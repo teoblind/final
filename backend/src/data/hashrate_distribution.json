@@ -1,0 +1,247 @@
+{
+  "metadata": {
+    "title": "Global Bitcoin Hashrate Distribution",
+    "last_updated": "2026-02-02",
+    "sources": [
+      "Cambridge Bitcoin Electricity Consumption Index (CBECI)",
+      "Hashrate Index",
+      "Mining pool data",
+      "Decrypt research reports"
+    ],
+    "methodology": "Combination of disclosed mining pool geolocational data and estimates accounting for VPN/proxy usage",
+    "total_network_hashrate_EH": 827
+  },
+  "mining_pools": {
+    "Foundry USA": {
+      "market_share_percent": 33.5,
+      "hashrate_EH": 277,
+      "headquarters": "United States",
+      "primary_regions": ["United States", "Canada"],
+      "blocks_mined_h1_2025": 8434,
+      "block_share_percent": 31.81
+    },
+    "AntPool": {
+      "market_share_percent": 17.7,
+      "hashrate_EH": 146,
+      "headquarters": "China (Bitmain)",
+      "primary_regions": ["China", "Global"],
+      "blocks_mined_h1_2025": 4918,
+      "block_share_percent": 18.55
+    },
+    "ViaBTC": {
+      "market_share_percent": 14.5,
+      "hashrate_EH": 120,
+      "headquarters": "China",
+      "primary_regions": ["China", "Global"],
+      "blocks_mined_h1_2025": 3680,
+      "block_share_percent": 13.88
+    },
+    "F2Pool": {
+      "market_share_percent": 9.3,
+      "hashrate_EH": 77,
+      "headquarters": "China",
+      "primary_regions": ["China", "Global"],
+      "blocks_mined_h1_2025": 2778,
+      "block_share_percent": 10.48
+    },
+    "MARA Pool": {
+      "market_share_percent": 6.0,
+      "hashrate_EH": 50,
+      "headquarters": "United States",
+      "primary_regions": ["United States"],
+      "blocks_mined_h1_2025": null,
+      "block_share_percent": null
+    },
+    "Binance Pool": {
+      "market_share_percent": 6.5,
+      "hashrate_EH": 54,
+      "headquarters": "Cayman Islands",
+      "primary_regions": ["Global"],
+      "blocks_mined_h1_2025": 477,
+      "block_share_percent": 1.8
+    },
+    "SpiderPool": {
+      "market_share_percent": 5.5,
+      "hashrate_EH": 45,
+      "headquarters": "China",
+      "primary_regions": ["China"],
+      "blocks_mined_h1_2025": null,
+      "block_share_percent": null
+    },
+    "Other": {
+      "market_share_percent": 7.0,
+      "hashrate_EH": 58,
+      "headquarters": "Various",
+      "primary_regions": ["Global"],
+      "blocks_mined_h1_2025": null,
+      "block_share_percent": null
+    }
+  },
+  "country_distribution": {
+    "disclosed": {
+      "description": "Based on IP addresses reported to mining pools - subject to VPN obfuscation",
+      "United States": {
+        "share_percent": 37.8,
+        "confidence": "high",
+        "notes": "Largest disclosed share, includes Foundry USA and MARA Pool"
+      },
+      "Kazakhstan": {
+        "share_percent": 13.2,
+        "confidence": "medium",
+        "notes": "Cheap electricity, stable regulatory environment"
+      },
+      "Russia": {
+        "share_percent": 4.7,
+        "confidence": "medium",
+        "notes": "Officially reported; likely understated due to sanctions concerns"
+      },
+      "Canada": {
+        "share_percent": 6.5,
+        "confidence": "high",
+        "notes": "Hydro-powered mining, favorable regulations"
+      },
+      "Germany": {
+        "share_percent": 4.5,
+        "confidence": "low",
+        "notes": "Likely inflated by VPN/proxy usage"
+      },
+      "Ireland": {
+        "share_percent": 4.7,
+        "confidence": "low",
+        "notes": "Likely significantly inflated by VPN usage"
+      },
+      "China": {
+        "share_percent": 0.0,
+        "confidence": "low",
+        "notes": "Officially banned in 2021; disclosed share near zero"
+      },
+      "Iran": {
+        "share_percent": 4.2,
+        "confidence": "medium",
+        "notes": "State-sponsored mining operations"
+      },
+      "Malaysia": {
+        "share_percent": 2.5,
+        "confidence": "medium",
+        "notes": "Growing mining sector"
+      },
+      "Other": {
+        "share_percent": 21.9,
+        "confidence": "medium",
+        "notes": "Distributed across various countries"
+      }
+    },
+    "estimated_actual": {
+      "description": "Adjusted estimates accounting for VPN usage, underground mining, and proxy services",
+      "United States": {
+        "share_percent_low": 35,
+        "share_percent_high": 40,
+        "share_percent_mid": 37.5,
+        "confidence": "high",
+        "notes": "Reliable data from public companies and pools"
+      },
+      "China": {
+        "share_percent_low": 15,
+        "share_percent_high": 25,
+        "share_percent_mid": 21,
+        "confidence": "medium",
+        "evidence": [
+          "Cambridge CDAP data shows 21% of hashrate from covert Chinese miners",
+          "Underground miners using proxy services",
+          "Recent shutdown of 1.3GW in Xinjiang (400,000 machines)",
+          "Mining pools still Chinese-controlled (AntPool, F2Pool, ViaBTC, SpiderPool)"
+        ],
+        "notes": "Significant underground operations continue despite 2021 ban"
+      },
+      "Kazakhstan": {
+        "share_percent_low": 10,
+        "share_percent_high": 15,
+        "share_percent_mid": 12,
+        "confidence": "medium",
+        "notes": "Stable since post-China migration"
+      },
+      "Russia": {
+        "share_percent_low": 5,
+        "share_percent_high": 10,
+        "share_percent_mid": 7,
+        "confidence": "low",
+        "evidence": [
+          "State-linked mining in shadow territories",
+          "Excess energy from gas flaring",
+          "New 2024 legislation legitimizing mining",
+          "Sanctions evasion incentive"
+        ],
+        "notes": "Likely understated in official figures"
+      },
+      "Iran": {
+        "share_percent_low": 3,
+        "share_percent_high": 5,
+        "share_percent_mid": 4.2,
+        "confidence": "medium",
+        "evidence": [
+          "427,000 active mining devices reported",
+          "State-subsidized electricity ($0.01-0.05/kWh)",
+          "IRGC-linked mining operations",
+          "Fifth largest Bitcoin mining country"
+        ],
+        "notes": "State-sponsored for sanctions evasion"
+      },
+      "Canada": {
+        "share_percent_low": 5,
+        "share_percent_high": 8,
+        "share_percent_mid": 6.5,
+        "confidence": "high",
+        "notes": "Hydro-powered, transparent operations"
+      },
+      "Germany": {
+        "share_percent_low": 0.5,
+        "share_percent_high": 2,
+        "share_percent_mid": 1,
+        "confidence": "medium",
+        "notes": "Actual share much lower than reported; VPN destination"
+      },
+      "Ireland": {
+        "share_percent_low": 0.5,
+        "share_percent_high": 2,
+        "share_percent_mid": 1,
+        "confidence": "medium",
+        "notes": "Actual share much lower than reported; VPN destination"
+      },
+      "Paraguay": {
+        "share_percent_low": 1,
+        "share_percent_high": 3,
+        "share_percent_mid": 2,
+        "confidence": "low",
+        "notes": "Cheap hydroelectric power from Itaipu dam"
+      },
+      "Norway": {
+        "share_percent_low": 0.5,
+        "share_percent_high": 2,
+        "share_percent_mid": 1,
+        "confidence": "medium",
+        "notes": "Renewable energy mining"
+      },
+      "Venezuela": {
+        "share_percent_low": 0.5,
+        "share_percent_high": 2,
+        "share_percent_mid": 1,
+        "confidence": "low",
+        "notes": "Subsidized electricity, sanctions evasion"
+      },
+      "Other": {
+        "share_percent_low": 5,
+        "share_percent_high": 10,
+        "share_percent_mid": 7.8,
+        "confidence": "low",
+        "notes": "Distributed globally"
+      }
+    }
+  },
+  "key_insights": {
+    "vpn_obfuscation": "Germany and Ireland likely show inflated shares due to VPN/proxy services masking actual miner locations",
+    "china_underground": "Despite official ban, China maintains 15-25% of global hashrate through covert operations",
+    "pool_concentration": "Top 6 pools control 95%+ of hashrate - significant centralization risk",
+    "chinese_pool_control": "AntPool, F2Pool, ViaBTC, SpiderPool are Chinese-operated, controlling ~47% of global hashrate",
+    "state_mining": "Russia and Iran operating state-linked mining for sanctions evasion purposes"
+  }
+}

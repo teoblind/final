@@ -1,0 +1,239 @@
+{
+  "metadata": {
+    "title": "Government Bitcoin Holdings Analysis",
+    "last_updated": "2026-02-02",
+    "total_bitcoin_supply": 19700000,
+    "sources": [
+      "BitcoinTreasuries.net",
+      "CoinGecko Government Holdings Report",
+      "Arkham Intelligence",
+      "Government financial disclosures",
+      "Court seizure records",
+      "FBI/DOJ announcements"
+    ]
+  },
+  "disclosed_holdings": {
+    "United States": {
+      "btc_held": 328000,
+      "usd_value_billions": 27.5,
+      "source_of_acquisition": [
+        "Silk Road seizures (2013-2020)",
+        "Bitfinex hack recovery (94,636 BTC in 2022)",
+        "Chen Zhi fraud seizure (130,000 BTC in 2025)"
+      ],
+      "status": "Strategic Bitcoin Reserve (Executive Order March 2025)",
+      "last_updated": "2026-01",
+      "confidence": "high",
+      "notes": "World's largest disclosed government holder. Executive order ended automatic liquidation policy."
+    },
+    "China": {
+      "btc_held": 194000,
+      "usd_value_billions": 16.3,
+      "source_of_acquisition": [
+        "PlusToken Ponzi scheme seizure (2019)"
+      ],
+      "status": "Likely sold through mixers",
+      "last_updated": "2025-06",
+      "confidence": "medium",
+      "notes": "On-chain analysis suggests tokens moved to mixers then centralized exchanges - likely liquidated. Official position unclear."
+    },
+    "United Kingdom": {
+      "btc_held": 61000,
+      "usd_value_billions": 5.1,
+      "source_of_acquisition": [
+        "Money laundering seizures",
+        "Criminal asset confiscations"
+      ],
+      "status": "Held, no strategic reserve policy",
+      "last_updated": "2025-12",
+      "confidence": "high",
+      "notes": "Policy discussions ongoing about whether to sell or hold long-term."
+    },
+    "Bhutan": {
+      "btc_held": 11000,
+      "usd_value_billions": 0.92,
+      "source_of_acquisition": [
+        "State-run hydro-powered mining operations"
+      ],
+      "status": "Actively mining and holding",
+      "last_updated": "2025-12",
+      "confidence": "medium",
+      "notes": "Secretive sovereign mining operation using abundant hydroelectric power."
+    },
+    "El Salvador": {
+      "btc_held": 7500,
+      "usd_value_billions": 0.63,
+      "source_of_acquisition": [
+        "Direct market purchases (2021-present)"
+      ],
+      "status": "Strategic reserve, actively accumulating",
+      "last_updated": "2025-11",
+      "confidence": "high",
+      "notes": "First country to adopt Bitcoin as legal tender. Split holdings across 15 wallets citing quantum computing concerns."
+    },
+    "Germany": {
+      "btc_held": 0,
+      "usd_value_billions": 0,
+      "source_of_acquisition": [
+        "Movie2k piracy seizure (49,858 BTC)"
+      ],
+      "status": "Fully liquidated in July 2024",
+      "last_updated": "2024-07",
+      "confidence": "high",
+      "notes": "Sold entire holdings at ~$57,900 average. Missed $2.35B in gains as Bitcoin rose 80% by May 2025."
+    },
+    "Ukraine": {
+      "btc_held": 46351,
+      "usd_value_billions": 3.9,
+      "source_of_acquisition": [
+        "Donations during conflict",
+        "Seizures"
+      ],
+      "status": "Partially liquidated for war effort",
+      "last_updated": "2024-12",
+      "confidence": "medium",
+      "notes": "Received significant crypto donations; some converted to fiat for military needs."
+    },
+    "Finland": {
+      "btc_held": 90,
+      "usd_value_billions": 0.008,
+      "source_of_acquisition": [
+        "Criminal seizures"
+      ],
+      "status": "Held",
+      "last_updated": "2024-06",
+      "confidence": "medium",
+      "notes": "Small holdings from seizures."
+    },
+    "total_disclosed": {
+      "btc": 648000,
+      "percent_of_supply": 3.29,
+      "notes": "Approximate total of all disclosed government holdings globally"
+    }
+  },
+  "estimated_secret_holdings": {
+    "methodology": "Estimates based on hashrate control, sanctions evasion needs, documented state mining, and intelligence reports",
+    "China": {
+      "disclosed_btc": 194000,
+      "disclosed_status": "Likely sold",
+      "estimated_secret_btc_low": 30000,
+      "estimated_secret_btc_high": 100000,
+      "estimated_secret_btc_mid": 60000,
+      "confidence": "medium",
+      "evidence": [
+        "Controlled 70% of global hashrate 2017-2021",
+        "Estimated 1.47M BTC mined by Chinese entities in that period",
+        "State-controlled mining likely 2-5% of Chinese operations",
+        "Underground mining continues at 15-25% of global hashrate",
+        "Mining pools (AntPool, F2Pool, ViaBTC) still Chinese-controlled"
+      ],
+      "estimation_methodology": "Conservative 2-5% of Chinese mining was state-controlled; continued covert operations"
+    },
+    "Russia": {
+      "disclosed_btc": 0,
+      "estimated_secret_btc_low": 50000,
+      "estimated_secret_btc_high": 150000,
+      "estimated_secret_btc_mid": 80000,
+      "confidence": "low",
+      "evidence": [
+        "State-linked mining in shadow territories",
+        "Excess energy from gas flaring and stranded hydro",
+        "2024 legislation legitimizing and requiring reporting of mining",
+        "Launched A7A5 ruble-backed token transacting $93.3B",
+        "Sanctions evasion primary motivation",
+        "Treasury sanctioned 13 blockchain firms in March 2025"
+      ],
+      "estimation_methodology": "State entities mining 4-7% of global hashrate; accumulated over several years"
+    },
+    "Iran": {
+      "disclosed_btc": 0,
+      "estimated_secret_btc_low": 40000,
+      "estimated_secret_btc_high": 100000,
+      "estimated_secret_btc_mid": 60000,
+      "confidence": "medium",
+      "evidence": [
+        "427,000 active mining devices in country",
+        "IRGC-linked mining operations documented",
+        "Electricity cost $0.01-0.05/kWh enables $1,300 mining cost per BTC",
+        "4.2% of global hashrate (5th largest)",
+        "Oil-to-Bitcoin conversion for sanctions bypass",
+        "State-subsidized mining since 2019"
+      ],
+      "estimation_methodology": "State controls significant portion of Iran's 4.2% hashrate; accumulated since 2019"
+    },
+    "North Korea": {
+      "disclosed_btc": 0,
+      "estimated_held_btc_low": 13500,
+      "estimated_held_btc_high": 20000,
+      "estimated_held_btc_mid": 15000,
+      "confidence": "high",
+      "evidence": [
+        "Bybit hack Feb 2025: Stole $1.5B ETH, converted 13,518 BTC",
+        "FBI confirmed Lazarus Group attribution",
+        "Historical exchange hacks (Ronin, Harmony, etc.)",
+        "Ransomware operations",
+        "Third largest government holder after Bybit conversion"
+      ],
+      "estimation_methodology": "Documented on-chain holdings from Lazarus Group operations tracked by Arkham"
+    },
+    "Venezuela": {
+      "disclosed_btc": 0,
+      "estimated_secret_btc_low": 5000,
+      "estimated_secret_btc_high": 20000,
+      "estimated_secret_btc_mid": 10000,
+      "confidence": "low",
+      "evidence": [
+        "State-subsidized electricity",
+        "Petro cryptocurrency failure led to Bitcoin pivot",
+        "Sanctions evasion motivation",
+        "Oil-for-crypto schemes documented"
+      ],
+      "estimation_methodology": "Limited evidence; speculation based on sanctions evasion needs"
+    },
+    "Saudi Arabia": {
+      "disclosed_btc": 0,
+      "estimated_secret_btc_low": 0,
+      "estimated_secret_btc_high": 50000,
+      "estimated_secret_btc_mid": 10000,
+      "confidence": "very_low",
+      "evidence": [
+        "Sovereign wealth fund diversification",
+        "Energy surplus for mining",
+        "No public statements"
+      ],
+      "estimation_methodology": "Pure speculation; no concrete evidence"
+    },
+    "United States (undisclosed)": {
+      "disclosed_btc": 328000,
+      "estimated_additional_secret_btc_low": 10000,
+      "estimated_additional_secret_btc_high": 50000,
+      "estimated_additional_secret_btc_mid": 20000,
+      "confidence": "low",
+      "evidence": [
+        "Classified intelligence operations",
+        "Possible NSA/CIA mining or acquisition",
+        "Unreported seizures from classified cases"
+      ],
+      "estimation_methodology": "Speculation; intelligence agencies historically acquire assets covertly"
+    },
+    "total_estimated_secret": {
+      "btc_low": 148500,
+      "btc_high": 490000,
+      "btc_mid": 255000,
+      "notes": "Wide range reflects high uncertainty in covert holdings estimates"
+    }
+  },
+  "aggregate_analysis": {
+    "total_government_btc_low": 796500,
+    "total_government_btc_high": 1138000,
+    "total_government_btc_mid": 903000,
+    "percent_of_supply_low": 4.04,
+    "percent_of_supply_high": 5.77,
+    "percent_of_supply_mid": 4.58,
+    "comparison_to_corporate": {
+      "microstrategy_btc": 687000,
+      "all_public_companies_btc": 850000,
+      "notes": "Government holdings (disclosed + estimated) likely exceed all corporate holdings"
+    }
+  }
+}
