@@ -25,6 +25,7 @@ import manualRoutes from './routes/manual.js';
 import notesRoutes from './routes/notes.js';
 import correlationRoutes from './routes/correlation.js';
 import liquidityRoutes from './routes/liquidity.js';
+import energyRoutes from './routes/energy.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 dotenv.config();
@@ -85,6 +86,7 @@ app.use('/api/manual', manualRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/correlation', correlationRoutes);
 app.use('/api/liquidity', liquidityRoutes);
+app.use('/api/energy', energyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -116,7 +118,7 @@ app.use((err, req, res, next) => {
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║          ZHAN MACRO DASHBOARD - BACKEND SERVER            ║
+║           SANGHA MINEOS - BACKEND SERVER                   ║
 ║═══════════════════════════════════════════════════════════║
 ║  Server running on http://localhost:${PORT}                   ║
 ║  WebSocket available on ws://localhost:${PORT}                ║

@@ -146,21 +146,67 @@ const MacroPanels: PanelRegistryEntry[] = [
   },
 ];
 
-// Phase 2-6: Placeholder panels for Operations dashboard
-const OperationsPlaceholders: PanelRegistryEntry[] = [
+// Phase 2: Energy Market panels (active)
+const EnergyPanels: PanelRegistryEntry[] = [
   {
-    id: 'energy-market',
-    title: 'Energy Market',
-    subtitle: 'Real-time ISO/RTO pricing',
+    id: 'energy-price',
+    title: 'Energy Price',
+    subtitle: 'Real-time ERCOT LMP + grid status',
     category: 'energy',
-    component: lazy(() => import('../components/panels/energy/EnergyPlaceholder')),
-    defaultSize: { cols: 2, rows: 1 },
+    component: lazy(() => import('../components/panels/energy/EnergyPricePanel')),
+    defaultSize: { cols: 1, rows: 1 },
     phase: 2,
-    status: 'placeholder',
-    requiredConfig: ['energySource'],
-    description: 'Real-time ERCOT/PJM/CAISO pricing, day-ahead curves, LMP heatmaps, and price forecasting. Connect your energy market feed to see live nodal prices and identify curtailment opportunities.',
+    status: 'active',
     icon: '⚡',
   },
+  {
+    id: 'day-ahead',
+    title: 'Day-Ahead Prices',
+    subtitle: 'Hourly DAM curve with mining windows',
+    category: 'energy',
+    component: lazy(() => import('../components/panels/energy/DayAheadPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 2,
+    status: 'active',
+    icon: '📈',
+  },
+  {
+    id: 'price-heatmap',
+    title: 'Price Heatmap',
+    subtitle: 'Hour × day LMP patterns',
+    category: 'energy',
+    component: lazy(() => import('../components/panels/energy/PriceHeatmapPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 2,
+    status: 'active',
+    icon: '🗺',
+  },
+  {
+    id: 'price-history',
+    title: 'Price History',
+    subtitle: 'LMP time series with volatility bands',
+    category: 'energy',
+    component: lazy(() => import('../components/panels/energy/PriceHistoryPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 2,
+    status: 'active',
+    icon: '📊',
+  },
+  {
+    id: 'generation-mix',
+    title: 'Generation Mix',
+    subtitle: 'ERCOT fuel type breakdown',
+    category: 'energy',
+    component: lazy(() => import('../components/panels/energy/GenerationMixPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 2,
+    status: 'active',
+    icon: '🔋',
+  },
+];
+
+// Phase 3-6: Placeholder panels for Operations dashboard
+const OperationsPlaceholders: PanelRegistryEntry[] = [
   {
     id: 'fleet-hashprice',
     title: 'Fleet Hashprice',
@@ -217,6 +263,7 @@ const OperationsPlaceholders: PanelRegistryEntry[] = [
 // Full registry
 export const panelRegistry: PanelRegistryEntry[] = [
   ...MacroPanels,
+  ...EnergyPanels,
   ...OperationsPlaceholders,
 ];
 

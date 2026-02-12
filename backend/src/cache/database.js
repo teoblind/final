@@ -143,6 +143,64 @@ export function initDatabase() {
     insertWallet.run(address, label, description);
   });
 
+  // =========================================================================
+  // Phase 2: Energy market tables
+  // =========================================================================
+
+  // Historical energy prices (LMP data)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS energy_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      iso TEXT NOT NULL,
+      node TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      market_type TEXT NOT NULL,
+      lmp REAL NOT NULL,
+      energy_component REAL,
+      congestion_component REAL,
+      loss_component REAL,
+      UNIQUE(iso, node, timestamp, market_type)
+    )
+  `);
+
+  // Create index for fast time-range queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_energy_prices_lookup
+    ON energy_prices(iso, node, market_type, timestamp)
+  `);
+
+  // System load data
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_load (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      iso TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      actual_load REAL,
+      forecast_load REAL,
+      UNIQUE(iso, timestamp)
+    )
+  `);
+
+  // Grid events / alerts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS grid_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      iso TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      description TEXT,
+      resolved_at TEXT
+    )
+  `);
+
+  // Energy settings (user configuration)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS energy_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL
+    )
+  `);
+
   console.log('Database initialized');
 }
 
@@ -339,6 +397,77 @@ export function addFiberDeal(deal) {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   return stmt.run(deal.date, deal.buyer, deal.seller, deal.value_usd, deal.capacity, deal.description);
+}
+
+// =========================================================================
+// Phase 2: Energy data helpers
+// =========================================================================
+
+export function insertEnergyPrices(records) {
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO energy_prices (iso, node, timestamp, market_type, lmp, energy_component, congestion_component, loss_component)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertMany = db.transaction((rows) => {
+    for (const r of rows) {
+      stmt.run(r.iso, r.node, r.timestamp, r.market_type, r.lmp, r.energy_component, r.congestion_component, r.loss_component);
+    }
+  });
+
+  insertMany(records);
+  return records.length;
+}
+
+export function getEnergyPrices(iso, node, startDate, endDate, marketType = 'realtime') {
+  return db.prepare(`
+    SELECT * FROM energy_prices
+    WHERE iso = ? AND node = ? AND timestamp >= ? AND timestamp <= ? AND market_type = ?
+    ORDER BY timestamp ASC
+  `).all(iso, node, startDate, endDate, marketType);
+}
+
+export function insertSystemLoad(iso, timestamp, actualLoad, forecastLoad = null) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO system_load (iso, timestamp, actual_load, forecast_load)
+    VALUES (?, ?, ?, ?)
+  `).run(iso, timestamp, actualLoad, forecastLoad);
+}
+
+export function getSystemLoad(iso, startDate, endDate) {
+  return db.prepare(`
+    SELECT * FROM system_load
+    WHERE iso = ? AND timestamp >= ? AND timestamp <= ?
+    ORDER BY timestamp ASC
+  `).all(iso, startDate, endDate);
+}
+
+export function insertGridEvent(iso, timestamp, eventType, description) {
+  return db.prepare(`
+    INSERT INTO grid_events (iso, timestamp, event_type, description)
+    VALUES (?, ?, ?, ?)
+  `).run(iso, timestamp, eventType, description);
+}
+
+export function getGridEvents(iso, days = 7) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM grid_events
+    WHERE iso = ? AND timestamp >= ?
+    ORDER BY timestamp DESC
+  `).all(iso, since);
+}
+
+export function getEnergySettings() {
+  const row = db.prepare('SELECT data FROM energy_settings WHERE id = 1').get();
+  return row ? JSON.parse(row.data) : null;
+}
+
+export function saveEnergySettings(settings) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO energy_settings (id, data)
+    VALUES (1, ?)
+  `).run(JSON.stringify(settings));
 }
 
 export default db;

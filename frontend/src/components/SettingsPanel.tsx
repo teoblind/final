@@ -1,15 +1,17 @@
-import React from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw } from 'lucide-react';
+import { useApi } from '../hooks/useApi';
 
 interface SettingsSectionProps {
   title: string;
   description: string;
   icon: React.ReactNode;
   phase?: number;
+  active?: boolean;
   children?: React.ReactNode;
 }
 
-function SettingsSection({ title, description, icon, phase, children }: SettingsSectionProps) {
+function SettingsSection({ title, description, icon, phase, active, children }: SettingsSectionProps) {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-terminal-border bg-terminal-bg/50">
@@ -20,11 +22,18 @@ function SettingsSection({ title, description, icon, phase, children }: Settings
             <p className="text-xs text-terminal-muted">{description}</p>
           </div>
         </div>
-        {phase && (
-          <span className="px-2 py-0.5 text-xs bg-terminal-border rounded text-terminal-muted">
-            Phase {phase}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {active && (
+            <span className="px-2 py-0.5 text-xs bg-terminal-green/20 text-terminal-green rounded">
+              Active
+            </span>
+          )}
+          {phase && !active && (
+            <span className="px-2 py-0.5 text-xs bg-terminal-border rounded text-terminal-muted">
+              Phase {phase}
+            </span>
+          )}
+        </div>
       </div>
       <div className="p-4">
         {children || (
@@ -37,7 +46,61 @@ function SettingsSection({ title, description, icon, phase, children }: Settings
   );
 }
 
+const ERCOT_NODES = [
+  'HB_NORTH', 'HB_SOUTH', 'HB_WEST', 'HB_HOUSTON', 'HB_PAN', 'HB_BUSAVG',
+  'LZ_NORTH', 'LZ_SOUTH', 'LZ_WEST', 'LZ_HOUSTON'
+];
+
 export default function SettingsPanel() {
+  const { data: settingsData, refetch: refetchSettings } = useApi('/energy/settings', { refreshInterval: 0 });
+
+  const [energySettings, setEnergySettings] = useState({
+    iso: 'ERCOT',
+    primaryNode: 'HB_NORTH',
+    monitoredNodes: ['HB_NORTH'],
+    priceAlertHigh: 50,
+    priceAlertLow: 0,
+    negativeAlertEnabled: true,
+    refreshIntervalMinutes: 5,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (settingsData?.settings) {
+      setEnergySettings(prev => ({ ...prev, ...settingsData.settings }));
+    }
+  }, [settingsData]);
+
+  const handleSaveEnergy = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch('/api/energy/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(energySettings),
+      });
+      if (response.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        refetchSettings();
+      }
+    } catch (err) {
+      console.error('Failed to save energy settings:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleNode = (node: string) => {
+    setEnergySettings(prev => ({
+      ...prev,
+      monitoredNodes: prev.monitoredNodes.includes(node)
+        ? prev.monitoredNodes.filter(n => n !== node)
+        : [...prev.monitoredNodes, node],
+    }));
+  };
+
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="mb-6">
@@ -49,6 +112,134 @@ export default function SettingsPanel() {
       </div>
 
       <div className="space-y-4">
+        {/* Energy Configuration — Phase 2 ACTIVE */}
+        <SettingsSection
+          title="Energy Market"
+          description="ISO/RTO connection, node selection, price thresholds"
+          icon={<Zap size={18} className="text-terminal-amber" />}
+          phase={2}
+          active
+        >
+          <div className="space-y-4">
+            {/* ISO Selection */}
+            <div>
+              <label className="block text-xs text-terminal-muted mb-1">ISO / RTO</label>
+              <select
+                value={energySettings.iso}
+                onChange={e => setEnergySettings(prev => ({ ...prev, iso: e.target.value }))}
+                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+              >
+                <option value="ERCOT">ERCOT (Texas)</option>
+                <option value="PJM" disabled>PJM (Mid-Atlantic) — Coming Soon</option>
+                <option value="MISO" disabled>MISO (Central US) — Coming Soon</option>
+              </select>
+            </div>
+
+            {/* Primary Node */}
+            <div>
+              <label className="block text-xs text-terminal-muted mb-1">Primary Settlement Point</label>
+              <select
+                value={energySettings.primaryNode}
+                onChange={e => setEnergySettings(prev => ({ ...prev, primaryNode: e.target.value }))}
+                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+              >
+                {ERCOT_NODES.map(n => (
+                  <option key={n} value={n}>{n.replace('_', ' ')}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Monitored Nodes */}
+            <div>
+              <label className="block text-xs text-terminal-muted mb-2">Monitored Nodes</label>
+              <div className="flex flex-wrap gap-2">
+                {ERCOT_NODES.map(node => (
+                  <button
+                    key={node}
+                    onClick={() => toggleNode(node)}
+                    className={`px-2 py-1 text-xs rounded border transition-colors ${
+                      energySettings.monitoredNodes.includes(node)
+                        ? 'border-terminal-green/50 bg-terminal-green/10 text-terminal-green'
+                        : 'border-terminal-border text-terminal-muted hover:border-terminal-text'
+                    }`}
+                  >
+                    {node.replace('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Price Thresholds */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">High Price Alert ($/MWh)</label>
+                <input
+                  type="number"
+                  value={energySettings.priceAlertHigh}
+                  onChange={e => setEnergySettings(prev => ({ ...prev, priceAlertHigh: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Low Price Alert ($/MWh)</label>
+                <input
+                  type="number"
+                  value={energySettings.priceAlertLow}
+                  onChange={e => setEnergySettings(prev => ({ ...prev, priceAlertLow: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+              </div>
+            </div>
+
+            {/* Negative Alert Toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-terminal-text">Negative Price Alerts</p>
+                <p className="text-xs text-terminal-muted">Get notified when prices go negative (free energy!)</p>
+              </div>
+              <button
+                onClick={() => setEnergySettings(prev => ({ ...prev, negativeAlertEnabled: !prev.negativeAlertEnabled }))}
+                className={`w-10 h-5 rounded-full transition-colors relative ${
+                  energySettings.negativeAlertEnabled ? 'bg-terminal-green' : 'bg-terminal-border'
+                }`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                  energySettings.negativeAlertEnabled ? 'left-5' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+
+            {/* Refresh Interval */}
+            <div>
+              <label className="block text-xs text-terminal-muted mb-1">Refresh Interval (minutes)</label>
+              <select
+                value={energySettings.refreshIntervalMinutes}
+                onChange={e => setEnergySettings(prev => ({ ...prev, refreshIntervalMinutes: Number(e.target.value) }))}
+                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+              >
+                <option value={1}>1 minute</option>
+                <option value={5}>5 minutes</option>
+                <option value={15}>15 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={60}>1 hour</option>
+              </select>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={handleSaveEnergy}
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors text-sm disabled:opacity-50"
+              >
+                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Energy Settings'}
+              </button>
+              {saved && <span className="text-xs text-terminal-green">Settings saved successfully</span>}
+            </div>
+          </div>
+        </SettingsSection>
+
         {/* Fleet Configuration */}
         <SettingsSection
           title="Fleet Configuration"
@@ -80,31 +271,6 @@ export default function SettingsPanel() {
                   <p className="text-terminal-muted">Efficiency</p>
                   <p className="text-terminal-text">15.0 J/TH</p>
                 </div>
-              </div>
-            </div>
-          </div>
-        </SettingsSection>
-
-        {/* Energy Configuration */}
-        <SettingsSection
-          title="Energy Contract"
-          description="Energy provider, contract type, rates, and market connection"
-          icon={<Zap size={18} className="text-terminal-amber" />}
-          phase={2}
-        >
-          <div className="space-y-3">
-            <p className="text-sm text-terminal-muted">
-              Connect your energy market data source and configure your contract details
-              for accurate profitability calculations and curtailment optimization.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-terminal-bg rounded p-3">
-                <p className="text-xs text-terminal-muted">ISO/RTO</p>
-                <p className="text-sm text-terminal-text">ERCOT, PJM, CAISO, MISO, etc.</p>
-              </div>
-              <div className="bg-terminal-bg rounded p-3">
-                <p className="text-xs text-terminal-muted">Contract Type</p>
-                <p className="text-sm text-terminal-text">Fixed, Index, PPA, Hybrid</p>
               </div>
             </div>
           </div>

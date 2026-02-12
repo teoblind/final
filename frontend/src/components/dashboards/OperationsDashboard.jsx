@@ -1,7 +1,13 @@
 import React, { Suspense, lazy } from 'react';
 
-// Lazy-load placeholder panels
-const EnergyPlaceholder = lazy(() => import('../panels/energy/EnergyPlaceholder'));
+// Phase 2: Live energy panels
+const EnergyPricePanel = lazy(() => import('../panels/energy/EnergyPricePanel'));
+const DayAheadPanel = lazy(() => import('../panels/energy/DayAheadPanel'));
+const PriceHeatmapPanel = lazy(() => import('../panels/energy/PriceHeatmapPanel'));
+const PriceHistoryPanel = lazy(() => import('../panels/energy/PriceHistoryPanel'));
+const GenerationMixPanel = lazy(() => import('../panels/energy/GenerationMixPanel'));
+
+// Phase 3-6: Placeholder panels
 const HashpricePlaceholder = lazy(() => import('../panels/hashprice/HashpricePlaceholder'));
 const CurtailmentPlaceholder = lazy(() => import('../panels/curtailment/CurtailmentPlaceholder'));
 const PoolPlaceholder = lazy(() => import('../panels/pools/PoolPlaceholder'));
@@ -19,9 +25,8 @@ function PanelSkeleton() {
 /**
  * Operations Dashboard
  *
- * The primary mining operations control center. Currently shows placeholder panels
- * for features coming in Phases 2-6. As each phase is built, the placeholders
- * will be replaced with live operational panels.
+ * The primary mining operations control center. Phase 2 energy panels are live.
+ * Phases 3-6 remain as placeholder panels until implemented.
  */
 export default function OperationsDashboard({ onNavigate }) {
   return (
@@ -30,7 +35,7 @@ export default function OperationsDashboard({ onNavigate }) {
       <div className="mb-6">
         <h2 className="text-lg font-bold text-terminal-green">Operations Control Center</h2>
         <p className="text-xs text-terminal-muted mt-1">
-          Unified mining operations dashboard. Panels below will activate as each phase is implemented.
+          Unified mining operations dashboard — energy market data is live.
           Visit <button
             onClick={() => onNavigate?.('macro')}
             className="text-terminal-cyan hover:underline"
@@ -45,8 +50,8 @@ export default function OperationsDashboard({ onNavigate }) {
         <h3 className="text-sm font-semibold text-terminal-text mb-3">Build Roadmap</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { phase: 2, label: 'Energy Market', status: 'next', color: 'terminal-amber' },
-            { phase: 3, label: 'Fleet Hashprice', status: 'planned', color: 'terminal-muted' },
+            { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
+            { phase: 3, label: 'Fleet Hashprice', status: 'next', color: 'terminal-amber' },
             { phase: 4, label: 'Curtailment', status: 'planned', color: 'terminal-muted' },
             { phase: 5, label: 'Pool Monitor', status: 'planned', color: 'terminal-muted' },
             { phase: 6, label: 'Agents', status: 'planned', color: 'terminal-muted' },
@@ -54,35 +59,60 @@ export default function OperationsDashboard({ onNavigate }) {
             <div
               key={item.phase}
               className={`text-center py-2 px-3 rounded border ${
-                item.status === 'next'
-                  ? 'border-terminal-amber/30 bg-terminal-amber/5'
-                  : 'border-terminal-border'
+                item.status === 'active'
+                  ? 'border-terminal-green/30 bg-terminal-green/5'
+                  : item.status === 'next'
+                    ? 'border-terminal-amber/30 bg-terminal-amber/5'
+                    : 'border-terminal-border'
               }`}
             >
               <p className={`text-xs text-${item.color}`}>Phase {item.phase}</p>
               <p className="text-sm font-medium text-terminal-text">{item.label}</p>
+              {item.status === 'active' && (
+                <p className="text-[10px] text-terminal-green mt-0.5">LIVE</p>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Operations panels grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Energy Market section — Phase 2 LIVE */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-terminal-amber mb-3 flex items-center gap-2">
+          <span>⚡</span> Energy Market
+          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
+        </h3>
         <Suspense fallback={<PanelSkeleton />}>
-          {/* Energy Market spans full width on md+ */}
-          <div className="md:col-span-2">
-            <EnergyPlaceholder />
-          </div>
-
-          <HashpricePlaceholder />
-          <CurtailmentPlaceholder />
-          <PoolPlaceholder />
-
-          {/* Agent Status spans full width on md+ */}
-          <div className="md:col-span-2">
-            <AgentPlaceholder />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Hero: Energy Price spans 1 col */}
+            <EnergyPricePanel />
+            {/* Day-ahead curve */}
+            <DayAheadPanel />
+            {/* Generation mix */}
+            <GenerationMixPanel />
+            {/* Price history spans 2 cols */}
+            <div className="md:col-span-2">
+              <PriceHistoryPanel />
+            </div>
+            {/* Heatmap */}
+            <PriceHeatmapPanel />
           </div>
         </Suspense>
+      </div>
+
+      {/* Future phases — Placeholder panels */}
+      <div>
+        <h3 className="text-sm font-semibold text-terminal-muted mb-3">Coming Soon</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Suspense fallback={<PanelSkeleton />}>
+            <HashpricePlaceholder />
+            <CurtailmentPlaceholder />
+            <PoolPlaceholder />
+            <div className="md:col-span-2">
+              <AgentPlaceholder />
+            </div>
+          </Suspense>
+        </div>
       </div>
     </div>
   );

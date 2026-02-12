@@ -137,6 +137,42 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/datacenter',
     refreshInterval: 60 * 60 * 1000,
   }),
+
+  // Phase 2: Energy Market connectors
+  energyRealtime: createApiConnector({
+    id: 'energy-realtime',
+    name: 'ERCOT Real-Time',
+    endpoint: '/energy/realtime',
+    refreshInterval: 5 * 60 * 1000,
+  }),
+
+  energyDayAhead: createApiConnector({
+    id: 'energy-dayahead',
+    name: 'ERCOT Day-Ahead',
+    endpoint: '/energy/dayahead',
+    refreshInterval: 15 * 60 * 1000,
+  }),
+
+  energyHistory: createApiConnector({
+    id: 'energy-history',
+    name: 'ERCOT Historical',
+    endpoint: '/energy/history',
+    refreshInterval: 15 * 60 * 1000,
+  }),
+
+  energyLoad: createApiConnector({
+    id: 'energy-load',
+    name: 'ERCOT System Load',
+    endpoint: '/energy/load',
+    refreshInterval: 5 * 60 * 1000,
+  }),
+
+  energyFuelmix: createApiConnector({
+    id: 'energy-fuelmix',
+    name: 'EIA / ERCOT Fuel Mix',
+    endpoint: '/energy/fuelmix',
+    refreshInterval: 15 * 60 * 1000,
+  }),
 };
 
 /**
