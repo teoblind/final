@@ -201,6 +201,59 @@ export function initDatabase() {
     )
   `);
 
+  // =========================================================================
+  // Phase 3: Fleet hashprice tables
+  // =========================================================================
+
+  // Fleet configuration (user's ASIC fleet)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fleet_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL
+    )
+  `);
+
+  // Fleet profitability snapshots (daily historical tracking)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fleet_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      btc_price REAL,
+      network_hashrate REAL,
+      difficulty REAL,
+      hashprice REAL,
+      fleet_gross_revenue REAL,
+      fleet_electricity_cost REAL,
+      fleet_net_revenue REAL,
+      fleet_profit_margin REAL,
+      profitable_machines INTEGER,
+      unprofitable_machines INTEGER,
+      total_hashrate REAL,
+      energy_cost_kwh REAL,
+      snapshot_json TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_fleet_snapshots_timestamp
+    ON fleet_snapshots(timestamp)
+  `);
+
+  // Per-model snapshots (linked to fleet snapshots)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS machine_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fleet_snapshot_id INTEGER REFERENCES fleet_snapshots(id),
+      model_id TEXT,
+      quantity INTEGER,
+      gross_revenue REAL,
+      electricity_cost REAL,
+      net_revenue REAL,
+      profit_margin REAL,
+      is_profitable INTEGER
+    )
+  `);
+
   console.log('Database initialized');
 }
 
@@ -468,6 +521,69 @@ export function saveEnergySettings(settings) {
     INSERT OR REPLACE INTO energy_settings (id, data)
     VALUES (1, ?)
   `).run(JSON.stringify(settings));
+}
+
+// =========================================================================
+// Phase 3: Fleet hashprice helpers
+// =========================================================================
+
+export function getFleetConfig() {
+  const row = db.prepare('SELECT data FROM fleet_config WHERE id = 1').get();
+  return row ? JSON.parse(row.data) : null;
+}
+
+export function saveFleetConfig(config) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO fleet_config (id, data)
+    VALUES (1, ?)
+  `).run(JSON.stringify(config));
+}
+
+export function insertFleetSnapshot(snapshot, machineDetails = []) {
+  const insertSnapshot = db.prepare(`
+    INSERT INTO fleet_snapshots (timestamp, btc_price, network_hashrate, difficulty, hashprice,
+      fleet_gross_revenue, fleet_electricity_cost, fleet_net_revenue, fleet_profit_margin,
+      profitable_machines, unprofitable_machines, total_hashrate, energy_cost_kwh, snapshot_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertMachine = db.prepare(`
+    INSERT INTO machine_snapshots (fleet_snapshot_id, model_id, quantity, gross_revenue,
+      electricity_cost, net_revenue, profit_margin, is_profitable)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const transaction = db.transaction(() => {
+    const result = insertSnapshot.run(
+      snapshot.timestamp, snapshot.btcPrice, snapshot.networkHashrate,
+      snapshot.difficulty, snapshot.hashprice, snapshot.fleetGrossRevenue,
+      snapshot.fleetElectricityCost, snapshot.fleetNetRevenue, snapshot.fleetProfitMargin,
+      snapshot.profitableMachines, snapshot.unprofitableMachines,
+      snapshot.totalHashrate, snapshot.energyCostKwh, snapshot.snapshotJson
+    );
+
+    const snapshotId = result.lastInsertRowid;
+    for (const m of machineDetails) {
+      insertMachine.run(
+        snapshotId, m.model?.id || m.model?.model, m.quantity,
+        m.grossRevenue * m.quantity, m.electricityCost * m.quantity,
+        m.netRevenue * m.quantity, m.profitMargin, m.isProfitable ? 1 : 0
+      );
+    }
+
+    return snapshotId;
+  });
+
+  return transaction();
+}
+
+export function getFleetSnapshots(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM fleet_snapshots
+    WHERE timestamp >= ?
+    ORDER BY timestamp ASC
+  `).all(since);
 }
 
 export default db;

@@ -7,8 +7,15 @@ const PriceHeatmapPanel = lazy(() => import('../panels/energy/PriceHeatmapPanel'
 const PriceHistoryPanel = lazy(() => import('../panels/energy/PriceHistoryPanel'));
 const GenerationMixPanel = lazy(() => import('../panels/energy/GenerationMixPanel'));
 
-// Phase 3-6: Placeholder panels
-const HashpricePlaceholder = lazy(() => import('../panels/hashprice/HashpricePlaceholder'));
+// Phase 3: Live hashprice panels
+const FleetProfitabilityPanel = lazy(() => import('../panels/hashprice/FleetProfitabilityPanel'));
+const MachineBreakdownPanel = lazy(() => import('../panels/hashprice/MachineBreakdownPanel'));
+const BreakevenChartPanel = lazy(() => import('../panels/hashprice/BreakevenChartPanel'));
+const HashpriceTrendPanel = lazy(() => import('../panels/hashprice/HashpriceTrendPanel'));
+const DifficultyPanel = lazy(() => import('../panels/hashprice/DifficultyPanel'));
+const ScenarioSimulator = lazy(() => import('../panels/hashprice/ScenarioSimulator'));
+
+// Phase 4-6: Placeholder panels
 const CurtailmentPlaceholder = lazy(() => import('../panels/curtailment/CurtailmentPlaceholder'));
 const PoolPlaceholder = lazy(() => import('../panels/pools/PoolPlaceholder'));
 const AgentPlaceholder = lazy(() => import('../panels/agents/AgentPlaceholder'));
@@ -25,8 +32,8 @@ function PanelSkeleton() {
 /**
  * Operations Dashboard
  *
- * The primary mining operations control center. Phase 2 energy panels are live.
- * Phases 3-6 remain as placeholder panels until implemented.
+ * The primary mining operations control center. Phase 2 energy panels and
+ * Phase 3 hashprice panels are live. Phases 4-6 remain as placeholders.
  */
 export default function OperationsDashboard({ onNavigate }) {
   return (
@@ -35,7 +42,7 @@ export default function OperationsDashboard({ onNavigate }) {
       <div className="mb-6">
         <h2 className="text-lg font-bold text-terminal-green">Operations Control Center</h2>
         <p className="text-xs text-terminal-muted mt-1">
-          Unified mining operations dashboard — energy market data is live.
+          Unified mining operations dashboard — energy market and fleet hashprice data are live.
           Visit <button
             onClick={() => onNavigate?.('macro')}
             className="text-terminal-cyan hover:underline"
@@ -51,8 +58,8 @@ export default function OperationsDashboard({ onNavigate }) {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
-            { phase: 3, label: 'Fleet Hashprice', status: 'next', color: 'terminal-amber' },
-            { phase: 4, label: 'Curtailment', status: 'planned', color: 'terminal-muted' },
+            { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
+            { phase: 4, label: 'Curtailment', status: 'next', color: 'terminal-amber' },
             { phase: 5, label: 'Pool Monitor', status: 'planned', color: 'terminal-muted' },
             { phase: 6, label: 'Agents', status: 'planned', color: 'terminal-muted' },
           ].map(item => (
@@ -76,6 +83,34 @@ export default function OperationsDashboard({ onNavigate }) {
         </div>
       </div>
 
+      {/* Fleet Hashprice section — Phase 3 LIVE */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-terminal-green mb-3 flex items-center gap-2">
+          <span>⛏</span> Fleet Hashprice
+          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
+        </h3>
+        <Suspense fallback={<PanelSkeleton />}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Hero: Fleet Profitability */}
+            <FleetProfitabilityPanel />
+            {/* Difficulty tracker */}
+            <DifficultyPanel />
+            {/* Scenario simulator */}
+            <ScenarioSimulator />
+            {/* Machine breakdown spans 2 cols */}
+            <div className="md:col-span-2">
+              <MachineBreakdownPanel />
+            </div>
+            {/* Breakeven chart */}
+            <BreakevenChartPanel />
+            {/* Hashprice trend spans full width */}
+            <div className="lg:col-span-3 md:col-span-2">
+              <HashpriceTrendPanel />
+            </div>
+          </div>
+        </Suspense>
+      </div>
+
       {/* Energy Market section — Phase 2 LIVE */}
       <div className="mb-6">
         <h3 className="text-sm font-semibold text-terminal-amber mb-3 flex items-center gap-2">
@@ -84,17 +119,12 @@ export default function OperationsDashboard({ onNavigate }) {
         </h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Hero: Energy Price spans 1 col */}
             <EnergyPricePanel />
-            {/* Day-ahead curve */}
             <DayAheadPanel />
-            {/* Generation mix */}
             <GenerationMixPanel />
-            {/* Price history spans 2 cols */}
             <div className="md:col-span-2">
               <PriceHistoryPanel />
             </div>
-            {/* Heatmap */}
             <PriceHeatmapPanel />
           </div>
         </Suspense>
@@ -105,7 +135,6 @@ export default function OperationsDashboard({ onNavigate }) {
         <h3 className="text-sm font-semibold text-terminal-muted mb-3">Coming Soon</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Suspense fallback={<PanelSkeleton />}>
-            <HashpricePlaceholder />
             <CurtailmentPlaceholder />
             <PoolPlaceholder />
             <div className="md:col-span-2">

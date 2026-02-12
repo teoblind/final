@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw } from 'lucide-react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 
 interface SettingsSectionProps {
@@ -51,7 +51,15 @@ const ERCOT_NODES = [
   'LZ_NORTH', 'LZ_SOUTH', 'LZ_WEST', 'LZ_HOUSTON'
 ];
 
+interface FleetEntry {
+  asicModel: any;
+  quantity: number;
+  energyNode: string;
+  location: string;
+}
+
 export default function SettingsPanel() {
+  // Phase 2: Energy settings
   const { data: settingsData, refetch: refetchSettings } = useApi('/energy/settings', { refreshInterval: 0 });
 
   const [energySettings, setEnergySettings] = useState({
@@ -63,8 +71,8 @@ export default function SettingsPanel() {
     negativeAlertEnabled: true,
     refreshIntervalMinutes: 5,
   });
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savingEnergy, setSavingEnergy] = useState(false);
+  const [savedEnergy, setSavedEnergy] = useState(false);
 
   useEffect(() => {
     if (settingsData?.settings) {
@@ -73,7 +81,7 @@ export default function SettingsPanel() {
   }, [settingsData]);
 
   const handleSaveEnergy = async () => {
-    setSaving(true);
+    setSavingEnergy(true);
     try {
       const response = await fetch('/api/energy/settings', {
         method: 'POST',
@@ -81,14 +89,14 @@ export default function SettingsPanel() {
         body: JSON.stringify(energySettings),
       });
       if (response.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        setSavedEnergy(true);
+        setTimeout(() => setSavedEnergy(false), 2000);
         refetchSettings();
       }
     } catch (err) {
       console.error('Failed to save energy settings:', err);
     } finally {
-      setSaving(false);
+      setSavingEnergy(false);
     }
   };
 
@@ -96,10 +104,99 @@ export default function SettingsPanel() {
     setEnergySettings(prev => ({
       ...prev,
       monitoredNodes: prev.monitoredNodes.includes(node)
-        ? prev.monitoredNodes.filter(n => n !== node)
+        ? prev.monitoredNodes.filter((n: string) => n !== node)
         : [...prev.monitoredNodes, node],
     }));
   };
+
+  // Phase 3: Fleet configuration
+  const { data: asicsData } = useApi('/fleet/asics', { refreshInterval: 0 });
+  const { data: fleetConfigData, refetch: refetchFleet } = useApi('/fleet/config', { refreshInterval: 0 });
+
+  const [fleetEntries, setFleetEntries] = useState<FleetEntry[]>([]);
+  const [defaultEnergyCost, setDefaultEnergyCost] = useState(0.05);
+  const [savingFleet, setSavingFleet] = useState(false);
+  const [savedFleet, setSavedFleet] = useState(false);
+  const [showAddModel, setShowAddModel] = useState(false);
+  const [customModel, setCustomModel] = useState({ manufacturer: '', model: '', hashrate: 0, powerConsumption: 0 });
+  const [isCustom, setIsCustom] = useState(false);
+
+  const asicModels = asicsData?.models || [];
+
+  useEffect(() => {
+    if (fleetConfigData?.config) {
+      const cfg = fleetConfigData.config;
+      if (cfg.entries && cfg.entries.length > 0) {
+        setFleetEntries(cfg.entries);
+      }
+      if (cfg.defaultEnergyCostKWh !== undefined) {
+        setDefaultEnergyCost(cfg.defaultEnergyCostKWh);
+      }
+    }
+  }, [fleetConfigData]);
+
+  const addFleetEntry = (model: any) => {
+    setFleetEntries(prev => [...prev, {
+      asicModel: model,
+      quantity: 1,
+      energyNode: '',
+      location: '',
+    }]);
+    setShowAddModel(false);
+    setIsCustom(false);
+  };
+
+  const addCustomModel = () => {
+    if (!customModel.model || !customModel.hashrate || !customModel.powerConsumption) return;
+    const efficiency = customModel.powerConsumption / customModel.hashrate;
+    addFleetEntry({
+      id: `custom-${Date.now()}`,
+      ...customModel,
+      efficiency,
+      generation: 'custom',
+    });
+    setCustomModel({ manufacturer: '', model: '', hashrate: 0, powerConsumption: 0 });
+  };
+
+  const removeFleetEntry = (index: number) => {
+    setFleetEntries(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateFleetEntry = (index: number, field: string, value: any) => {
+    setFleetEntries(prev => prev.map((entry, i) =>
+      i === index ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  const handleSaveFleet = async () => {
+    setSavingFleet(true);
+    try {
+      const response = await fetch('/api/fleet/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entries: fleetEntries,
+          defaultEnergyCostKWh: defaultEnergyCost,
+        }),
+      });
+      if (response.ok) {
+        setSavedFleet(true);
+        setTimeout(() => setSavedFleet(false), 2000);
+        refetchFleet();
+      }
+    } catch (err) {
+      console.error('Failed to save fleet config:', err);
+    } finally {
+      setSavingFleet(false);
+    }
+  };
+
+  // Compute fleet totals for summary
+  const fleetTotals = fleetEntries.reduce((acc, entry) => ({
+    machines: acc.machines + entry.quantity,
+    hashrate: acc.hashrate + (entry.asicModel.hashrate * entry.quantity),
+    power: acc.power + (entry.asicModel.powerConsumption * entry.quantity),
+  }), { machines: 0, hashrate: 0, power: 0 });
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
@@ -112,6 +209,239 @@ export default function SettingsPanel() {
       </div>
 
       <div className="space-y-4">
+        {/* Fleet Configuration — Phase 3 ACTIVE */}
+        <SettingsSection
+          title="Fleet Configuration"
+          description="Define your ASIC fleet — models, quantities, efficiency ratings"
+          icon={<Cpu size={18} className="text-terminal-green" />}
+          phase={3}
+          active
+        >
+          <div className="space-y-4">
+            {/* Default Energy Cost */}
+            <div>
+              <label className="block text-xs text-terminal-muted mb-1">Default Energy Cost ($/kWh)</label>
+              <input
+                type="number"
+                step="0.001"
+                value={defaultEnergyCost}
+                onChange={e => setDefaultEnergyCost(Number(e.target.value))}
+                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-48"
+              />
+              <p className="text-xs text-terminal-muted mt-1">
+                Used when no ERCOT node is linked. Override per-entry by linking a node below.
+              </p>
+            </div>
+
+            {/* Fleet Summary */}
+            {fleetEntries.length > 0 && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-terminal-bg rounded p-3 text-center">
+                  <p className="text-xs text-terminal-muted">Total Machines</p>
+                  <p className="text-lg font-bold text-terminal-text">{fleetTotals.machines.toLocaleString()}</p>
+                </div>
+                <div className="bg-terminal-bg rounded p-3 text-center">
+                  <p className="text-xs text-terminal-muted">Total Hashrate</p>
+                  <p className="text-lg font-bold text-terminal-text">
+                    {fleetTotals.hashrate >= 1e6
+                      ? `${(fleetTotals.hashrate / 1e6).toFixed(2)} EH/s`
+                      : `${(fleetTotals.hashrate / 1e3).toFixed(1)} PH/s`}
+                  </p>
+                </div>
+                <div className="bg-terminal-bg rounded p-3 text-center">
+                  <p className="text-xs text-terminal-muted">Total Power</p>
+                  <p className="text-lg font-bold text-terminal-text">{(fleetTotals.power / 1e6).toFixed(2)} MW</p>
+                </div>
+              </div>
+            )}
+
+            {/* Fleet Entries Table */}
+            {fleetEntries.length > 0 && (
+              <div className="border border-terminal-border rounded overflow-hidden">
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-terminal-bg/50 text-xs text-terminal-muted border-b border-terminal-border">
+                  <div className="col-span-3">Model</div>
+                  <div className="col-span-1 text-right">Qty</div>
+                  <div className="col-span-2 text-right">TH/s</div>
+                  <div className="col-span-2 text-right">J/TH</div>
+                  <div className="col-span-2">Node</div>
+                  <div className="col-span-1">Location</div>
+                  <div className="col-span-1"></div>
+                </div>
+                {fleetEntries.map((entry, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs border-b border-terminal-border/50 items-center">
+                    <div className="col-span-3 text-terminal-text truncate" title={entry.asicModel.model}>
+                      {entry.asicModel.model}
+                    </div>
+                    <div className="col-span-1">
+                      <input
+                        type="number"
+                        min="1"
+                        value={entry.quantity}
+                        onChange={e => updateFleetEntry(idx, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                        className="bg-terminal-bg border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text w-full text-right"
+                      />
+                    </div>
+                    <div className="col-span-2 text-right text-terminal-text">{entry.asicModel.hashrate}</div>
+                    <div className="col-span-2 text-right text-terminal-muted">{entry.asicModel.efficiency?.toFixed(1)}</div>
+                    <div className="col-span-2">
+                      <select
+                        value={entry.energyNode || ''}
+                        onChange={e => updateFleetEntry(idx, 'energyNode', e.target.value)}
+                        className="bg-terminal-bg border border-terminal-border rounded px-1 py-1 text-xs text-terminal-text w-full"
+                      >
+                        <option value="">None</option>
+                        {ERCOT_NODES.map(n => <option key={n} value={n}>{n.replace('_', ' ')}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-1">
+                      <input
+                        type="text"
+                        placeholder="Site"
+                        value={entry.location || ''}
+                        onChange={e => updateFleetEntry(idx, 'location', e.target.value)}
+                        className="bg-terminal-bg border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text w-full"
+                      />
+                    </div>
+                    <div className="col-span-1 text-center">
+                      <button
+                        onClick={() => removeFleetEntry(idx)}
+                        className="p-1 text-terminal-muted hover:text-terminal-red transition-colors"
+                        title="Remove"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add Machine */}
+            {!showAddModel ? (
+              <button
+                onClick={() => setShowAddModel(true)}
+                className="flex items-center gap-2 px-3 py-2 text-xs text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/10 transition-colors"
+              >
+                <Plus size={14} /> Add Machine Class
+              </button>
+            ) : (
+              <div className="bg-terminal-bg border border-terminal-border rounded p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-terminal-text">Add Machine Class</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setIsCustom(false)}
+                      className={`px-2 py-1 text-xs rounded ${!isCustom ? 'bg-terminal-green/20 text-terminal-green' : 'text-terminal-muted hover:text-terminal-text'}`}
+                    >
+                      From Database
+                    </button>
+                    <button
+                      onClick={() => setIsCustom(true)}
+                      className={`px-2 py-1 text-xs rounded ${isCustom ? 'bg-terminal-green/20 text-terminal-green' : 'text-terminal-muted hover:text-terminal-text'}`}
+                    >
+                      Custom
+                    </button>
+                  </div>
+                </div>
+
+                {!isCustom ? (
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {asicModels.map((model: any) => (
+                      <button
+                        key={model.id}
+                        onClick={() => addFleetEntry(model)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-xs rounded hover:bg-terminal-border/50 transition-colors"
+                      >
+                        <span className="text-terminal-text">{model.model}</span>
+                        <span className="text-terminal-muted">
+                          {model.hashrate} TH/s &middot; {model.powerConsumption}W &middot; {model.efficiency?.toFixed(1)} J/TH
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-terminal-muted mb-1">Manufacturer</label>
+                        <input
+                          type="text"
+                          value={customModel.manufacturer}
+                          onChange={e => setCustomModel(prev => ({ ...prev, manufacturer: e.target.value }))}
+                          placeholder="e.g. Bitmain"
+                          className="bg-terminal-panel border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-terminal-muted mb-1">Model Name</label>
+                        <input
+                          type="text"
+                          value={customModel.model}
+                          onChange={e => setCustomModel(prev => ({ ...prev, model: e.target.value }))}
+                          placeholder="e.g. Antminer S22"
+                          className="bg-terminal-panel border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text w-full"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-terminal-muted mb-1">Hashrate (TH/s)</label>
+                        <input
+                          type="number"
+                          value={customModel.hashrate || ''}
+                          onChange={e => setCustomModel(prev => ({ ...prev, hashrate: Number(e.target.value) }))}
+                          className="bg-terminal-panel border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-terminal-muted mb-1">Power (Watts)</label>
+                        <input
+                          type="number"
+                          value={customModel.powerConsumption || ''}
+                          onChange={e => setCustomModel(prev => ({ ...prev, powerConsumption: Number(e.target.value) }))}
+                          className="bg-terminal-panel border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text w-full"
+                        />
+                      </div>
+                    </div>
+                    {customModel.hashrate > 0 && customModel.powerConsumption > 0 && (
+                      <p className="text-xs text-terminal-muted">
+                        Efficiency: {(customModel.powerConsumption / customModel.hashrate).toFixed(1)} J/TH
+                      </p>
+                    )}
+                    <button
+                      onClick={addCustomModel}
+                      disabled={!customModel.model || !customModel.hashrate || !customModel.powerConsumption}
+                      className="px-3 py-1.5 text-xs bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors disabled:opacity-50"
+                    >
+                      Add Custom Model
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => { setShowAddModel(false); setIsCustom(false); }}
+                  className="text-xs text-terminal-muted hover:text-terminal-text"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {/* Save Button */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={handleSaveFleet}
+                disabled={savingFleet}
+                className="flex items-center gap-2 px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors text-sm disabled:opacity-50"
+              >
+                {savingFleet ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {savingFleet ? 'Saving...' : savedFleet ? 'Saved!' : 'Save Fleet Configuration'}
+              </button>
+              {savedFleet && <span className="text-xs text-terminal-green">Fleet configuration saved</span>}
+            </div>
+          </div>
+        </SettingsSection>
+
         {/* Energy Configuration — Phase 2 ACTIVE */}
         <SettingsSection
           title="Energy Market"
@@ -121,7 +451,6 @@ export default function SettingsPanel() {
           active
         >
           <div className="space-y-4">
-            {/* ISO Selection */}
             <div>
               <label className="block text-xs text-terminal-muted mb-1">ISO / RTO</label>
               <select
@@ -135,7 +464,6 @@ export default function SettingsPanel() {
               </select>
             </div>
 
-            {/* Primary Node */}
             <div>
               <label className="block text-xs text-terminal-muted mb-1">Primary Settlement Point</label>
               <select
@@ -149,7 +477,6 @@ export default function SettingsPanel() {
               </select>
             </div>
 
-            {/* Monitored Nodes */}
             <div>
               <label className="block text-xs text-terminal-muted mb-2">Monitored Nodes</label>
               <div className="flex flex-wrap gap-2">
@@ -169,7 +496,6 @@ export default function SettingsPanel() {
               </div>
             </div>
 
-            {/* Price Thresholds */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-terminal-muted mb-1">High Price Alert ($/MWh)</label>
@@ -191,11 +517,10 @@ export default function SettingsPanel() {
               </div>
             </div>
 
-            {/* Negative Alert Toggle */}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-terminal-text">Negative Price Alerts</p>
-                <p className="text-xs text-terminal-muted">Get notified when prices go negative (free energy!)</p>
+                <p className="text-xs text-terminal-muted">Get notified when prices go negative</p>
               </div>
               <button
                 onClick={() => setEnergySettings(prev => ({ ...prev, negativeAlertEnabled: !prev.negativeAlertEnabled }))}
@@ -209,7 +534,6 @@ export default function SettingsPanel() {
               </button>
             </div>
 
-            {/* Refresh Interval */}
             <div>
               <label className="block text-xs text-terminal-muted mb-1">Refresh Interval (minutes)</label>
               <select
@@ -225,53 +549,16 @@ export default function SettingsPanel() {
               </select>
             </div>
 
-            {/* Save Button */}
             <div className="flex items-center gap-3 pt-2">
               <button
                 onClick={handleSaveEnergy}
-                disabled={saving}
+                disabled={savingEnergy}
                 className="flex items-center gap-2 px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors text-sm disabled:opacity-50"
               >
-                {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Energy Settings'}
+                {savingEnergy ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {savingEnergy ? 'Saving...' : savedEnergy ? 'Saved!' : 'Save Energy Settings'}
               </button>
-              {saved && <span className="text-xs text-terminal-green">Settings saved successfully</span>}
-            </div>
-          </div>
-        </SettingsSection>
-
-        {/* Fleet Configuration */}
-        <SettingsSection
-          title="Fleet Configuration"
-          description="Define your ASIC fleet — models, quantities, efficiency ratings"
-          icon={<Cpu size={18} className="text-terminal-green" />}
-          phase={3}
-        >
-          <div className="space-y-3">
-            <p className="text-sm text-terminal-muted">
-              Configure your mining hardware fleet to enable fleet-aware hashprice modeling
-              and profitability analysis.
-            </p>
-            <div className="bg-terminal-bg rounded p-3">
-              <p className="text-xs text-terminal-muted mb-2">Example fleet entry:</p>
-              <div className="grid grid-cols-4 gap-2 text-xs">
-                <div>
-                  <p className="text-terminal-muted">Model</p>
-                  <p className="text-terminal-text">S21 XP</p>
-                </div>
-                <div>
-                  <p className="text-terminal-muted">Quantity</p>
-                  <p className="text-terminal-text">500</p>
-                </div>
-                <div>
-                  <p className="text-terminal-muted">Hashrate</p>
-                  <p className="text-terminal-text">270 TH/s</p>
-                </div>
-                <div>
-                  <p className="text-terminal-muted">Efficiency</p>
-                  <p className="text-terminal-text">15.0 J/TH</p>
-                </div>
-              </div>
+              {savedEnergy && <span className="text-xs text-terminal-green">Settings saved successfully</span>}
             </div>
           </div>
         </SettingsSection>

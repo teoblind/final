@@ -205,21 +205,78 @@ const EnergyPanels: PanelRegistryEntry[] = [
   },
 ];
 
-// Phase 3-6: Placeholder panels for Operations dashboard
-const OperationsPlaceholders: PanelRegistryEntry[] = [
+// Phase 3: Fleet Hashprice panels (active)
+const HashpricePanels: PanelRegistryEntry[] = [
   {
-    id: 'fleet-hashprice',
-    title: 'Fleet Hashprice',
-    subtitle: 'Fleet-aware profitability modeling',
+    id: 'fleet-profitability',
+    title: 'Fleet Profitability',
+    subtitle: 'Fleet P&L at a glance',
     category: 'hashprice',
-    component: lazy(() => import('../components/panels/hashprice/HashpricePlaceholder')),
+    component: lazy(() => import('../components/panels/hashprice/FleetProfitabilityPanel')),
     defaultSize: { cols: 1, rows: 1 },
     phase: 3,
-    status: 'placeholder',
-    requiredConfig: ['fleetConfig'],
-    description: 'Your fleet\'s actual hashprice based on ASIC models, efficiency curves, and real energy costs. Includes breakeven analysis, profitability heatmaps by power price, and what-if modeling for hardware upgrades.',
+    status: 'active',
     icon: '⛏',
   },
+  {
+    id: 'machine-breakdown',
+    title: 'Machine Class Profitability',
+    subtitle: 'Per-model revenue breakdown',
+    category: 'hashprice',
+    component: lazy(() => import('../components/panels/hashprice/MachineBreakdownPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 3,
+    status: 'active',
+    icon: '📋',
+  },
+  {
+    id: 'breakeven-chart',
+    title: 'Breakeven Electricity',
+    subtitle: 'Max tolerable $/kWh per model',
+    category: 'hashprice',
+    component: lazy(() => import('../components/panels/hashprice/BreakevenChartPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 3,
+    status: 'active',
+    icon: '📊',
+  },
+  {
+    id: 'hashprice-trend',
+    title: 'Hashprice Trend',
+    subtitle: 'Historical + projections',
+    category: 'hashprice',
+    component: lazy(() => import('../components/panels/hashprice/HashpriceTrendPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 3,
+    status: 'active',
+    icon: '📈',
+  },
+  {
+    id: 'difficulty-tracker',
+    title: 'Difficulty Adjustment',
+    subtitle: 'Next adjustment countdown + impact',
+    category: 'hashprice',
+    component: lazy(() => import('../components/panels/hashprice/DifficultyPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 3,
+    status: 'active',
+    icon: '🎯',
+  },
+  {
+    id: 'scenario-simulator',
+    title: 'Scenario Simulator',
+    subtitle: 'What-if analysis',
+    category: 'hashprice',
+    component: lazy(() => import('../components/panels/hashprice/ScenarioSimulator')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 3,
+    status: 'active',
+    icon: '🔮',
+  },
+];
+
+// Phase 4-6: Placeholder panels for Operations dashboard
+const OperationsPlaceholders: PanelRegistryEntry[] = [
   {
     id: 'curtailment-optimizer',
     title: 'Curtailment Optimizer',
@@ -264,6 +321,7 @@ const OperationsPlaceholders: PanelRegistryEntry[] = [
 export const panelRegistry: PanelRegistryEntry[] = [
   ...MacroPanels,
   ...EnergyPanels,
+  ...HashpricePanels,
   ...OperationsPlaceholders,
 ];
 

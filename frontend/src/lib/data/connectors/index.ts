@@ -173,6 +173,42 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/energy/fuelmix',
     refreshInterval: 15 * 60 * 1000,
   }),
+
+  // Phase 3: Fleet Hashprice connectors
+  fleetProfitability: createApiConnector({
+    id: 'fleet-profitability',
+    name: 'Fleet Hashprice Engine',
+    endpoint: '/fleet/profitability',
+    refreshInterval: 5 * 60 * 1000,
+  }),
+
+  fleetNetwork: createApiConnector({
+    id: 'fleet-network',
+    name: 'Blockchain.info + CoinGecko + Mempool',
+    endpoint: '/fleet/network',
+    refreshInterval: 10 * 60 * 1000,
+  }),
+
+  fleetBreakeven: createApiConnector({
+    id: 'fleet-breakeven',
+    name: 'Fleet Breakeven Calculator',
+    endpoint: '/fleet/breakeven',
+    refreshInterval: 5 * 60 * 1000,
+  }),
+
+  fleetDifficulty: createApiConnector({
+    id: 'fleet-difficulty',
+    name: 'Blockchain.info Difficulty',
+    endpoint: '/fleet/difficulty',
+    refreshInterval: 10 * 60 * 1000,
+  }),
+
+  fleetHistory: createApiConnector({
+    id: 'fleet-history',
+    name: 'Hashprice History',
+    endpoint: '/fleet/history',
+    refreshInterval: 30 * 60 * 1000,
+  }),
 };
 
 /**
