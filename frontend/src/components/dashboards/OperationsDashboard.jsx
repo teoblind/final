@@ -15,8 +15,14 @@ const HashpriceTrendPanel = lazy(() => import('../panels/hashprice/HashpriceTren
 const DifficultyPanel = lazy(() => import('../panels/hashprice/DifficultyPanel'));
 const ScenarioSimulator = lazy(() => import('../panels/hashprice/ScenarioSimulator'));
 
-// Phase 4-6: Placeholder panels
-const CurtailmentPlaceholder = lazy(() => import('../panels/curtailment/CurtailmentPlaceholder'));
+// Phase 4: Live curtailment panels
+const OperatingStatusPanel = lazy(() => import('../panels/curtailment/OperatingStatusPanel'));
+const SchedulePanel = lazy(() => import('../panels/curtailment/SchedulePanel'));
+const SavingsTrackerPanel = lazy(() => import('../panels/curtailment/SavingsTrackerPanel'));
+const EfficiencyWaterfallPanel = lazy(() => import('../panels/curtailment/EfficiencyWaterfallPanel'));
+const BacktestPanel = lazy(() => import('../panels/curtailment/BacktestPanel'));
+
+// Phase 5-6: Placeholder panels
 const PoolPlaceholder = lazy(() => import('../panels/pools/PoolPlaceholder'));
 const AgentPlaceholder = lazy(() => import('../panels/agents/AgentPlaceholder'));
 
@@ -32,8 +38,9 @@ function PanelSkeleton() {
 /**
  * Operations Dashboard
  *
- * The primary mining operations control center. Phase 2 energy panels and
- * Phase 3 hashprice panels are live. Phases 4-6 remain as placeholders.
+ * The primary mining operations control center. Phase 2 energy panels,
+ * Phase 3 hashprice panels, and Phase 4 curtailment panels are live.
+ * Phases 5-6 remain as placeholders.
  */
 export default function OperationsDashboard({ onNavigate }) {
   return (
@@ -42,7 +49,7 @@ export default function OperationsDashboard({ onNavigate }) {
       <div className="mb-6">
         <h2 className="text-lg font-bold text-terminal-green">Operations Control Center</h2>
         <p className="text-xs text-terminal-muted mt-1">
-          Unified mining operations dashboard — energy market and fleet hashprice data are live.
+          Unified mining operations dashboard — energy, hashprice, and curtailment data are live.
           Visit <button
             onClick={() => onNavigate?.('macro')}
             className="text-terminal-cyan hover:underline"
@@ -59,8 +66,8 @@ export default function OperationsDashboard({ onNavigate }) {
           {[
             { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
             { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
-            { phase: 4, label: 'Curtailment', status: 'next', color: 'terminal-amber' },
-            { phase: 5, label: 'Pool Monitor', status: 'planned', color: 'terminal-muted' },
+            { phase: 4, label: 'Curtailment', status: 'active', color: 'terminal-green' },
+            { phase: 5, label: 'Pool Monitor', status: 'next', color: 'terminal-amber' },
             { phase: 6, label: 'Agents', status: 'planned', color: 'terminal-muted' },
           ].map(item => (
             <div
@@ -81,6 +88,30 @@ export default function OperationsDashboard({ onNavigate }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Curtailment section — Phase 4 LIVE */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-terminal-cyan mb-3 flex items-center gap-2">
+          <span>🔋</span> Curtailment Optimizer
+          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
+        </h3>
+        <Suspense fallback={<PanelSkeleton />}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Hero: Operating Status */}
+            <OperatingStatusPanel />
+            {/* 24h Schedule spans 2 cols */}
+            <div className="md:col-span-2">
+              <SchedulePanel />
+            </div>
+            {/* Efficiency Waterfall */}
+            <EfficiencyWaterfallPanel />
+            {/* Savings Tracker */}
+            <SavingsTrackerPanel />
+            {/* Backtest */}
+            <BacktestPanel />
+          </div>
+        </Suspense>
       </div>
 
       {/* Fleet Hashprice section — Phase 3 LIVE */}
@@ -135,7 +166,6 @@ export default function OperationsDashboard({ onNavigate }) {
         <h3 className="text-sm font-semibold text-terminal-muted mb-3">Coming Soon</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Suspense fallback={<PanelSkeleton />}>
-            <CurtailmentPlaceholder />
             <PoolPlaceholder />
             <div className="md:col-span-2">
               <AgentPlaceholder />

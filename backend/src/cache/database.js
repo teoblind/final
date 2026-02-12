@@ -254,6 +254,62 @@ export function initDatabase() {
     )
   `);
 
+  // =========================================================================
+  // Phase 4: Curtailment optimization tables
+  // =========================================================================
+
+  // Curtailment events log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS curtailment_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trigger_type TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT,
+      duration_minutes INTEGER,
+      machine_classes TEXT,
+      energy_price_mwh REAL,
+      estimated_savings REAL DEFAULT 0,
+      reason TEXT,
+      acknowledged INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_curtailment_events_start
+    ON curtailment_events(start_time)
+  `);
+
+  // Curtailment daily performance tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS curtailment_performance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL UNIQUE,
+      mining_hours REAL,
+      curtailed_hours REAL,
+      mining_revenue REAL,
+      curtailment_savings REAL,
+      avg_energy_price_mwh REAL,
+      peak_energy_price_mwh REAL,
+      curtailment_events INTEGER DEFAULT 0,
+      fleet_state_summary TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_curtailment_performance_date
+    ON curtailment_performance(date)
+  `);
+
+  // Curtailment settings (user constraints)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS curtailment_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL
+    )
+  `);
+
   console.log('Database initialized');
 }
 
@@ -584,6 +640,76 @@ export function getFleetSnapshots(days = 30) {
     WHERE timestamp >= ?
     ORDER BY timestamp ASC
   `).all(since);
+}
+
+// =========================================================================
+// Phase 4: Curtailment helpers
+// =========================================================================
+
+export function getCurtailmentEvents(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM curtailment_events
+    WHERE start_time >= ?
+    ORDER BY start_time DESC
+  `).all(since);
+}
+
+export function insertCurtailmentEvent(event) {
+  const stmt = db.prepare(`
+    INSERT INTO curtailment_events
+      (trigger_type, start_time, end_time, duration_minutes, machine_classes,
+       energy_price_mwh, estimated_savings, reason, acknowledged)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const result = stmt.run(
+    event.triggerType, event.startTime, event.endTime,
+    event.durationMinutes, event.machineClasses,
+    event.energyPriceMWh, event.estimatedSavings,
+    event.reason, event.acknowledged
+  );
+  return result.lastInsertRowid;
+}
+
+export function acknowledgeCurtailmentEvent(id) {
+  return db.prepare(
+    'UPDATE curtailment_events SET acknowledged = 1 WHERE id = ?'
+  ).run(id);
+}
+
+export function getCurtailmentPerformance(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  return db.prepare(`
+    SELECT * FROM curtailment_performance
+    WHERE date >= ?
+    ORDER BY date ASC
+  `).all(since);
+}
+
+export function insertCurtailmentPerformance(perf) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO curtailment_performance
+      (date, mining_hours, curtailed_hours, mining_revenue, curtailment_savings,
+       avg_energy_price_mwh, peak_energy_price_mwh, curtailment_events, fleet_state_summary)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    perf.date, perf.miningHours, perf.curtailedHours,
+    perf.miningRevenue, perf.curtailmentSavings,
+    perf.avgEnergyPriceMWh, perf.peakEnergyPriceMWh,
+    perf.curtailmentEvents, perf.fleetStateSummary
+  );
+}
+
+export function getCurtailmentSettings() {
+  const row = db.prepare('SELECT data FROM curtailment_settings WHERE id = 1').get();
+  return row ? JSON.parse(row.data) : null;
+}
+
+export function saveCurtailmentSettings(settings) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO curtailment_settings (id, data)
+    VALUES (1, ?)
+  `).run(JSON.stringify(settings));
 }
 
 export default db;

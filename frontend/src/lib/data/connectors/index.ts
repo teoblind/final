@@ -209,6 +209,35 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/fleet/history',
     refreshInterval: 30 * 60 * 1000,
   }),
+
+  // Phase 4: Curtailment connectors
+  curtailmentRecommendation: createApiConnector({
+    id: 'curtailment-recommendation',
+    name: 'Curtailment Engine',
+    endpoint: '/curtailment/recommendation',
+    refreshInterval: 60 * 1000,
+  }),
+
+  curtailmentSchedule: createApiConnector({
+    id: 'curtailment-schedule',
+    name: 'DAM + Curtailment Engine',
+    endpoint: '/curtailment/schedule',
+    refreshInterval: 15 * 60 * 1000,
+  }),
+
+  curtailmentSavings: createApiConnector({
+    id: 'curtailment-savings',
+    name: 'Curtailment Event Log',
+    endpoint: '/curtailment/savings',
+    refreshInterval: 5 * 60 * 1000,
+  }),
+
+  curtailmentEfficiency: createApiConnector({
+    id: 'curtailment-efficiency',
+    name: 'Fleet Merit Order',
+    endpoint: '/curtailment/efficiency',
+    refreshInterval: 60 * 1000,
+  }),
 };
 
 /**

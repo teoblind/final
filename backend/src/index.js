@@ -27,6 +27,7 @@ import correlationRoutes from './routes/correlation.js';
 import liquidityRoutes from './routes/liquidity.js';
 import energyRoutes from './routes/energy.js';
 import fleetRoutes from './routes/fleet.js';
+import curtailmentRoutes from './routes/curtailment.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 dotenv.config();
@@ -89,6 +90,7 @@ app.use('/api/correlation', correlationRoutes);
 app.use('/api/liquidity', liquidityRoutes);
 app.use('/api/energy', energyRoutes);
 app.use('/api/fleet', fleetRoutes);
+app.use('/api/curtailment', curtailmentRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

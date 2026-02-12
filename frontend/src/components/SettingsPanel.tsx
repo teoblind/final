@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown } from 'lucide-react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 
 interface SettingsSectionProps {
@@ -188,6 +188,47 @@ export default function SettingsPanel() {
       console.error('Failed to save fleet config:', err);
     } finally {
       setSavingFleet(false);
+    }
+  };
+
+  // Phase 4: Curtailment constraints
+  const { data: curtailmentData, refetch: refetchCurtailment } = useApi('/curtailment/constraints', { refreshInterval: 0 });
+
+  const [curtailmentSettings, setCurtailmentSettings] = useState({
+    minCurtailmentMinutes: 30,
+    rampUpMinutes: 15,
+    demandResponseEnabled: false,
+    minimumTakePercent: 0,
+    maxCurtailmentPercent: 100,
+    hysteresisBandMWh: 2,
+    curtailmentMode: 'copilot' as 'copilot' | 'auto',
+  });
+  const [savingCurtailment, setSavingCurtailment] = useState(false);
+  const [savedCurtailment, setSavedCurtailment] = useState(false);
+
+  useEffect(() => {
+    if (curtailmentData) {
+      setCurtailmentSettings(prev => ({ ...prev, ...curtailmentData }));
+    }
+  }, [curtailmentData]);
+
+  const handleSaveCurtailment = async () => {
+    setSavingCurtailment(true);
+    try {
+      const response = await fetch('/api/curtailment/constraints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(curtailmentSettings),
+      });
+      if (response.ok) {
+        setSavedCurtailment(true);
+        setTimeout(() => setSavedCurtailment(false), 2000);
+        refetchCurtailment();
+      }
+    } catch (err) {
+      console.error('Failed to save curtailment settings:', err);
+    } finally {
+      setSavingCurtailment(false);
     }
   };
 
@@ -438,6 +479,134 @@ export default function SettingsPanel() {
                 {savingFleet ? 'Saving...' : savedFleet ? 'Saved!' : 'Save Fleet Configuration'}
               </button>
               {savedFleet && <span className="text-xs text-terminal-green">Fleet configuration saved</span>}
+            </div>
+          </div>
+        </SettingsSection>
+
+        {/* Curtailment Configuration — Phase 4 ACTIVE */}
+        <SettingsSection
+          title="Curtailment Optimizer"
+          description="Operational constraints, hysteresis, demand response"
+          icon={<Battery size={18} className="text-terminal-cyan" />}
+          phase={4}
+          active
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Min Curtailment Duration (min)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={curtailmentSettings.minCurtailmentMinutes}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, minCurtailmentMinutes: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Minimum shutdown duration to avoid thermal cycling</p>
+              </div>
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Ramp-Up Time (min)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={curtailmentSettings.rampUpMinutes}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, rampUpMinutes: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Time from power-on to full hashrate</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Hysteresis Band ($/MWh)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={curtailmentSettings.hysteresisBandMWh}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, hysteresisBandMWh: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Dead band around breakeven to prevent flip-flopping</p>
+              </div>
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Max Curtailment (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={curtailmentSettings.maxCurtailmentPercent}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, maxCurtailmentPercent: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Maximum % of fleet that can be curtailed</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-terminal-muted mb-1">Minimum Take (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="5"
+                value={curtailmentSettings.minimumTakePercent}
+                onChange={e => setCurtailmentSettings(prev => ({ ...prev, minimumTakePercent: Number(e.target.value) }))}
+                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-48"
+              />
+              <p className="text-[10px] text-terminal-muted mt-1">Contractual minimum power draw (% of capacity)</p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-terminal-text">Mode</p>
+                <p className="text-xs text-terminal-muted">
+                  {curtailmentSettings.curtailmentMode === 'copilot'
+                    ? 'Copilot: recommends actions, human decides'
+                    : 'Auto: executes decisions automatically'}
+                </p>
+              </div>
+              <select
+                value={curtailmentSettings.curtailmentMode}
+                onChange={e => setCurtailmentSettings(prev => ({ ...prev, curtailmentMode: e.target.value as 'copilot' | 'auto' }))}
+                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text"
+              >
+                <option value="copilot">Copilot (Recommended)</option>
+                <option value="auto">Auto</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-terminal-text">Demand Response</p>
+                <p className="text-xs text-terminal-muted">Enable 4CP and ancillary services integration</p>
+              </div>
+              <button
+                onClick={() => setCurtailmentSettings(prev => ({ ...prev, demandResponseEnabled: !prev.demandResponseEnabled }))}
+                className={`w-10 h-5 rounded-full transition-colors relative ${
+                  curtailmentSettings.demandResponseEnabled ? 'bg-terminal-green' : 'bg-terminal-border'
+                }`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                  curtailmentSettings.demandResponseEnabled ? 'left-5' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={handleSaveCurtailment}
+                disabled={savingCurtailment}
+                className="flex items-center gap-2 px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors text-sm disabled:opacity-50"
+              >
+                {savingCurtailment ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {savingCurtailment ? 'Saving...' : savedCurtailment ? 'Saved!' : 'Save Curtailment Settings'}
+              </button>
+              {savedCurtailment && <span className="text-xs text-terminal-green">Curtailment settings saved</span>}
             </div>
           </div>
         </SettingsSection>

@@ -275,21 +275,67 @@ const HashpricePanels: PanelRegistryEntry[] = [
   },
 ];
 
-// Phase 4-6: Placeholder panels for Operations dashboard
-const OperationsPlaceholders: PanelRegistryEntry[] = [
+// Phase 4: Curtailment panels (active)
+const CurtailmentPanels: PanelRegistryEntry[] = [
   {
-    id: 'curtailment-optimizer',
-    title: 'Curtailment Optimizer',
-    subtitle: 'Automated curtailment decisions',
+    id: 'operating-status',
+    title: 'Operating Status',
+    subtitle: 'Real-time fleet mining/curtailment state',
     category: 'curtailment',
-    component: lazy(() => import('../components/panels/curtailment/CurtailmentPlaceholder')),
+    component: lazy(() => import('../components/panels/curtailment/OperatingStatusPanel')),
     defaultSize: { cols: 1, rows: 1 },
     phase: 4,
-    status: 'placeholder',
-    requiredConfig: ['energySource', 'fleetConfig'],
-    description: 'Autonomous curtailment engine that cross-references energy prices, hashprice, and demand response signals. Shows optimal on/off schedules, revenue from curtailment credits, and historical performance.',
+    status: 'active',
     icon: '🔋',
   },
+  {
+    id: 'curtailment-schedule',
+    title: '24h Operating Schedule',
+    subtitle: 'Day-ahead mining/curtailment timeline',
+    category: 'curtailment',
+    component: lazy(() => import('../components/panels/curtailment/SchedulePanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 4,
+    status: 'active',
+    icon: '📅',
+  },
+  {
+    id: 'curtailment-savings',
+    title: 'Curtailment Savings',
+    subtitle: 'Cumulative savings from curtailment',
+    category: 'curtailment',
+    component: lazy(() => import('../components/panels/curtailment/SavingsTrackerPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 4,
+    status: 'active',
+    icon: '💰',
+  },
+  {
+    id: 'efficiency-waterfall',
+    title: 'Fleet Efficiency Waterfall',
+    subtitle: 'Merit-order curtailment visualization',
+    category: 'curtailment',
+    component: lazy(() => import('../components/panels/curtailment/EfficiencyWaterfallPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 4,
+    status: 'active',
+    icon: '📊',
+  },
+  {
+    id: 'curtailment-backtest',
+    title: 'Strategy Backtest',
+    subtitle: 'Historical curtailment strategy analysis',
+    category: 'curtailment',
+    component: lazy(() => import('../components/panels/curtailment/BacktestPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 4,
+    status: 'active',
+    icon: '🧪',
+  },
+];
+
+// Phase 5-6: Placeholder panels for Operations dashboard
+const OperationsPlaceholders: PanelRegistryEntry[] = [
   {
     id: 'pool-monitor',
     title: 'Pool Monitor',
@@ -322,6 +368,7 @@ export const panelRegistry: PanelRegistryEntry[] = [
   ...MacroPanels,
   ...EnergyPanels,
   ...HashpricePanels,
+  ...CurtailmentPanels,
   ...OperationsPlaceholders,
 ];
 
