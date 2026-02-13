@@ -310,6 +310,18 @@ export function initDatabase() {
     )
   `);
 
+  // Add missing columns to curtailment_events (idempotent)
+  const addColumn = (table, col, type) => {
+    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch (e) { /* already exists */ }
+  };
+  addColumn('curtailment_events', 'hashrate_online', 'REAL');
+  addColumn('curtailment_events', 'hashrate_curtailed', 'REAL');
+  addColumn('curtailment_events', 'machines_running', 'INTEGER');
+  addColumn('curtailment_events', 'machines_curtailed', 'INTEGER');
+  addColumn('curtailment_events', 'power_online_mw', 'REAL');
+  addColumn('curtailment_events', 'power_curtailed_mw', 'REAL');
+  addColumn('curtailment_events', 'savings_type', 'TEXT');
+
   console.log('Database initialized');
 }
 
@@ -659,14 +671,20 @@ export function insertCurtailmentEvent(event) {
   const stmt = db.prepare(`
     INSERT INTO curtailment_events
       (trigger_type, start_time, end_time, duration_minutes, machine_classes,
-       energy_price_mwh, estimated_savings, reason, acknowledged)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       energy_price_mwh, estimated_savings, reason, acknowledged,
+       hashrate_online, hashrate_curtailed, machines_running, machines_curtailed,
+       power_online_mw, power_curtailed_mw, savings_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const result = stmt.run(
     event.triggerType, event.startTime, event.endTime,
     event.durationMinutes, event.machineClasses,
     event.energyPriceMWh, event.estimatedSavings,
-    event.reason, event.acknowledged
+    event.reason, event.acknowledged || 0,
+    event.hashrateOnline || null, event.hashrateCurtailed || null,
+    event.machinesRunning || null, event.machinesCurtailed || null,
+    event.powerOnlineMW || null, event.powerCurtailedMW || null,
+    event.savingsType || null
   );
   return result.lastInsertRowid;
 }

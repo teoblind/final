@@ -196,12 +196,18 @@ export default function SettingsPanel() {
 
   const [curtailmentSettings, setCurtailmentSettings] = useState({
     minCurtailmentMinutes: 30,
+    minRunDurationMinutes: 30,
     rampUpMinutes: 15,
     demandResponseEnabled: false,
+    demandResponsePaymentRate: 0,
     minimumTakePercent: 0,
     maxCurtailmentPercent: 100,
     hysteresisBandMWh: 2,
     curtailmentMode: 'copilot' as 'copilot' | 'auto',
+    alwaysMineBelow: null as number | null,
+    alwaysCurtailAbove: null as number | null,
+    poolMinHashrateTH: null as number | null,
+    autoSchedule: false,
   });
   const [savingCurtailment, setSavingCurtailment] = useState(false);
   const [savedCurtailment, setSavedCurtailment] = useState(false);
@@ -492,9 +498,9 @@ export default function SettingsPanel() {
           active
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-terminal-muted mb-1">Min Curtailment Duration (min)</label>
+                <label className="block text-xs text-terminal-muted mb-1">Min Curtailment (min)</label>
                 <input
                   type="number"
                   min="0"
@@ -503,7 +509,19 @@ export default function SettingsPanel() {
                   onChange={e => setCurtailmentSettings(prev => ({ ...prev, minCurtailmentMinutes: Number(e.target.value) }))}
                   className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
                 />
-                <p className="text-[10px] text-terminal-muted mt-1">Minimum shutdown duration to avoid thermal cycling</p>
+                <p className="text-[10px] text-terminal-muted mt-1">Min shutdown to avoid thermal cycling</p>
+              </div>
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Min Run Duration (min)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={curtailmentSettings.minRunDurationMinutes}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, minRunDurationMinutes: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Min mining window to justify restart</p>
               </div>
               <div>
                 <label className="block text-xs text-terminal-muted mb-1">Ramp-Up Time (min)</label>
@@ -547,18 +565,77 @@ export default function SettingsPanel() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs text-terminal-muted mb-1">Minimum Take (%)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="5"
-                value={curtailmentSettings.minimumTakePercent}
-                onChange={e => setCurtailmentSettings(prev => ({ ...prev, minimumTakePercent: Number(e.target.value) }))}
-                className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-48"
-              />
-              <p className="text-[10px] text-terminal-muted mt-1">Contractual minimum power draw (% of capacity)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Always Mine Below ($/MWh)</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={curtailmentSettings.alwaysMineBelow ?? ''}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, alwaysMineBelow: e.target.value ? Number(e.target.value) : null }))}
+                  placeholder="None"
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Always mine when price is below this (overrides hysteresis)</p>
+              </div>
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Always Curtail Above ($/MWh)</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={curtailmentSettings.alwaysCurtailAbove ?? ''}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, alwaysCurtailAbove: e.target.value ? Number(e.target.value) : null }))}
+                  placeholder="None"
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Always curtail when price exceeds this (overrides hysteresis)</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Minimum Take (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={curtailmentSettings.minimumTakePercent}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, minimumTakePercent: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Contractual minimum power draw (%)</p>
+              </div>
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">Pool Min Hashrate (TH/s)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={curtailmentSettings.poolMinHashrateTH ?? ''}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, poolMinHashrateTH: e.target.value ? Number(e.target.value) : null }))}
+                  placeholder="None"
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Keep enough machines online to maintain pool minimum</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-terminal-text">Auto-Schedule</p>
+                <p className="text-xs text-terminal-muted">Automatically regenerate schedule when DAM prices publish</p>
+              </div>
+              <button
+                onClick={() => setCurtailmentSettings(prev => ({ ...prev, autoSchedule: !prev.autoSchedule }))}
+                className={`w-10 h-5 rounded-full transition-colors relative ${
+                  curtailmentSettings.autoSchedule ? 'bg-terminal-green' : 'bg-terminal-border'
+                }`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                  curtailmentSettings.autoSchedule ? 'left-5' : 'left-0.5'
+                }`} />
+              </button>
             </div>
 
             <div className="flex items-center justify-between">
@@ -596,6 +673,21 @@ export default function SettingsPanel() {
                 }`} />
               </button>
             </div>
+
+            {curtailmentSettings.demandResponseEnabled && (
+              <div>
+                <label className="block text-xs text-terminal-muted mb-1">DR Payment Rate ($/MWh)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="5"
+                  value={curtailmentSettings.demandResponsePaymentRate}
+                  onChange={e => setCurtailmentSettings(prev => ({ ...prev, demandResponsePaymentRate: Number(e.target.value) }))}
+                  className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-48"
+                />
+                <p className="text-[10px] text-terminal-muted mt-1">Payment rate for curtailing during grid stress events</p>
+              </div>
+            )}
 
             <div className="flex items-center gap-3 pt-2">
               <button

@@ -21,6 +21,7 @@ export default function SavingsTrackerPanel() {
   const totalSavings = data?.totalSavings || 0;
   const totalEvents = data?.totalEvents || 0;
   const byType = data?.byType || {};
+  const bySourceType = data?.bySourceType || {};
   const dailySavings = data?.dailySavings || [];
 
   // Build cumulative chart data
@@ -130,6 +131,38 @@ export default function SavingsTrackerPanel() {
               <div className="absolute bottom-1 right-2 text-[10px] text-terminal-muted">
                 {cumulativeData[cumulativeData.length - 1]?.date}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Breakdown by Savings Source Type */}
+        {(bySourceType.avoided_losses > 0 || bySourceType.demand_response > 0 || bySourceType.spike_avoidance > 0) && (
+          <div>
+            <p className="text-xs text-terminal-muted mb-2">By Savings Source</p>
+            <div className="space-y-2">
+              {[
+                { key: 'avoided_losses', label: 'Avoided Losses', color: 'text-terminal-green', bg: 'bg-terminal-green/20' },
+                { key: 'demand_response', label: 'Demand Response', color: 'text-terminal-cyan', bg: 'bg-terminal-cyan/20' },
+                { key: 'spike_avoidance', label: 'Spike Avoidance', color: 'text-terminal-red', bg: 'bg-terminal-red/20' },
+              ].filter(item => (bySourceType[item.key] || 0) > 0)
+               .map(item => {
+                  const savings = bySourceType[item.key] || 0;
+                  const pct = totalSavings > 0 ? (savings / totalSavings) * 100 : 0;
+                  return (
+                    <div key={item.key} className="flex items-center gap-3">
+                      <span className={`text-xs ${item.color} w-28`}>{item.label}</span>
+                      <div className="flex-1 h-3 bg-terminal-bg/50 rounded overflow-hidden">
+                        <div
+                          className={`h-full ${item.bg} rounded`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-terminal-text w-20 text-right">
+                        ${formatNumber(savings, 0)} ({formatNumber(pct, 0)}%)
+                      </span>
+                    </div>
+                  );
+               })}
             </div>
           </div>
         )}

@@ -22,6 +22,9 @@ export default function EfficiencyWaterfallPanel() {
     ? Math.max(...waterfall.map(w => w.breakevenMWh), currentPriceMWh) * 1.1
     : 100;
 
+  // Total hashrate for proportional bar widths
+  const totalHashrate = waterfall.reduce((s, w) => s + (w.hashrateTH || 0), 0) || 1;
+
   const barHeightPct = (breakevenMWh) => {
     return Math.min(100, (breakevenMWh / maxBreakeven) * 100);
   };
@@ -78,12 +81,13 @@ export default function EfficiencyWaterfallPanel() {
                 const barColor = isMining
                   ? 'bg-terminal-green/60 hover:bg-terminal-green/80'
                   : 'bg-terminal-red/40 hover:bg-terminal-red/60';
+                const widthPct = ((item.hashrateTH || 1) / totalHashrate) * 100;
 
                 return (
                   <div
                     key={i}
-                    className="flex-1 flex flex-col items-center justify-end group relative"
-                    style={{ height: '100%' }}
+                    className="flex flex-col items-center justify-end group relative"
+                    style={{ height: '100%', width: `${widthPct}%` }}
                   >
                     {/* Bar */}
                     <div

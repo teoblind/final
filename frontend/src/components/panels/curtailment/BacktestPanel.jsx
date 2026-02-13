@@ -209,6 +209,58 @@ export default function BacktestPanel() {
               </div>
             </div>
 
+            {/* Avg Energy Prices */}
+            {(r.avgMiningEnergyPrice > 0 || r.avgCurtailedEnergyPrice > 0) && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-terminal-bg/50 rounded p-3">
+                  <p className="text-xs text-terminal-muted">Avg Mining Energy Price</p>
+                  <p className="text-sm font-bold text-terminal-green">
+                    ${formatNumber(r.avgMiningEnergyPrice, 1)}/MWh
+                  </p>
+                </div>
+                <div className="bg-terminal-bg/50 rounded p-3">
+                  <p className="text-xs text-terminal-muted">Avg Curtailed Energy Price</p>
+                  <p className="text-sm font-bold text-terminal-red">
+                    ${formatNumber(r.avgCurtailedEnergyPrice, 1)}/MWh
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Monthly Breakdown */}
+            {results.monthlyBreakdown?.length > 0 && (
+              <div>
+                <p className="text-xs text-terminal-muted mb-2">Monthly Breakdown</p>
+                <div className="border border-terminal-border rounded overflow-hidden">
+                  <div className="grid grid-cols-5 gap-2 px-3 py-1.5 bg-terminal-bg/50 text-[10px] text-terminal-muted border-b border-terminal-border">
+                    <div>Month</div>
+                    <div className="text-right">Always Mine</div>
+                    <div className="text-right">Optimized</div>
+                    <div className="text-right">Savings</div>
+                    <div className="text-right">Days</div>
+                  </div>
+                  {results.monthlyBreakdown.map((m, i) => {
+                    const isSaved = m.savings > 0;
+                    return (
+                      <div key={i} className="grid grid-cols-5 gap-2 px-3 py-1.5 text-xs border-b border-terminal-border/50">
+                        <div className="text-terminal-text">{m.month}</div>
+                        <div className={`text-right ${m.alwaysMine >= 0 ? 'text-terminal-text' : 'text-terminal-red'}`}>
+                          ${formatNumber(m.alwaysMine, 0)}
+                        </div>
+                        <div className={`text-right ${m.optimized >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
+                          ${formatNumber(m.optimized, 0)}
+                        </div>
+                        <div className={`text-right font-medium ${isSaved ? 'text-terminal-cyan' : 'text-terminal-red'}`}>
+                          {isSaved ? '+' : ''}${formatNumber(m.savings, 0)}
+                        </div>
+                        <div className="text-right text-terminal-muted">{m.days}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Daily P&L chart (simplified) */}
             {results.dailyResults?.length > 0 && (
               <div>

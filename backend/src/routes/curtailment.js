@@ -46,6 +46,24 @@ router.get('/recommendation', async (req, res) => {
   }
 });
 
+/**
+ * GET /schedule/generate — Force-regenerate the operating schedule
+ * Same as /schedule but signals explicit regeneration intent
+ */
+router.get('/schedule/generate', async (req, res) => {
+  try {
+    const opts = {};
+    if (req.query.node) opts.node = req.query.node;
+    if (req.query.date) opts.date = req.query.date;
+
+    const schedule = await generateSchedule(opts);
+    res.json({ ...schedule, regenerated: true });
+  } catch (error) {
+    console.error('Error regenerating schedule:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── 24-Hour Schedule ──────────────────────────────────────────────────────
 
 /**
@@ -135,10 +153,27 @@ router.get('/savings', (req, res) => {
       dailySavings[item.date].events += 1;
     }
 
+    // Compute savings by source type
+    const bySourceType = { avoided_losses: 0, demand_response: 0, spike_avoidance: 0 };
+    for (const event of sorted) {
+      const savings = event.estimated_savings || 0;
+      const st = event.savings_type;
+      if (st && bySourceType[st] !== undefined) {
+        bySourceType[st] += savings;
+      } else if ((event.energy_price_mwh || 0) > 100) {
+        bySourceType.spike_avoidance += savings;
+      } else if (event.trigger_type === 'demand_response') {
+        bySourceType.demand_response += savings;
+      } else {
+        bySourceType.avoided_losses += savings;
+      }
+    }
+
     res.json({
       totalSavings: cumulative,
       totalEvents: events.length,
       byType,
+      bySourceType,
       timeline: savingsTimeline,
       dailySavings: Object.values(dailySavings).sort((a, b) => a.date.localeCompare(b.date)),
       fetchedAt: new Date().toISOString(),
@@ -229,6 +264,8 @@ router.post('/events', (req, res) => {
     const {
       triggerType, startTime, endTime, machineClasses,
       energyPriceMWh, estimatedSavings, reason, acknowledged,
+      hashrateOnline, hashrateCurtailed, machinesRunning,
+      machinesCurtailed, powerOnlineMW, powerCurtailedMW, savingsType,
     } = req.body;
 
     if (!triggerType || !startTime) {
@@ -253,6 +290,13 @@ router.post('/events', (req, res) => {
       estimatedSavings: estimatedSavings || 0,
       reason: reason || null,
       acknowledged: acknowledged ? 1 : 0,
+      hashrateOnline: hashrateOnline || null,
+      hashrateCurtailed: hashrateCurtailed || null,
+      machinesRunning: machinesRunning || null,
+      machinesCurtailed: machinesCurtailed || null,
+      powerOnlineMW: powerOnlineMW || null,
+      powerCurtailedMW: powerCurtailedMW || null,
+      savingsType: savingsType || null,
     });
 
     res.json({ success: true, eventId });
@@ -314,6 +358,27 @@ router.post('/constraints', (req, res) => {
 });
 
 /**
+ * PUT /constraints — Update curtailment constraints (same as POST)
+ */
+router.put('/constraints', (req, res) => {
+  try {
+    const constraints = req.body;
+    saveCurtailmentSettings(constraints);
+
+    const config = getFleetConfig();
+    if (config) {
+      config.curtailmentConstraints = constraints;
+      saveFleetConfig(config);
+    }
+
+    res.json({ success: true, constraints });
+  } catch (error) {
+    console.error('Error saving constraints:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /alerts — Curtailment-specific alerts
  */
 router.get('/alerts', async (req, res) => {
@@ -345,13 +410,14 @@ router.get('/alerts', async (req, res) => {
       });
     }
 
-    // Alert: high savings opportunity
-    if (rec.summary.curtailmentSavings > 100) {
+    // Alert: high savings opportunity (check per-day projection)
+    const savingsPerDay = rec.summary.curtailmentSavingsPerDay || (rec.summary.curtailmentSavingsPerHr * 24) || 0;
+    if (savingsPerDay > 100) {
       alerts.push({
         type: 'savings_opportunity',
         severity: 'info',
-        message: `Curtailment could save $${rec.summary.curtailmentSavings.toFixed(0)}/day at current conditions`,
-        savings: rec.summary.curtailmentSavings,
+        message: `Curtailment could save $${savingsPerDay.toFixed(0)}/day at current conditions`,
+        savings: savingsPerDay,
       });
     }
 
@@ -409,13 +475,19 @@ router.get('/efficiency', async (req, res) => {
 function getDefaultConstraints() {
   return {
     minCurtailmentMinutes: 30,
+    minRunDurationMinutes: 30,
     rampUpMinutes: 15,
     demandResponseEnabled: false,
+    demandResponsePaymentRate: 0,
     demandResponsePrograms: [],
     minimumTakePercent: 0,
     maxCurtailmentPercent: 100,
     hysteresisBandMWh: 2,
     curtailmentMode: 'copilot',
+    alwaysMineBelow: null,
+    alwaysCurtailAbove: null,
+    poolMinHashrateTH: null,
+    autoSchedule: false,
   };
 }
 
