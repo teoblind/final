@@ -12,7 +12,14 @@ const METRICS = [
   { value: 'ndpr_price', label: 'NdPr Price ($/kg)' },
   { value: 'ewz_spy_ratio', label: 'EWZ/SPY Ratio' },
   { value: 'glw_qqq_ratio', label: 'GLW/QQQ Ratio' },
-  { value: 'iran_hashrate_share', label: 'Iran Hashrate Share (%)' }
+  { value: 'iran_hashrate_share', label: 'Iran Hashrate Share (%)' },
+  // Phase 5: Pool & On-Chain
+  { value: 'pool_hashrate_drop', label: 'Pool Hashrate Drop (%)' },
+  { value: 'pool_reject_rate', label: 'Pool Reject Rate (%)' },
+  { value: 'worker_dead_count', label: 'Dead Workers (#)' },
+  { value: 'mempool_fee_rate', label: 'Mempool Fee Rate (sat/vB)' },
+  { value: 'fee_revenue_pct', label: 'Fee Revenue % of Block' },
+  { value: 'pool_luck', label: 'Pool Luck (%)' },
 ];
 
 const CONDITIONS = [

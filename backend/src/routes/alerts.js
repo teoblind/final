@@ -53,7 +53,14 @@ router.post('/', (req, res) => {
     'ndpr_price',
     'ewz_spy_ratio',
     'glw_qqq_ratio',
-    'iran_hashrate_share'
+    'iran_hashrate_share',
+    // Phase 5: Pool & On-Chain
+    'pool_hashrate_drop',
+    'pool_reject_rate',
+    'worker_dead_count',
+    'mempool_fee_rate',
+    'fee_revenue_pct',
+    'pool_luck',
   ];
 
   if (!validMetrics.includes(metric)) {

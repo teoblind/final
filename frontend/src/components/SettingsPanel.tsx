@@ -51,6 +51,15 @@ const ERCOT_NODES = [
   'LZ_NORTH', 'LZ_SOUTH', 'LZ_WEST', 'LZ_HOUSTON'
 ];
 
+const POOL_OPTIONS = [
+  { id: 'foundry', name: 'Foundry USA' },
+  { id: 'luxor', name: 'Luxor' },
+  { id: 'antpool', name: 'Antpool' },
+  { id: 'f2pool', name: 'F2Pool' },
+  { id: 'braiins', name: 'Braiins Pool' },
+  { id: 'ocean', name: 'Ocean' },
+];
+
 interface FleetEntry {
   asicModel: any;
   quantity: number;
@@ -212,11 +221,37 @@ export default function SettingsPanel() {
   const [savingCurtailment, setSavingCurtailment] = useState(false);
   const [savedCurtailment, setSavedCurtailment] = useState(false);
 
+  // Phase 5: Pool configuration
+  const { data: poolConfigData, refetch: refetchPools } = useApi('/pools', { refreshInterval: 0 });
+  const [poolEntries, setPoolEntries] = useState<any[]>([]);
+  const [showAddPool, setShowAddPool] = useState(false);
+  const [newPool, setNewPool] = useState({ pool: 'foundry', apiKey: '', apiSecret: '', label: '' });
+  const [testingPool, setTestingPool] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ poolId: string; ok: boolean; message: string } | null>(null);
+  const [poolMonitoring, setPoolMonitoring] = useState({
+    pollIntervalSeconds: 60,
+    workerSnapshotMinutes: 5,
+    hashrateDeviationPct: 10,
+    rejectRateThreshold: 2,
+    deadWorkerTimeoutMinutes: 30,
+  });
+  const [savingPool, setSavingPool] = useState(false);
+  const [savedPool, setSavedPool] = useState(false);
+
   useEffect(() => {
     if (curtailmentData) {
       setCurtailmentSettings(prev => ({ ...prev, ...curtailmentData }));
     }
   }, [curtailmentData]);
+
+  useEffect(() => {
+    if (poolConfigData?.pools) {
+      setPoolEntries(poolConfigData.pools);
+    }
+    if (poolConfigData?.monitoring) {
+      setPoolMonitoring(prev => ({ ...prev, ...poolConfigData.monitoring }));
+    }
+  }, [poolConfigData]);
 
   const handleSaveCurtailment = async () => {
     setSavingCurtailment(true);
@@ -235,6 +270,67 @@ export default function SettingsPanel() {
       console.error('Failed to save curtailment settings:', err);
     } finally {
       setSavingCurtailment(false);
+    }
+  };
+
+  // Phase 5: Pool handlers
+  const handleAddPool = async () => {
+    if (!newPool.apiKey) return;
+    try {
+      const response = await fetch('/api/pools', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPool),
+      });
+      if (response.ok) {
+        setNewPool({ pool: 'foundry', apiKey: '', apiSecret: '', label: '' });
+        setShowAddPool(false);
+        refetchPools();
+      }
+    } catch (err) {
+      console.error('Failed to add pool:', err);
+    }
+  };
+
+  const handleRemovePool = async (poolId: string) => {
+    try {
+      await fetch(`/api/pools/${poolId}`, { method: 'DELETE' });
+      refetchPools();
+    } catch (err) {
+      console.error('Failed to remove pool:', err);
+    }
+  };
+
+  const handleTestPool = async (poolId: string) => {
+    setTestingPool(poolId);
+    setTestResult(null);
+    try {
+      const response = await fetch(`/api/pools/${poolId}/test`, { method: 'POST' });
+      const result = await response.json();
+      setTestResult({ poolId, ok: result.connected, message: result.message || (result.connected ? 'Connected' : 'Failed') });
+    } catch {
+      setTestResult({ poolId, ok: false, message: 'Connection test failed' });
+    } finally {
+      setTestingPool(null);
+    }
+  };
+
+  const handleSavePoolMonitoring = async () => {
+    setSavingPool(true);
+    try {
+      const response = await fetch('/api/pools/monitoring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(poolMonitoring),
+      });
+      if (response.ok) {
+        setSavedPool(true);
+        setTimeout(() => setSavedPool(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to save pool monitoring:', err);
+    } finally {
+      setSavingPool(false);
     }
   };
 
@@ -824,25 +920,225 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Pool API Keys */}
+        {/* Pool Configuration — Phase 5 ACTIVE */}
         <SettingsSection
-          title="Pool API Keys"
-          description="Connect mining pools for unified monitoring"
-          icon={<Server size={18} className="text-terminal-blue" />}
+          title="Pool Configuration"
+          description="Connect mining pools for unified monitoring and earnings tracking"
+          icon={<Server size={18} className="text-terminal-cyan" />}
           phase={5}
+          active
         >
-          <div className="space-y-3">
-            <p className="text-sm text-terminal-muted">
-              Add API keys from your mining pools to enable the unified Pool Monitor.
-              Supports Foundry, Braiins, Ocean, F2Pool, Luxor, and custom pools.
-            </p>
-            <div className="bg-terminal-bg rounded p-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-terminal-muted">No pools configured yet</span>
-                <span className="text-terminal-green cursor-pointer hover:underline">
-                  + Add Pool
-                </span>
+          <div className="space-y-4">
+            {/* Connected Pools */}
+            {poolEntries.length > 0 && (
+              <div className="space-y-2">
+                {poolEntries.map((pool: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between bg-terminal-bg rounded p-3">
+                    <div className="flex items-center gap-3">
+                      <span className={`w-2 h-2 rounded-full ${pool.connected !== false ? 'bg-terminal-green' : 'bg-terminal-red'}`} />
+                      <div>
+                        <p className="text-sm text-terminal-text font-medium">
+                          {pool.label || POOL_OPTIONS.find(p => p.id === pool.pool)?.name || pool.pool}
+                        </p>
+                        <p className="text-xs text-terminal-muted">
+                          {POOL_OPTIONS.find(p => p.id === pool.pool)?.name || pool.pool} &middot; Key: ****{pool.apiKey?.slice(-4) || '****'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {testResult?.poolId === (pool.id || pool.pool) && (
+                        <span className={`text-xs ${testResult.ok ? 'text-terminal-green' : 'text-terminal-red'}`}>
+                          {testResult.message}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleTestPool(pool.id || pool.pool)}
+                        disabled={testingPool === (pool.id || pool.pool)}
+                        className="px-2 py-1 text-xs border border-terminal-border rounded hover:border-terminal-cyan text-terminal-muted hover:text-terminal-cyan transition-colors disabled:opacity-50"
+                      >
+                        {testingPool === (pool.id || pool.pool) ? (
+                          <RefreshCw size={12} className="animate-spin" />
+                        ) : 'Test'}
+                      </button>
+                      <button
+                        onClick={() => handleRemovePool(pool.id || pool.pool)}
+                        className="p-1 text-terminal-muted hover:text-terminal-red transition-colors"
+                        title="Remove pool"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
+
+            {poolEntries.length === 0 && !showAddPool && (
+              <div className="bg-terminal-bg/50 rounded p-4 text-center">
+                <p className="text-sm text-terminal-muted mb-1">No pools connected</p>
+                <p className="text-xs text-terminal-muted">Add your mining pool API credentials to enable unified monitoring.</p>
+              </div>
+            )}
+
+            {/* Add Pool */}
+            {!showAddPool ? (
+              <button
+                onClick={() => setShowAddPool(true)}
+                className="flex items-center gap-2 px-3 py-2 text-xs text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/10 transition-colors"
+              >
+                <Plus size={14} /> Add Pool Connection
+              </button>
+            ) : (
+              <div className="bg-terminal-bg border border-terminal-border rounded p-3 space-y-3">
+                <p className="text-sm font-semibold text-terminal-text">Add Pool Connection</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Pool</label>
+                    <select
+                      value={newPool.pool}
+                      onChange={e => setNewPool(prev => ({ ...prev, pool: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                    >
+                      {POOL_OPTIONS.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Label (optional)</label>
+                    <input
+                      type="text"
+                      value={newPool.label}
+                      onChange={e => setNewPool(prev => ({ ...prev, label: e.target.value }))}
+                      placeholder="e.g. Primary Pool"
+                      className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">API Key</label>
+                  <input
+                    type="password"
+                    value={newPool.apiKey}
+                    onChange={e => setNewPool(prev => ({ ...prev, apiKey: e.target.value }))}
+                    placeholder="Enter API key"
+                    className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">API Secret (if required)</label>
+                  <input
+                    type="password"
+                    value={newPool.apiSecret}
+                    onChange={e => setNewPool(prev => ({ ...prev, apiSecret: e.target.value }))}
+                    placeholder="Enter API secret"
+                    className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full font-mono"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleAddPool}
+                    disabled={!newPool.apiKey}
+                    className="px-3 py-1.5 text-xs bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/30 transition-colors disabled:opacity-50"
+                  >
+                    Add Pool
+                  </button>
+                  <button
+                    onClick={() => { setShowAddPool(false); setNewPool({ pool: 'foundry', apiKey: '', apiSecret: '', label: '' }); }}
+                    className="text-xs text-terminal-muted hover:text-terminal-text"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Monitoring Preferences */}
+            <div className="border-t border-terminal-border pt-4 mt-4">
+              <p className="text-sm font-medium text-terminal-text mb-3">Monitoring Preferences</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">Poll Interval</label>
+                  <select
+                    value={poolMonitoring.pollIntervalSeconds}
+                    onChange={e => setPoolMonitoring(prev => ({ ...prev, pollIntervalSeconds: Number(e.target.value) }))}
+                    className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                  >
+                    <option value={30}>30 seconds</option>
+                    <option value={60}>1 minute</option>
+                    <option value={120}>2 minutes</option>
+                    <option value={300}>5 minutes</option>
+                  </select>
+                  <p className="text-[10px] text-terminal-muted mt-1">How often to fetch pool data</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">Worker Snapshot Interval</label>
+                  <select
+                    value={poolMonitoring.workerSnapshotMinutes}
+                    onChange={e => setPoolMonitoring(prev => ({ ...prev, workerSnapshotMinutes: Number(e.target.value) }))}
+                    className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                  >
+                    <option value={1}>1 minute</option>
+                    <option value={5}>5 minutes</option>
+                    <option value={15}>15 minutes</option>
+                    <option value={30}>30 minutes</option>
+                  </select>
+                  <p className="text-[10px] text-terminal-muted mt-1">Interval for worker status snapshots</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mt-3">
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">Hashrate Deviation (%)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={poolMonitoring.hashrateDeviationPct}
+                    onChange={e => setPoolMonitoring(prev => ({ ...prev, hashrateDeviationPct: Number(e.target.value) }))}
+                    className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                  />
+                  <p className="text-[10px] text-terminal-muted mt-1">Alert when hashrate deviates by this %</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">Reject Rate Threshold (%)</label>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="10"
+                    step="0.1"
+                    value={poolMonitoring.rejectRateThreshold}
+                    onChange={e => setPoolMonitoring(prev => ({ ...prev, rejectRateThreshold: Number(e.target.value) }))}
+                    className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                  />
+                  <p className="text-[10px] text-terminal-muted mt-1">Alert when reject rate exceeds this</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-terminal-muted mb-1">Dead Worker Timeout (min)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="120"
+                    step="5"
+                    value={poolMonitoring.deadWorkerTimeoutMinutes}
+                    onChange={e => setPoolMonitoring(prev => ({ ...prev, deadWorkerTimeoutMinutes: Number(e.target.value) }))}
+                    className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
+                  />
+                  <p className="text-[10px] text-terminal-muted mt-1">Mark worker dead after this silence</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={handleSavePoolMonitoring}
+                disabled={savingPool}
+                className="flex items-center gap-2 px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors text-sm disabled:opacity-50"
+              >
+                {savingPool ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {savingPool ? 'Saving...' : savedPool ? 'Saved!' : 'Save Pool Settings'}
+              </button>
+              {savedPool && <span className="text-xs text-terminal-green">Pool settings saved</span>}
             </div>
           </div>
         </SettingsSection>

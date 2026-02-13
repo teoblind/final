@@ -322,6 +322,126 @@ export function initDatabase() {
   addColumn('curtailment_events', 'power_curtailed_mw', 'REAL');
   addColumn('curtailment_events', 'savings_type', 'TEXT');
 
+  // ─── Phase 5: Pool & On-Chain Tables ──────────────────────────────────────
+
+  // Pool configuration (encrypted credentials)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pool_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL
+    )
+  `);
+
+  // Pool hashrate history
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pool_hashrate (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pool TEXT NOT NULL,
+      timestamp DATETIME NOT NULL,
+      reported_hashrate REAL,
+      avg_1h REAL,
+      avg_24h REAL,
+      avg_7d REAL,
+      active_workers INTEGER,
+      reject_rate REAL,
+      stale_rate REAL,
+      UNIQUE(pool, timestamp)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pool_hashrate_pool_ts ON pool_hashrate(pool, timestamp)`);
+
+  // Pool earnings
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pool_earnings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pool TEXT NOT NULL,
+      date DATE NOT NULL,
+      earned_btc REAL,
+      earned_usd REAL,
+      subsidy_btc REAL,
+      fee_btc REAL,
+      hashrate_avg REAL,
+      effective_per_th REAL,
+      UNIQUE(pool, date)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_pool_earnings_pool_date ON pool_earnings(pool, date)`);
+
+  // Pool payouts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pool_payouts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pool TEXT NOT NULL,
+      timestamp DATETIME NOT NULL,
+      amount_btc REAL,
+      txid TEXT,
+      address TEXT,
+      status TEXT,
+      confirmations INTEGER
+    )
+  `);
+
+  // Worker snapshots (periodic)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS worker_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pool TEXT NOT NULL,
+      timestamp DATETIME NOT NULL,
+      worker_id TEXT NOT NULL,
+      hashrate REAL,
+      status TEXT,
+      reject_rate REAL,
+      last_share DATETIME
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_snapshots_pool_ts ON worker_snapshots(pool, timestamp)`);
+
+  // On-chain blocks
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      height INTEGER NOT NULL UNIQUE,
+      hash TEXT,
+      timestamp DATETIME,
+      size INTEGER,
+      tx_count INTEGER,
+      total_fees REAL,
+      subsidy REAL,
+      total_reward REAL,
+      avg_fee_rate REAL,
+      miner TEXT,
+      time_since_last INTEGER
+    )
+  `);
+
+  // Mempool snapshots
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mempool_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp DATETIME NOT NULL,
+      size_bytes INTEGER,
+      tx_count INTEGER,
+      total_fees REAL,
+      fee_next_block REAL,
+      fee_half_hour REAL,
+      fee_hour REAL,
+      fee_economy REAL
+    )
+  `);
+
+  // Fleet diagnostics log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS diagnostic_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp DATETIME NOT NULL,
+      type TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      details TEXT,
+      resolved INTEGER DEFAULT 0,
+      resolved_at DATETIME
+    )
+  `);
+
   console.log('Database initialized');
 }
 
@@ -728,6 +848,144 @@ export function saveCurtailmentSettings(settings) {
     INSERT OR REPLACE INTO curtailment_settings (id, data)
     VALUES (1, ?)
   `).run(JSON.stringify(settings));
+}
+
+// ─── Phase 5: Pool & On-Chain Helpers ──────────────────────────────────────
+
+// Pool config
+export function getPoolConfig() {
+  const row = db.prepare('SELECT data FROM pool_config WHERE id = 1').get();
+  return row ? JSON.parse(row.data) : { pools: [], settings: {} };
+}
+
+export function savePoolConfig(config) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO pool_config (id, data) VALUES (1, ?)
+  `).run(JSON.stringify(config));
+}
+
+// Pool hashrate
+export function insertPoolHashrate(record) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO pool_hashrate
+      (pool, timestamp, reported_hashrate, avg_1h, avg_24h, avg_7d, active_workers, reject_rate, stale_rate)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(record.pool, record.timestamp, record.reportedHashrate, record.avg1h, record.avg24h, record.avg7d, record.activeWorkers, record.rejectRate, record.staleRate);
+}
+
+export function getPoolHashrateHistory(pool, days = 7) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM pool_hashrate WHERE pool = ? AND timestamp >= ? ORDER BY timestamp ASC
+  `).all(pool, since);
+}
+
+// Pool earnings
+export function insertPoolEarning(record) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO pool_earnings
+      (pool, date, earned_btc, earned_usd, subsidy_btc, fee_btc, hashrate_avg, effective_per_th)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(record.pool, record.date, record.earnedBtc, record.earnedUsd, record.subsidyBtc, record.feeBtc, record.hashrateAvg, record.effectivePerTh);
+}
+
+export function getPoolEarningsHistory(pool, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  return db.prepare(`
+    SELECT * FROM pool_earnings WHERE pool = ? AND date >= ? ORDER BY date ASC
+  `).all(pool, since);
+}
+
+// Pool payouts
+export function insertPoolPayout(record) {
+  return db.prepare(`
+    INSERT INTO pool_payouts (pool, timestamp, amount_btc, txid, address, status, confirmations)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(record.pool, record.timestamp, record.amountBtc, record.txid, record.address, record.status, record.confirmations);
+}
+
+export function getPoolPayouts(pool, limit = 50) {
+  return db.prepare(`
+    SELECT * FROM pool_payouts WHERE pool = ? ORDER BY timestamp DESC LIMIT ?
+  `).all(pool, limit);
+}
+
+// Worker snapshots
+export function insertWorkerSnapshot(record) {
+  return db.prepare(`
+    INSERT INTO worker_snapshots (pool, timestamp, worker_id, hashrate, status, reject_rate, last_share)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(record.pool, record.timestamp, record.workerId, record.hashrate, record.status, record.rejectRate, record.lastShare);
+}
+
+export function getLatestWorkerSnapshots(pool) {
+  return db.prepare(`
+    SELECT ws.* FROM worker_snapshots ws
+    INNER JOIN (
+      SELECT worker_id, MAX(timestamp) as max_ts FROM worker_snapshots WHERE pool = ? GROUP BY worker_id
+    ) latest ON ws.worker_id = latest.worker_id AND ws.timestamp = latest.max_ts
+    WHERE ws.pool = ?
+    ORDER BY ws.hashrate DESC
+  `).all(pool, pool);
+}
+
+// Blocks
+export function insertBlock(block) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO blocks
+      (height, hash, timestamp, size, tx_count, total_fees, subsidy, total_reward, avg_fee_rate, miner, time_since_last)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(block.height, block.hash, block.timestamp, block.size, block.txCount, block.totalFees, block.subsidy, block.totalReward, block.avgFeeRate, block.miner, block.timeSinceLast);
+}
+
+export function getRecentBlocks(count = 10) {
+  return db.prepare(`
+    SELECT * FROM blocks ORDER BY height DESC LIMIT ?
+  `).all(count);
+}
+
+// Mempool snapshots
+export function insertMempoolSnapshot(snapshot) {
+  return db.prepare(`
+    INSERT INTO mempool_snapshots
+      (timestamp, size_bytes, tx_count, total_fees, fee_next_block, fee_half_hour, fee_hour, fee_economy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(snapshot.timestamp, snapshot.sizeBytes, snapshot.txCount, snapshot.totalFees, snapshot.feeNextBlock, snapshot.feeHalfHour, snapshot.feeHour, snapshot.feeEconomy);
+}
+
+export function getMempoolHistory(hours = 24) {
+  const since = new Date(Date.now() - hours * 3600000).toISOString();
+  return db.prepare(`
+    SELECT * FROM mempool_snapshots WHERE timestamp >= ? ORDER BY timestamp ASC
+  `).all(since);
+}
+
+// Diagnostic events
+export function insertDiagnosticEvent(event) {
+  return db.prepare(`
+    INSERT INTO diagnostic_events (timestamp, type, severity, details)
+    VALUES (?, ?, ?, ?)
+  `).run(event.timestamp, event.type, event.severity, JSON.stringify(event.details));
+}
+
+export function getDiagnosticEvents(days = 7) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM diagnostic_events WHERE timestamp >= ? ORDER BY timestamp DESC
+  `).all(since);
+}
+
+// Grid events helper (used by curtailment engine)
+export function getGridEvents(iso = 'ERCOT', days = 1) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  try {
+    return db.prepare(`
+      SELECT * FROM grid_events WHERE iso = ? AND timestamp >= ? ORDER BY timestamp DESC
+    `).all(iso, since);
+  } catch (e) {
+    // grid_events table may not exist yet
+    return [];
+  }
 }
 
 export default db;

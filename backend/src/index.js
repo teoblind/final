@@ -28,6 +28,9 @@ import liquidityRoutes from './routes/liquidity.js';
 import energyRoutes from './routes/energy.js';
 import fleetRoutes from './routes/fleet.js';
 import curtailmentRoutes from './routes/curtailment.js';
+import poolRoutes from './routes/pools.js';
+import chainRoutes from './routes/chain.js';
+import diagnosticsRoutes from './routes/diagnostics.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 dotenv.config();
@@ -91,6 +94,9 @@ app.use('/api/liquidity', liquidityRoutes);
 app.use('/api/energy', energyRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/curtailment', curtailmentRoutes);
+app.use('/api/pools', poolRoutes);
+app.use('/api/chain', chainRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

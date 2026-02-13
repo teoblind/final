@@ -334,21 +334,67 @@ const CurtailmentPanels: PanelRegistryEntry[] = [
   },
 ];
 
-// Phase 5-6: Placeholder panels for Operations dashboard
-const OperationsPlaceholders: PanelRegistryEntry[] = [
+// Phase 5: Mining Pool & On-Chain panels (active)
+const PoolPanels: PanelRegistryEntry[] = [
   {
-    id: 'pool-monitor',
-    title: 'Pool Monitor',
-    subtitle: 'Mining pool performance tracking',
+    id: 'pool-hashrate',
+    title: 'Pool Hashrate',
+    subtitle: 'Reported vs expected hashrate overview',
     category: 'pools',
-    component: lazy(() => import('../components/panels/pools/PoolPlaceholder')),
+    component: lazy(() => import('../components/panels/pools/PoolHashratePanel')),
     defaultSize: { cols: 1, rows: 1 },
     phase: 5,
-    status: 'placeholder',
-    requiredConfig: ['poolApiKeys'],
-    description: 'Unified view across all your mining pools. Track hashrate, shares, luck, earnings, and payout schedules. Compare pool performance and detect anomalies like hashrate drops or rejected shares.',
-    icon: '🏊',
+    status: 'active',
+    icon: '⛏',
   },
+  {
+    id: 'pool-earnings',
+    title: 'Earnings Tracker',
+    subtitle: 'BTC earnings, luck, payouts',
+    category: 'pools',
+    component: lazy(() => import('../components/panels/pools/PoolEarningsPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 5,
+    status: 'active',
+    icon: '₿',
+  },
+  {
+    id: 'worker-fleet',
+    title: 'Worker Fleet',
+    subtitle: 'Worker-level status and diagnostics',
+    category: 'pools',
+    component: lazy(() => import('../components/panels/pools/WorkerFleetPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 5,
+    status: 'active',
+    icon: '🖥',
+  },
+  {
+    id: 'mempool-fees',
+    title: 'Mempool & Fees',
+    subtitle: 'On-chain mempool, fee estimates, blocks',
+    category: 'pools',
+    component: lazy(() => import('../components/panels/pools/MempoolFeesPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 5,
+    status: 'active',
+    icon: '📦',
+  },
+  {
+    id: 'pool-comparison',
+    title: 'Pool Comparison',
+    subtitle: 'Side-by-side pool performance',
+    category: 'pools',
+    component: lazy(() => import('../components/panels/pools/PoolComparisonPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 5,
+    status: 'active',
+    icon: '📊',
+  },
+];
+
+// Phase 6: Placeholder panels
+const OperationsPlaceholders: PanelRegistryEntry[] = [
   {
     id: 'agent-status',
     title: 'Agent Status',
@@ -358,7 +404,7 @@ const OperationsPlaceholders: PanelRegistryEntry[] = [
     defaultSize: { cols: 2, rows: 1 },
     phase: 6,
     status: 'placeholder',
-    description: 'Monitor and control autonomous agents handling curtailment decisions, pool switching, firmware updates, and anomaly response. View agent logs, decision history, and override controls.',
+    description: 'Monitor and control autonomous agents handling curtailment decisions, pool switching, firmware updates, and anomaly response.',
     icon: '🤖',
   },
 ];
@@ -369,6 +415,7 @@ export const panelRegistry: PanelRegistryEntry[] = [
   ...EnergyPanels,
   ...HashpricePanels,
   ...CurtailmentPanels,
+  ...PoolPanels,
   ...OperationsPlaceholders,
 ];
 

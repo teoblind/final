@@ -238,6 +238,63 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/curtailment/efficiency',
     refreshInterval: 60 * 1000,
   }),
+
+  // Phase 5: Pool & On-Chain connectors
+  poolUnified: createApiConnector({
+    id: 'pool-unified',
+    name: 'Mining Pool Aggregator',
+    endpoint: '/pools/unified',
+    refreshInterval: 60 * 1000,
+  }),
+
+  poolEarnings: createApiConnector({
+    id: 'pool-earnings',
+    name: 'Pool Earnings',
+    endpoint: '/pools/earnings',
+    refreshInterval: 5 * 60 * 1000,
+  }),
+
+  poolWorkers: createApiConnector({
+    id: 'pool-workers',
+    name: 'Worker Fleet',
+    endpoint: '/pools/workers',
+    refreshInterval: 60 * 1000,
+  }),
+
+  poolComparison: createApiConnector({
+    id: 'pool-comparison',
+    name: 'Pool Comparison',
+    endpoint: '/pools/comparison',
+    refreshInterval: 10 * 60 * 1000,
+  }),
+
+  chainMempool: createApiConnector({
+    id: 'chain-mempool',
+    name: 'Mempool.space',
+    endpoint: '/chain/mempool',
+    refreshInterval: 30 * 1000,
+  }),
+
+  chainFees: createApiConnector({
+    id: 'chain-fees',
+    name: 'Fee Estimates',
+    endpoint: '/chain/fees',
+    refreshInterval: 30 * 1000,
+  }),
+
+  chainBlocks: createApiConnector({
+    id: 'chain-blocks',
+    name: 'Recent Blocks',
+    endpoint: '/chain/blocks',
+    refreshInterval: 60 * 1000,
+  }),
+
+  diagnostics: createApiConnector({
+    id: 'diagnostics',
+    name: 'Fleet Diagnostics',
+    endpoint: '/diagnostics/summary',
+    refreshInterval: 5 * 60 * 1000,
+  }),
 };
 
 /**
