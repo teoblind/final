@@ -33,6 +33,10 @@ import chainRoutes from './routes/chain.js';
 import diagnosticsRoutes from './routes/diagnostics.js';
 import agentRoutes from './routes/agents.js';
 import notificationRoutes from './routes/notifications.js';
+import workloadRoutes from './routes/workloads.js';
+import gpuRoutes from './routes/gpu.js';
+import hpcRoutes from './routes/hpc.js';
+import allocationRoutes from './routes/allocation.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 dotenv.config();
@@ -101,6 +105,10 @@ app.use('/api/chain', chainRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/workloads', workloadRoutes);
+app.use('/api/gpu', gpuRoutes);
+app.use('/api/hpc', hpcRoutes);
+app.use('/api/allocation', allocationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

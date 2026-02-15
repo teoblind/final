@@ -536,6 +536,108 @@ export function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)'); } catch (e) { /* exists */ }
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, dismissed)'); } catch (e) { /* exists */ }
 
+  // ─── Phase 7: HPC / AI Compute Abstraction Layer ────────────────────────────
+
+  // Workload configuration (BTC + HPC workloads)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workloads (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      site TEXT,
+      energy_node TEXT,
+      power_allocation_mw REAL DEFAULT 0,
+      revenue_model_json TEXT,
+      fleet_json TEXT,
+      curtailment_profile_json TEXT,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // GPU fleet configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gpu_fleet_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      config_json TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // HPC contracts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hpc_contracts (
+      id TEXT PRIMARY KEY,
+      customer TEXT NOT NULL,
+      contract_type TEXT NOT NULL,
+      gpu_model TEXT,
+      gpu_count INTEGER,
+      power_draw_mw REAL,
+      rate_per_gpu_hr REAL,
+      monthly_revenue REAL,
+      uptime_sla REAL,
+      interruptible INTEGER DEFAULT 0,
+      curtailment_penalty REAL,
+      curtailment_max_hours REAL,
+      curtailment_notice_min INTEGER,
+      start_date DATE,
+      end_date DATE,
+      auto_renew INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // HPC SLA tracking events
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hpc_sla_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contract_id TEXT REFERENCES hpc_contracts(id),
+      timestamp DATETIME NOT NULL,
+      event_type TEXT NOT NULL,
+      duration_minutes REAL,
+      cause TEXT,
+      penalty_amount REAL
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_hpc_sla_events_contract ON hpc_sla_events(contract_id, timestamp)'); } catch (e) { /* exists */ }
+
+  // Workload daily snapshots (unified BTC + HPC tracking)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS workload_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date DATE NOT NULL,
+      workload_id TEXT NOT NULL,
+      workload_type TEXT NOT NULL,
+      capacity_mw REAL,
+      online_mw REAL,
+      curtailed_mw REAL,
+      gross_revenue REAL,
+      energy_cost REAL,
+      curtailment_savings REAL,
+      curtailment_penalties REAL,
+      net_revenue REAL,
+      revenue_per_mw REAL,
+      margin_percent REAL,
+      UNIQUE(date, workload_id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workload_snapshots_date ON workload_snapshots(date, workload_type)'); } catch (e) { /* exists */ }
+
+  // GPU spot pricing history
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS gpu_spot_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp DATETIME NOT NULL,
+      gpu_model TEXT NOT NULL,
+      provider TEXT,
+      price_per_gpu_hr REAL,
+      UNIQUE(timestamp, gpu_model, provider)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_gpu_spot_prices_model ON gpu_spot_prices(gpu_model, timestamp)'); } catch (e) { /* exists */ }
+
   console.log('Database initialized');
 }
 
@@ -1260,6 +1362,218 @@ export function markAllNotificationsRead() {
 
 export function dismissNotification(id) {
   db.prepare('UPDATE notifications SET dismissed = 1 WHERE id = ?').run(id);
+}
+
+// ─── Phase 7: HPC / AI Compute Helpers ──────────────────────────────────────
+
+// Workload CRUD
+export function getWorkloads() {
+  return db.prepare('SELECT * FROM workloads ORDER BY created_at').all();
+}
+
+export function getWorkload(id) {
+  return db.prepare('SELECT * FROM workloads WHERE id = ?').get(id);
+}
+
+export function createWorkload(workload) {
+  return db.prepare(`
+    INSERT INTO workloads (id, name, type, site, energy_node, power_allocation_mw,
+      revenue_model_json, fleet_json, curtailment_profile_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    workload.id, workload.name, workload.type, workload.site || null,
+    workload.energyNode || null, workload.powerAllocationMW || 0,
+    JSON.stringify(workload.revenueModel || {}),
+    JSON.stringify(workload.fleet || {}),
+    JSON.stringify(workload.curtailmentProfile || {}),
+    workload.status || 'active'
+  );
+}
+
+export function updateWorkload(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.name !== undefined) { sets.push('name = ?'); params.push(updates.name); }
+  if (updates.type !== undefined) { sets.push('type = ?'); params.push(updates.type); }
+  if (updates.site !== undefined) { sets.push('site = ?'); params.push(updates.site); }
+  if (updates.energyNode !== undefined) { sets.push('energy_node = ?'); params.push(updates.energyNode); }
+  if (updates.powerAllocationMW !== undefined) { sets.push('power_allocation_mw = ?'); params.push(updates.powerAllocationMW); }
+  if (updates.revenueModel !== undefined) { sets.push('revenue_model_json = ?'); params.push(JSON.stringify(updates.revenueModel)); }
+  if (updates.fleet !== undefined) { sets.push('fleet_json = ?'); params.push(JSON.stringify(updates.fleet)); }
+  if (updates.curtailmentProfile !== undefined) { sets.push('curtailment_profile_json = ?'); params.push(JSON.stringify(updates.curtailmentProfile)); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE workloads SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function deleteWorkload(id) {
+  return db.prepare('DELETE FROM workloads WHERE id = ?').run(id);
+}
+
+// GPU fleet config
+export function getGpuFleetConfig() {
+  const row = db.prepare('SELECT config_json FROM gpu_fleet_config WHERE id = 1').get();
+  return row ? JSON.parse(row.config_json) : null;
+}
+
+export function saveGpuFleetConfig(config) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO gpu_fleet_config (id, config_json, updated_at)
+    VALUES (1, ?, datetime('now'))
+  `).run(JSON.stringify(config));
+}
+
+// HPC Contracts CRUD
+export function getHpcContracts(status = null) {
+  if (status) {
+    return db.prepare('SELECT * FROM hpc_contracts WHERE status = ? ORDER BY start_date DESC').all(status);
+  }
+  return db.prepare('SELECT * FROM hpc_contracts ORDER BY start_date DESC').all();
+}
+
+export function getHpcContract(id) {
+  return db.prepare('SELECT * FROM hpc_contracts WHERE id = ?').get(id);
+}
+
+export function createHpcContract(contract) {
+  return db.prepare(`
+    INSERT INTO hpc_contracts (id, customer, contract_type, gpu_model, gpu_count,
+      power_draw_mw, rate_per_gpu_hr, monthly_revenue, uptime_sla, interruptible,
+      curtailment_penalty, curtailment_max_hours, curtailment_notice_min,
+      start_date, end_date, auto_renew, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    contract.id, contract.customer, contract.contractType,
+    contract.gpuModel || null, contract.gpuCount || 0,
+    contract.powerDrawMW || 0, contract.ratePerGpuHr || 0,
+    contract.monthlyRevenue || 0, contract.uptimeSLA || 99.9,
+    contract.interruptible ? 1 : 0,
+    contract.curtailmentPenalty || 0, contract.curtailmentMaxHours || 0,
+    contract.curtailmentNoticeMin || 0,
+    contract.startDate || null, contract.endDate || null,
+    contract.autoRenew ? 1 : 0, contract.status || 'active'
+  );
+}
+
+export function updateHpcContract(id, updates) {
+  const sets = [];
+  const params = [];
+  const fieldMap = {
+    customer: 'customer', contractType: 'contract_type', gpuModel: 'gpu_model',
+    gpuCount: 'gpu_count', powerDrawMW: 'power_draw_mw', ratePerGpuHr: 'rate_per_gpu_hr',
+    monthlyRevenue: 'monthly_revenue', uptimeSLA: 'uptime_sla',
+    curtailmentPenalty: 'curtailment_penalty', curtailmentMaxHours: 'curtailment_max_hours',
+    curtailmentNoticeMin: 'curtailment_notice_min', startDate: 'start_date',
+    endDate: 'end_date', status: 'status',
+  };
+  for (const [key, col] of Object.entries(fieldMap)) {
+    if (updates[key] !== undefined) { sets.push(`${col} = ?`); params.push(updates[key]); }
+  }
+  if (updates.interruptible !== undefined) { sets.push('interruptible = ?'); params.push(updates.interruptible ? 1 : 0); }
+  if (updates.autoRenew !== undefined) { sets.push('auto_renew = ?'); params.push(updates.autoRenew ? 1 : 0); }
+  if (sets.length === 0) return;
+  params.push(id);
+  return db.prepare(`UPDATE hpc_contracts SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function deleteHpcContract(id) {
+  return db.prepare("UPDATE hpc_contracts SET status = 'archived' WHERE id = ?").run(id);
+}
+
+// HPC SLA Events
+export function insertSlaEvent(contractId, eventType, durationMinutes, cause, penaltyAmount = 0) {
+  return db.prepare(`
+    INSERT INTO hpc_sla_events (contract_id, timestamp, event_type, duration_minutes, cause, penalty_amount)
+    VALUES (?, datetime('now'), ?, ?, ?, ?)
+  `).run(contractId, eventType, durationMinutes, cause, penaltyAmount);
+}
+
+export function getSlaEvents(contractId, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM hpc_sla_events WHERE contract_id = ? AND timestamp >= ? ORDER BY timestamp DESC
+  `).all(contractId, since);
+}
+
+export function getSlaEventsSummary(contractId, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT
+      COUNT(*) as total_events,
+      COALESCE(SUM(duration_minutes), 0) as total_downtime_minutes,
+      COALESCE(SUM(penalty_amount), 0) as total_penalties,
+      COALESCE(SUM(CASE WHEN event_type = 'sla_breach' THEN 1 ELSE 0 END), 0) as breach_count
+    FROM hpc_sla_events WHERE contract_id = ? AND timestamp >= ?
+  `).get(contractId, since);
+}
+
+export function getAllSlaSummary(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT contract_id,
+      COUNT(*) as total_events,
+      COALESCE(SUM(duration_minutes), 0) as total_downtime_minutes,
+      COALESCE(SUM(penalty_amount), 0) as total_penalties
+    FROM hpc_sla_events WHERE timestamp >= ?
+    GROUP BY contract_id
+  `).all(since);
+}
+
+// Workload snapshots
+export function insertWorkloadSnapshot(snapshot) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO workload_snapshots
+      (date, workload_id, workload_type, capacity_mw, online_mw, curtailed_mw,
+       gross_revenue, energy_cost, curtailment_savings, curtailment_penalties,
+       net_revenue, revenue_per_mw, margin_percent)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    snapshot.date, snapshot.workloadId, snapshot.workloadType,
+    snapshot.capacityMW, snapshot.onlineMW, snapshot.curtailedMW,
+    snapshot.grossRevenue, snapshot.energyCost,
+    snapshot.curtailmentSavings, snapshot.curtailmentPenalties,
+    snapshot.netRevenue, snapshot.revenuePerMW, snapshot.marginPercent
+  );
+}
+
+export function getWorkloadSnapshots(workloadId, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  return db.prepare(`
+    SELECT * FROM workload_snapshots WHERE workload_id = ? AND date >= ? ORDER BY date ASC
+  `).all(workloadId, since);
+}
+
+export function getAllWorkloadSnapshots(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  return db.prepare(`
+    SELECT * FROM workload_snapshots WHERE date >= ? ORDER BY date ASC
+  `).all(since);
+}
+
+// GPU Spot Prices
+export function insertGpuSpotPrice(record) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO gpu_spot_prices (timestamp, gpu_model, provider, price_per_gpu_hr)
+    VALUES (?, ?, ?, ?)
+  `).run(record.timestamp, record.gpuModel, record.provider, record.pricePerGpuHr);
+}
+
+export function getGpuSpotPrices(gpuModel, days = 7) {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return db.prepare(`
+    SELECT * FROM gpu_spot_prices WHERE gpu_model = ? AND timestamp >= ? ORDER BY timestamp ASC
+  `).all(gpuModel, since);
+}
+
+export function getLatestGpuSpotPrices() {
+  return db.prepare(`
+    SELECT gsp.* FROM gpu_spot_prices gsp
+    INNER JOIN (
+      SELECT gpu_model, provider, MAX(timestamp) as max_ts FROM gpu_spot_prices GROUP BY gpu_model, provider
+    ) latest ON gsp.gpu_model = latest.gpu_model AND gsp.provider = latest.provider AND gsp.timestamp = latest.max_ts
+    ORDER BY gsp.gpu_model
+  `).all();
 }
 
 export default db;

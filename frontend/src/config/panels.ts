@@ -441,6 +441,43 @@ const AgentPanels: PanelRegistryEntry[] = [
   },
 ];
 
+// Phase 7: HPC / AI Compute panels (active)
+const HpcPanels: PanelRegistryEntry[] = [
+  {
+    id: 'site-overview',
+    title: 'Site Overview',
+    subtitle: 'Unified BTC + HPC capacity, revenue, curtailment',
+    category: 'hpc',
+    component: lazy(() => import('../components/panels/hpc/SiteOverviewPanel')),
+    defaultSize: { cols: 2, rows: 1 },
+    phase: 7,
+    status: 'active',
+    icon: '🏭',
+  },
+  {
+    id: 'workload-economics',
+    title: 'Workload Economics',
+    subtitle: '$/MW/day comparison across BTC and HPC',
+    category: 'hpc',
+    component: lazy(() => import('../components/panels/hpc/WorkloadEconomicsPanel')),
+    defaultSize: { cols: 2, rows: 1 },
+    phase: 7,
+    status: 'active',
+    icon: '📊',
+  },
+  {
+    id: 'hpc-contracts',
+    title: 'HPC Contracts',
+    subtitle: 'Contract management with SLA tracking',
+    category: 'hpc',
+    component: lazy(() => import('../components/panels/hpc/HpcContractsPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 7,
+    status: 'active',
+    icon: '🖥',
+  },
+];
+
 // Full registry
 export const panelRegistry: PanelRegistryEntry[] = [
   ...MacroPanels,
@@ -449,6 +486,7 @@ export const panelRegistry: PanelRegistryEntry[] = [
   ...CurtailmentPanels,
   ...PoolPanels,
   ...AgentPanels,
+  ...HpcPanels,
 ];
 
 /**

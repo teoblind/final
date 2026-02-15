@@ -338,6 +338,49 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/notifications',
     refreshInterval: 10 * 1000,
   }),
+
+  // Phase 7: HPC / AI Compute connectors
+  workloadSiteOverview: createApiConnector({
+    id: 'workload-site-overview',
+    name: 'Site Overview',
+    endpoint: '/workloads/site-overview',
+    refreshInterval: 30 * 1000,
+  }),
+
+  workloadComparison: createApiConnector({
+    id: 'workload-comparison',
+    name: 'Workload Economics',
+    endpoint: '/workloads/comparison',
+    refreshInterval: 60 * 1000,
+  }),
+
+  hpcContracts: createApiConnector({
+    id: 'hpc-contracts',
+    name: 'HPC Contracts',
+    endpoint: '/hpc/contracts',
+    refreshInterval: 60 * 1000,
+  }),
+
+  gpuModels: createApiConnector({
+    id: 'gpu-models',
+    name: 'GPU Model Database',
+    endpoint: '/gpu/models',
+    refreshInterval: 3600 * 1000,
+  }),
+
+  gpuFleet: createApiConnector({
+    id: 'gpu-fleet',
+    name: 'GPU Fleet Config',
+    endpoint: '/gpu/fleet',
+    refreshInterval: 60 * 1000,
+  }),
+
+  hpcSlaSummary: createApiConnector({
+    id: 'hpc-sla-summary',
+    name: 'HPC SLA Summary',
+    endpoint: '/hpc/sla/summary',
+    refreshInterval: 60 * 1000,
+  }),
 };
 
 /**

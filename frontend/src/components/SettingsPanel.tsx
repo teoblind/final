@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery } from 'lucide-react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 
 interface SettingsSectionProps {
@@ -241,6 +241,35 @@ export default function SettingsPanel() {
   // Phase 6: Agent configuration
   const { data: agentData, refetch: refetchAgents } = useApi('/agents', { refreshInterval: 0 });
   const agentList = (agentData?.agents || []) as any[];
+
+  // Phase 7: HPC/GPU configuration
+  const { data: gpuModelsData } = useApi('/gpu/models', { refreshInterval: 0 });
+  const { data: gpuFleetData, refetch: refetchGpuFleet } = useApi('/gpu/fleet', { refreshInterval: 0 });
+  const { data: hpcContractsData, refetch: refetchContracts } = useApi('/hpc/contracts', { refreshInterval: 0 });
+
+  const gpuModels = (gpuModelsData?.models || []) as any[];
+  const gpuFleetEntries = (gpuFleetData?.entries || []) as any[];
+  const hpcContracts = (hpcContractsData?.contracts || []) as any[];
+
+  const [showAddGpu, setShowAddGpu] = useState(false);
+  const [newGpuEntry, setNewGpuEntry] = useState({ gpuModelId: '', quantity: 1, gpusPerServer: 8, serverOverheadWatts: 500, pue: 1.2, coolingType: 'air' });
+  const [savingGpu, setSavingGpu] = useState(false);
+  const [savedGpu, setSavedGpu] = useState(false);
+
+  const [showAddContract, setShowAddContract] = useState(false);
+  const [newContract, setNewContract] = useState({
+    customer: '', contractType: 'reserved', gpuModel: '', gpuCount: 0,
+    powerDrawMW: 0, ratePerGpuHr: 0, monthlyRevenue: 0, uptimeSLA: 99.9,
+    interruptible: false, curtailmentPenalty: 0, curtailmentMaxHours: 0,
+    curtailmentNoticeMin: 30, startDate: '', endDate: '', autoRenew: false,
+  });
+  const [savingContract, setSavingContract] = useState(false);
+
+  const [curtailmentPriority, setCurtailmentPriority] = useState([
+    'btc_inefficient', 'btc_efficient', 'hpc_spot', 'hpc_interruptible'
+  ]);
+  const [savingPriority, setSavingPriority] = useState(false);
+  const [savedPriority, setSavedPriority] = useState(false);
 
   useEffect(() => {
     if (curtailmentData) {
@@ -1240,6 +1269,477 @@ export default function SettingsPanel() {
                 Use the Agent Command Center on the Operations tab for real-time monitoring and approvals.
               </p>
             </div>
+          </div>
+        </SettingsSection>
+
+        {/* GPU Fleet Configuration — Phase 7 ACTIVE */}
+        <SettingsSection
+          title="GPU Fleet Configuration"
+          description="Configure your GPU fleet for AI/HPC workloads"
+          icon={<Monitor size={18} className="text-terminal-cyan" />}
+          phase={7}
+          active
+        >
+          <div className="space-y-4">
+            {/* GPU Fleet Summary */}
+            {gpuFleetEntries.length > 0 && (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-terminal-bg rounded p-3 text-center">
+                  <p className="text-xs text-terminal-muted">Total GPUs</p>
+                  <p className="text-lg font-bold text-terminal-text">
+                    {gpuFleetEntries.reduce((s: number, e: any) => s + (e.quantity || 0), 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-terminal-bg rounded p-3 text-center">
+                  <p className="text-xs text-terminal-muted">Total Power</p>
+                  <p className="text-lg font-bold text-terminal-text">
+                    {(gpuFleetEntries.reduce((s: number, e: any) => {
+                      const model = gpuModels.find((m: any) => m.id === e.gpuModelId);
+                      const tdp = model?.tdpWatts || 700;
+                      const servers = Math.ceil((e.quantity || 0) / (e.gpusPerServer || 8));
+                      const it = tdp * (e.quantity || 0) + (e.serverOverheadWatts || 500) * servers;
+                      return s + it * (e.pue || 1.2);
+                    }, 0) / 1e6).toFixed(2)} MW
+                  </p>
+                </div>
+                <div className="bg-terminal-bg rounded p-3 text-center">
+                  <p className="text-xs text-terminal-muted">Total Memory</p>
+                  <p className="text-lg font-bold text-terminal-text">
+                    {(gpuFleetEntries.reduce((s: number, e: any) => {
+                      const model = gpuModels.find((m: any) => m.id === e.gpuModelId);
+                      return s + (model?.memoryGB || 80) * (e.quantity || 0);
+                    }, 0) / 1000).toFixed(1)} TB
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* GPU Fleet Entries */}
+            {gpuFleetEntries.length > 0 && (
+              <div className="border border-terminal-border rounded overflow-hidden">
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-terminal-bg/50 text-xs text-terminal-muted border-b border-terminal-border">
+                  <div className="col-span-3">GPU Model</div>
+                  <div className="col-span-1 text-right">Qty</div>
+                  <div className="col-span-2 text-right">TDP (W)</div>
+                  <div className="col-span-2 text-right">GPU/Srv</div>
+                  <div className="col-span-2 text-right">PUE</div>
+                  <div className="col-span-1">Cool</div>
+                  <div className="col-span-1"></div>
+                </div>
+                {gpuFleetEntries.map((entry: any, idx: number) => {
+                  const model = gpuModels.find((m: any) => m.id === entry.gpuModelId);
+                  return (
+                    <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs border-b border-terminal-border/50 items-center">
+                      <div className="col-span-3 text-terminal-text truncate">{model?.model || entry.gpuModelId}</div>
+                      <div className="col-span-1 text-right text-terminal-text">{entry.quantity}</div>
+                      <div className="col-span-2 text-right text-terminal-muted">{model?.tdpWatts || '—'}</div>
+                      <div className="col-span-2 text-right text-terminal-muted">{entry.gpusPerServer || 8}</div>
+                      <div className="col-span-2 text-right text-terminal-muted">{entry.pue || 1.2}</div>
+                      <div className="col-span-1 text-terminal-muted">{entry.coolingType || 'air'}</div>
+                      <div className="col-span-1 text-center">
+                        <button
+                          onClick={async () => {
+                            const updated = gpuFleetEntries.filter((_: any, i: number) => i !== idx);
+                            await fetch('/api/gpu/fleet', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ entries: updated }),
+                            });
+                            refetchGpuFleet();
+                          }}
+                          className="p-1 text-terminal-muted hover:text-terminal-red transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add GPU */}
+            {!showAddGpu ? (
+              <button
+                onClick={() => setShowAddGpu(true)}
+                className="flex items-center gap-2 px-3 py-2 text-xs text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/10 transition-colors"
+              >
+                <Plus size={14} /> Add GPU Class
+              </button>
+            ) : (
+              <div className="bg-terminal-bg border border-terminal-border rounded p-3 space-y-3">
+                <p className="text-sm font-semibold text-terminal-text">Add GPU Class</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">GPU Model</label>
+                    <select
+                      value={newGpuEntry.gpuModelId}
+                      onChange={e => setNewGpuEntry(prev => ({ ...prev, gpuModelId: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    >
+                      <option value="">Select...</option>
+                      {gpuModels.map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.manufacturer} {m.model} ({m.memoryGB}GB, {m.tdpWatts}W)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Quantity</label>
+                    <input
+                      type="number" min="1" value={newGpuEntry.quantity}
+                      onChange={e => setNewGpuEntry(prev => ({ ...prev, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">GPUs per Server</label>
+                    <input
+                      type="number" min="1" max="16" value={newGpuEntry.gpusPerServer}
+                      onChange={e => setNewGpuEntry(prev => ({ ...prev, gpusPerServer: parseInt(e.target.value) || 8 }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">PUE</label>
+                    <input
+                      type="number" step="0.01" min="1" max="2" value={newGpuEntry.pue}
+                      onChange={e => setNewGpuEntry(prev => ({ ...prev, pue: parseFloat(e.target.value) || 1.2 }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!newGpuEntry.gpuModelId) return;
+                      const updated = [...gpuFleetEntries, newGpuEntry];
+                      setSavingGpu(true);
+                      try {
+                        await fetch('/api/gpu/fleet', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ entries: updated }),
+                        });
+                        setSavedGpu(true);
+                        setTimeout(() => setSavedGpu(false), 2000);
+                        refetchGpuFleet();
+                        setShowAddGpu(false);
+                        setNewGpuEntry({ gpuModelId: '', quantity: 1, gpusPerServer: 8, serverOverheadWatts: 500, pue: 1.2, coolingType: 'air' });
+                      } finally { setSavingGpu(false); }
+                    }}
+                    className="px-3 py-1.5 text-xs bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/30"
+                  >
+                    {savingGpu ? 'Saving...' : 'Add'}
+                  </button>
+                  <button
+                    onClick={() => setShowAddGpu(false)}
+                    className="px-3 py-1.5 text-xs text-terminal-muted border border-terminal-border rounded hover:bg-terminal-panel"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {gpuFleetEntries.length === 0 && !showAddGpu && (
+              <p className="text-xs text-terminal-muted italic">
+                No GPU fleet configured. Add GPU classes to enable AI/HPC workload tracking.
+              </p>
+            )}
+          </div>
+        </SettingsSection>
+
+        {/* HPC Contract Management — Phase 7 ACTIVE */}
+        <SettingsSection
+          title="HPC Contracts"
+          description="Manage AI/HPC customer contracts, SLA requirements, and curtailment rules"
+          icon={<Server size={18} className="text-terminal-cyan" />}
+          phase={7}
+          active
+        >
+          <div className="space-y-4">
+            {/* Contract List */}
+            {hpcContracts.length > 0 && (
+              <div className="space-y-2">
+                {hpcContracts.map((c: any) => (
+                  <div key={c.id} className="bg-terminal-bg border border-terminal-border rounded p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${c.status === 'active' ? 'bg-terminal-green' : 'bg-terminal-muted'}`} />
+                        <span className="text-sm font-medium text-terminal-text">{c.id}</span>
+                        <span className="text-xs text-terminal-muted">— {c.customer}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded ${
+                          c.interruptible ? 'bg-terminal-amber/20 text-terminal-amber' : 'bg-terminal-green/20 text-terminal-green'
+                        }`}>
+                          {c.interruptible ? 'Interruptible' : 'Firm'}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/hpc/contracts/${c.id}`, { method: 'DELETE' });
+                            refetchContracts();
+                          }}
+                          className="p-1 text-terminal-muted hover:text-terminal-red"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <div><span className="text-terminal-muted">GPU:</span> <span className="text-terminal-text">{c.gpu_model || c.gpuModel} × {c.gpu_count || c.gpuCount}</span></div>
+                      <div><span className="text-terminal-muted">Power:</span> <span className="text-terminal-text">{c.power_draw_mw || c.powerDrawMW} MW</span></div>
+                      <div><span className="text-terminal-muted">Rate:</span> <span className="text-terminal-text">${c.rate_per_gpu_hr || c.ratePerGpuHr}/GPU-hr</span></div>
+                      <div><span className="text-terminal-muted">SLA:</span> <span className="text-terminal-text">{c.uptime_sla || c.uptimeSLA}%</span></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add Contract */}
+            {!showAddContract ? (
+              <button
+                onClick={() => setShowAddContract(true)}
+                className="flex items-center gap-2 px-3 py-2 text-xs text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/10 transition-colors"
+              >
+                <Plus size={14} /> Add HPC Contract
+              </button>
+            ) : (
+              <div className="bg-terminal-bg border border-terminal-border rounded p-3 space-y-3">
+                <p className="text-sm font-semibold text-terminal-text">New HPC Contract</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Customer</label>
+                    <input
+                      type="text" value={newContract.customer}
+                      onChange={e => setNewContract(prev => ({ ...prev, customer: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                      placeholder="e.g. Neocloud"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Type</label>
+                    <select
+                      value={newContract.contractType}
+                      onChange={e => setNewContract(prev => ({ ...prev, contractType: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    >
+                      <option value="reserved">Reserved</option>
+                      <option value="spot">Spot</option>
+                      <option value="burst">Burst</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">GPU Model</label>
+                    <select
+                      value={newContract.gpuModel}
+                      onChange={e => setNewContract(prev => ({ ...prev, gpuModel: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    >
+                      <option value="">Select...</option>
+                      {gpuModels.map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.manufacturer} {m.model}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">GPU Count</label>
+                    <input
+                      type="number" min="1" value={newContract.gpuCount}
+                      onChange={e => setNewContract(prev => ({ ...prev, gpuCount: parseInt(e.target.value) || 0 }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Power Draw (MW)</label>
+                    <input
+                      type="number" step="0.1" value={newContract.powerDrawMW}
+                      onChange={e => setNewContract(prev => ({ ...prev, powerDrawMW: parseFloat(e.target.value) || 0 }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Rate ($/GPU-hr)</label>
+                    <input
+                      type="number" step="0.01" value={newContract.ratePerGpuHr}
+                      onChange={e => setNewContract(prev => ({ ...prev, ratePerGpuHr: parseFloat(e.target.value) || 0 }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Uptime SLA (%)</label>
+                    <input
+                      type="number" step="0.1" min="90" max="100" value={newContract.uptimeSLA}
+                      onChange={e => setNewContract(prev => ({ ...prev, uptimeSLA: parseFloat(e.target.value) || 99.9 }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox" checked={newContract.interruptible}
+                      onChange={e => setNewContract(prev => ({ ...prev, interruptible: e.target.checked }))}
+                      className="rounded border-terminal-border"
+                    />
+                    <label className="text-xs text-terminal-muted">Interruptible (can be curtailed)</label>
+                  </div>
+                  {newContract.interruptible && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-terminal-muted mb-1">Curtailment Penalty ($/hr)</label>
+                        <input
+                          type="number" step="0.01" value={newContract.curtailmentPenalty}
+                          onChange={e => setNewContract(prev => ({ ...prev, curtailmentPenalty: parseFloat(e.target.value) || 0 }))}
+                          className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-terminal-muted mb-1">Max Curtail Hours/Month</label>
+                        <input
+                          type="number" value={newContract.curtailmentMaxHours}
+                          onChange={e => setNewContract(prev => ({ ...prev, curtailmentMaxHours: parseFloat(e.target.value) || 0 }))}
+                          className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">Start Date</label>
+                    <input
+                      type="date" value={newContract.startDate}
+                      onChange={e => setNewContract(prev => ({ ...prev, startDate: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-terminal-muted mb-1">End Date</label>
+                    <input
+                      type="date" value={newContract.endDate}
+                      onChange={e => setNewContract(prev => ({ ...prev, endDate: e.target.value }))}
+                      className="bg-terminal-panel border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text w-full"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!newContract.customer) return;
+                      setSavingContract(true);
+                      try {
+                        await fetch('/api/hpc/contracts', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(newContract),
+                        });
+                        refetchContracts();
+                        setShowAddContract(false);
+                        setNewContract({
+                          customer: '', contractType: 'reserved', gpuModel: '', gpuCount: 0,
+                          powerDrawMW: 0, ratePerGpuHr: 0, monthlyRevenue: 0, uptimeSLA: 99.9,
+                          interruptible: false, curtailmentPenalty: 0, curtailmentMaxHours: 0,
+                          curtailmentNoticeMin: 30, startDate: '', endDate: '', autoRenew: false,
+                        });
+                      } finally { setSavingContract(false); }
+                    }}
+                    className="px-3 py-1.5 text-xs bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/30"
+                  >
+                    {savingContract ? 'Creating...' : 'Create Contract'}
+                  </button>
+                  <button
+                    onClick={() => setShowAddContract(false)}
+                    className="px-3 py-1.5 text-xs text-terminal-muted border border-terminal-border rounded hover:bg-terminal-panel"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {hpcContracts.length === 0 && !showAddContract && (
+              <p className="text-xs text-terminal-muted italic">
+                No HPC contracts configured. Add contracts to enable AI/HPC workload management.
+              </p>
+            )}
+          </div>
+        </SettingsSection>
+
+        {/* Curtailment Priority — Phase 7 */}
+        <SettingsSection
+          title="Curtailment Priority Order"
+          description="Configure which workloads get curtailed first during price spikes"
+          icon={<Battery size={18} className="text-terminal-amber" />}
+          phase={7}
+          active
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-terminal-muted">
+              Drag to reorder. Top items are curtailed first. Firm HPC contracts are never curtailed.
+            </p>
+            <div className="space-y-1">
+              {curtailmentPriority.map((item, idx) => {
+                const labels: Record<string, string> = {
+                  btc_inefficient: 'BTC Mining — Inefficient machines first',
+                  btc_efficient: 'BTC Mining — Efficient machines',
+                  hpc_spot: 'HPC — Spot/burst capacity',
+                  hpc_interruptible: 'HPC — Interruptible contracts (with penalty)',
+                };
+                return (
+                  <div key={item} className="flex items-center gap-3 bg-terminal-bg border border-terminal-border rounded px-3 py-2">
+                    <span className="text-xs text-terminal-muted w-4">{idx + 1}.</span>
+                    <span className="text-xs text-terminal-text flex-1">{labels[item] || item}</span>
+                    <div className="flex gap-1">
+                      {idx > 0 && (
+                        <button
+                          onClick={() => {
+                            const arr = [...curtailmentPriority];
+                            [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                            setCurtailmentPriority(arr);
+                          }}
+                          className="px-1.5 py-0.5 text-[10px] text-terminal-muted hover:text-terminal-text border border-terminal-border rounded"
+                        >
+                          Up
+                        </button>
+                      )}
+                      {idx < curtailmentPriority.length - 1 && (
+                        <button
+                          onClick={() => {
+                            const arr = [...curtailmentPriority];
+                            [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                            setCurtailmentPriority(arr);
+                          }}
+                          className="px-1.5 py-0.5 text-[10px] text-terminal-muted hover:text-terminal-text border border-terminal-border rounded"
+                        >
+                          Down
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-3 bg-terminal-bg border border-terminal-green/20 rounded px-3 py-2">
+              <span className="text-xs text-terminal-muted w-4">—</span>
+              <span className="text-xs text-terminal-green flex-1">HPC — Firm contracts (NEVER curtailed)</span>
+            </div>
+            <button
+              onClick={async () => {
+                setSavingPriority(true);
+                try {
+                  await fetch('/api/curtailment/constraints', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...curtailmentSettings, curtailmentPriority }),
+                  });
+                  setSavedPriority(true);
+                  setTimeout(() => setSavedPriority(false), 2000);
+                } finally { setSavingPriority(false); }
+              }}
+              disabled={savingPriority}
+              className="flex items-center gap-2 px-4 py-2 bg-terminal-amber/20 text-terminal-amber border border-terminal-amber/30 rounded hover:bg-terminal-amber/30 transition-colors text-sm disabled:opacity-50"
+            >
+              {savingPriority ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+              {savingPriority ? 'Saving...' : savedPriority ? 'Saved!' : 'Save Priority Order'}
+            </button>
           </div>
         </SettingsSection>
 

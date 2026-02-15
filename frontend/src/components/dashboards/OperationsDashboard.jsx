@@ -35,6 +35,11 @@ const ApprovalQueuePanel = lazy(() => import('../panels/agents/ApprovalQueuePane
 const AgentActivityFeed = lazy(() => import('../panels/agents/AgentActivityFeed'));
 const AgentPerformancePanel = lazy(() => import('../panels/agents/AgentPerformancePanel'));
 
+// Phase 7: HPC / AI Compute panels
+const SiteOverviewPanel = lazy(() => import('../panels/hpc/SiteOverviewPanel'));
+const WorkloadEconomicsPanel = lazy(() => import('../panels/hpc/WorkloadEconomicsPanel'));
+const HpcContractsPanel = lazy(() => import('../panels/hpc/HpcContractsPanel'));
+
 function PanelSkeleton() {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-lg p-8 animate-pulse">
@@ -69,13 +74,14 @@ export default function OperationsDashboard({ onNavigate }) {
       {/* Phase Roadmap Summary */}
       <div className="mb-6 bg-terminal-panel border border-terminal-border rounded-lg p-4">
         <h3 className="text-sm font-semibold text-terminal-text mb-3">Build Roadmap</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           {[
             { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
             { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
             { phase: 4, label: 'Curtailment', status: 'active', color: 'terminal-green' },
             { phase: 5, label: 'Pool & Chain', status: 'active', color: 'terminal-green' },
             { phase: 6, label: 'Clawbot Agents', status: 'active', color: 'terminal-green' },
+            { phase: 7, label: 'HPC / AI Compute', status: 'active', color: 'terminal-green' },
           ].map(item => (
             <div
               key={item.phase}
@@ -113,6 +119,28 @@ export default function OperationsDashboard({ onNavigate }) {
             <div className="md:col-span-2">
               <AgentActivityFeed />
             </div>
+          </div>
+        </Suspense>
+      </div>
+
+      {/* HPC / AI Compute — Phase 7 LIVE */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-terminal-cyan mb-3 flex items-center gap-2">
+          <span>🖥</span> HPC / AI Compute
+          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
+        </h3>
+        <Suspense fallback={<PanelSkeleton />}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Site Overview spans full width */}
+            <div className="lg:col-span-3 md:col-span-2">
+              <SiteOverviewPanel />
+            </div>
+            {/* Workload Economics spans 2 cols */}
+            <div className="md:col-span-2">
+              <WorkloadEconomicsPanel />
+            </div>
+            {/* HPC Contracts */}
+            <HpcContractsPanel />
           </div>
         </Suspense>
       </div>
@@ -204,7 +232,7 @@ export default function OperationsDashboard({ onNavigate }) {
       {/* Future phases note */}
       <div className="text-center py-4">
         <p className="text-xs text-terminal-muted">
-          Phases 2–6 live. Phase 7 (IPP Visibility) and Phase 8 (External Integrations) coming next.
+          Phases 2–7 live. Phase 8 (External Integrations) and Phase 9 (IPP Visibility) coming next.
         </p>
       </div>
     </div>
