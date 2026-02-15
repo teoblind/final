@@ -1,12 +1,19 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
-  DollarSign, Settings, Hammer, BarChart3
+  DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield
 } from 'lucide-react';
 
+// Auth
+import { AuthProvider, useAuth } from './components/auth/AuthContext';
+
 // Lazy-load tab content for performance
+const LoginPage = lazy(() => import('./components/auth/LoginPage'));
+const OnboardingWizard = lazy(() => import('./components/auth/OnboardingWizard'));
 const OperationsDashboard = lazy(() => import('./components/dashboards/OperationsDashboard'));
 const MacroDashboard = lazy(() => import('./components/dashboards/MacroDashboard'));
+const PartnerDashboard = lazy(() => import('./components/dashboards/PartnerDashboard'));
+const AdminConsoleDashboard = lazy(() => import('./components/dashboards/AdminConsoleDashboard'));
 const CorrelationPanel = lazy(() => import('./components/panels/macro/CorrelationPanel'));
 const AlertsPanel = lazy(() => import('./components/AlertsPanel'));
 const NotesPanel = lazy(() => import('./components/NotesPanel'));
@@ -18,17 +25,6 @@ import ManualEntryModal from './components/ManualEntryModal';
 import Sidebar from './components/Sidebar';
 import NotificationBell from './components/NotificationBell';
 
-// Navigation configuration
-const NAV_ITEMS = [
-  { id: 'operations', label: 'Operations', shortLabel: 'Ops', icon: Hammer },
-  { id: 'macro', label: 'Macro Intelligence', shortLabel: 'Macro', icon: TrendingUp },
-  { id: 'correlations', label: 'Correlations', shortLabel: 'Corr', icon: BarChart3 },
-  { id: 'alerts', label: 'Alerts', shortLabel: 'Alerts', icon: Bell },
-  { id: 'notes', label: 'Notes', shortLabel: 'Notes', icon: FileText },
-  { id: 'liquidity', label: 'Liquidity', shortLabel: 'Liq', icon: DollarSign },
-  { id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings },
-];
-
 function LoadingSpinner() {
   return (
     <div className="flex items-center justify-center py-24">
@@ -37,11 +33,38 @@ function LoadingSpinner() {
   );
 }
 
-function App() {
+function AppContent() {
+  const { user, loading: authLoading, logout, hasPermission, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('operations');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Build navigation based on user role
+  const NAV_ITEMS = [];
+
+  if (!user || hasPermission('viewOperations')) {
+    NAV_ITEMS.push({ id: 'operations', label: 'Operations', shortLabel: 'Ops', icon: Hammer });
+  }
+  if (!user || hasPermission('viewMacroIntelligence')) {
+    NAV_ITEMS.push({ id: 'macro', label: 'Macro Intelligence', shortLabel: 'Macro', icon: TrendingUp });
+    NAV_ITEMS.push({ id: 'correlations', label: 'Correlations', shortLabel: 'Corr', icon: BarChart3 });
+  }
+  if (!user || hasPermission('viewAlerts')) {
+    NAV_ITEMS.push({ id: 'alerts', label: 'Alerts', shortLabel: 'Alerts', icon: Bell });
+  }
+  if (!user || hasPermission('viewNotes')) {
+    NAV_ITEMS.push({ id: 'notes', label: 'Notes', shortLabel: 'Notes', icon: FileText });
+  }
+  NAV_ITEMS.push({ id: 'liquidity', label: 'Liquidity', shortLabel: 'Liq', icon: DollarSign });
+  if (!user || hasPermission('viewSettings')) {
+    NAV_ITEMS.push({ id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings });
+  }
+  // Admin console for Sangha roles
+  if (user && (hasRole('sangha_admin') || hasRole('sangha_underwriter'))) {
+    NAV_ITEMS.push({ id: 'admin', label: 'Admin Console', shortLabel: 'Admin', icon: Shield });
+  }
 
   // WebSocket connection for real-time updates
   useEffect(() => {
@@ -90,6 +113,67 @@ function App() {
     }
   }, []);
 
+  // Show login if not authenticated and auth is loaded
+  if (!authLoading && !user) {
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <LoginPage onLogin={(data) => {
+          // Check if onboarding needed
+          if (data.user.role === 'owner') {
+            setShowOnboarding(true);
+          }
+        }} />
+      </Suspense>
+    );
+  }
+
+  // Show loading while auth is loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-terminal-bg flex items-center justify-center">
+        <div className="text-center">
+          <div className="spinner w-10 h-10 mx-auto mb-4" />
+          <p className="text-terminal-muted text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show onboarding wizard for new owners
+  if (showOnboarding) {
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+      </Suspense>
+    );
+  }
+
+  // IPP partner gets simplified dashboard
+  if (user?.role === 'ipp_partner') {
+    return (
+      <div className="min-h-screen bg-terminal-bg text-terminal-text">
+        <header className="sticky top-0 z-50 bg-terminal-bg border-b border-terminal-border">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-terminal-green font-bold text-lg">&#9650;</span>
+              <h1 className="text-lg font-bold">SANGHA MINEOS</h1>
+              <span className="text-xs bg-terminal-amber/20 text-terminal-amber px-2 py-0.5 rounded">PARTNER</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-terminal-muted">{user.email}</span>
+              <button onClick={logout} className="text-terminal-muted hover:text-terminal-red">
+                <LogOut size={16} />
+              </button>
+            </div>
+          </div>
+        </header>
+        <Suspense fallback={<LoadingSpinner />}>
+          <PartnerDashboard />
+        </Suspense>
+      </div>
+    );
+  }
+
   const renderContent = () => {
     switch (activeTab) {
       case 'operations':
@@ -122,6 +206,8 @@ function App() {
         );
       case 'settings':
         return <SettingsPanel />;
+      case 'admin':
+        return <AdminConsoleDashboard />;
       default:
         return <OperationsDashboard onNavigate={setActiveTab} />;
     }
@@ -165,13 +251,29 @@ function App() {
 
           <div className="flex items-center gap-2">
             <NotificationBell />
-            <button
-              onClick={() => setManualEntryOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded hover:border-terminal-green text-sm"
-            >
-              <Database size={14} />
-              <span className="hidden sm:inline">Data Entry</span>
-            </button>
+            {hasPermission('exportData') && (
+              <button
+                onClick={() => setManualEntryOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded hover:border-terminal-green text-sm"
+              >
+                <Database size={14} />
+                <span className="hidden sm:inline">Data Entry</span>
+              </button>
+            )}
+            {/* User info */}
+            <div className="flex items-center gap-2 pl-2 border-l border-terminal-border">
+              <div className="hidden sm:flex flex-col items-end">
+                <span className="text-xs text-terminal-text">{user?.name}</span>
+                <span className="text-[10px] text-terminal-muted capitalize">{user?.role}</span>
+              </div>
+              <button
+                onClick={logout}
+                className="p-1.5 text-terminal-muted hover:text-terminal-red rounded"
+                title="Logout"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
             <div
               className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-terminal-green' : 'bg-terminal-red'}`}
               title={wsConnected ? 'Connected' : 'Disconnected'}
@@ -251,6 +353,14 @@ function MobileNavButton({ active, onClick, icon, label }) {
       {icon}
       <span className="text-xs truncate">{label}</span>
     </button>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

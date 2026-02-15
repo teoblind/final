@@ -381,6 +381,63 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/hpc/sla/summary',
     refreshInterval: 60 * 1000,
   }),
+
+  // Phase 8: Multi-Tenant connectors
+  authMe: createApiConnector({
+    id: 'auth-me',
+    name: 'Current User',
+    endpoint: '/v1/auth/me',
+    refreshInterval: 60 * 1000,
+  }),
+
+  tenantInfo: createApiConnector({
+    id: 'tenant-info',
+    name: 'Tenant Info',
+    endpoint: '/v1/tenant',
+    refreshInterval: 60 * 1000,
+  }),
+
+  tenantUsers: createApiConnector({
+    id: 'tenant-users',
+    name: 'Tenant Users',
+    endpoint: '/v1/tenant/users',
+    refreshInterval: 30 * 1000,
+  }),
+
+  partnerAccess: createApiConnector({
+    id: 'partner-access',
+    name: 'Partner Access',
+    endpoint: '/v1/partners',
+    refreshInterval: 30 * 1000,
+  }),
+
+  apiKeys: createApiConnector({
+    id: 'api-keys',
+    name: 'API Keys',
+    endpoint: '/v1/tenant/api-keys',
+    refreshInterval: 60 * 1000,
+  }),
+
+  webhooks: createApiConnector({
+    id: 'webhooks',
+    name: 'Webhooks',
+    endpoint: '/v1/webhooks',
+    refreshInterval: 60 * 1000,
+  }),
+
+  adminTenants: createApiConnector({
+    id: 'admin-tenants',
+    name: 'Admin Tenants',
+    endpoint: '/v1/admin/tenants',
+    refreshInterval: 30 * 1000,
+  }),
+
+  adminAggregate: createApiConnector({
+    id: 'admin-aggregate',
+    name: 'Admin Aggregate',
+    endpoint: '/v1/admin/aggregate',
+    refreshInterval: 30 * 1000,
+  }),
 };
 
 /**

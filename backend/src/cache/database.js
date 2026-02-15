@@ -639,6 +639,9 @@ export function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_gpu_spot_prices_model ON gpu_spot_prices(gpu_model, timestamp)'); } catch (e) { /* exists */ }
 
   console.log('Database initialized');
+
+  // Initialize Phase 8 multi-tenant tables
+  initPhase8Tables();
 }
 
 // Cache helpers
@@ -1171,18 +1174,7 @@ export function getDiagnosticEvents(days = 7) {
   `).all(since);
 }
 
-// Grid events helper (used by curtailment engine)
-export function getGridEvents(iso = 'ERCOT', days = 1) {
-  const since = new Date(Date.now() - days * 86400000).toISOString();
-  try {
-    return db.prepare(`
-      SELECT * FROM grid_events WHERE iso = ? AND timestamp >= ? ORDER BY timestamp DESC
-    `).all(iso, since);
-  } catch (e) {
-    // grid_events table may not exist yet
-    return [];
-  }
-}
+// Grid events also accessible via getGridEvents() above (Phase 2)
 
 // ─── Phase 6: Agent Framework Helpers ────────────────────────────────────────
 
@@ -1574,6 +1566,556 @@ export function getLatestGpuSpotPrices() {
     ) latest ON gsp.gpu_model = latest.gpu_model AND gsp.provider = latest.provider AND gsp.timestamp = latest.max_ts
     ORDER BY gsp.gpu_model
   `).all();
+}
+
+// ─── Phase 8: Multi-Tenant, Auth, Webhook Tables ────────────────────────────
+
+export function initPhase8Tables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      plan TEXT NOT NULL DEFAULT 'trial',
+      status TEXT NOT NULL DEFAULT 'trial',
+      branding_json TEXT,
+      settings_json TEXT,
+      limits_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      trial_ends_at DATETIME,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      role TEXT NOT NULL DEFAULT 'viewer',
+      status TEXT NOT NULL DEFAULT 'invited',
+      mfa_enabled INTEGER DEFAULT 0,
+      mfa_secret TEXT,
+      last_login DATETIME,
+      notification_prefs_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      refresh_token_hash TEXT NOT NULL,
+      device TEXT,
+      ip_address TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      revoked INTEGER DEFAULT 0
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invitations (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      email TEXT NOT NULL,
+      role TEXT NOT NULL,
+      invited_by TEXT REFERENCES users(id),
+      token TEXT NOT NULL UNIQUE,
+      expires_at DATETIME NOT NULL,
+      accepted_at DATETIME,
+      status TEXT DEFAULT 'pending'
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS partner_access (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      partner_tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      granted_by TEXT REFERENCES users(id),
+      access_type TEXT NOT NULL,
+      permissions_json TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME,
+      revoked_at DATETIME
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      user_id TEXT NOT NULL REFERENCES users(id),
+      name TEXT NOT NULL,
+      key_hash TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      permissions_json TEXT,
+      rate_limit INTEGER,
+      last_used DATETIME,
+      expires_at DATETIME,
+      revoked INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT,
+      action TEXT NOT NULL,
+      resource_type TEXT,
+      resource_id TEXT,
+      details_json TEXT,
+      ip_address TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS webhooks (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      url TEXT NOT NULL,
+      secret TEXT NOT NULL,
+      events_json TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      failure_count INTEGER DEFAULT 0,
+      last_success DATETIME,
+      last_failure DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      webhook_id TEXT NOT NULL REFERENCES webhooks(id),
+      event_type TEXT NOT NULL,
+      payload_json TEXT,
+      status TEXT NOT NULL,
+      status_code INTEGER,
+      response_body TEXT,
+      attempts INTEGER DEFAULT 0,
+      next_retry DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sites (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL REFERENCES tenants(id),
+      name TEXT NOT NULL,
+      location_json TEXT,
+      iso TEXT DEFAULT 'ERCOT',
+      energy_node TEXT,
+      total_capacity_mw REAL DEFAULT 0,
+      workload_ids_json TEXT,
+      status TEXT DEFAULT 'operational',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Phase 8 indices
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_refresh ON sessions(refresh_token_hash)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_partner_access_tenant ON partner_access(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_partner_access_partner ON partner_access(partner_tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id, timestamp)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_webhooks_tenant ON webhooks(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sites_tenant ON sites(tenant_id)'); } catch (e) {}
+
+  // Add tenant_id to ALL existing tables (idempotent)
+  const tablesToMigrate = [
+    'cache', 'manual_data', 'alerts', 'alert_history', 'notes', 'imec_milestones',
+    'datacenter_projects', 'fiber_deals', 'btc_wallets',
+    'energy_prices', 'system_load', 'grid_events', 'energy_settings',
+    'fleet_config', 'fleet_snapshots', 'machine_snapshots',
+    'curtailment_events', 'curtailment_performance', 'curtailment_settings',
+    'pool_config', 'pool_hashrate', 'pool_earnings', 'pool_payouts',
+    'worker_snapshots', 'blocks', 'mempool_snapshots', 'diagnostic_events',
+    'agents', 'agent_events', 'agent_approvals', 'agent_metrics', 'agent_reports',
+    'notifications',
+    'workloads', 'gpu_fleet_config', 'hpc_contracts', 'hpc_sla_events',
+    'workload_snapshots', 'gpu_spot_prices'
+  ];
+
+  for (const table of tablesToMigrate) {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT DEFAULT 'default'`);
+    } catch (e) {
+      // Column already exists
+    }
+  }
+
+  // Create default tenant if not exists
+  const defaultTenant = db.prepare('SELECT id FROM tenants WHERE id = ?').get('default');
+  if (!defaultTenant) {
+    db.prepare(`
+      INSERT INTO tenants (id, name, slug, plan, status, limits_json)
+      VALUES ('default', 'Default Organization', 'default', 'professional', 'active', ?)
+    `).run(JSON.stringify({
+      maxUsers: 50,
+      maxSites: 10,
+      maxWorkloads: 100,
+      maxAgents: 20,
+      apiRateLimit: 120,
+      dataRetentionDays: 365
+    }));
+  }
+
+  // Enable WAL mode for better concurrent access
+  db.pragma('journal_mode = WAL');
+
+  console.log('Phase 8 tables initialized');
+}
+
+// ─── Phase 8: Tenant Helpers ────────────────────────────────────────────────
+
+export function getTenant(id) {
+  const row = db.prepare('SELECT * FROM tenants WHERE id = ?').get(id);
+  if (row) {
+    row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
+    row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
+    row.limits = row.limits_json ? JSON.parse(row.limits_json) : null;
+  }
+  return row;
+}
+
+export function getTenantBySlug(slug) {
+  const row = db.prepare('SELECT * FROM tenants WHERE slug = ?').get(slug);
+  if (row) {
+    row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
+    row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
+    row.limits = row.limits_json ? JSON.parse(row.limits_json) : null;
+  }
+  return row;
+}
+
+export function getAllTenants() {
+  return db.prepare('SELECT * FROM tenants ORDER BY created_at').all().map(row => ({
+    ...row,
+    branding: row.branding_json ? JSON.parse(row.branding_json) : null,
+    settings: row.settings_json ? JSON.parse(row.settings_json) : null,
+    limits: row.limits_json ? JSON.parse(row.limits_json) : null,
+  }));
+}
+
+export function createTenant(tenant) {
+  return db.prepare(`
+    INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json, trial_ends_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    tenant.id, tenant.name, tenant.slug,
+    tenant.plan || 'trial', tenant.status || 'trial',
+    tenant.branding ? JSON.stringify(tenant.branding) : null,
+    tenant.settings ? JSON.stringify(tenant.settings) : null,
+    tenant.limits ? JSON.stringify(tenant.limits) : JSON.stringify({
+      maxUsers: 10, maxSites: 3, maxWorkloads: 20, maxAgents: 5, apiRateLimit: 60, dataRetentionDays: 90
+    }),
+    tenant.trialEndsAt || new Date(Date.now() + 14 * 86400000).toISOString()
+  );
+}
+
+export function updateTenant(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.name !== undefined) { sets.push('name = ?'); params.push(updates.name); }
+  if (updates.slug !== undefined) { sets.push('slug = ?'); params.push(updates.slug); }
+  if (updates.plan !== undefined) { sets.push('plan = ?'); params.push(updates.plan); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.branding !== undefined) { sets.push('branding_json = ?'); params.push(JSON.stringify(updates.branding)); }
+  if (updates.settings !== undefined) { sets.push('settings_json = ?'); params.push(JSON.stringify(updates.settings)); }
+  if (updates.limits !== undefined) { sets.push('limits_json = ?'); params.push(JSON.stringify(updates.limits)); }
+  if (updates.trialEndsAt !== undefined) { sets.push('trial_ends_at = ?'); params.push(updates.trialEndsAt); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 8: User Helpers ──────────────────────────────────────────────────
+
+export function getUserByEmail(email) {
+  return db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+}
+
+export function getUserById(id) {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+}
+
+export function getUsersByTenant(tenantId) {
+  return db.prepare('SELECT id, email, name, tenant_id, role, status, mfa_enabled, last_login, created_at FROM users WHERE tenant_id = ? ORDER BY created_at').all(tenantId);
+}
+
+export function createUser(user) {
+  return db.prepare(`
+    INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(user.id, user.email, user.name, user.passwordHash, user.tenantId, user.role || 'viewer', user.status || 'active');
+}
+
+export function updateUser(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.name !== undefined) { sets.push('name = ?'); params.push(updates.name); }
+  if (updates.email !== undefined) { sets.push('email = ?'); params.push(updates.email); }
+  if (updates.role !== undefined) { sets.push('role = ?'); params.push(updates.role); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.passwordHash !== undefined) { sets.push('password_hash = ?'); params.push(updates.passwordHash); }
+  if (updates.mfaEnabled !== undefined) { sets.push('mfa_enabled = ?'); params.push(updates.mfaEnabled ? 1 : 0); }
+  if (updates.mfaSecret !== undefined) { sets.push('mfa_secret = ?'); params.push(updates.mfaSecret); }
+  if (updates.lastLogin !== undefined) { sets.push('last_login = ?'); params.push(updates.lastLogin); }
+  if (updates.notificationPrefs !== undefined) { sets.push('notification_prefs_json = ?'); params.push(JSON.stringify(updates.notificationPrefs)); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function deleteUser(id) {
+  return db.prepare('DELETE FROM users WHERE id = ?').run(id);
+}
+
+// ─── Phase 8: Session Helpers ───────────────────────────────────────────────
+
+export function createSession(session) {
+  return db.prepare(`
+    INSERT INTO sessions (id, user_id, refresh_token_hash, device, ip_address, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(session.id, session.userId, session.refreshTokenHash, session.device, session.ipAddress, session.expiresAt);
+}
+
+export function getSessionByRefreshHash(hash) {
+  return db.prepare('SELECT * FROM sessions WHERE refresh_token_hash = ? AND revoked = 0').get(hash);
+}
+
+export function getUserSessions(userId) {
+  return db.prepare('SELECT id, device, ip_address, created_at, expires_at FROM sessions WHERE user_id = ? AND revoked = 0 ORDER BY created_at DESC').all(userId);
+}
+
+export function revokeSession(sessionId) {
+  return db.prepare('UPDATE sessions SET revoked = 1 WHERE id = ?').run(sessionId);
+}
+
+export function revokeUserSessions(userId) {
+  return db.prepare('UPDATE sessions SET revoked = 1 WHERE user_id = ?').run(userId);
+}
+
+// ─── Phase 8: Invitation Helpers ────────────────────────────────────────────
+
+export function createInvitation(invitation) {
+  return db.prepare(`
+    INSERT INTO invitations (id, tenant_id, email, role, invited_by, token, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(invitation.id, invitation.tenantId, invitation.email, invitation.role, invitation.invitedBy, invitation.token, invitation.expiresAt);
+}
+
+export function getInvitationByToken(token) {
+  return db.prepare("SELECT * FROM invitations WHERE token = ? AND status = 'pending'").get(token);
+}
+
+export function getInvitationsByTenant(tenantId) {
+  return db.prepare('SELECT * FROM invitations WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function acceptInvitation(token) {
+  return db.prepare("UPDATE invitations SET status = 'accepted', accepted_at = datetime('now') WHERE token = ?").run(token);
+}
+
+export function revokeInvitation(id) {
+  return db.prepare("UPDATE invitations SET status = 'revoked' WHERE id = ?").run(id);
+}
+
+// ─── Phase 8: Partner Access Helpers ────────────────────────────────────────
+
+export function getPartnerAccess(tenantId) {
+  return db.prepare("SELECT * FROM partner_access WHERE tenant_id = ? AND status = 'active' ORDER BY created_at DESC").all(tenantId);
+}
+
+export function getPartnerAccessForPartner(partnerTenantId) {
+  return db.prepare("SELECT pa.*, t.name as tenant_name FROM partner_access pa JOIN tenants t ON pa.tenant_id = t.id WHERE pa.partner_tenant_id = ? AND pa.status = 'active'").all(partnerTenantId);
+}
+
+export function createPartnerAccess(pa) {
+  return db.prepare(`
+    INSERT INTO partner_access (id, tenant_id, partner_tenant_id, granted_by, access_type, permissions_json, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(pa.id, pa.tenantId, pa.partnerTenantId, pa.grantedBy, pa.accessType, JSON.stringify(pa.permissions), pa.expiresAt || null);
+}
+
+export function updatePartnerAccess(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.permissions !== undefined) { sets.push('permissions_json = ?'); params.push(JSON.stringify(updates.permissions)); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.expiresAt !== undefined) { sets.push('expires_at = ?'); params.push(updates.expiresAt); }
+  if (updates.status === 'revoked') { sets.push("revoked_at = datetime('now')"); }
+  params.push(id);
+  return db.prepare(`UPDATE partner_access SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 8: API Key Helpers ───────────────────────────────────────────────
+
+export function getApiKeys(tenantId) {
+  return db.prepare('SELECT id, tenant_id, user_id, name, key_prefix, permissions_json, rate_limit, last_used, expires_at, revoked, created_at FROM api_keys WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getApiKeyByPrefix(prefix) {
+  return db.prepare('SELECT * FROM api_keys WHERE key_prefix = ? AND revoked = 0').all(prefix);
+}
+
+export function createApiKey(key) {
+  return db.prepare(`
+    INSERT INTO api_keys (id, tenant_id, user_id, name, key_hash, key_prefix, permissions_json, rate_limit, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(key.id, key.tenantId, key.userId, key.name, key.keyHash, key.keyPrefix, key.permissions ? JSON.stringify(key.permissions) : null, key.rateLimit || null, key.expiresAt || null);
+}
+
+export function revokeApiKey(id) {
+  return db.prepare('UPDATE api_keys SET revoked = 1 WHERE id = ?').run(id);
+}
+
+export function updateApiKeyLastUsed(id) {
+  return db.prepare("UPDATE api_keys SET last_used = datetime('now') WHERE id = ?").run(id);
+}
+
+// ─── Phase 8: Audit Log Helpers ─────────────────────────────────────────────
+
+export function insertAuditLog(entry) {
+  return db.prepare(`
+    INSERT INTO audit_log (tenant_id, user_id, action, resource_type, resource_id, details_json, ip_address)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(entry.tenantId, entry.userId, entry.action, entry.resourceType || null, entry.resourceId || null, entry.details ? JSON.stringify(entry.details) : null, entry.ipAddress || null);
+}
+
+export function getAuditLog(tenantId, limit = 100, offset = 0) {
+  return db.prepare(`
+    SELECT al.*, u.name as user_name, u.email as user_email
+    FROM audit_log al LEFT JOIN users u ON al.user_id = u.id
+    WHERE al.tenant_id = ? ORDER BY al.timestamp DESC LIMIT ? OFFSET ?
+  `).all(tenantId, limit, offset);
+}
+
+export function getCrosstenantAuditLog(limit = 100, offset = 0) {
+  return db.prepare(`
+    SELECT al.*, u.name as user_name, u.email as user_email, t.name as tenant_name
+    FROM audit_log al LEFT JOIN users u ON al.user_id = u.id LEFT JOIN tenants t ON al.tenant_id = t.id
+    ORDER BY al.timestamp DESC LIMIT ? OFFSET ?
+  `).all(limit, offset);
+}
+
+// ─── Phase 8: Webhook Helpers ───────────────────────────────────────────────
+
+export function getWebhooks(tenantId) {
+  return db.prepare('SELECT * FROM webhooks WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getWebhook(id) {
+  return db.prepare('SELECT * FROM webhooks WHERE id = ?').get(id);
+}
+
+export function createWebhook(wh) {
+  return db.prepare(`
+    INSERT INTO webhooks (id, tenant_id, url, secret, events_json, status)
+    VALUES (?, ?, ?, ?, ?, 'active')
+  `).run(wh.id, wh.tenantId, wh.url, wh.secret, JSON.stringify(wh.events));
+}
+
+export function updateWebhook(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.url !== undefined) { sets.push('url = ?'); params.push(updates.url); }
+  if (updates.events !== undefined) { sets.push('events_json = ?'); params.push(JSON.stringify(updates.events)); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.failureCount !== undefined) { sets.push('failure_count = ?'); params.push(updates.failureCount); }
+  if (updates.lastSuccess !== undefined) { sets.push('last_success = ?'); params.push(updates.lastSuccess); }
+  if (updates.lastFailure !== undefined) { sets.push('last_failure = ?'); params.push(updates.lastFailure); }
+  params.push(id);
+  return db.prepare(`UPDATE webhooks SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function deleteWebhook(id) {
+  return db.prepare('DELETE FROM webhooks WHERE id = ?').run(id);
+}
+
+export function getWebhooksByEvent(tenantId, eventType) {
+  return db.prepare(`
+    SELECT * FROM webhooks WHERE tenant_id = ? AND status = 'active'
+  `).all(tenantId).filter(wh => {
+    const events = JSON.parse(wh.events_json);
+    return events.includes(eventType);
+  });
+}
+
+export function insertWebhookDelivery(delivery) {
+  return db.prepare(`
+    INSERT INTO webhook_deliveries (webhook_id, event_type, payload_json, status, status_code, response_body, attempts, next_retry)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(delivery.webhookId, delivery.eventType, JSON.stringify(delivery.payload), delivery.status, delivery.statusCode || null, delivery.responseBody || null, delivery.attempts || 1, delivery.nextRetry || null);
+}
+
+export function getPendingWebhookDeliveries() {
+  return db.prepare(`
+    SELECT * FROM webhook_deliveries WHERE status = 'pending' AND (next_retry IS NULL OR next_retry <= datetime('now'))
+    ORDER BY created_at ASC LIMIT 100
+  `).all();
+}
+
+// ─── Phase 8: Site Helpers ──────────────────────────────────────────────────
+
+export function getSites(tenantId) {
+  return db.prepare('SELECT * FROM sites WHERE tenant_id = ? ORDER BY name').all(tenantId).map(s => ({
+    ...s,
+    location: s.location_json ? JSON.parse(s.location_json) : null,
+    workloadIds: s.workload_ids_json ? JSON.parse(s.workload_ids_json) : [],
+  }));
+}
+
+export function getSite(id) {
+  const s = db.prepare('SELECT * FROM sites WHERE id = ?').get(id);
+  if (s) {
+    s.location = s.location_json ? JSON.parse(s.location_json) : null;
+    s.workloadIds = s.workload_ids_json ? JSON.parse(s.workload_ids_json) : [];
+  }
+  return s;
+}
+
+export function createSite(site) {
+  return db.prepare(`
+    INSERT INTO sites (id, tenant_id, name, location_json, iso, energy_node, total_capacity_mw, workload_ids_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(site.id, site.tenantId, site.name, site.location ? JSON.stringify(site.location) : null, site.iso || 'ERCOT', site.energyNode || null, site.totalCapacityMW || 0, JSON.stringify(site.workloadIds || []), site.status || 'operational');
+}
+
+export function updateSite(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.name !== undefined) { sets.push('name = ?'); params.push(updates.name); }
+  if (updates.location !== undefined) { sets.push('location_json = ?'); params.push(JSON.stringify(updates.location)); }
+  if (updates.iso !== undefined) { sets.push('iso = ?'); params.push(updates.iso); }
+  if (updates.energyNode !== undefined) { sets.push('energy_node = ?'); params.push(updates.energyNode); }
+  if (updates.totalCapacityMW !== undefined) { sets.push('total_capacity_mw = ?'); params.push(updates.totalCapacityMW); }
+  if (updates.workloadIds !== undefined) { sets.push('workload_ids_json = ?'); params.push(JSON.stringify(updates.workloadIds)); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE sites SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function deleteSite(id) {
+  return db.prepare('DELETE FROM sites WHERE id = ?').run(id);
 }
 
 export default db;

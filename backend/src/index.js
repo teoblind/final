@@ -7,8 +7,12 @@ import { dirname, join } from 'path';
 import dotenv from 'dotenv';
 import { initDatabase } from './cache/database.js';
 
+dotenv.config();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Existing route modules (Phases 1-7)
 import yahooRoutes from './routes/yahoo.js';
 import hashpriceRoutes from './routes/hashprice.js';
 import bitcoinRoutes from './routes/bitcoin.js';
@@ -37,9 +41,15 @@ import workloadRoutes from './routes/workloads.js';
 import gpuRoutes from './routes/gpu.js';
 import hpcRoutes from './routes/hpc.js';
 import allocationRoutes from './routes/allocation.js';
-import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
-dotenv.config();
+// Phase 8: New route modules
+import authRoutes from './routes/auth.js';
+import tenantRoutes from './routes/tenant.js';
+import partnerRoutes from './routes/partners.js';
+import adminRoutes from './routes/admin.js';
+import webhookRoutes from './routes/webhooks.js';
+
+import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 const app = express();
 const server = createServer(app);
@@ -48,14 +58,25 @@ const wss = new WebSocketServer({ server });
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
 app.use(express.json());
 
-// Initialize database
+// Initialize database (includes Phase 8 tables)
 initDatabase();
 
 // Start liquidity data refresh scheduler (every 5 minutes)
 startRefreshScheduler(5);
+
+// Start webhook retry scheduler
+try {
+  const { startWebhookRetryScheduler } = await import('./services/webhookService.js');
+  startWebhookRetryScheduler(2);
+} catch (err) {
+  console.warn('Webhook retry scheduler not started:', err.message);
+}
 
 // Store connected clients
 const clients = new Set();
@@ -80,7 +101,58 @@ export function broadcast(type, data) {
   });
 }
 
-// API Routes
+// =========================================================================
+// Phase 8: Versioned API Routes (/api/v1/)
+// =========================================================================
+
+// Auth routes (no auth middleware — public)
+app.use('/api/v1/auth', authRoutes);
+
+// Tenant & user management
+app.use('/api/v1/tenant', tenantRoutes);
+
+// Partner access
+app.use('/api/v1/partners', partnerRoutes);
+
+// Sangha admin routes
+app.use('/api/v1/admin', adminRoutes);
+
+// Webhooks
+app.use('/api/v1/webhooks', webhookRoutes);
+
+// All existing routes under /api/v1/ (versioned)
+app.use('/api/v1/yahoo', yahooRoutes);
+app.use('/api/v1/hashprice', hashpriceRoutes);
+app.use('/api/v1/bitcoin', bitcoinRoutes);
+app.use('/api/v1/uranium', uraniumRoutes);
+app.use('/api/v1/pmi', pmiRoutes);
+app.use('/api/v1/rareearth', rareEarthRoutes);
+app.use('/api/v1/japan', japanRoutes);
+app.use('/api/v1/trade', tradeRoutes);
+app.use('/api/v1/datacenter', datacenterRoutes);
+app.use('/api/v1/iran', iranRoutes);
+app.use('/api/v1/brazil', brazilRoutes);
+app.use('/api/v1/alerts', alertRoutes);
+app.use('/api/v1/manual', manualRoutes);
+app.use('/api/v1/notes', notesRoutes);
+app.use('/api/v1/correlation', correlationRoutes);
+app.use('/api/v1/liquidity', liquidityRoutes);
+app.use('/api/v1/energy', energyRoutes);
+app.use('/api/v1/fleet', fleetRoutes);
+app.use('/api/v1/curtailment', curtailmentRoutes);
+app.use('/api/v1/pools', poolRoutes);
+app.use('/api/v1/chain', chainRoutes);
+app.use('/api/v1/diagnostics', diagnosticsRoutes);
+app.use('/api/v1/agents', agentRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/workloads', workloadRoutes);
+app.use('/api/v1/gpu', gpuRoutes);
+app.use('/api/v1/hpc', hpcRoutes);
+app.use('/api/v1/allocation', allocationRoutes);
+
+// =========================================================================
+// Backward-compatible routes (/api/) — redirect to /api/v1/
+// =========================================================================
 app.use('/api/yahoo', yahooRoutes);
 app.use('/api/hashprice', hashpriceRoutes);
 app.use('/api/bitcoin', bitcoinRoutes);
@@ -110,9 +182,50 @@ app.use('/api/gpu', gpuRoutes);
 app.use('/api/hpc', hpcRoutes);
 app.use('/api/allocation', allocationRoutes);
 
+// =========================================================================
+// OpenAPI documentation
+// =========================================================================
+try {
+  const swaggerJsdoc = (await import('swagger-jsdoc')).default;
+  const swaggerUi = (await import('swagger-ui-express')).default;
+
+  const swaggerSpec = swaggerJsdoc({
+    definition: {
+      openapi: '3.0.0',
+      info: {
+        title: 'Sangha MineOS API',
+        version: '1.0.0',
+        description: 'Multi-tenant mining operations platform API. Manage energy, fleet, curtailment, pools, agents, HPC workloads, and more.',
+        contact: { name: 'Sangha', email: 'support@sangha.io' },
+      },
+      servers: [{ url: `/api/v1`, description: 'API v1' }],
+      components: {
+        securitySchemes: {
+          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+          apiKeyAuth: { type: 'apiKey', in: 'header', name: 'Authorization', description: 'Use "ApiKey mk_live_..." format' },
+        },
+      },
+      security: [{ bearerAuth: [] }],
+    },
+    apis: ['./src/routes/*.js'],
+  });
+
+  app.use('/api/v1/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'MineOS API Docs',
+  }));
+
+  app.get('/api/v1/docs.json', (req, res) => res.json(swaggerSpec));
+} catch (err) {
+  console.warn('Swagger docs not available:', err.message);
+}
+
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
+});
+app.get('/api/v1/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
 });
 
 // Serve static frontend files in production
@@ -143,7 +256,9 @@ server.listen(PORT, async () => {
 ║           SANGHA MINEOS - BACKEND SERVER                   ║
 ║═══════════════════════════════════════════════════════════║
 ║  Server running on http://localhost:${PORT}                   ║
-║  WebSocket available on ws://localhost:${PORT}                ║
+║  API v1:  http://localhost:${PORT}/api/v1/                    ║
+║  API Docs: http://localhost:${PORT}/api/v1/docs               ║
+║  WebSocket: ws://localhost:${PORT}                            ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
 

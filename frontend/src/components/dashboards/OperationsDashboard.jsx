@@ -74,7 +74,7 @@ export default function OperationsDashboard({ onNavigate }) {
       {/* Phase Roadmap Summary */}
       <div className="mb-6 bg-terminal-panel border border-terminal-border rounded-lg p-4">
         <h3 className="text-sm font-semibold text-terminal-text mb-3">Build Roadmap</h3>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
           {[
             { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
             { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
@@ -82,6 +82,7 @@ export default function OperationsDashboard({ onNavigate }) {
             { phase: 5, label: 'Pool & Chain', status: 'active', color: 'terminal-green' },
             { phase: 6, label: 'Clawbot Agents', status: 'active', color: 'terminal-green' },
             { phase: 7, label: 'HPC / AI Compute', status: 'active', color: 'terminal-green' },
+            { phase: 8, label: 'Multi-Tenant', status: 'active', color: 'terminal-green' },
           ].map(item => (
             <div
               key={item.phase}
@@ -232,7 +233,7 @@ export default function OperationsDashboard({ onNavigate }) {
       {/* Future phases note */}
       <div className="text-center py-4">
         <p className="text-xs text-terminal-muted">
-          Phases 2–7 live. Phase 8 (External Integrations) and Phase 9 (IPP Visibility) coming next.
+          Phases 2–8 live. Phase 9 (SanghaModel Network Simulator) coming next.
         </p>
       </div>
     </div>

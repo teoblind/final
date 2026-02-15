@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor } from 'lucide-react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 
 interface SettingsSectionProps {
@@ -1782,7 +1782,549 @@ export default function SettingsPanel() {
             </div>
           </div>
         </SettingsSection>
+
+        {/* Phase 8: Team Management */}
+        <TeamManagementSection />
+
+        {/* Phase 8: Partner Access */}
+        <PartnerAccessSection />
+
+        {/* Phase 8: API Keys */}
+        <ApiKeysSection />
+
+        {/* Phase 8: Webhooks */}
+        <WebhooksSection />
+
+        {/* Phase 8: Notification Preferences */}
+        <NotificationPreferencesSection />
+
+        {/* Phase 8: White Label / Branding */}
+        <BrandingSection />
       </div>
     </div>
+  );
+}
+
+function TeamManagementSection() {
+  const { data: users, refetch } = useApi('/tenant/users', { refreshInterval: 30000 });
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [inviting, setInviting] = useState(false);
+
+  const handleInvite = async () => {
+    if (!inviteEmail) return;
+    setInviting(true);
+    try {
+      const { postApi } = await import('../hooks/useApi');
+      await postApi('/tenant/users/invite', { email: inviteEmail, role: inviteRole });
+      setInviteEmail('');
+      refetch();
+    } catch (err) {
+      console.error('Invite failed:', err);
+    }
+    setInviting(false);
+  };
+
+  const handleRoleChange = async (userId: string, newRole: string) => {
+    try {
+      const { putApi } = await import('../hooks/useApi');
+      await putApi(`/tenant/users/${userId}`, { role: newRole });
+      refetch();
+    } catch (err) {
+      console.error('Role change failed:', err);
+    }
+  };
+
+  return (
+    <SettingsSection
+      title="Team Members"
+      description="Manage users and roles"
+      icon={<Users size={18} className="text-terminal-green" />}
+      active
+    >
+      <div className="space-y-4">
+        {/* User list */}
+        <div className="space-y-2">
+          {(users || []).map((u: any) => (
+            <div key={u.id} className="flex items-center justify-between p-2 bg-terminal-bg rounded border border-terminal-border">
+              <div>
+                <p className="text-sm text-terminal-text">{u.name}</p>
+                <p className="text-xs text-terminal-muted">{u.email}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={u.role}
+                  onChange={e => handleRoleChange(u.id, e.target.value)}
+                  className="bg-terminal-bg border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text"
+                >
+                  <option value="owner">Owner</option>
+                  <option value="admin">Admin</option>
+                  <option value="operator">Operator</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+                <span className={`w-2 h-2 rounded-full ${u.status === 'active' ? 'bg-terminal-green' : 'bg-terminal-amber'}`} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Invite form */}
+        <div className="flex gap-2">
+          <input
+            type="email"
+            value={inviteEmail}
+            onChange={e => setInviteEmail(e.target.value)}
+            placeholder="Email address"
+            className="flex-1 bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted focus:border-terminal-green focus:outline-none"
+          />
+          <select
+            value={inviteRole}
+            onChange={e => setInviteRole(e.target.value)}
+            className="bg-terminal-bg border border-terminal-border rounded px-2 py-2 text-sm text-terminal-text"
+          >
+            <option value="admin">Admin</option>
+            <option value="operator">Operator</option>
+            <option value="viewer">Viewer</option>
+          </select>
+          <button
+            onClick={handleInvite}
+            disabled={inviting || !inviteEmail}
+            className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30 disabled:opacity-50"
+          >
+            {inviting ? 'Inviting...' : 'Invite'}
+          </button>
+        </div>
+      </div>
+    </SettingsSection>
+  );
+}
+
+function PartnerAccessSection() {
+  const { data: partners, refetch } = useApi('/partners', { refreshInterval: 30000 });
+  const [showForm, setShowForm] = useState(false);
+  const [partnerEmail, setPartnerEmail] = useState('');
+  const [accessType, setAccessType] = useState('ipp');
+  const [permissions, setPermissions] = useState({
+    shareEnergyConsumption: true,
+    shareCurtailmentSchedule: true,
+    shareRevenueData: false,
+    shareFleetComposition: false,
+    shareHashrateData: false,
+    shareAgentActivity: false,
+    shareHPCContractData: false,
+    shareSLACompliance: true,
+    dataGranularity: 'daily',
+    historicalAccess: 30,
+  });
+
+  const handleGrant = async () => {
+    if (!partnerEmail) return;
+    try {
+      const { postApi } = await import('../hooks/useApi');
+      await postApi('/partners', { partnerEmail, accessType, permissions });
+      setPartnerEmail('');
+      setShowForm(false);
+      refetch();
+    } catch (err) {
+      console.error('Partner grant failed:', err);
+    }
+  };
+
+  const handleRevoke = async (id: string) => {
+    try {
+      const { deleteApi } = await import('../hooks/useApi');
+      await deleteApi(`/partners/${id}`);
+      refetch();
+    } catch (err) {
+      console.error('Partner revoke failed:', err);
+    }
+  };
+
+  return (
+    <SettingsSection
+      title="Partner Access"
+      description="Grant IPP or auditor visibility into your data"
+      icon={<Link2 size={18} className="text-terminal-amber" />}
+      active
+    >
+      <div className="space-y-4">
+        {(partners?.grants || []).map((p: any) => (
+          <div key={p.id} className="flex items-center justify-between p-2 bg-terminal-bg rounded border border-terminal-border">
+            <div>
+              <p className="text-sm text-terminal-text">{p.partner_tenant_id}</p>
+              <p className="text-xs text-terminal-muted capitalize">{p.access_type} partner</p>
+            </div>
+            <button onClick={() => handleRevoke(p.id)} className="text-terminal-red text-xs hover:underline">
+              Revoke
+            </button>
+          </div>
+        ))}
+
+        {showForm ? (
+          <div className="space-y-3 p-3 bg-terminal-bg rounded border border-terminal-border">
+            <input
+              type="email"
+              value={partnerEmail}
+              onChange={e => setPartnerEmail(e.target.value)}
+              placeholder="Partner email"
+              className="w-full bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted focus:border-terminal-green focus:outline-none"
+            />
+            <select
+              value={accessType}
+              onChange={e => setAccessType(e.target.value)}
+              className="w-full bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text"
+            >
+              <option value="ipp">IPP / Energy Provider</option>
+              <option value="auditor">Auditor</option>
+              <option value="insurance">Insurance Provider</option>
+            </select>
+
+            <div className="space-y-2">
+              <p className="text-xs text-terminal-muted font-semibold">Data Sharing</p>
+              {[
+                { key: 'shareEnergyConsumption', label: 'Energy Consumption' },
+                { key: 'shareCurtailmentSchedule', label: 'Curtailment Schedule' },
+                { key: 'shareRevenueData', label: 'Revenue Data' },
+                { key: 'shareFleetComposition', label: 'Fleet Composition' },
+                { key: 'shareHashrateData', label: 'Hashrate Data' },
+                { key: 'shareSLACompliance', label: 'SLA Compliance' },
+              ].map(item => (
+                <label key={item.key} className="flex items-center gap-2 text-xs text-terminal-text">
+                  <input
+                    type="checkbox"
+                    checked={(permissions as any)[item.key]}
+                    onChange={e => setPermissions({ ...permissions, [item.key]: e.target.checked })}
+                    className="rounded"
+                  />
+                  {item.label}
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={handleGrant} className="px-3 py-1.5 bg-terminal-green/20 text-terminal-green text-xs rounded border border-terminal-green/30">
+                Grant Access
+              </button>
+              <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-terminal-muted text-xs rounded border border-terminal-border">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 text-sm text-terminal-green hover:underline"
+          >
+            <Plus size={14} /> Add Partner
+          </button>
+        )}
+      </div>
+    </SettingsSection>
+  );
+}
+
+function ApiKeysSection() {
+  const { data: keysData, refetch } = useApi('/tenant/api-keys', { refreshInterval: 30000 });
+  const [keyName, setKeyName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [newKey, setNewKey] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    if (!keyName) return;
+    setCreating(true);
+    try {
+      const { postApi } = await import('../hooks/useApi');
+      const result = await postApi('/tenant/api-keys', { name: keyName });
+      setNewKey(result.key);
+      setKeyName('');
+      refetch();
+    } catch (err) {
+      console.error('API key creation failed:', err);
+    }
+    setCreating(false);
+  };
+
+  const handleRevoke = async (id: string) => {
+    try {
+      const { deleteApi } = await import('../hooks/useApi');
+      await deleteApi(`/tenant/api-keys/${id}`);
+      refetch();
+    } catch (err) {
+      console.error('API key revocation failed:', err);
+    }
+  };
+
+  return (
+    <SettingsSection
+      title="API Keys"
+      description="Manage API keys for external integrations"
+      icon={<Key size={18} className="text-terminal-cyan" />}
+      active
+    >
+      <div className="space-y-4">
+        {newKey && (
+          <div className="p-3 bg-terminal-green/10 border border-terminal-green/30 rounded">
+            <p className="text-xs text-terminal-green mb-1 font-semibold">New API Key — copy now, it won't be shown again:</p>
+            <code className="text-xs text-terminal-text bg-terminal-bg px-2 py-1 rounded block overflow-x-auto">{newKey}</code>
+            <button onClick={() => setNewKey(null)} className="text-xs text-terminal-muted mt-2 hover:underline">Dismiss</button>
+          </div>
+        )}
+
+        {(keysData?.keys || []).map((k: any) => (
+          <div key={k.id} className="flex items-center justify-between p-2 bg-terminal-bg rounded border border-terminal-border">
+            <div>
+              <p className="text-sm text-terminal-text">{k.name}</p>
+              <p className="text-xs text-terminal-muted font-mono">{k.key_prefix}...</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-terminal-muted">{k.last_used ? `Last used: ${new Date(k.last_used).toLocaleDateString()}` : 'Never used'}</span>
+              {!k.revoked && (
+                <button onClick={() => handleRevoke(k.id)} className="text-terminal-red text-xs hover:underline">
+                  Revoke
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={keyName}
+            onChange={e => setKeyName(e.target.value)}
+            placeholder="Key name (e.g., Production API)"
+            className="flex-1 bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted focus:border-terminal-green focus:outline-none"
+          />
+          <button
+            onClick={handleCreate}
+            disabled={creating || !keyName}
+            className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30 disabled:opacity-50"
+          >
+            {creating ? 'Creating...' : 'Create Key'}
+          </button>
+        </div>
+      </div>
+    </SettingsSection>
+  );
+}
+
+function WebhooksSection() {
+  const { data: webhooksData, refetch } = useApi('/v1/webhooks', { refreshInterval: 30000 });
+  const [showForm, setShowForm] = useState(false);
+  const [whUrl, setWhUrl] = useState('');
+  const [whEvents, setWhEvents] = useState<string[]>([]);
+
+  const EVENT_TYPES = [
+    'curtailment.recommendation', 'curtailment.executed',
+    'agent.approval_required', 'agent.action_executed',
+    'alert.critical', 'alert.warning',
+    'pool.hashrate_deviation', 'pool.worker_dead',
+    'energy.price_spike', 'energy.grid_emergency',
+    'report.generated', 'hpc.sla_warning',
+  ];
+
+  const handleCreate = async () => {
+    if (!whUrl || whEvents.length === 0) return;
+    try {
+      const { postApi } = await import('../hooks/useApi');
+      await postApi('/v1/webhooks', { url: whUrl, events: whEvents });
+      setWhUrl('');
+      setWhEvents([]);
+      setShowForm(false);
+      refetch();
+    } catch (err) {
+      console.error('Webhook creation failed:', err);
+    }
+  };
+
+  return (
+    <SettingsSection
+      title="Webhooks"
+      description="Receive real-time event notifications"
+      icon={<Globe size={18} className="text-terminal-amber" />}
+      active
+    >
+      <div className="space-y-4">
+        {(webhooksData?.webhooks || []).map((wh: any) => (
+          <div key={wh.id} className="p-2 bg-terminal-bg rounded border border-terminal-border">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-terminal-text font-mono truncate">{wh.url}</p>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${wh.status === 'active' ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'}`}>
+                {wh.status}
+              </span>
+            </div>
+            <p className="text-xs text-terminal-muted mt-1">{(wh.events || []).join(', ')}</p>
+          </div>
+        ))}
+
+        {showForm ? (
+          <div className="space-y-3 p-3 bg-terminal-bg rounded border border-terminal-border">
+            <input
+              type="url"
+              value={whUrl}
+              onChange={e => setWhUrl(e.target.value)}
+              placeholder="https://your-endpoint.com/webhook"
+              className="w-full bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted focus:border-terminal-green focus:outline-none"
+            />
+            <div className="grid grid-cols-2 gap-1">
+              {EVENT_TYPES.map(evt => (
+                <label key={evt} className="flex items-center gap-1.5 text-xs text-terminal-text">
+                  <input
+                    type="checkbox"
+                    checked={whEvents.includes(evt)}
+                    onChange={e => {
+                      if (e.target.checked) setWhEvents([...whEvents, evt]);
+                      else setWhEvents(whEvents.filter(x => x !== evt));
+                    }}
+                    className="rounded"
+                  />
+                  {evt}
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleCreate} className="px-3 py-1.5 bg-terminal-green/20 text-terminal-green text-xs rounded border border-terminal-green/30">
+                Create Webhook
+              </button>
+              <button onClick={() => setShowForm(false)} className="px-3 py-1.5 text-terminal-muted text-xs rounded border border-terminal-border">
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-1 text-sm text-terminal-green hover:underline">
+            <Plus size={14} /> Add Webhook
+          </button>
+        )}
+      </div>
+    </SettingsSection>
+  );
+}
+
+function NotificationPreferencesSection() {
+  const [prefs, setPrefs] = useState({
+    criticalAlerts: { inApp: true, email: true, webhook: true },
+    curtailmentChanges: { inApp: true, email: true, webhook: true },
+    agentApprovals: { inApp: true, email: true, webhook: true },
+    agentActions: { inApp: true, email: false, webhook: true },
+    dailyReports: { inApp: true, email: true, webhook: false },
+    poolAlerts: { inApp: true, email: false, webhook: true },
+    weeklyDigest: { inApp: false, email: true, webhook: false },
+  });
+
+  const categories = [
+    { key: 'criticalAlerts', label: 'Critical Alerts' },
+    { key: 'curtailmentChanges', label: 'Curtailment Changes' },
+    { key: 'agentApprovals', label: 'Agent Approvals' },
+    { key: 'agentActions', label: 'Agent Actions' },
+    { key: 'dailyReports', label: 'Daily Reports' },
+    { key: 'poolAlerts', label: 'Pool Alerts' },
+    { key: 'weeklyDigest', label: 'Weekly Digest' },
+  ];
+
+  return (
+    <SettingsSection
+      title="Notification Preferences"
+      description="Control how you receive notifications"
+      icon={<Bell size={18} className="text-terminal-green" />}
+      active
+    >
+      <div className="space-y-1">
+        <div className="grid grid-cols-4 gap-2 text-xs text-terminal-muted font-semibold pb-2 border-b border-terminal-border">
+          <span></span>
+          <span className="text-center">In-App</span>
+          <span className="text-center">Email</span>
+          <span className="text-center">Webhook</span>
+        </div>
+        {categories.map(cat => (
+          <div key={cat.key} className="grid grid-cols-4 gap-2 items-center py-1.5">
+            <span className="text-xs text-terminal-text">{cat.label}</span>
+            {(['inApp', 'email', 'webhook'] as const).map(channel => (
+              <div key={channel} className="flex justify-center">
+                <input
+                  type="checkbox"
+                  checked={(prefs as any)[cat.key][channel]}
+                  onChange={e => setPrefs({
+                    ...prefs,
+                    [cat.key]: { ...(prefs as any)[cat.key], [channel]: e.target.checked }
+                  })}
+                  className="rounded"
+                />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </SettingsSection>
+  );
+}
+
+function BrandingSection() {
+  const [branding, setBranding] = useState({
+    companyName: '',
+    primaryColor: '#00d26a',
+    logo: '',
+    hideSanghaBranding: false,
+  });
+
+  return (
+    <SettingsSection
+      title="Branding & White Label"
+      description="Customize the platform appearance"
+      icon={<Shield size={18} className="text-terminal-cyan" />}
+      active
+    >
+      <div className="space-y-3">
+        <div>
+          <label className="text-xs text-terminal-muted">Company Name Override</label>
+          <input
+            type="text"
+            value={branding.companyName}
+            onChange={e => setBranding({ ...branding, companyName: e.target.value })}
+            placeholder="Your Company Name"
+            className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted focus:border-terminal-green focus:outline-none mt-1"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-terminal-muted">Primary Color</label>
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              type="color"
+              value={branding.primaryColor}
+              onChange={e => setBranding({ ...branding, primaryColor: e.target.value })}
+              className="w-8 h-8 rounded border border-terminal-border bg-transparent cursor-pointer"
+            />
+            <input
+              type="text"
+              value={branding.primaryColor}
+              onChange={e => setBranding({ ...branding, primaryColor: e.target.value })}
+              className="bg-terminal-bg border border-terminal-border rounded px-3 py-1.5 text-sm text-terminal-text font-mono w-28"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs text-terminal-muted">Logo URL</label>
+          <input
+            type="url"
+            value={branding.logo}
+            onChange={e => setBranding({ ...branding, logo: e.target.value })}
+            placeholder="https://..."
+            className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text placeholder-terminal-muted focus:border-terminal-green focus:outline-none mt-1"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-xs text-terminal-text">
+          <input
+            type="checkbox"
+            checked={branding.hideSanghaBranding}
+            onChange={e => setBranding({ ...branding, hideSanghaBranding: e.target.checked })}
+            className="rounded"
+          />
+          Hide "Powered by Sangha MineOS" (Enterprise plans only)
+        </label>
+        <button className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30">
+          Save Branding
+        </button>
+      </div>
+    </SettingsSection>
   );
 }
