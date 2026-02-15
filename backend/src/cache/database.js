@@ -442,6 +442,100 @@ export function initDatabase() {
     )
   `);
 
+  // ─── Phase 6: Agent Framework Tables ──────────────────────────────────────
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agents (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      config_json TEXT,
+      status TEXT DEFAULT 'stopped',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      timestamp DATETIME NOT NULL,
+      phase TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      summary TEXT,
+      details_json TEXT,
+      financial_impact REAL,
+      reasoning TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_approvals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      created_at DATETIME NOT NULL,
+      expires_at DATETIME,
+      decision_json TEXT,
+      reasoning TEXT,
+      estimated_impact REAL,
+      status TEXT DEFAULT 'pending',
+      resolved_at DATETIME,
+      resolved_by TEXT,
+      rejection_reason TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      date DATE NOT NULL,
+      observations INTEGER DEFAULT 0,
+      recommendations INTEGER DEFAULT 0,
+      actions_executed INTEGER DEFAULT 0,
+      actions_approved INTEGER DEFAULT 0,
+      actions_rejected INTEGER DEFAULT 0,
+      actions_skipped INTEGER DEFAULT 0,
+      value_generated REAL DEFAULT 0,
+      avg_response_ms REAL,
+      UNIQUE(agent_id, date)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      period TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      data_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp DATETIME NOT NULL,
+      source TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'info',
+      title TEXT NOT NULL,
+      body TEXT,
+      action_url TEXT,
+      read INTEGER DEFAULT 0,
+      dismissed INTEGER DEFAULT 0
+    )
+  `);
+
+  // Create indices for agent tables
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_events_agent_ts ON agent_events(agent_id, timestamp)'); } catch (e) { /* exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status)'); } catch (e) { /* exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)'); } catch (e) { /* exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, dismissed)'); } catch (e) { /* exists */ }
+
   console.log('Database initialized');
 }
 
@@ -986,6 +1080,186 @@ export function getGridEvents(iso = 'ERCOT', days = 1) {
     // grid_events table may not exist yet
     return [];
   }
+}
+
+// ─── Phase 6: Agent Framework Helpers ────────────────────────────────────────
+
+// Agent CRUD
+export function getAgentRow(agentId) {
+  return db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
+}
+
+export function getAllAgentRows() {
+  return db.prepare('SELECT * FROM agents ORDER BY created_at').all();
+}
+
+export function upsertAgent(id, name, category, configJson, status = 'stopped') {
+  db.prepare(`
+    INSERT INTO agents (id, name, category, config_json, status, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      config_json = excluded.config_json,
+      status = excluded.status,
+      updated_at = datetime('now')
+  `).run(id, name, category, JSON.stringify(configJson), status);
+}
+
+export function updateAgentStatus(agentId, status) {
+  db.prepare('UPDATE agents SET status = ?, updated_at = datetime(\'now\') WHERE id = ?').run(status, agentId);
+}
+
+export function updateAgentConfig(agentId, configJson) {
+  db.prepare('UPDATE agents SET config_json = ?, updated_at = datetime(\'now\') WHERE id = ?').run(JSON.stringify(configJson), agentId);
+}
+
+// Agent Events
+export function insertAgentEvent(agentId, phase, eventType, summary, detailsJson = null, financialImpact = null, reasoning = null) {
+  return db.prepare(`
+    INSERT INTO agent_events (agent_id, timestamp, phase, event_type, summary, details_json, financial_impact, reasoning)
+    VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)
+  `).run(agentId, phase, eventType, summary, detailsJson ? JSON.stringify(detailsJson) : null, financialImpact, reasoning);
+}
+
+export function getAgentEvents(agentId, limit = 50) {
+  return db.prepare(`
+    SELECT * FROM agent_events WHERE agent_id = ? ORDER BY timestamp DESC LIMIT ?
+  `).all(agentId, limit);
+}
+
+export function getAllAgentEvents(limit = 100, agentFilter = null, typeFilter = null) {
+  let sql = 'SELECT * FROM agent_events WHERE 1=1';
+  const params = [];
+  if (agentFilter) { sql += ' AND agent_id = ?'; params.push(agentFilter); }
+  if (typeFilter) { sql += ' AND event_type = ?'; params.push(typeFilter); }
+  sql += ' ORDER BY timestamp DESC LIMIT ?';
+  params.push(limit);
+  return db.prepare(sql).all(...params);
+}
+
+// Agent Approvals
+export function insertAgentApproval(agentId, decisionJson, reasoning, estimatedImpact, expiresAt = null) {
+  const result = db.prepare(`
+    INSERT INTO agent_approvals (agent_id, created_at, expires_at, decision_json, reasoning, estimated_impact, status)
+    VALUES (?, datetime('now'), ?, ?, ?, ?, 'pending')
+  `).run(agentId, expiresAt, JSON.stringify(decisionJson), reasoning, estimatedImpact);
+  return result.lastInsertRowid;
+}
+
+export function getPendingApprovals() {
+  return db.prepare(`
+    SELECT ap.*, a.name as agent_name FROM agent_approvals ap
+    LEFT JOIN agents a ON ap.agent_id = a.id
+    WHERE ap.status = 'pending'
+    ORDER BY ap.created_at DESC
+  `).all();
+}
+
+export function getApproval(approvalId) {
+  return db.prepare(`
+    SELECT ap.*, a.name as agent_name FROM agent_approvals ap
+    LEFT JOIN agents a ON ap.agent_id = a.id
+    WHERE ap.id = ?
+  `).get(approvalId);
+}
+
+export function resolveApproval(approvalId, status, resolvedBy = 'operator', rejectionReason = null) {
+  db.prepare(`
+    UPDATE agent_approvals
+    SET status = ?, resolved_at = datetime('now'), resolved_by = ?, rejection_reason = ?
+    WHERE id = ?
+  `).run(status, resolvedBy, rejectionReason, approvalId);
+}
+
+export function expireOldApprovals() {
+  const result = db.prepare(`
+    UPDATE agent_approvals
+    SET status = 'expired', resolved_at = datetime('now'), resolved_by = 'auto-expired'
+    WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < datetime('now')
+  `).run();
+  return result.changes;
+}
+
+// Agent Metrics
+export function upsertAgentMetrics(agentId, date, metrics) {
+  db.prepare(`
+    INSERT INTO agent_metrics (agent_id, date, observations, recommendations, actions_executed, actions_approved, actions_rejected, actions_skipped, value_generated, avg_response_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(agent_id, date) DO UPDATE SET
+      observations = observations + excluded.observations,
+      recommendations = recommendations + excluded.recommendations,
+      actions_executed = actions_executed + excluded.actions_executed,
+      actions_approved = actions_approved + excluded.actions_approved,
+      actions_rejected = actions_rejected + excluded.actions_rejected,
+      actions_skipped = actions_skipped + excluded.actions_skipped,
+      value_generated = value_generated + excluded.value_generated,
+      avg_response_ms = CASE WHEN excluded.avg_response_ms > 0 THEN excluded.avg_response_ms ELSE avg_response_ms END
+  `).run(
+    agentId, date,
+    metrics.observations || 0, metrics.recommendations || 0,
+    metrics.actions_executed || 0, metrics.actions_approved || 0,
+    metrics.actions_rejected || 0, metrics.actions_skipped || 0,
+    metrics.value_generated || 0, metrics.avg_response_ms || 0
+  );
+}
+
+export function getAgentMetrics(agentId, days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  return db.prepare(`
+    SELECT * FROM agent_metrics WHERE agent_id = ? AND date >= ? ORDER BY date DESC
+  `).all(agentId, since);
+}
+
+export function getAllAgentMetrics(days = 30) {
+  const since = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+  return db.prepare(`
+    SELECT * FROM agent_metrics WHERE date >= ? ORDER BY date DESC
+  `).all(since);
+}
+
+// Agent Reports
+export function insertAgentReport(agentId, reportType, period, title, content, dataJson = null) {
+  return db.prepare(`
+    INSERT INTO agent_reports (agent_id, report_type, period, title, content, data_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(agentId, reportType, period, title, content, dataJson ? JSON.stringify(dataJson) : null);
+}
+
+export function getAgentReports(limit = 20) {
+  return db.prepare('SELECT * FROM agent_reports ORDER BY created_at DESC LIMIT ?').all(limit);
+}
+
+export function getAgentReport(reportId) {
+  return db.prepare('SELECT * FROM agent_reports WHERE id = ?').get(reportId);
+}
+
+// Notifications
+export function insertNotification(source, type, title, body, actionUrl = null) {
+  return db.prepare(`
+    INSERT INTO notifications (timestamp, source, type, title, body, action_url)
+    VALUES (datetime('now'), ?, ?, ?, ?, ?)
+  `).run(source, type, title, body, actionUrl);
+}
+
+export function getNotifications(limit = 50, unreadOnly = false) {
+  const where = unreadOnly ? 'WHERE read = 0 AND dismissed = 0' : 'WHERE dismissed = 0';
+  return db.prepare(`SELECT * FROM notifications ${where} ORDER BY timestamp DESC LIMIT ?`).all(limit);
+}
+
+export function getUnreadNotificationCount() {
+  return db.prepare('SELECT COUNT(*) as count FROM notifications WHERE read = 0 AND dismissed = 0').get().count;
+}
+
+export function markNotificationRead(id) {
+  db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id);
+}
+
+export function markAllNotificationsRead() {
+  db.prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
+}
+
+export function dismissNotification(id) {
+  db.prepare('UPDATE notifications SET dismissed = 1 WHERE id = ?').run(id);
 }
 
 export default db;

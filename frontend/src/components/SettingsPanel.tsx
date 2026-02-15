@@ -238,6 +238,10 @@ export default function SettingsPanel() {
   const [savingPool, setSavingPool] = useState(false);
   const [savedPool, setSavedPool] = useState(false);
 
+  // Phase 6: Agent configuration
+  const { data: agentData, refetch: refetchAgents } = useApi('/agents', { refreshInterval: 0 });
+  const agentList = (agentData?.agents || []) as any[];
+
   useEffect(() => {
     if (curtailmentData) {
       setCurtailmentSettings(prev => ({ ...prev, ...curtailmentData }));
@@ -1143,17 +1147,100 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Agent Preferences */}
+        {/* Agent Configuration — Phase 6 ACTIVE */}
         <SettingsSection
-          title="Agent Preferences"
-          description="Configure autonomous agent behavior and constraints"
-          icon={<Bot size={18} className="text-terminal-purple" />}
+          title="Clawbot Agents"
+          description="Configure autonomous agent behavior, modes, and guardrails"
+          icon={<Bot size={18} className="text-terminal-green" />}
           phase={6}
+          active
         >
-          <p className="text-sm text-terminal-muted">
-            Define risk thresholds, approval requirements, and operational boundaries
-            for autonomous agents. Control what agents can do without human approval.
-          </p>
+          <div className="space-y-4">
+            {agentList.length === 0 && (
+              <p className="text-sm text-terminal-muted italic">
+                No agents registered. Agents register when the backend starts.
+              </p>
+            )}
+
+            {agentList.map((agent: any) => {
+              const config = agent.config || {};
+              const mode = config.mode || 'recommend';
+              const status = agent.status?.state || 'stopped';
+
+              return (
+                <div key={agent.id} className="bg-terminal-bg border border-terminal-border rounded p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${status !== 'stopped' && status !== 'error' ? 'bg-terminal-green' : 'bg-terminal-muted'}`} />
+                      <p className="text-sm font-medium text-terminal-text">{agent.name}</p>
+                      <span className="text-[10px] text-terminal-muted">v{agent.version || '1.0.0'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={mode}
+                        onChange={async (e) => {
+                          await fetch(`/api/agents/${agent.id}/config`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mode: e.target.value }),
+                          });
+                          refetchAgents();
+                        }}
+                        className="bg-terminal-panel border border-terminal-border rounded px-2 py-1 text-xs text-terminal-text"
+                      >
+                        <option value="observe">Observe</option>
+                        <option value="recommend">Recommend</option>
+                        <option value="approve">Approve</option>
+                        <option value="autonomous">Autonomous</option>
+                      </select>
+                      <button
+                        onClick={async () => {
+                          const endpoint = status === 'stopped' ? 'start' : 'stop';
+                          await fetch(`/api/agents/${agent.id}/${endpoint}`, { method: 'POST' });
+                          refetchAgents();
+                        }}
+                        className={`px-2 py-1 text-xs rounded border transition-colors ${
+                          status === 'stopped'
+                            ? 'border-terminal-green/50 text-terminal-green hover:bg-terminal-green/10'
+                            : 'border-terminal-red/50 text-terminal-red hover:bg-terminal-red/10'
+                        }`}
+                      >
+                        {status === 'stopped' ? 'Start' : 'Stop'}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-terminal-muted">{agent.description}</p>
+                  {config.permissions && (
+                    <div className="flex flex-wrap gap-2 text-[10px]">
+                      {config.permissions.canAlert && (
+                        <span className="px-1.5 py-0.5 bg-terminal-amber/10 text-terminal-amber rounded">Alert</span>
+                      )}
+                      {config.permissions.canExecute && (
+                        <span className="px-1.5 py-0.5 bg-terminal-green/10 text-terminal-green rounded">Execute</span>
+                      )}
+                      {config.permissions.maxFinancialImpact && (
+                        <span className="px-1.5 py-0.5 bg-terminal-cyan/10 text-terminal-cyan rounded">
+                          Max ${config.permissions.maxFinancialImpact}/hr
+                        </span>
+                      )}
+                      {config.permissions.cooldownPeriod && (
+                        <span className="px-1.5 py-0.5 bg-terminal-border text-terminal-muted rounded">
+                          {Math.round(config.permissions.cooldownPeriod / 60)}min cooldown
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div className="border-t border-terminal-border pt-3 mt-3">
+              <p className="text-[10px] text-terminal-muted">
+                All agents start in "Recommend" mode. Upgrade to "Approve" or "Autonomous" after building trust.
+                Use the Agent Command Center on the Operations tab for real-time monitoring and approvals.
+              </p>
+            </div>
+          </div>
         </SettingsSection>
 
         {/* Alert Thresholds */}

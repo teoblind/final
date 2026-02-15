@@ -295,6 +295,49 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/diagnostics/summary',
     refreshInterval: 5 * 60 * 1000,
   }),
+
+  // Phase 6: Agent Framework
+  agentList: createApiConnector({
+    id: 'agentList',
+    name: 'Agent List',
+    endpoint: '/agents',
+    refreshInterval: 10 * 1000,
+  }),
+
+  agentSystemStatus: createApiConnector({
+    id: 'agentSystemStatus',
+    name: 'Agent System Status',
+    endpoint: '/agents/system-status',
+    refreshInterval: 10 * 1000,
+  }),
+
+  agentApprovals: createApiConnector({
+    id: 'agentApprovals',
+    name: 'Agent Approvals',
+    endpoint: '/agents/approvals',
+    refreshInterval: 10 * 1000,
+  }),
+
+  agentActivity: createApiConnector({
+    id: 'agentActivity',
+    name: 'Agent Activity Feed',
+    endpoint: '/agents/activity',
+    refreshInterval: 10 * 1000,
+  }),
+
+  agentPerformance: createApiConnector({
+    id: 'agentPerformance',
+    name: 'Agent Performance',
+    endpoint: '/agents/performance',
+    refreshInterval: 60 * 1000,
+  }),
+
+  notifications: createApiConnector({
+    id: 'notifications',
+    name: 'Notifications',
+    endpoint: '/notifications',
+    refreshInterval: 10 * 1000,
+  }),
 };
 
 /**

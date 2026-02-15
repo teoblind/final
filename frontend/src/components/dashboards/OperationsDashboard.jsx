@@ -29,8 +29,11 @@ const WorkerFleetPanel = lazy(() => import('../panels/pools/WorkerFleetPanel'));
 const MempoolFeesPanel = lazy(() => import('../panels/pools/MempoolFeesPanel'));
 const PoolComparisonPanel = lazy(() => import('../panels/pools/PoolComparisonPanel'));
 
-// Phase 6: Placeholder panels
-const AgentPlaceholder = lazy(() => import('../panels/agents/AgentPlaceholder'));
+// Phase 6: Clawbot Agent panels
+const AgentCommandCenter = lazy(() => import('../panels/agents/AgentCommandCenter'));
+const ApprovalQueuePanel = lazy(() => import('../panels/agents/ApprovalQueuePanel'));
+const AgentActivityFeed = lazy(() => import('../panels/agents/AgentActivityFeed'));
+const AgentPerformancePanel = lazy(() => import('../panels/agents/AgentPerformancePanel'));
 
 function PanelSkeleton() {
   return (
@@ -44,8 +47,7 @@ function PanelSkeleton() {
 /**
  * Operations Dashboard
  *
- * The primary mining operations control center. Phases 2-5 are live.
- * Phase 6 remains as placeholder.
+ * The primary mining operations control center. Phases 2-6 are live.
  */
 export default function OperationsDashboard({ onNavigate }) {
   return (
@@ -54,7 +56,7 @@ export default function OperationsDashboard({ onNavigate }) {
       <div className="mb-6">
         <h2 className="text-lg font-bold text-terminal-green">Operations Control Center</h2>
         <p className="text-xs text-terminal-muted mt-1">
-          Unified mining operations dashboard — energy, hashprice, curtailment, and pool data are live.
+          Unified mining operations dashboard — energy, hashprice, curtailment, pool, and agent data are live.
           Visit <button
             onClick={() => onNavigate?.('macro')}
             className="text-terminal-cyan hover:underline"
@@ -73,7 +75,7 @@ export default function OperationsDashboard({ onNavigate }) {
             { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
             { phase: 4, label: 'Curtailment', status: 'active', color: 'terminal-green' },
             { phase: 5, label: 'Pool & Chain', status: 'active', color: 'terminal-green' },
-            { phase: 6, label: 'Agents', status: 'next', color: 'terminal-amber' },
+            { phase: 6, label: 'Clawbot Agents', status: 'active', color: 'terminal-green' },
           ].map(item => (
             <div
               key={item.phase}
@@ -93,6 +95,26 @@ export default function OperationsDashboard({ onNavigate }) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Clawbot Agents — Phase 6 LIVE */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-terminal-green mb-3 flex items-center gap-2">
+          <span>🤖</span> Clawbot Agents
+          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
+        </h3>
+        <Suspense fallback={<PanelSkeleton />}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <AgentCommandCenter />
+            </div>
+            <ApprovalQueuePanel />
+            <AgentPerformancePanel />
+            <div className="md:col-span-2">
+              <AgentActivityFeed />
+            </div>
+          </div>
+        </Suspense>
       </div>
 
       {/* Pool & On-Chain section — Phase 5 LIVE */}
@@ -179,16 +201,11 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* Future phases — Placeholder panels */}
-      <div>
-        <h3 className="text-sm font-semibold text-terminal-muted mb-3">Coming Soon</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Suspense fallback={<PanelSkeleton />}>
-            <div className="md:col-span-2">
-              <AgentPlaceholder />
-            </div>
-          </Suspense>
-        </div>
+      {/* Future phases note */}
+      <div className="text-center py-4">
+        <p className="text-xs text-terminal-muted">
+          Phases 2–6 live. Phase 7 (IPP Visibility) and Phase 8 (External Integrations) coming next.
+        </p>
       </div>
     </div>
   );

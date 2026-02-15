@@ -16,6 +16,7 @@ const SettingsPanel = lazy(() => import('./components/SettingsPanel'));
 // Non-lazy supporting components
 import ManualEntryModal from './components/ManualEntryModal';
 import Sidebar from './components/Sidebar';
+import NotificationBell from './components/NotificationBell';
 
 // Navigation configuration
 const NAV_ITEMS = [
@@ -163,6 +164,7 @@ function App() {
           </nav>
 
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <button
               onClick={() => setManualEntryOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded hover:border-terminal-green text-sm"

@@ -31,6 +31,8 @@ import curtailmentRoutes from './routes/curtailment.js';
 import poolRoutes from './routes/pools.js';
 import chainRoutes from './routes/chain.js';
 import diagnosticsRoutes from './routes/diagnostics.js';
+import agentRoutes from './routes/agents.js';
+import notificationRoutes from './routes/notifications.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 dotenv.config();
@@ -97,6 +99,8 @@ app.use('/api/curtailment', curtailmentRoutes);
 app.use('/api/pools', poolRoutes);
 app.use('/api/chain', chainRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
+app.use('/api/agents', agentRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -125,7 +129,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║           SANGHA MINEOS - BACKEND SERVER                   ║
@@ -134,4 +138,22 @@ server.listen(PORT, () => {
 ║  WebSocket available on ws://localhost:${PORT}                ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
+
+  // Initialize Clawbot Agent Runtime (Phase 6)
+  try {
+    const { default: agentRuntime } = await import('./services/agentRuntime.js');
+    const { default: CurtailmentAgent } = await import('./services/agents/curtailmentAgent.js');
+    const { default: PoolOptimizationAgent } = await import('./services/agents/poolOptimizationAgent.js');
+    const { default: AlertSynthesisAgent } = await import('./services/agents/alertSynthesisAgent.js');
+    const { default: ReportingAgent } = await import('./services/agents/reportingAgent.js');
+
+    agentRuntime.registerAgent(new CurtailmentAgent());
+    agentRuntime.registerAgent(new PoolOptimizationAgent());
+    agentRuntime.registerAgent(new AlertSynthesisAgent());
+    agentRuntime.registerAgent(new ReportingAgent());
+
+    console.log('Clawbot Agent Runtime initialized with 4 agents');
+  } catch (err) {
+    console.error('Failed to initialize agent runtime:', err.message);
+  }
 });

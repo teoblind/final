@@ -393,19 +393,51 @@ const PoolPanels: PanelRegistryEntry[] = [
   },
 ];
 
-// Phase 6: Placeholder panels
-const OperationsPlaceholders: PanelRegistryEntry[] = [
+// Phase 6: Clawbot Agent panels (active)
+const AgentPanels: PanelRegistryEntry[] = [
   {
-    id: 'agent-status',
-    title: 'Agent Status',
-    subtitle: 'Autonomous agent control panel',
+    id: 'agent-command-center',
+    title: 'Agent Command Center',
+    subtitle: 'Overview of all agents and their current state',
     category: 'agents',
-    component: lazy(() => import('../components/panels/agents/AgentPlaceholder')),
+    component: lazy(() => import('../components/panels/agents/AgentCommandCenter')),
     defaultSize: { cols: 2, rows: 1 },
     phase: 6,
-    status: 'placeholder',
-    description: 'Monitor and control autonomous agents handling curtailment decisions, pool switching, firmware updates, and anomaly response.',
+    status: 'active',
     icon: '🤖',
+  },
+  {
+    id: 'agent-approvals',
+    title: 'Approval Queue',
+    subtitle: 'Actions waiting for human confirmation',
+    category: 'agents',
+    component: lazy(() => import('../components/panels/agents/ApprovalQueuePanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 6,
+    status: 'active',
+    icon: '✅',
+  },
+  {
+    id: 'agent-activity',
+    title: 'Agent Activity',
+    subtitle: 'Chronological log of all agent events',
+    category: 'agents',
+    component: lazy(() => import('../components/panels/agents/AgentActivityFeed')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 6,
+    status: 'active',
+    icon: '📋',
+  },
+  {
+    id: 'agent-performance',
+    title: 'Agent Performance',
+    subtitle: 'Value generated and action metrics',
+    category: 'agents',
+    component: lazy(() => import('../components/panels/agents/AgentPerformancePanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 6,
+    status: 'active',
+    icon: '📊',
   },
 ];
 
@@ -416,7 +448,7 @@ export const panelRegistry: PanelRegistryEntry[] = [
   ...HashpricePanels,
   ...CurtailmentPanels,
   ...PoolPanels,
-  ...OperationsPlaceholders,
+  ...AgentPanels,
 ];
 
 /**
