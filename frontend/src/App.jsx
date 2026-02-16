@@ -35,7 +35,7 @@ function LoadingSpinner() {
 }
 
 function AppContent() {
-  const { user, loading: authLoading, logout, hasPermission, hasRole } = useAuth();
+  const { user, loading: authLoading, login, logout, hasPermission, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('operations');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
@@ -120,6 +120,7 @@ function AppContent() {
     return (
       <Suspense fallback={<LoadingSpinner />}>
         <LoginPage onLogin={(data) => {
+          login(data);
           // Check if onboarding needed
           if (data.user.role === 'owner') {
             setShowOnboarding(true);
