@@ -1,5 +1,5 @@
 """
-Sangha Ampera — Phase 9: SanghaModel Simulation Engine
+Ampera — Phase 9: SanghaModel Simulation Engine
 
 Monte Carlo simulation for Bitcoin mining revenue projections,
 risk scoring, floor suggestions, and scenario analysis.

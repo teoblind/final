@@ -93,7 +93,7 @@ export default function LoginPage({ onLogin }) {
           {/* Invitation banner */}
           {inviteToken && mode === 'register' && (
             <div className="mb-4 px-3 py-2 bg-terminal-green/10 border border-terminal-green/30 rounded text-terminal-green text-xs">
-              You have been invited to join Sangha Ampera. Complete registration below.
+              You have been invited to join Ampera. Complete registration below.
             </div>
           )}
 
@@ -196,7 +196,7 @@ export default function LoginPage({ onLogin }) {
 
         {/* Footer */}
         <p className="text-center text-terminal-muted text-xs mt-6">
-          Sangha Ampera &middot; Mining Operations Platform
+          Ampera &middot; Mining Operations Platform
         </p>
       </div>
     </div>

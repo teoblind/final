@@ -1,5 +1,5 @@
 """
-Sangha Ampera — Phase 9: SanghaModel Pydantic Models
+Ampera — Phase 9: SanghaModel Pydantic Models
 
 Defines the full API contract for the SanghaModel risk-assessment
 microservice, covering miner profiles, simulation parameters,

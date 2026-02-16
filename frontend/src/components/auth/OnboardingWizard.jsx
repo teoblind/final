@@ -192,10 +192,10 @@ export default function OnboardingWizard({ onComplete }) {
         <span className="text-terminal-green text-4xl font-bold">&#9650;</span>
       </div>
       <h2 className="text-2xl font-bold text-terminal-text mb-4">
-        Welcome to Sangha Ampera
+        Welcome to Ampera
       </h2>
       <p className="text-terminal-muted text-sm leading-relaxed mb-6">
-        Sangha Ampera is a unified intelligence platform for mining operations.
+        Ampera is a unified intelligence platform for mining operations.
         It connects your energy markets, fleet hashprice, curtailment strategy,
         mining pools, and AI agents into a single command center.
       </p>

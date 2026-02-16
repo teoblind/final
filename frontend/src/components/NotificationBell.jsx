@@ -55,7 +55,7 @@ export default function NotificationBell() {
     if (!notifications.length) return;
     const critical = notifications.find(n => n.type === 'critical' && !n.read);
     if (critical && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('Sangha Ampera Alert', {
+      new Notification('Ampera Alert', {
         body: critical.title,
         icon: '/favicon.ico',
         tag: `ampera-${critical.id}`,

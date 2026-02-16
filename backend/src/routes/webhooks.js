@@ -155,7 +155,7 @@ router.post('/test', requirePermission('manageSettings'), async (req, res) => {
       type: 'test',
       timestamp: new Date().toISOString(),
       tenantId: req.tenantId,
-      data: { message: 'This is a test webhook delivery from Sangha Ampera' },
+      data: { message: 'This is a test webhook delivery from Ampera' },
     };
 
     const signature = crypto

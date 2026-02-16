@@ -1,5 +1,5 @@
 /**
- * Sangha Ampera Theme Configuration
+ * Ampera Theme Configuration
  *
  * Centralizes all design tokens for visual consistency across all phases.
  * Based on the Bloomberg terminal-inspired dark aesthetic from the original dashboard.

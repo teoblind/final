@@ -205,7 +205,7 @@ try {
     definition: {
       openapi: '3.0.0',
       info: {
-        title: 'Sangha Ampera API',
+        title: 'Ampera API',
         version: '1.0.0',
         description: 'Multi-tenant mining operations platform API. Manage energy, fleet, curtailment, pools, agents, HPC workloads, and more.',
         contact: { name: 'Sangha', email: 'support@sangha.io' },

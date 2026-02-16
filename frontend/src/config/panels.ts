@@ -2,7 +2,7 @@ import { lazy } from 'react';
 import type { PanelRegistryEntry } from '../types';
 
 /**
- * Panel Registry — Single source of truth for all panels in Sangha Ampera.
+ * Panel Registry — Single source of truth for all panels in Ampera.
  *
  * To add a new panel:
  * 1. Create the panel component in src/components/panels/<category>/

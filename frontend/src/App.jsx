@@ -321,7 +321,7 @@ function AppContent() {
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-terminal-bg border-t border-terminal-border px-4 py-2 text-xs text-terminal-muted flex justify-between">
-        <span>Sangha Ampera | Mining Operations Platform</span>
+        <span>Ampera | Mining Operations Platform</span>
         <span>{new Date().toLocaleString()}</span>
       </footer>
     </div>

@@ -1,5 +1,5 @@
 """
-Sangha Ampera — Phase 9: SanghaModel FastAPI Wrapper
+Ampera — Phase 9: SanghaModel FastAPI Wrapper
 
 A Python microservice providing Monte Carlo risk-assessment,
 scenario analysis, and calibration endpoints for Bitcoin mining
@@ -56,7 +56,7 @@ SERVICE_START_TIME = time.time()
 app = FastAPI(
     title="SanghaModel",
     description=(
-        "Monte Carlo risk-assessment engine for Sangha Ampera. "
+        "Monte Carlo risk-assessment engine for Ampera. "
         "Provides hashprice distribution projections, risk scoring, "
         "floor suggestions, scenario analysis, and calibration ingestion."
     ),

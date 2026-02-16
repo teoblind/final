@@ -2322,7 +2322,7 @@ function BrandingSection() {
             onChange={e => setBranding({ ...branding, hideSanghaBranding: e.target.checked })}
             className="rounded"
           />
-          Hide "Powered by Sangha Ampera" (Enterprise plans only)
+          Hide "Powered by Ampera" (Enterprise plans only)
         </label>
         <button className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30">
           Save Branding

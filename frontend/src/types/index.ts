@@ -1,5 +1,5 @@
 /**
- * Global TypeScript types for Sangha Ampera
+ * Global TypeScript types for Ampera
  */
 
 // Panel system types
