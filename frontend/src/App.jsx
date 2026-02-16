@@ -74,7 +74,7 @@ function AppContent() {
     let reconnectTimeout;
 
     const connect = () => {
-      const wsPort = window.location.port === '3000' ? '3001' : window.location.port;
+      const wsPort = window.location.port === '3000' ? '3002' : window.location.port;
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.hostname}:${wsPort}`;
       ws = new WebSocket(wsUrl);
