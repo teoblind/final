@@ -82,21 +82,9 @@ try {
   console.warn('Webhook retry scheduler not started:', err.message);
 }
 
-// Start insurance claims scheduler (Phase 9)
-try {
-  const { startClaimsScheduler } = await import('./services/claimsVerifier.js');
-  startClaimsScheduler(1); // Generate claims on 1st of each month
-} catch (err) {
-  console.warn('Claims scheduler not started:', err.message);
-}
-
-// Start calibration export scheduler (Phase 9)
-try {
-  const { startCalibrationScheduler } = await import('./services/calibrationExporter.js');
-  startCalibrationScheduler(24); // Daily calibration export
-} catch (err) {
-  console.warn('Calibration scheduler not started:', err.message);
-}
+// Phase 9 schedulers: NOT auto-started — enable via Settings or API
+// POST /api/v1/insurance/schedulers/start to start them
+// POST /api/v1/insurance/schedulers/stop to stop them
 
 // Store connected clients
 const clients = new Set();

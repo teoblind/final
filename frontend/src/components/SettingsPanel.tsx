@@ -2343,6 +2343,23 @@ function InsuranceSettingsSection() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Scheduler controls
+  const { data: schedulerData, refetch: refetchSchedulers } = useApi('/v1/insurance/schedulers', { refreshInterval: 10000 });
+  const [togglingScheduler, setTogglingScheduler] = useState<string | null>(null);
+
+  const toggleScheduler = async (name: string, currentlyRunning: boolean) => {
+    setTogglingScheduler(name);
+    try {
+      const { postApi } = await import('../hooks/useApi');
+      const action = currentlyRunning ? 'stop' : 'start';
+      await postApi(`/v1/insurance/schedulers/${action}`, { scheduler: name });
+      refetchSchedulers();
+    } catch (err) {
+      console.error(`Failed to toggle ${name} scheduler:`, err);
+    }
+    setTogglingScheduler(null);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -2365,6 +2382,40 @@ function InsuranceSettingsSection() {
       active
     >
       <div className="space-y-4">
+        {/* Background Scheduler Controls */}
+        <div className="p-3 bg-terminal-bg border border-terminal-border rounded">
+          <p className="text-xs text-terminal-muted uppercase tracking-wider mb-2">Background Schedulers</p>
+          <p className="text-[10px] text-terminal-muted mb-3">
+            These are background jobs. They are OFF by default to avoid unnecessary computation.
+            The calibration scheduler requires the SanghaModel Python service running on port 8100.
+          </p>
+          <div className="space-y-2">
+            {['claims', 'calibration'].map(name => {
+              const sched = schedulerData?.[name];
+              const running = sched?.running ?? false;
+              return (
+                <div key={name} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-terminal-text capitalize">{name} Scheduler</p>
+                    <p className="text-[10px] text-terminal-muted">{sched?.description || ''}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleScheduler(name, running)}
+                    disabled={togglingScheduler === name}
+                    className={`px-3 py-1 text-xs rounded border transition-colors ${
+                      running
+                        ? 'bg-terminal-green/10 text-terminal-green border-terminal-green/30 hover:bg-terminal-red/10 hover:text-terminal-red hover:border-terminal-red/30'
+                        : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:text-terminal-green hover:border-terminal-green/30'
+                    } disabled:opacity-50`}
+                  >
+                    {togglingScheduler === name ? '...' : running ? 'Running — Stop' : 'Stopped — Start'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <label className="flex items-center gap-2 text-sm text-terminal-text">
           <input
             type="checkbox"

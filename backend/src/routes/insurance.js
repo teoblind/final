@@ -772,4 +772,82 @@ router.get('/coverage-status', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Scheduler Controls — start/stop background jobs from the dashboard
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let schedulerState = { claims: false, calibration: false };
+
+/**
+ * GET /schedulers — Get status of all Phase 9 schedulers
+ */
+router.get('/schedulers', (req, res) => {
+  res.json({
+    claims: { running: schedulerState.claims, description: 'Monthly claims generation (1st of month)' },
+    calibration: { running: schedulerState.calibration, description: 'Daily calibration export to SanghaModel' },
+  });
+});
+
+/**
+ * POST /schedulers/start — Start one or all schedulers
+ * Body: { scheduler: 'claims' | 'calibration' | 'all' }
+ */
+router.post('/schedulers/start', async (req, res) => {
+  try {
+    const { scheduler = 'all' } = req.body || {};
+
+    if (scheduler === 'claims' || scheduler === 'all') {
+      if (!schedulerState.claims) {
+        const { startClaimsScheduler } = await import('../services/claimsVerifier.js');
+        startClaimsScheduler(1);
+        schedulerState.claims = true;
+      }
+    }
+
+    if (scheduler === 'calibration' || scheduler === 'all') {
+      if (!schedulerState.calibration) {
+        const { startCalibrationScheduler } = await import('../services/calibrationExporter.js');
+        startCalibrationScheduler(24);
+        schedulerState.calibration = true;
+      }
+    }
+
+    res.json({ success: true, schedulers: schedulerState });
+  } catch (error) {
+    console.error('Failed to start schedulers:', error);
+    res.status(500).json({ error: 'Failed to start schedulers' });
+  }
+});
+
+/**
+ * POST /schedulers/stop — Stop one or all schedulers
+ * Body: { scheduler: 'claims' | 'calibration' | 'all' }
+ */
+router.post('/schedulers/stop', async (req, res) => {
+  try {
+    const { scheduler = 'all' } = req.body || {};
+
+    if (scheduler === 'claims' || scheduler === 'all') {
+      if (schedulerState.claims) {
+        const { stopClaimsScheduler } = await import('../services/claimsVerifier.js');
+        stopClaimsScheduler();
+        schedulerState.claims = false;
+      }
+    }
+
+    if (scheduler === 'calibration' || scheduler === 'all') {
+      if (schedulerState.calibration) {
+        const { stopCalibrationScheduler } = await import('../services/calibrationExporter.js');
+        stopCalibrationScheduler();
+        schedulerState.calibration = false;
+      }
+    }
+
+    res.json({ success: true, schedulers: schedulerState });
+  } catch (error) {
+    console.error('Failed to stop schedulers:', error);
+    res.status(500).json({ error: 'Failed to stop schedulers' });
+  }
+});
+
 export default router;
