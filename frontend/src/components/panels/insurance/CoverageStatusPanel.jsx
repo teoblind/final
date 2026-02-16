@@ -41,7 +41,7 @@ export default function CoverageStatusPanel() {
   const [showClaimHistory, setShowClaimHistory] = useState(false);
 
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
-    '/v1/insurance/coverage',
+    '/v1/insurance/coverage-status',
     { refreshInterval: 60 * 1000 }
   );
 

@@ -71,7 +71,7 @@ export default function CoverageExplorerPanel() {
     try {
       const termConfig = TERMS.find(t => t.key === termKey);
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL || '/api'}/v1/insurance/quotes/indicative?floor_price=${floor}&term_months=${termConfig?.months || 12}&hashrate_th=${hr}`
+        `${import.meta.env.VITE_API_URL || '/api'}/v1/insurance/quotes/indicative?floor=${floor}&term=${termConfig?.months || 12}&hashrate=${hr}`
       );
       if (res.ok) {
         const result = await res.json();

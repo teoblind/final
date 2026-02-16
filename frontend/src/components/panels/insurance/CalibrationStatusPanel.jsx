@@ -38,7 +38,7 @@ export default function CalibrationStatusPanel() {
   const [countdown, setCountdown] = useState(null);
 
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
-    '/v1/insurance/admin/calibration-status',
+    '/v1/admin/insurance/calibration',
     { refreshInterval: 30 * 1000 }
   );
 
@@ -86,7 +86,7 @@ export default function CalibrationStatusPanel() {
   const handleForceExport = async () => {
     setForceExporting(true);
     try {
-      await postApi('/v1/insurance/admin/calibration/force-export');
+      await postApi('/v1/admin/insurance/calibration/export');
       await refetch();
     } catch (err) {
       console.error('Force export failed:', err);

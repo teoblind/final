@@ -46,7 +46,7 @@ export default function UnderwritingQueuePanel() {
   const [quoteError, setQuoteError] = useState(null);
 
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
-    '/v1/insurance/admin/underwriting-queue',
+    '/v1/admin/insurance/queue',
     { refreshInterval: 30 * 1000 }
   );
 
@@ -65,7 +65,7 @@ export default function UnderwritingQueuePanel() {
   const handleRunAssessment = async (requestId) => {
     setRunningAssessment(requestId);
     try {
-      await postApi(`/v1/insurance/admin/underwriting-queue/${requestId}/assess`);
+      await postApi(`/v1/admin/insurance/queue/${requestId}/assess`);
       await refetch();
     } catch (err) {
       console.error('Assessment failed:', err);
@@ -78,7 +78,7 @@ export default function UnderwritingQueuePanel() {
     setQuoteSubmitting(true);
     setQuoteError(null);
     try {
-      await postApi(`/v1/insurance/admin/underwriting-queue/${requestId}/issue-quote`, {
+      await postApi(`/v1/admin/insurance/queue/${requestId}/quote`, {
         premium: parseFloat(quoteForm.premium),
         upside_share_pct: parseFloat(quoteForm.upsideSharePct),
         floor_price: parseFloat(quoteForm.floorPrice),

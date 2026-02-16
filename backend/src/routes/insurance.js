@@ -145,8 +145,8 @@ router.post('/risk-profile/refresh', async (req, res) => {
 
     // Attempt quick assessment inline
     try {
-      const { quickAssessment } = await import('../services/sanghaModelClient.js');
-      const result = await quickAssessment(profile);
+      const { requestQuickAssessment } = await import('../services/sanghaModelClient.js');
+      const result = await requestQuickAssessment(profile);
 
       updateRiskAssessment(assessmentId, {
         status: 'completed',
@@ -200,7 +200,7 @@ router.post('/risk-profile/refresh', async (req, res) => {
       if (assessmentType === 'full') {
         // Trigger async full assessment in background (fire-and-forget)
         import('../services/sanghaModelClient.js')
-          .then(({ fullAssessment }) => fullAssessment(profile, assessmentId))
+          .then(({ requestFullAssessment }) => requestFullAssessment(profile, assessmentId))
           .catch(err => console.error('Async full assessment error:', err.message));
       }
 

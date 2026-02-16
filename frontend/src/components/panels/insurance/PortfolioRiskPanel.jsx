@@ -32,7 +32,7 @@ export default function PortfolioRiskPanel() {
   const [showScenarioDropdown, setShowScenarioDropdown] = useState(false);
 
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
-    '/v1/insurance/admin/portfolio-risk',
+    '/v1/admin/insurance/portfolio',
     { refreshInterval: 60 * 1000 }
   );
 
@@ -62,8 +62,8 @@ export default function PortfolioRiskPanel() {
     setStressRunning(true);
     setStressResults(null);
     try {
-      const result = await postApi('/v1/insurance/admin/portfolio-risk/stress-test', {
-        scenario: stressScenario,
+      const result = await postApi('/v1/admin/insurance/stress-test', {
+        scenarioType: stressScenario,
       });
       setStressResults(result);
     } catch (err) {

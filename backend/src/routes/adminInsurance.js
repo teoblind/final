@@ -270,7 +270,7 @@ router.post('/queue/:id/assess', async (req, res) => {
     // Attempt assessment via sanghaModelClient
     try {
       const client = await import('../services/sanghaModelClient.js');
-      const assessFn = assessmentType === 'full' ? client.fullAssessment : client.quickAssessment;
+      const assessFn = assessmentType === 'full' ? client.requestFullAssessment : client.requestQuickAssessment;
       const result = await assessFn(profile);
 
       updateRiskAssessment(assessmentId, {
@@ -631,8 +631,8 @@ router.post('/calibration/export', async (req, res) => {
     // Attempt to run calibration export via calibrationExporter service
     let exportResult;
     try {
-      const { runCalibrationExport } = await import('../services/calibrationExporter.js');
-      exportResult = await runCalibrationExport();
+      const { exportCalibrationData } = await import('../services/calibrationExporter.js');
+      exportResult = await exportCalibrationData();
     } catch (serviceError) {
       // Service unavailable — create a mock export record
       exportResult = {
@@ -705,8 +705,8 @@ router.post('/stress-test', async (req, res) => {
     // Attempt to run stress test via sanghaModelClient
     let scenarioResults;
     try {
-      const { runStressTest } = await import('../services/sanghaModelClient.js');
-      scenarioResults = await runStressTest(scenarioType, params || {});
+      const { runScenario } = await import('../services/sanghaModelClient.js');
+      scenarioResults = await runScenario({ scenarioType, params: params || {} });
     } catch (serviceError) {
       // Model service unavailable — return mock stress test results
       const portfolioMetrics = getPortfolioMetrics();
