@@ -49,6 +49,10 @@ import partnerRoutes from './routes/partners.js';
 import adminRoutes from './routes/admin.js';
 import webhookRoutes from './routes/webhooks.js';
 
+// Phase 9: Insurance integration routes
+import insuranceRoutes from './routes/insurance.js';
+import adminInsuranceRoutes from './routes/adminInsurance.js';
+
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
 const app = express();
@@ -76,6 +80,22 @@ try {
   startWebhookRetryScheduler(2);
 } catch (err) {
   console.warn('Webhook retry scheduler not started:', err.message);
+}
+
+// Start insurance claims scheduler (Phase 9)
+try {
+  const { startClaimsScheduler } = await import('./services/claimsVerifier.js');
+  startClaimsScheduler(1); // Generate claims on 1st of each month
+} catch (err) {
+  console.warn('Claims scheduler not started:', err.message);
+}
+
+// Start calibration export scheduler (Phase 9)
+try {
+  const { startCalibrationScheduler } = await import('./services/calibrationExporter.js');
+  startCalibrationScheduler(24); // Daily calibration export
+} catch (err) {
+  console.warn('Calibration scheduler not started:', err.message);
 }
 
 // Store connected clients
@@ -119,6 +139,10 @@ app.use('/api/v1/admin', adminRoutes);
 
 // Webhooks
 app.use('/api/v1/webhooks', webhookRoutes);
+
+// Phase 9: Insurance routes
+app.use('/api/v1/insurance', insuranceRoutes);
+app.use('/api/v1/admin/insurance', adminInsuranceRoutes);
 
 // All existing routes under /api/v1/ (versioned)
 app.use('/api/v1/yahoo', yahooRoutes);

@@ -1800,6 +1800,9 @@ export default function SettingsPanel() {
 
         {/* Phase 8: White Label / Branding */}
         <BrandingSection />
+
+        {/* Phase 9: Insurance Settings */}
+        <InsuranceSettingsSection />
       </div>
     </div>
   );
@@ -2323,6 +2326,109 @@ function BrandingSection() {
         </label>
         <button className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30">
           Save Branding
+        </button>
+      </div>
+    </SettingsSection>
+  );
+}
+
+function InsuranceSettingsSection() {
+  const [insuranceSettings, setInsuranceSettings] = useState({
+    enabled: true,
+    defaultFloorPreference: 'moderate',
+    claimsNotifications: true,
+    dataSharingConsent: false,
+    consentTimestamp: null as string | null,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { postApi } = await import('../hooks/useApi');
+      await postApi('/v1/insurance/settings', insuranceSettings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('Failed to save insurance settings:', err);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <SettingsSection
+      title="Insurance & Revenue Protection"
+      description="Configure Sangha revenue floor guarantee settings"
+      icon={<Shield size={18} className="text-terminal-cyan" />}
+      phase={9}
+      active
+    >
+      <div className="space-y-4">
+        <label className="flex items-center gap-2 text-sm text-terminal-text">
+          <input
+            type="checkbox"
+            checked={insuranceSettings.enabled}
+            onChange={e => setInsuranceSettings({ ...insuranceSettings, enabled: e.target.checked })}
+            className="rounded"
+          />
+          Enable Insurance Features
+        </label>
+
+        <div>
+          <label className="text-xs text-terminal-muted block mb-1">Default Coverage Preference</label>
+          <select
+            value={insuranceSettings.defaultFloorPreference}
+            onChange={e => setInsuranceSettings({ ...insuranceSettings, defaultFloorPreference: e.target.value })}
+            className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text focus:border-terminal-green focus:outline-none"
+          >
+            <option value="conservative">Conservative (Higher floor, higher premium)</option>
+            <option value="moderate">Moderate (Balanced risk/cost)</option>
+            <option value="aggressive">Aggressive (Lower floor, lower premium)</option>
+          </select>
+        </div>
+
+        <label className="flex items-center gap-2 text-sm text-terminal-text">
+          <input
+            type="checkbox"
+            checked={insuranceSettings.claimsNotifications}
+            onChange={e => setInsuranceSettings({ ...insuranceSettings, claimsNotifications: e.target.checked })}
+            className="rounded"
+          />
+          Receive claims notifications
+        </label>
+
+        <div className="p-3 bg-terminal-bg border border-terminal-amber/30 rounded">
+          <label className="flex items-center gap-2 text-sm text-terminal-text">
+            <input
+              type="checkbox"
+              checked={insuranceSettings.dataSharingConsent}
+              onChange={e => setInsuranceSettings({
+                ...insuranceSettings,
+                dataSharingConsent: e.target.checked,
+                consentTimestamp: e.target.checked ? new Date().toISOString() : null,
+              })}
+              className="rounded"
+            />
+            <span>Consent to anonymized data sharing for calibration</span>
+          </label>
+          <p className="text-[10px] text-terminal-muted mt-1 ml-6">
+            Your operational data will be aggregated and anonymized before being used to calibrate the network simulator.
+            No individual tenant data is ever shared. This helps improve risk assessment accuracy for all miners.
+          </p>
+          {insuranceSettings.consentTimestamp && (
+            <p className="text-[10px] text-terminal-green mt-1 ml-6">
+              Consent granted: {new Date(insuranceSettings.consentTimestamp).toLocaleString()}
+            </p>
+          )}
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30 disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Insurance Settings'}
         </button>
       </div>
     </SettingsSection>

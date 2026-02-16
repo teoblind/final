@@ -1,7 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
-  DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield
+  DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella
 } from 'lucide-react';
 
 // Auth
@@ -19,6 +19,7 @@ const AlertsPanel = lazy(() => import('./components/AlertsPanel'));
 const NotesPanel = lazy(() => import('./components/NotesPanel'));
 const LiquidityPanel = lazy(() => import('./components/LiquidityPanel'));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel'));
+const InsuranceDashboard = lazy(() => import('./components/dashboards/InsuranceDashboard'));
 
 // Non-lazy supporting components
 import ManualEntryModal from './components/ManualEntryModal';
@@ -58,6 +59,7 @@ function AppContent() {
     NAV_ITEMS.push({ id: 'notes', label: 'Notes', shortLabel: 'Notes', icon: FileText });
   }
   NAV_ITEMS.push({ id: 'liquidity', label: 'Liquidity', shortLabel: 'Liq', icon: DollarSign });
+  NAV_ITEMS.push({ id: 'insurance', label: 'Insurance', shortLabel: 'Ins', icon: Umbrella });
   if (!user || hasPermission('viewSettings')) {
     NAV_ITEMS.push({ id: 'settings', label: 'Settings', shortLabel: 'Settings', icon: Settings });
   }
@@ -204,6 +206,8 @@ function AppContent() {
             <LiquidityPanel />
           </div>
         );
+      case 'insurance':
+        return <InsuranceDashboard />;
       case 'settings':
         return <SettingsPanel />;
       case 'admin':
@@ -215,7 +219,7 @@ function AppContent() {
 
   // Only show a subset of tabs in mobile nav (most important ones)
   const mobileNavItems = NAV_ITEMS.filter(item =>
-    ['operations', 'macro', 'alerts', 'notes', 'settings'].includes(item.id)
+    ['operations', 'macro', 'alerts', 'insurance', 'settings'].includes(item.id)
   );
 
   return (

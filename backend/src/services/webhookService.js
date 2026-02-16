@@ -21,7 +21,16 @@ export const WEBHOOK_EVENT_TYPES = [
   'energy.price_spike',
   'energy.grid_emergency',
   'report.generated',
-  'hpc.sla_warning'
+  'hpc.sla_warning',
+  // Phase 9: Insurance lifecycle events
+  'insurance.quote_requested',
+  'insurance.quote_issued',
+  'insurance.quote_accepted',
+  'insurance.policy_activated',
+  'insurance.claim_generated',
+  'insurance.claim_verified',
+  'insurance.claim_paid',
+  'insurance.risk_score_changed'
 ];
 
 // ─── Payload Signing ────────────────────────────────────────────────────────

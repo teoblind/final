@@ -1,5 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import api from '../../lib/hooks/useApi';
+
+const UnderwritingQueuePanel = lazy(() => import('../panels/insurance/UnderwritingQueuePanel'));
+const PortfolioRiskPanel = lazy(() => import('../panels/insurance/PortfolioRiskPanel'));
+const CalibrationStatusPanel = lazy(() => import('../panels/insurance/CalibrationStatusPanel'));
 
 export default function AdminConsoleDashboard() {
   const [aggregate, setAggregate] = useState(null);
@@ -327,6 +331,18 @@ export default function AdminConsoleDashboard() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Phase 9: Insurance Admin Panels */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-terminal-green mb-3">Insurance & Underwriting</h3>
+        <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="spinner w-8 h-8" /></div>}>
+          <div className="space-y-4">
+            <UnderwritingQueuePanel />
+            <PortfolioRiskPanel />
+            <CalibrationStatusPanel />
+          </div>
+        </Suspense>
       </div>
 
       {/* Action Buttons */}

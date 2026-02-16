@@ -52,7 +52,7 @@ function PanelSkeleton() {
 /**
  * Operations Dashboard
  *
- * The primary mining operations control center. Phases 2-6 are live.
+ * The primary mining operations control center. Phases 2-9 are live.
  */
 export default function OperationsDashboard({ onNavigate }) {
   return (
@@ -74,7 +74,7 @@ export default function OperationsDashboard({ onNavigate }) {
       {/* Phase Roadmap Summary */}
       <div className="mb-6 bg-terminal-panel border border-terminal-border rounded-lg p-4">
         <h3 className="text-sm font-semibold text-terminal-text mb-3">Build Roadmap</h3>
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
           {[
             { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
             { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
@@ -83,6 +83,7 @@ export default function OperationsDashboard({ onNavigate }) {
             { phase: 6, label: 'Clawbot Agents', status: 'active', color: 'terminal-green' },
             { phase: 7, label: 'HPC / AI Compute', status: 'active', color: 'terminal-green' },
             { phase: 8, label: 'Multi-Tenant', status: 'active', color: 'terminal-green' },
+            { phase: 9, label: 'Insurance Bridge', status: 'active', color: 'terminal-green' },
           ].map(item => (
             <div
               key={item.phase}
@@ -233,7 +234,7 @@ export default function OperationsDashboard({ onNavigate }) {
       {/* Future phases note */}
       <div className="text-center py-4">
         <p className="text-xs text-terminal-muted">
-          Phases 2–8 live. Phase 9 (SanghaModel Network Simulator) coming next.
+          Phases 2–9 live. All phases complete — full-stack mining operations platform.
         </p>
       </div>
     </div>

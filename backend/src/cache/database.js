@@ -642,6 +642,9 @@ export function initDatabase() {
 
   // Initialize Phase 8 multi-tenant tables
   initPhase8Tables();
+
+  // Initialize Phase 9 insurance tables
+  initPhase9Tables();
 }
 
 // Cache helpers
@@ -2116,6 +2119,439 @@ export function updateSite(id, updates) {
 
 export function deleteSite(id) {
   return db.prepare('DELETE FROM sites WHERE id = ?').run(id);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 9: Insurance Integration & Network Simulator Bridge
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function initPhase9Tables() {
+  // Calibration exports — audit log of telemetry exports to SanghaModel
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS calibration_exports (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT DEFAULT 'sangha',
+      exported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      export_version TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      tenants_included INTEGER DEFAULT 0,
+      total_hashrate_th REAL DEFAULT 0,
+      response_status INTEGER,
+      response_body TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Risk assessments — cached risk assessments from simulator
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS risk_assessments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      assessment_type TEXT NOT NULL DEFAULT 'full',
+      requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      status TEXT NOT NULL DEFAULT 'pending',
+      assessment_json TEXT,
+      risk_score REAL,
+      prob_below_breakeven_12m REAL,
+      suggested_floor_moderate REAL,
+      model_version TEXT,
+      expires_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Quote requests — formal quote requests from miners
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS quote_requests (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      requested_by TEXT NOT NULL,
+      requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      status TEXT NOT NULL DEFAULT 'submitted',
+      desired_floor REAL NOT NULL,
+      desired_term INTEGER NOT NULL DEFAULT 12,
+      covered_hashrate REAL NOT NULL,
+      additional_notes TEXT,
+      miner_profile_json TEXT,
+      latest_risk_assessment_id TEXT REFERENCES risk_assessments(id),
+      indicative_quote_json TEXT,
+      formal_quote_json TEXT,
+      reviewed_by TEXT,
+      reviewed_at DATETIME,
+      review_notes TEXT,
+      expires_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Insurance policies — active insurance policies
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS insurance_policies (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      quote_request_id TEXT REFERENCES quote_requests(id),
+      policy_number TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'active',
+      floor_price REAL NOT NULL,
+      monthly_premium REAL NOT NULL,
+      covered_hashrate REAL NOT NULL,
+      term_months INTEGER NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      upside_share_pct REAL DEFAULT 0.15,
+      terms_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Insurance claims — monthly claims with verification
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS insurance_claims (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      policy_id TEXT NOT NULL REFERENCES insurance_policies(id),
+      claim_month TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      actual_hashprice REAL,
+      floor_price REAL,
+      shortfall_per_th REAL,
+      covered_hashrate REAL,
+      gross_claim_amount REAL,
+      verification_json TEXT,
+      verification_status TEXT DEFAULT 'pending',
+      recommended_payout REAL,
+      adjustment_reason TEXT,
+      paid_amount REAL,
+      paid_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Insurance upside sharing — upside revenue sharing calculations
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS insurance_upside_sharing (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      policy_id TEXT NOT NULL REFERENCES insurance_policies(id),
+      sharing_month TEXT NOT NULL,
+      actual_hashprice REAL,
+      floor_price REAL,
+      upside_per_th REAL,
+      share_pct REAL,
+      covered_hashrate REAL,
+      sangha_share_amount REAL,
+      miner_net_amount REAL,
+      status TEXT DEFAULT 'calculated',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Indices for Phase 9
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_calibration_exports_exported ON calibration_exports(exported_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_risk_assessments_tenant ON risk_assessments(tenant_id, status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_risk_assessments_expires ON risk_assessments(expires_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_quote_requests_tenant ON quote_requests(tenant_id, status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_quote_requests_status ON quote_requests(status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_policies_tenant ON insurance_policies(tenant_id, status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_policy ON insurance_claims(policy_id, claim_month)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_status ON insurance_claims(status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_upside_sharing_policy ON insurance_upside_sharing(policy_id, sharing_month)`);
+}
+
+// ─── Phase 9: Calibration Export Helpers ────────────────────────────────────
+
+export function createCalibrationExport(exp) {
+  return db.prepare(`
+    INSERT INTO calibration_exports (id, tenant_id, export_version, payload_hash, tenants_included, total_hashrate_th, response_status, response_body)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(exp.id, exp.tenantId || 'sangha', exp.exportVersion, exp.payloadHash, exp.tenantsIncluded || 0, exp.totalHashrateTH || 0, exp.responseStatus || null, exp.responseBody || null);
+}
+
+export function getCalibrationExports(limit = 20) {
+  return db.prepare('SELECT * FROM calibration_exports ORDER BY exported_at DESC LIMIT ?').all(limit);
+}
+
+export function getLatestCalibrationExport() {
+  return db.prepare('SELECT * FROM calibration_exports ORDER BY exported_at DESC LIMIT 1').get();
+}
+
+// ─── Phase 9: Risk Assessment Helpers ───────────────────────────────────────
+
+export function createRiskAssessment(ra) {
+  return db.prepare(`
+    INSERT INTO risk_assessments (id, tenant_id, assessment_type, status, model_version, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(ra.id, ra.tenantId, ra.assessmentType || 'full', ra.status || 'pending', ra.modelVersion || null, ra.expiresAt || null);
+}
+
+export function updateRiskAssessment(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.completedAt !== undefined) { sets.push('completed_at = ?'); params.push(updates.completedAt); }
+  if (updates.assessmentJson !== undefined) { sets.push('assessment_json = ?'); params.push(typeof updates.assessmentJson === 'string' ? updates.assessmentJson : JSON.stringify(updates.assessmentJson)); }
+  if (updates.riskScore !== undefined) { sets.push('risk_score = ?'); params.push(updates.riskScore); }
+  if (updates.probBelowBreakeven12m !== undefined) { sets.push('prob_below_breakeven_12m = ?'); params.push(updates.probBelowBreakeven12m); }
+  if (updates.suggestedFloorModerate !== undefined) { sets.push('suggested_floor_moderate = ?'); params.push(updates.suggestedFloorModerate); }
+  if (updates.modelVersion !== undefined) { sets.push('model_version = ?'); params.push(updates.modelVersion); }
+  if (updates.expiresAt !== undefined) { sets.push('expires_at = ?'); params.push(updates.expiresAt); }
+  if (sets.length === 0) return;
+  params.push(id);
+  return db.prepare(`UPDATE risk_assessments SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+export function getRiskAssessment(id) {
+  const ra = db.prepare('SELECT * FROM risk_assessments WHERE id = ?').get(id);
+  if (ra && ra.assessment_json) ra.assessment = JSON.parse(ra.assessment_json);
+  return ra;
+}
+
+export function getLatestRiskAssessment(tenantId) {
+  const ra = db.prepare(`
+    SELECT * FROM risk_assessments WHERE tenant_id = ? AND status = 'completed'
+    ORDER BY completed_at DESC LIMIT 1
+  `).get(tenantId);
+  if (ra && ra.assessment_json) ra.assessment = JSON.parse(ra.assessment_json);
+  return ra;
+}
+
+export function getRiskAssessmentHistory(tenantId, limit = 10) {
+  return db.prepare(`
+    SELECT * FROM risk_assessments WHERE tenant_id = ?
+    ORDER BY created_at DESC LIMIT ?
+  `).all(tenantId, limit).map(ra => {
+    if (ra.assessment_json) ra.assessment = JSON.parse(ra.assessment_json);
+    return ra;
+  });
+}
+
+// ─── Phase 9: Quote Request Helpers ─────────────────────────────────────────
+
+export function createQuoteRequest(qr) {
+  return db.prepare(`
+    INSERT INTO quote_requests (id, tenant_id, requested_by, status, desired_floor, desired_term, covered_hashrate, additional_notes, miner_profile_json, latest_risk_assessment_id, indicative_quote_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(qr.id, qr.tenantId, qr.requestedBy, qr.status || 'submitted', qr.desiredFloor, qr.desiredTerm || 12, qr.coveredHashrate, qr.additionalNotes || null, qr.minerProfileJson ? JSON.stringify(qr.minerProfileJson) : null, qr.latestRiskAssessmentId || null, qr.indicativeQuoteJson ? JSON.stringify(qr.indicativeQuoteJson) : null);
+}
+
+export function getQuoteRequest(id) {
+  const qr = db.prepare('SELECT * FROM quote_requests WHERE id = ?').get(id);
+  if (qr) {
+    if (qr.miner_profile_json) qr.minerProfile = JSON.parse(qr.miner_profile_json);
+    if (qr.indicative_quote_json) qr.indicativeQuote = JSON.parse(qr.indicative_quote_json);
+    if (qr.formal_quote_json) qr.formalQuote = JSON.parse(qr.formal_quote_json);
+  }
+  return qr;
+}
+
+export function getQuoteRequests(tenantId, status = null) {
+  let sql = 'SELECT * FROM quote_requests WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (status) { sql += ' AND status = ?'; params.push(status); }
+  sql += ' ORDER BY requested_at DESC';
+  return db.prepare(sql).all(...params).map(qr => {
+    if (qr.miner_profile_json) qr.minerProfile = JSON.parse(qr.miner_profile_json);
+    if (qr.indicative_quote_json) qr.indicativeQuote = JSON.parse(qr.indicative_quote_json);
+    if (qr.formal_quote_json) qr.formalQuote = JSON.parse(qr.formal_quote_json);
+    return qr;
+  });
+}
+
+export function getAllQuoteRequests(status = null) {
+  let sql = 'SELECT * FROM quote_requests';
+  const params = [];
+  if (status) { sql += ' WHERE status = ?'; params.push(status); }
+  sql += ' ORDER BY requested_at DESC';
+  return db.prepare(sql).all(...params).map(qr => {
+    if (qr.miner_profile_json) qr.minerProfile = JSON.parse(qr.miner_profile_json);
+    if (qr.indicative_quote_json) qr.indicativeQuote = JSON.parse(qr.indicative_quote_json);
+    if (qr.formal_quote_json) qr.formalQuote = JSON.parse(qr.formal_quote_json);
+    return qr;
+  });
+}
+
+export function updateQuoteRequest(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.formalQuoteJson !== undefined) { sets.push('formal_quote_json = ?'); params.push(typeof updates.formalQuoteJson === 'string' ? updates.formalQuoteJson : JSON.stringify(updates.formalQuoteJson)); }
+  if (updates.reviewedBy !== undefined) { sets.push('reviewed_by = ?'); params.push(updates.reviewedBy); }
+  if (updates.reviewedAt !== undefined) { sets.push('reviewed_at = ?'); params.push(updates.reviewedAt); }
+  if (updates.reviewNotes !== undefined) { sets.push('review_notes = ?'); params.push(updates.reviewNotes); }
+  if (updates.expiresAt !== undefined) { sets.push('expires_at = ?'); params.push(updates.expiresAt); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE quote_requests SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 9: Insurance Policy Helpers ──────────────────────────────────────
+
+export function createInsurancePolicy(policy) {
+  return db.prepare(`
+    INSERT INTO insurance_policies (id, tenant_id, quote_request_id, policy_number, status, floor_price, monthly_premium, covered_hashrate, term_months, start_date, end_date, upside_share_pct, terms_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(policy.id, policy.tenantId, policy.quoteRequestId, policy.policyNumber, policy.status || 'active', policy.floorPrice, policy.monthlyPremium, policy.coveredHashrate, policy.termMonths, policy.startDate, policy.endDate, policy.upsideSharePct || 0.15, policy.termsJson ? JSON.stringify(policy.termsJson) : null);
+}
+
+export function getInsurancePolicy(id) {
+  const p = db.prepare('SELECT * FROM insurance_policies WHERE id = ?').get(id);
+  if (p && p.terms_json) p.terms = JSON.parse(p.terms_json);
+  return p;
+}
+
+export function getInsurancePolicies(tenantId, status = null) {
+  let sql = 'SELECT * FROM insurance_policies WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (status) { sql += ' AND status = ?'; params.push(status); }
+  sql += ' ORDER BY created_at DESC';
+  return db.prepare(sql).all(...params).map(p => {
+    if (p.terms_json) p.terms = JSON.parse(p.terms_json);
+    return p;
+  });
+}
+
+export function getAllInsurancePolicies(status = null) {
+  let sql = 'SELECT * FROM insurance_policies';
+  const params = [];
+  if (status) { sql += ' WHERE status = ?'; params.push(status); }
+  sql += ' ORDER BY created_at DESC';
+  return db.prepare(sql).all(...params).map(p => {
+    if (p.terms_json) p.terms = JSON.parse(p.terms_json);
+    return p;
+  });
+}
+
+export function updateInsurancePolicy(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.termsJson !== undefined) { sets.push('terms_json = ?'); params.push(JSON.stringify(updates.termsJson)); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE insurance_policies SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 9: Insurance Claims Helpers ──────────────────────────────────────
+
+export function createInsuranceClaim(claim) {
+  return db.prepare(`
+    INSERT INTO insurance_claims (id, tenant_id, policy_id, claim_month, status, actual_hashprice, floor_price, shortfall_per_th, covered_hashrate, gross_claim_amount, verification_json, verification_status, recommended_payout, adjustment_reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(claim.id, claim.tenantId, claim.policyId, claim.claimMonth, claim.status || 'pending', claim.actualHashprice || null, claim.floorPrice || null, claim.shortfallPerTH || null, claim.coveredHashrate || null, claim.grossClaimAmount || null, claim.verificationJson ? JSON.stringify(claim.verificationJson) : null, claim.verificationStatus || 'pending', claim.recommendedPayout || null, claim.adjustmentReason || null);
+}
+
+export function getInsuranceClaims(tenantId, policyId = null) {
+  let sql = 'SELECT * FROM insurance_claims WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (policyId) { sql += ' AND policy_id = ?'; params.push(policyId); }
+  sql += ' ORDER BY claim_month DESC';
+  return db.prepare(sql).all(...params).map(c => {
+    if (c.verification_json) c.verification = JSON.parse(c.verification_json);
+    return c;
+  });
+}
+
+export function getInsuranceClaim(id) {
+  const c = db.prepare('SELECT * FROM insurance_claims WHERE id = ?').get(id);
+  if (c && c.verification_json) c.verification = JSON.parse(c.verification_json);
+  return c;
+}
+
+export function getClaimsByMonth(tenantId, month) {
+  return db.prepare(`
+    SELECT * FROM insurance_claims WHERE tenant_id = ? AND claim_month = ?
+  `).all(tenantId, month).map(c => {
+    if (c.verification_json) c.verification = JSON.parse(c.verification_json);
+    return c;
+  });
+}
+
+export function getAllPendingClaims() {
+  return db.prepare(`
+    SELECT ic.*, ip.policy_number, ip.floor_price as policy_floor, t.name as tenant_name
+    FROM insurance_claims ic
+    JOIN insurance_policies ip ON ic.policy_id = ip.id
+    LEFT JOIN tenants t ON ic.tenant_id = t.id
+    WHERE ic.status IN ('pending', 'verified')
+    ORDER BY ic.claim_month DESC
+  `).all().map(c => {
+    if (c.verification_json) c.verification = JSON.parse(c.verification_json);
+    return c;
+  });
+}
+
+export function updateInsuranceClaim(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.verificationJson !== undefined) { sets.push('verification_json = ?'); params.push(typeof updates.verificationJson === 'string' ? updates.verificationJson : JSON.stringify(updates.verificationJson)); }
+  if (updates.verificationStatus !== undefined) { sets.push('verification_status = ?'); params.push(updates.verificationStatus); }
+  if (updates.recommendedPayout !== undefined) { sets.push('recommended_payout = ?'); params.push(updates.recommendedPayout); }
+  if (updates.adjustmentReason !== undefined) { sets.push('adjustment_reason = ?'); params.push(updates.adjustmentReason); }
+  if (updates.paidAmount !== undefined) { sets.push('paid_amount = ?'); params.push(updates.paidAmount); }
+  if (updates.paidAt !== undefined) { sets.push('paid_at = ?'); params.push(updates.paidAt); }
+  if (updates.actualHashprice !== undefined) { sets.push('actual_hashprice = ?'); params.push(updates.actualHashprice); }
+  if (updates.shortfallPerTH !== undefined) { sets.push('shortfall_per_th = ?'); params.push(updates.shortfallPerTH); }
+  if (updates.grossClaimAmount !== undefined) { sets.push('gross_claim_amount = ?'); params.push(updates.grossClaimAmount); }
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE insurance_claims SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 9: Upside Sharing Helpers ────────────────────────────────────────
+
+export function createUpsideSharing(us) {
+  return db.prepare(`
+    INSERT INTO insurance_upside_sharing (id, tenant_id, policy_id, sharing_month, actual_hashprice, floor_price, upside_per_th, share_pct, covered_hashrate, sangha_share_amount, miner_net_amount, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(us.id, us.tenantId, us.policyId, us.sharingMonth, us.actualHashprice, us.floorPrice, us.upsidePerTH, us.sharePct, us.coveredHashrate, us.sanghaShareAmount, us.minerNetAmount, us.status || 'calculated');
+}
+
+export function getUpsideSharing(tenantId, policyId = null) {
+  let sql = 'SELECT * FROM insurance_upside_sharing WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (policyId) { sql += ' AND policy_id = ?'; params.push(policyId); }
+  sql += ' ORDER BY sharing_month DESC';
+  return db.prepare(sql).all(...params);
+}
+
+// ─── Phase 9: Portfolio Aggregate Helpers ───────────────────────────────────
+
+export function getPortfolioMetrics() {
+  const activePolicies = db.prepare(`SELECT COUNT(*) as count, SUM(covered_hashrate) as totalHashrate, SUM(monthly_premium) as totalPremium FROM insurance_policies WHERE status = 'active'`).get();
+  const totalClaims = db.prepare(`SELECT COUNT(*) as count, SUM(paid_amount) as totalPaid FROM insurance_claims WHERE status = 'paid'`).get();
+  const pendingClaims = db.prepare(`SELECT COUNT(*) as count, SUM(gross_claim_amount) as totalPending FROM insurance_claims WHERE status IN ('pending', 'verified')`).get();
+  const byRiskTier = db.prepare(`
+    SELECT
+      CASE
+        WHEN ra.risk_score <= 30 THEN 'low'
+        WHEN ra.risk_score <= 60 THEN 'medium'
+        ELSE 'high'
+      END as tier,
+      COUNT(*) as count,
+      SUM(ip.covered_hashrate) as hashrate,
+      SUM(ip.monthly_premium) as premium
+    FROM insurance_policies ip
+    LEFT JOIN risk_assessments ra ON ip.tenant_id = ra.tenant_id AND ra.status = 'completed'
+    WHERE ip.status = 'active'
+    GROUP BY tier
+  `).all();
+
+  return {
+    activePolicies: activePolicies.count || 0,
+    totalCoveredHashrate: activePolicies.totalHashrate || 0,
+    monthlyPremiumIncome: activePolicies.totalPremium || 0,
+    totalClaimsPaid: totalClaims.totalPaid || 0,
+    claimCount: totalClaims.count || 0,
+    pendingClaimsCount: pendingClaims.count || 0,
+    pendingClaimsAmount: pendingClaims.totalPending || 0,
+    lossRatio: activePolicies.totalPremium ? (totalClaims.totalPaid || 0) / (activePolicies.totalPremium * 12) : 0,
+    byRiskTier,
+  };
 }
 
 export default db;

@@ -438,6 +438,63 @@ export const connectors: Record<string, DataConnector> = {
     endpoint: '/v1/admin/aggregate',
     refreshInterval: 30 * 1000,
   }),
+
+  // Phase 9: Insurance Integration connectors
+  insuranceRiskProfile: createApiConnector({
+    id: 'insurance-risk-profile',
+    name: 'Risk Profile',
+    endpoint: '/v1/insurance/risk-profile',
+    refreshInterval: 60 * 1000,
+  }),
+
+  insuranceQuotes: createApiConnector({
+    id: 'insurance-quotes',
+    name: 'Quote Requests',
+    endpoint: '/v1/insurance/quotes',
+    refreshInterval: 30 * 1000,
+  }),
+
+  insurancePolicy: createApiConnector({
+    id: 'insurance-policy',
+    name: 'Insurance Policy',
+    endpoint: '/v1/insurance/policy',
+    refreshInterval: 60 * 1000,
+  }),
+
+  insuranceClaims: createApiConnector({
+    id: 'insurance-claims',
+    name: 'Insurance Claims',
+    endpoint: '/v1/insurance/claims',
+    refreshInterval: 60 * 1000,
+  }),
+
+  insuranceCoverageStatus: createApiConnector({
+    id: 'insurance-coverage-status',
+    name: 'Coverage Status',
+    endpoint: '/v1/insurance/coverage-status',
+    refreshInterval: 30 * 1000,
+  }),
+
+  adminInsuranceQueue: createApiConnector({
+    id: 'admin-insurance-queue',
+    name: 'Underwriting Queue',
+    endpoint: '/v1/admin/insurance/queue',
+    refreshInterval: 15 * 1000,
+  }),
+
+  adminInsurancePortfolio: createApiConnector({
+    id: 'admin-insurance-portfolio',
+    name: 'Portfolio Risk',
+    endpoint: '/v1/admin/insurance/portfolio',
+    refreshInterval: 30 * 1000,
+  }),
+
+  adminCalibration: createApiConnector({
+    id: 'admin-calibration',
+    name: 'Calibration Status',
+    endpoint: '/v1/admin/insurance/calibration',
+    refreshInterval: 60 * 1000,
+  }),
 };
 
 /**
