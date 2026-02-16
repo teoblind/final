@@ -265,7 +265,7 @@ app.use((err, req, res, next) => {
 server.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           SANGHA AMPERA - BACKEND SERVER                   ║
+║           AMPERA - BACKEND SERVER                   ║
 ║═══════════════════════════════════════════════════════════║
 ║  Server running on http://localhost:${PORT}                   ║
 ║  API v1:  http://localhost:${PORT}/api/v1/                    ║

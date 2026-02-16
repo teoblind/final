@@ -158,7 +158,7 @@ function AppContent() {
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="text-terminal-green font-bold text-lg">&#9650;</span>
-              <h1 className="text-lg font-bold">SANGHA AMPERA</h1>
+              <h1 className="text-lg font-bold">AMPERA</h1>
               <span className="text-xs bg-terminal-amber/20 text-terminal-amber px-2 py-0.5 rounded">PARTNER</span>
             </div>
             <div className="flex items-center gap-3">
@@ -236,8 +236,8 @@ function AppContent() {
             </button>
             <div className="flex items-center gap-2">
               <span className="text-terminal-green font-bold text-lg">&#9650;</span>
-              <h1 className="text-lg font-bold hidden sm:block">SANGHA AMPERA</h1>
-              <h1 className="text-lg font-bold sm:hidden">SA</h1>
+              <h1 className="text-lg font-bold hidden sm:block">AMPERA</h1>
+              <h1 className="text-lg font-bold sm:hidden">A</h1>
             </div>
           </div>
 

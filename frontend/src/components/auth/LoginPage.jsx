@@ -76,7 +76,7 @@ export default function LoginPage({ onLogin }) {
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="text-terminal-green text-3xl font-bold">&#9650;</span>
             <h1 className="text-2xl font-bold text-terminal-text tracking-wide">
-              SANGHA AMPERA
+              AMPERA
             </h1>
           </div>
           <p className="text-terminal-muted text-sm">
