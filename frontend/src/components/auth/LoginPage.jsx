@@ -38,7 +38,7 @@ export default function LoginPage({ onLogin }) {
         const payload = {
           email,
           password,
-          fullName,
+          name: fullName,
           companyName,
         };
         if (inviteToken) {
