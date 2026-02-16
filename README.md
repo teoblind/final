@@ -1,4 +1,4 @@
-# Sangha MineOS — Mining Operations Platform
+# Sangha Ampera — Mining Operations Platform
 
 A unified mining operations platform for Bitcoin miners and AI HPC operators, built on top of a macro intelligence dashboard. Provides real-time energy market data, fleet-aware hashprice modeling, curtailment optimization, mining pool monitoring, and autonomous agent-based operations.
 

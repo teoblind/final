@@ -55,10 +55,10 @@ export default function NotificationBell() {
     if (!notifications.length) return;
     const critical = notifications.find(n => n.type === 'critical' && !n.read);
     if (critical && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('Sangha MineOS Alert', {
+      new Notification('Sangha Ampera Alert', {
         body: critical.title,
         icon: '/favicon.ico',
-        tag: `mineos-${critical.id}`,
+        tag: `ampera-${critical.id}`,
       });
     }
   }, [notifications]);

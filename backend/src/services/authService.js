@@ -2,15 +2,15 @@
  * Authentication Service
  *
  * Handles password hashing, JWT token generation/verification,
- * and API key management for the MineOS platform.
+ * and API key management for the Ampera platform.
  */
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto, { randomUUID } from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'mineos-dev-secret-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'mineos-refresh-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'ampera-dev-secret-change-in-production';
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'ampera-refresh-secret-change-in-production';
 
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';

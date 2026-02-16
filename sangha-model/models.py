@@ -1,5 +1,5 @@
 """
-Sangha MineOS — Phase 9: SanghaModel Pydantic Models
+Sangha Ampera — Phase 9: SanghaModel Pydantic Models
 
 Defines the full API contract for the SanghaModel risk-assessment
 microservice, covering miner profiles, simulation parameters,
@@ -127,7 +127,7 @@ class RiskAssessment(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Calibration (input from MineOS telemetry)
+# Calibration (input from Ampera telemetry)
 # ---------------------------------------------------------------------------
 
 class FleetAggregate(BaseModel):

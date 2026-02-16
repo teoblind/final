@@ -84,8 +84,8 @@ export async function deliverWebhook(webhookId, eventType, data) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-MineOS-Signature': `sha256=${signature}`,
-        'X-MineOS-Event': eventType
+        'X-Ampera-Signature': `sha256=${signature}`,
+        'X-Ampera-Event': eventType
       },
       body: payloadString,
       signal: controller.signal
@@ -222,8 +222,8 @@ export async function retryFailedDeliveries() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-MineOS-Signature': `sha256=${signature}`,
-          'X-MineOS-Event': delivery.event_type
+          'X-Ampera-Signature': `sha256=${signature}`,
+          'X-Ampera-Event': delivery.event_type
         },
         body: payloadString,
         signal: controller.signal

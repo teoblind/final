@@ -155,7 +155,7 @@ router.post('/test', requirePermission('manageSettings'), async (req, res) => {
       type: 'test',
       timestamp: new Date().toISOString(),
       tenantId: req.tenantId,
-      data: { message: 'This is a test webhook delivery from Sangha MineOS' },
+      data: { message: 'This is a test webhook delivery from Sangha Ampera' },
     };
 
     const signature = crypto
@@ -171,8 +171,8 @@ router.post('/test', requirePermission('manageSettings'), async (req, res) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-MineOS-Signature': `sha256=${signature}`,
-          'X-MineOS-Event': 'test',
+          'X-Ampera-Signature': `sha256=${signature}`,
+          'X-Ampera-Event': 'test',
         },
         body: JSON.stringify(payload),
         signal: controller.signal,

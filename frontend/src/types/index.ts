@@ -1,5 +1,5 @@
 /**
- * Global TypeScript types for Sangha MineOS
+ * Global TypeScript types for Sangha Ampera
  */
 
 // Panel system types

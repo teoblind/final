@@ -158,7 +158,7 @@ function AppContent() {
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-2">
               <span className="text-terminal-green font-bold text-lg">&#9650;</span>
-              <h1 className="text-lg font-bold">SANGHA MINEOS</h1>
+              <h1 className="text-lg font-bold">SANGHA AMPERA</h1>
               <span className="text-xs bg-terminal-amber/20 text-terminal-amber px-2 py-0.5 rounded">PARTNER</span>
             </div>
             <div className="flex items-center gap-3">
@@ -236,8 +236,8 @@ function AppContent() {
             </button>
             <div className="flex items-center gap-2">
               <span className="text-terminal-green font-bold text-lg">&#9650;</span>
-              <h1 className="text-lg font-bold hidden sm:block">SANGHA MINEOS</h1>
-              <h1 className="text-lg font-bold sm:hidden">SMO</h1>
+              <h1 className="text-lg font-bold hidden sm:block">SANGHA AMPERA</h1>
+              <h1 className="text-lg font-bold sm:hidden">SA</h1>
             </div>
           </div>
 
@@ -321,7 +321,7 @@ function AppContent() {
 
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 bg-terminal-bg border-t border-terminal-border px-4 py-2 text-xs text-terminal-muted flex justify-between">
-        <span>Sangha MineOS | Mining Operations Platform</span>
+        <span>Sangha Ampera | Mining Operations Platform</span>
         <span>{new Date().toLocaleString()}</span>
       </footer>
     </div>

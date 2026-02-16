@@ -1,5 +1,5 @@
 """
-Sangha MineOS — Phase 9: SanghaModel Simulation Engine
+Sangha Ampera — Phase 9: SanghaModel Simulation Engine
 
 Monte Carlo simulation for Bitcoin mining revenue projections,
 risk scoring, floor suggestions, and scenario analysis.
@@ -631,7 +631,7 @@ def run_scenario(scenario: ScenarioRequest) -> ScenarioResult:
 
 def ingest_calibration(payload: CalibrationPayload) -> Dict[str, Any]:
     """
-    Ingest aggregated telemetry from MineOS to calibrate model parameters.
+    Ingest aggregated telemetry from Ampera to calibrate model parameters.
     Updates the in-memory calibration state.
     """
     global _calibration_state

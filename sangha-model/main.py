@@ -1,5 +1,5 @@
 """
-Sangha MineOS — Phase 9: SanghaModel FastAPI Wrapper
+Sangha Ampera — Phase 9: SanghaModel FastAPI Wrapper
 
 A Python microservice providing Monte Carlo risk-assessment,
 scenario analysis, and calibration endpoints for Bitcoin mining
@@ -56,7 +56,7 @@ SERVICE_START_TIME = time.time()
 app = FastAPI(
     title="SanghaModel",
     description=(
-        "Monte Carlo risk-assessment engine for Sangha MineOS. "
+        "Monte Carlo risk-assessment engine for Sangha Ampera. "
         "Provides hashprice distribution projections, risk scoring, "
         "floor suggestions, scenario analysis, and calibration ingestion."
     ),
@@ -212,7 +212,7 @@ async def quick_risk_assessment(
 @app.post(
     "/v1/calibration/ingest",
     tags=["calibration"],
-    summary="Ingest aggregated telemetry from MineOS",
+    summary="Ingest aggregated telemetry from Ampera",
     responses={
         200: {"description": "Calibration data ingested"},
         401: {"model": ErrorResponse},
@@ -224,7 +224,7 @@ async def calibration_ingest(
     _key: str = Depends(verify_api_key),
 ):
     """
-    Receive aggregated fleet telemetry from MineOS to calibrate
+    Receive aggregated fleet telemetry from Ampera to calibrate
     the model's priors for network efficiency, hashrate, and
     curtailment behavior.
     """

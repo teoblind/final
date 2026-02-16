@@ -205,7 +205,7 @@ try {
     definition: {
       openapi: '3.0.0',
       info: {
-        title: 'Sangha MineOS API',
+        title: 'Sangha Ampera API',
         version: '1.0.0',
         description: 'Multi-tenant mining operations platform API. Manage energy, fleet, curtailment, pools, agents, HPC workloads, and more.',
         contact: { name: 'Sangha', email: 'support@sangha.io' },
@@ -224,7 +224,7 @@ try {
 
   app.use('/api/v1/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
-    customSiteTitle: 'MineOS API Docs',
+    customSiteTitle: 'Ampera API Docs',
   }));
 
   app.get('/api/v1/docs.json', (req, res) => res.json(swaggerSpec));
@@ -265,7 +265,7 @@ app.use((err, req, res, next) => {
 server.listen(PORT, async () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
-║           SANGHA MINEOS - BACKEND SERVER                   ║
+║           SANGHA AMPERA - BACKEND SERVER                   ║
 ║═══════════════════════════════════════════════════════════║
 ║  Server running on http://localhost:${PORT}                   ║
 ║  API v1:  http://localhost:${PORT}/api/v1/                    ║

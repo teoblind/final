@@ -76,7 +76,7 @@ export default function LoginPage({ onLogin }) {
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="text-terminal-green text-3xl font-bold">&#9650;</span>
             <h1 className="text-2xl font-bold text-terminal-text tracking-wide">
-              SANGHA MINEOS
+              SANGHA AMPERA
             </h1>
           </div>
           <p className="text-terminal-muted text-sm">
@@ -93,7 +93,7 @@ export default function LoginPage({ onLogin }) {
           {/* Invitation banner */}
           {inviteToken && mode === 'register' && (
             <div className="mb-4 px-3 py-2 bg-terminal-green/10 border border-terminal-green/30 rounded text-terminal-green text-xs">
-              You have been invited to join Sangha MineOS. Complete registration below.
+              You have been invited to join Sangha Ampera. Complete registration below.
             </div>
           )}
 
@@ -196,7 +196,7 @@ export default function LoginPage({ onLogin }) {
 
         {/* Footer */}
         <p className="text-center text-terminal-muted text-xs mt-6">
-          Sangha MineOS &middot; Mining Operations Platform
+          Sangha Ampera &middot; Mining Operations Platform
         </p>
       </div>
     </div>

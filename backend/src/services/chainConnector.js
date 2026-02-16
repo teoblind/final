@@ -3,7 +3,7 @@
  *
  * Real-time Bitcoin on-chain monitoring via Mempool.space API (primary)
  * with Blockchain.info fallback.  Feeds mempool state, fee estimates,
- * block data, and network health into the Sangha MineOS dashboard and
+ * block data, and network health into the Sangha Ampera dashboard and
  * hashprice engine.
  */
 

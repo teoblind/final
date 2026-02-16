@@ -136,7 +136,7 @@ export default function AdminConsoleDashboard() {
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-lg font-bold text-terminal-green">
-          SANGHA MINEOS &mdash; Admin Console
+          SANGHA AMPERA &mdash; Admin Console
         </h2>
         <p className="text-xs text-terminal-muted mt-1">
           Platform-wide metrics and tenant management
