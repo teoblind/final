@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+import bcryptPkg from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1778,6 +1779,18 @@ export function initPhase8Tables() {
       apiRateLimit: 120,
       dataRetentionDays: 365
     }));
+  }
+
+  // Seed default admin user if not exists
+  const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@ampera.io');
+  if (!adminUser) {
+    const salt = bcryptPkg.genSaltSync(12);
+    const hash = bcryptPkg.hashSync('admin123', salt);
+    db.prepare(`
+      INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
+      VALUES ('seed-admin-001', 'admin@ampera.io', 'Admin', ?, 'default', 'sangha_admin', 'active')
+    `).run(hash);
+    console.log('Seed admin user created: admin@ampera.io / admin123');
   }
 
   // Enable WAL mode for better concurrent access
