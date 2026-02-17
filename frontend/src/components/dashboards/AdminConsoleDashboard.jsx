@@ -4,6 +4,7 @@ import api from '../../lib/hooks/useApi';
 const UnderwritingQueuePanel = lazy(() => import('../panels/insurance/UnderwritingQueuePanel'));
 const PortfolioRiskPanel = lazy(() => import('../panels/insurance/PortfolioRiskPanel'));
 const CalibrationStatusPanel = lazy(() => import('../panels/insurance/CalibrationStatusPanel'));
+const LPManagementPanel = lazy(() => import('../panels/insurance/LPManagementPanel'));
 
 export default function AdminConsoleDashboard() {
   const [aggregate, setAggregate] = useState(null);
@@ -339,6 +340,7 @@ export default function AdminConsoleDashboard() {
         <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="spinner w-8 h-8" /></div>}>
           <div className="space-y-4">
             <UnderwritingQueuePanel />
+            <LPManagementPanel />
             <PortfolioRiskPanel />
             <CalibrationStatusPanel />
           </div>

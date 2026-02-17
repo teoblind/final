@@ -2260,6 +2260,106 @@ export function initPhase9Tables() {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_policy ON insurance_claims(policy_id, claim_month)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_status ON insurance_claims(status)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_upside_sharing_policy ON insurance_upside_sharing(policy_id, sharing_month)`);
+
+  // ── Phase 9b: Three-Party Insurance Structure ──────────────────────────────
+
+  // Balance sheet partners — LP / capital provider entities
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS balance_sheet_partners (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      short_name TEXT NOT NULL,
+      contact_email TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'onboarding',
+      total_capital_committed REAL DEFAULT 0,
+      capital_deployed REAL DEFAULT 0,
+      max_single_exposure REAL,
+      max_aggregate_exposure REAL,
+      accepted_instruments_json TEXT,
+      min_premium_rate REAL,
+      max_term_months INTEGER DEFAULT 36,
+      risk_tier_preference_json TEXT,
+      auto_approve_threshold REAL,
+      master_agreement_date DATE,
+      master_agreement_doc_url TEXT,
+      fee_structure_json TEXT NOT NULL DEFAULT '{"structuringFeePercent":5,"performanceFeePercent":10,"managementFeePercent":1}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // LP allocations — tracks which LP backs which quote/policy
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS lp_allocations (
+      id TEXT PRIMARY KEY,
+      lp_id TEXT NOT NULL REFERENCES balance_sheet_partners(id),
+      quote_request_id TEXT NOT NULL REFERENCES quote_requests(id),
+      allocated_at DATETIME NOT NULL,
+      allocated_by TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      reviewed_at DATETIME,
+      reviewed_by TEXT,
+      review_notes TEXT,
+      modification_requested TEXT,
+      auto_approved BOOLEAN DEFAULT FALSE,
+      structured_terms_json TEXT NOT NULL,
+      risk_summary_json TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Add LP columns to insurance_policies (safe IF NOT EXISTS via pragma)
+  try {
+    db.exec(`ALTER TABLE insurance_policies ADD COLUMN lp_id TEXT REFERENCES balance_sheet_partners(id)`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_policies ADD COLUMN lp_allocation_id TEXT REFERENCES lp_allocations(id)`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_policies ADD COLUMN instrument_type TEXT`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_policies ADD COLUMN structuring_fee_monthly REAL`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_policies ADD COLUMN management_fee_monthly REAL`);
+  } catch (e) { /* column may already exist */ }
+
+  // Add LP/settlement columns to insurance_claims
+  try {
+    db.exec(`ALTER TABLE insurance_claims ADD COLUMN lp_id TEXT REFERENCES balance_sheet_partners(id)`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_claims ADD COLUMN settlement_status TEXT DEFAULT 'pending'`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_claims ADD COLUMN settled_at DATETIME`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE insurance_claims ADD COLUMN settlement_reference TEXT`);
+  } catch (e) { /* column may already exist */ }
+
+  // Add instrument_type and structured_terms to quote_requests
+  try {
+    db.exec(`ALTER TABLE quote_requests ADD COLUMN instrument_type TEXT`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE quote_requests ADD COLUMN structured_terms_json TEXT`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE quote_requests ADD COLUMN structured_by TEXT`);
+  } catch (e) { /* column may already exist */ }
+  try {
+    db.exec(`ALTER TABLE quote_requests ADD COLUMN structured_at DATETIME`);
+  } catch (e) { /* column may already exist */ }
+
+  // Indices for Phase 9b
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_lp_allocations_lp ON lp_allocations(lp_id, status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_lp_allocations_quote ON lp_allocations(quote_request_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bsp_status ON balance_sheet_partners(status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_policies_lp ON insurance_policies(lp_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_claims_lp ON insurance_claims(lp_id)`);
 }
 
 // ─── Phase 9: Calibration Export Helpers ────────────────────────────────────
@@ -2551,6 +2651,200 @@ export function getPortfolioMetrics() {
     pendingClaimsAmount: pendingClaims.totalPending || 0,
     lossRatio: activePolicies.totalPremium ? (totalClaims.totalPaid || 0) / (activePolicies.totalPremium * 12) : 0,
     byRiskTier,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 9b: Balance Sheet Partner (LP) Helpers
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function createBalanceSheetPartner(lp) {
+  return db.prepare(`
+    INSERT INTO balance_sheet_partners (id, name, short_name, contact_email, status, total_capital_committed, capital_deployed, max_single_exposure, max_aggregate_exposure, accepted_instruments_json, min_premium_rate, max_term_months, risk_tier_preference_json, auto_approve_threshold, master_agreement_date, master_agreement_doc_url, fee_structure_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(lp.id, lp.name, lp.shortName, lp.contactEmail, lp.status || 'onboarding', lp.totalCapitalCommitted || 0, lp.capitalDeployed || 0, lp.maxSingleExposure || null, lp.maxAggregateExposure || null, lp.acceptedInstruments ? JSON.stringify(lp.acceptedInstruments) : null, lp.minPremiumRate || null, lp.maxTermMonths || 36, lp.riskTierPreference ? JSON.stringify(lp.riskTierPreference) : null, lp.autoApproveThreshold || null, lp.masterAgreementDate || null, lp.masterAgreementDocUrl || null, JSON.stringify(lp.feeStructure || { structuringFeePercent: 5, performanceFeePercent: 10, managementFeePercent: 1 }));
+}
+
+export function getBalanceSheetPartner(id) {
+  const lp = db.prepare('SELECT * FROM balance_sheet_partners WHERE id = ?').get(id);
+  if (lp) {
+    if (lp.accepted_instruments_json) lp.acceptedInstruments = JSON.parse(lp.accepted_instruments_json);
+    if (lp.risk_tier_preference_json) lp.riskTierPreference = JSON.parse(lp.risk_tier_preference_json);
+    if (lp.fee_structure_json) lp.feeStructure = JSON.parse(lp.fee_structure_json);
+    lp.capitalAvailable = (lp.total_capital_committed || 0) - (lp.capital_deployed || 0);
+  }
+  return lp;
+}
+
+export function getAllBalanceSheetPartners(status = null) {
+  let sql = 'SELECT * FROM balance_sheet_partners';
+  const params = [];
+  if (status) { sql += ' WHERE status = ?'; params.push(status); }
+  sql += ' ORDER BY name ASC';
+  return db.prepare(sql).all(...params).map(lp => {
+    if (lp.accepted_instruments_json) lp.acceptedInstruments = JSON.parse(lp.accepted_instruments_json);
+    if (lp.risk_tier_preference_json) lp.riskTierPreference = JSON.parse(lp.risk_tier_preference_json);
+    if (lp.fee_structure_json) lp.feeStructure = JSON.parse(lp.fee_structure_json);
+    lp.capitalAvailable = (lp.total_capital_committed || 0) - (lp.capital_deployed || 0);
+    return lp;
+  });
+}
+
+export function updateBalanceSheetPartner(id, updates) {
+  const sets = [];
+  const params = [];
+  const fieldMap = {
+    name: 'name', shortName: 'short_name', contactEmail: 'contact_email', status: 'status',
+    totalCapitalCommitted: 'total_capital_committed', capitalDeployed: 'capital_deployed',
+    maxSingleExposure: 'max_single_exposure', maxAggregateExposure: 'max_aggregate_exposure',
+    minPremiumRate: 'min_premium_rate', maxTermMonths: 'max_term_months',
+    autoApproveThreshold: 'auto_approve_threshold',
+    masterAgreementDate: 'master_agreement_date', masterAgreementDocUrl: 'master_agreement_doc_url',
+  };
+  for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
+    if (updates[jsKey] !== undefined) { sets.push(`${dbCol} = ?`); params.push(updates[jsKey]); }
+  }
+  if (updates.acceptedInstruments !== undefined) { sets.push('accepted_instruments_json = ?'); params.push(JSON.stringify(updates.acceptedInstruments)); }
+  if (updates.riskTierPreference !== undefined) { sets.push('risk_tier_preference_json = ?'); params.push(JSON.stringify(updates.riskTierPreference)); }
+  if (updates.feeStructure !== undefined) { sets.push('fee_structure_json = ?'); params.push(JSON.stringify(updates.feeStructure)); }
+  if (sets.length === 0) return;
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE balance_sheet_partners SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 9b: LP Allocation Helpers ────────────────────────────────────────
+
+export function createLPAllocation(alloc) {
+  return db.prepare(`
+    INSERT INTO lp_allocations (id, lp_id, quote_request_id, allocated_at, allocated_by, status, auto_approved, structured_terms_json, risk_summary_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(alloc.id, alloc.lpId, alloc.quoteRequestId, alloc.allocatedAt, alloc.allocatedBy, alloc.status || 'pending', alloc.autoApproved ? 1 : 0, JSON.stringify(alloc.structuredTerms), JSON.stringify(alloc.riskSummary));
+}
+
+export function getLPAllocation(id) {
+  const a = db.prepare('SELECT * FROM lp_allocations WHERE id = ?').get(id);
+  if (a) {
+    if (a.structured_terms_json) a.structuredTerms = JSON.parse(a.structured_terms_json);
+    if (a.risk_summary_json) a.riskSummary = JSON.parse(a.risk_summary_json);
+  }
+  return a;
+}
+
+export function getLPAllocationByQuote(quoteRequestId) {
+  const a = db.prepare('SELECT * FROM lp_allocations WHERE quote_request_id = ? ORDER BY created_at DESC LIMIT 1').get(quoteRequestId);
+  if (a) {
+    if (a.structured_terms_json) a.structuredTerms = JSON.parse(a.structured_terms_json);
+    if (a.risk_summary_json) a.riskSummary = JSON.parse(a.risk_summary_json);
+  }
+  return a;
+}
+
+export function getLPAllocations(lpId, status = null) {
+  let sql = 'SELECT * FROM lp_allocations WHERE lp_id = ?';
+  const params = [lpId];
+  if (status) { sql += ' AND status = ?'; params.push(status); }
+  sql += ' ORDER BY allocated_at DESC';
+  return db.prepare(sql).all(...params).map(a => {
+    if (a.structured_terms_json) a.structuredTerms = JSON.parse(a.structured_terms_json);
+    if (a.risk_summary_json) a.riskSummary = JSON.parse(a.risk_summary_json);
+    return a;
+  });
+}
+
+export function updateLPAllocation(id, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.reviewedAt !== undefined) { sets.push('reviewed_at = ?'); params.push(updates.reviewedAt); }
+  if (updates.reviewedBy !== undefined) { sets.push('reviewed_by = ?'); params.push(updates.reviewedBy); }
+  if (updates.reviewNotes !== undefined) { sets.push('review_notes = ?'); params.push(updates.reviewNotes); }
+  if (updates.modificationRequested !== undefined) { sets.push('modification_requested = ?'); params.push(updates.modificationRequested); }
+  if (sets.length === 0) return;
+  sets.push("updated_at = datetime('now')");
+  params.push(id);
+  return db.prepare(`UPDATE lp_allocations SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// ─── Phase 9b: LP Portfolio Helpers ─────────────────────────────────────────
+
+export function getLPPortfolioMetrics(lpId) {
+  const policies = db.prepare(`SELECT COUNT(*) as count, SUM(covered_hashrate) as totalHashrate, SUM(monthly_premium) as totalPremium FROM insurance_policies WHERE lp_id = ? AND status = 'active'`).get(lpId);
+  const claims = db.prepare(`SELECT COUNT(*) as count, SUM(paid_amount) as totalPaid FROM insurance_claims WHERE lp_id = ? AND status = 'paid'`).get(lpId);
+  const pendingClaims = db.prepare(`SELECT COUNT(*) as count, SUM(gross_claim_amount) as totalPending FROM insurance_claims WHERE lp_id = ? AND status IN ('pending', 'verified')`).get(lpId);
+  const lp = getBalanceSheetPartner(lpId);
+  return {
+    activePolicies: policies.count || 0,
+    totalCoveredHashrate: policies.totalHashrate || 0,
+    monthlyPremiumIncome: policies.totalPremium || 0,
+    totalClaimsPaid: claims.totalPaid || 0,
+    pendingClaimsCount: pendingClaims.count || 0,
+    pendingClaimsAmount: pendingClaims.totalPending || 0,
+    lossRatio: policies.totalPremium ? (claims.totalPaid || 0) / ((policies.totalPremium || 1) * 12) : 0,
+    capitalCommitted: lp?.total_capital_committed || 0,
+    capitalDeployed: lp?.capital_deployed || 0,
+    capitalAvailable: lp?.capitalAvailable || 0,
+  };
+}
+
+export function getLPPolicies(lpId) {
+  return db.prepare(`
+    SELECT ip.*, t.name as tenant_name
+    FROM insurance_policies ip
+    LEFT JOIN tenants t ON ip.tenant_id = t.id
+    WHERE ip.lp_id = ? AND ip.status = 'active'
+    ORDER BY ip.created_at DESC
+  `).all(lpId).map(p => {
+    if (p.terms_json) p.terms = JSON.parse(p.terms_json);
+    return p;
+  });
+}
+
+export function getLPClaims(lpId, status = null) {
+  let sql = `SELECT ic.*, ip.policy_number, ip.floor_price as policy_floor
+    FROM insurance_claims ic
+    JOIN insurance_policies ip ON ic.policy_id = ip.id
+    WHERE ic.lp_id = ?`;
+  const params = [lpId];
+  if (status) { sql += ' AND ic.settlement_status = ?'; params.push(status); }
+  sql += ' ORDER BY ic.claim_month DESC';
+  return db.prepare(sql).all(...params).map(c => {
+    if (c.verification_json) c.verification = JSON.parse(c.verification_json);
+    return c;
+  });
+}
+
+export function getPortfolioMetricsByLP() {
+  return db.prepare(`
+    SELECT bsp.id as lp_id, bsp.name as lp_name, bsp.short_name,
+      COUNT(ip.id) as policy_count,
+      COALESCE(SUM(ip.covered_hashrate), 0) as total_hashrate,
+      COALESCE(SUM(ip.monthly_premium), 0) as monthly_premium,
+      bsp.total_capital_committed, bsp.capital_deployed
+    FROM balance_sheet_partners bsp
+    LEFT JOIN insurance_policies ip ON ip.lp_id = bsp.id AND ip.status = 'active'
+    WHERE bsp.status = 'active'
+    GROUP BY bsp.id
+    ORDER BY bsp.name
+  `).all();
+}
+
+export function getSanghaRevenueBreakdown() {
+  const fees = db.prepare(`
+    SELECT
+      COALESCE(SUM(monthly_premium), 0) as total_miner_premiums,
+      COALESCE(SUM(structuring_fee_monthly), 0) as total_structuring_fees,
+      COALESCE(SUM(management_fee_monthly), 0) as total_management_fees,
+      COALESCE(SUM(monthly_premium - COALESCE(structuring_fee_monthly, 0) - COALESCE(management_fee_monthly, 0)), 0) as total_lp_premium_share
+    FROM insurance_policies
+    WHERE status = 'active'
+  `).get();
+  return {
+    totalMinerPremiums: fees.total_miner_premiums || 0,
+    totalStructuringFees: fees.total_structuring_fees || 0,
+    totalManagementFees: fees.total_management_fees || 0,
+    totalLPPremiumShare: fees.total_lp_premium_share || 0,
+    sanghaNetRevenue: (fees.total_structuring_fees || 0) + (fees.total_management_fees || 0),
   };
 }
 

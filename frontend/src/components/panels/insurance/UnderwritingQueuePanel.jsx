@@ -10,6 +10,9 @@ import { formatNumber, formatCurrency, formatDate, formatDateTime } from '../../
 const STATUS_CONFIG = {
   submitted: { label: 'Submitted', color: 'text-terminal-amber', bg: 'bg-terminal-amber/20', border: 'border-terminal-amber/30' },
   under_review: { label: 'Under Review', color: 'text-terminal-cyan', bg: 'bg-terminal-cyan/20', border: 'border-terminal-cyan/30' },
+  pending_lp_approval: { label: 'Pending LP', color: 'text-terminal-amber', bg: 'bg-terminal-amber/20', border: 'border-terminal-amber/30' },
+  lp_revision_requested: { label: 'LP Revision', color: 'text-terminal-cyan', bg: 'bg-terminal-cyan/20', border: 'border-terminal-cyan/30' },
+  lp_rejected: { label: 'LP Rejected', color: 'text-terminal-red', bg: 'bg-terminal-red/20', border: 'border-terminal-red/30' },
   quote_issued: { label: 'Quote Issued', color: 'text-terminal-green', bg: 'bg-terminal-green/20', border: 'border-terminal-green/30' },
   accepted: { label: 'Accepted', color: 'text-terminal-green', bg: 'bg-terminal-green/20', border: 'border-terminal-green/30' },
   declined: { label: 'Declined', color: 'text-terminal-red', bg: 'bg-terminal-red/20', border: 'border-terminal-red/30' },
@@ -19,6 +22,7 @@ const STATUS_CONFIG = {
 const FILTER_TABS = [
   { key: 'all', label: 'All' },
   { key: 'pending', label: 'Pending' },
+  { key: 'lp_pending', label: 'LP Pending' },
   { key: 'quoted', label: 'Quoted' },
   { key: 'accepted', label: 'Accepted' },
 ];
@@ -32,6 +36,7 @@ export default function UnderwritingQueuePanel() {
   const [filter, setFilter] = useState('all');
   const [expandedRow, setExpandedRow] = useState(null);
   const [issueQuoteFor, setIssueQuoteFor] = useState(null);
+  const [structureFor, setStructureFor] = useState(null);
   const [runningAssessment, setRunningAssessment] = useState(null);
 
   // Issue Quote form state
@@ -45,6 +50,24 @@ export default function UnderwritingQueuePanel() {
   const [quoteSubmitting, setQuoteSubmitting] = useState(false);
   const [quoteError, setQuoteError] = useState(null);
 
+  // Structure & Allocate form state
+  const [structureForm, setStructureForm] = useState({
+    lpId: '',
+    instrumentType: 'quarq_spread',
+    monthlyPremium: '',
+    lpPremiumShare: '',
+    structuringFee: '',
+    managementFee: '',
+    floorPrice: '',
+    termMonths: '',
+  });
+  const [structureSubmitting, setStructureSubmitting] = useState(false);
+  const [structureError, setStructureError] = useState(null);
+
+  // Fetch LP partners for the allocation dropdown
+  const { data: lpData } = useApi('/v1/admin/insurance/lp-partners', { refreshInterval: 60 * 1000 });
+  const lpPartners = lpData?.partners || [];
+
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
     '/v1/admin/insurance/queue',
     { refreshInterval: 30 * 1000 }
@@ -57,6 +80,7 @@ export default function UnderwritingQueuePanel() {
   const filteredRequests = requests.filter(req => {
     if (filter === 'all') return true;
     if (filter === 'pending') return ['submitted', 'under_review'].includes(req.status);
+    if (filter === 'lp_pending') return ['pending_lp_approval', 'lp_revision_requested', 'lp_rejected'].includes(req.status);
     if (filter === 'quoted') return req.status === 'quote_issued';
     if (filter === 'accepted') return req.status === 'accepted';
     return true;
@@ -95,10 +119,38 @@ export default function UnderwritingQueuePanel() {
     }
   };
 
+  const handleStructure = async (requestId) => {
+    setStructureSubmitting(true);
+    setStructureError(null);
+    try {
+      await postApi(`/v1/admin/insurance/queue/${requestId}/structure`, {
+        lpId: structureForm.lpId,
+        instrumentType: structureForm.instrumentType,
+        structuredTerms: {
+          monthlyPremium: parseFloat(structureForm.monthlyPremium),
+          lpPremiumShare: parseFloat(structureForm.lpPremiumShare),
+          structuringFee: parseFloat(structureForm.structuringFee),
+          managementFee: parseFloat(structureForm.managementFee),
+          floorPrice: parseFloat(structureForm.floorPrice),
+          termMonths: parseInt(structureForm.termMonths, 10),
+        },
+      });
+      setStructureFor(null);
+      setStructureForm({ lpId: '', instrumentType: 'quarq_spread', monthlyPremium: '', lpPremiumShare: '', structuringFee: '', managementFee: '', floorPrice: '', termMonths: '' });
+      await refetch();
+    } catch (err) {
+      setStructureError(err.response?.data?.error || err.message || 'Failed to structure');
+    } finally {
+      setStructureSubmitting(false);
+    }
+  };
+
   const toggleExpand = (id) => {
     setExpandedRow(expandedRow === id ? null : id);
     setIssueQuoteFor(null);
+    setStructureFor(null);
     setQuoteError(null);
+    setStructureError(null);
   };
 
   return (
@@ -263,25 +315,167 @@ export default function UnderwritingQueuePanel() {
                           {runningAssessment === req.id ? 'Running...' : 'Run Assessment'}
                         </button>
                         {['submitted', 'under_review'].includes(req.status) && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setIssueQuoteFor(isIssuingQuote ? null : req.id);
-                              setQuoteError(null);
-                              // Pre-fill from request data
-                              setQuoteForm(prev => ({
-                                ...prev,
-                                floorPrice: String(req.desiredFloor || req.floorPrice || ''),
-                                termMonths: String(req.termMonths || ''),
-                              }));
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors"
-                          >
-                            <Send size={12} />
-                            Issue Quote
-                          </button>
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIssueQuoteFor(isIssuingQuote ? null : req.id);
+                                setStructureFor(null);
+                                setQuoteError(null);
+                                setQuoteForm(prev => ({
+                                  ...prev,
+                                  floorPrice: String(req.desiredFloor || req.floorPrice || ''),
+                                  termMonths: String(req.termMonths || ''),
+                                }));
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded hover:bg-terminal-green/30 transition-colors"
+                            >
+                              <Send size={12} />
+                              Issue Quote
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStructureFor(structureFor === req.id ? null : req.id);
+                                setIssueQuoteFor(null);
+                                setStructureError(null);
+                                setStructureForm(prev => ({
+                                  ...prev,
+                                  floorPrice: String(req.desiredFloor || req.floorPrice || ''),
+                                  termMonths: String(req.termMonths || ''),
+                                  monthlyPremium: '',
+                                  lpPremiumShare: '',
+                                  structuringFee: '',
+                                  managementFee: '',
+                                }));
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-terminal-amber/20 text-terminal-amber border border-terminal-amber/30 rounded hover:bg-terminal-amber/30 transition-colors"
+                            >
+                              <Users size={12} />
+                              Structure & Allocate
+                            </button>
+                          </>
                         )}
                       </div>
+
+                      {/* Structure & Allocate Form */}
+                      {structureFor === req.id && (
+                        <div className="bg-terminal-bg/50 border border-terminal-amber/20 rounded p-3 space-y-3" onClick={e => e.stopPropagation()}>
+                          <p className="text-xs font-semibold text-terminal-amber">Structure & Allocate to LP</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-terminal-muted block mb-1">Balance Sheet Partner *</label>
+                              <select
+                                value={structureForm.lpId}
+                                onChange={(e) => setStructureForm(f => ({ ...f, lpId: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text focus:outline-none focus:border-terminal-amber"
+                              >
+                                <option value="">Select LP...</option>
+                                {lpPartners.map(lp => (
+                                  <option key={lp.id} value={lp.id}>{lp.name} ({lp.shortName})</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">Instrument Type</label>
+                              <select
+                                value={structureForm.instrumentType}
+                                onChange={(e) => setStructureForm(f => ({ ...f, instrumentType: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text focus:outline-none focus:border-terminal-amber"
+                              >
+                                <option value="quarq_spread">Quarq Spread</option>
+                                <option value="synthetic_ppa">Synthetic PPA</option>
+                                <option value="proxy_revenue">Proxy Revenue Swap</option>
+                                <option value="efficiency_hedge">Efficiency Hedge</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">Floor Price</label>
+                              <input
+                                type="number"
+                                value={structureForm.floorPrice}
+                                onChange={(e) => setStructureForm(f => ({ ...f, floorPrice: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                placeholder="$/PH/day"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">Total Miner Premium ($/mo)</label>
+                              <input
+                                type="number"
+                                value={structureForm.monthlyPremium}
+                                onChange={(e) => setStructureForm(f => ({ ...f, monthlyPremium: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                placeholder="Total monthly"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">LP Premium Share ($/mo)</label>
+                              <input
+                                type="number"
+                                value={structureForm.lpPremiumShare}
+                                onChange={(e) => setStructureForm(f => ({ ...f, lpPremiumShare: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                placeholder="LP share"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">Structuring Fee ($/mo)</label>
+                              <input
+                                type="number"
+                                value={structureForm.structuringFee}
+                                onChange={(e) => setStructureForm(f => ({ ...f, structuringFee: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                placeholder="Sangha fee"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">Management Fee ($/mo)</label>
+                              <input
+                                type="number"
+                                value={structureForm.managementFee}
+                                onChange={(e) => setStructureForm(f => ({ ...f, managementFee: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                placeholder="Mgmt fee"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-terminal-muted block mb-1">Term (months)</label>
+                              <input
+                                type="number"
+                                value={structureForm.termMonths}
+                                onChange={(e) => setStructureForm(f => ({ ...f, termMonths: e.target.value }))}
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                placeholder="12"
+                              />
+                            </div>
+                          </div>
+
+                          {structureError && (
+                            <div className="flex items-center gap-2 text-xs text-terminal-red bg-terminal-red/10 border border-terminal-red/20 rounded px-2 py-1.5">
+                              <AlertTriangle size={12} />
+                              {structureError}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { setStructureFor(null); setStructureError(null); }}
+                              className="flex-1 px-3 py-1.5 text-xs border border-terminal-border rounded text-terminal-muted hover:bg-terminal-border transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleStructure(req.id)}
+                              disabled={structureSubmitting || !structureForm.lpId || !structureForm.monthlyPremium}
+                              className="flex-1 px-3 py-1.5 text-xs bg-terminal-amber text-terminal-bg rounded font-semibold hover:bg-terminal-amber/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                            >
+                              <Users size={12} />
+                              {structureSubmitting ? 'Allocating...' : 'Allocate to LP'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Issue Quote Form */}
                       {isIssuingQuote && (

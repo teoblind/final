@@ -13,6 +13,7 @@ const OnboardingWizard = lazy(() => import('./components/auth/OnboardingWizard')
 const OperationsDashboard = lazy(() => import('./components/dashboards/OperationsDashboard'));
 const MacroDashboard = lazy(() => import('./components/dashboards/MacroDashboard'));
 const PartnerDashboard = lazy(() => import('./components/dashboards/PartnerDashboard'));
+const LPDashboard = lazy(() => import('./components/dashboards/LPDashboard'));
 const AdminConsoleDashboard = lazy(() => import('./components/dashboards/AdminConsoleDashboard'));
 const CorrelationPanel = lazy(() => import('./components/panels/macro/CorrelationPanel'));
 const AlertsPanel = lazy(() => import('./components/AlertsPanel'));
@@ -172,6 +173,32 @@ function AppContent() {
         </header>
         <Suspense fallback={<LoadingSpinner />}>
           <PartnerDashboard />
+        </Suspense>
+      </div>
+    );
+  }
+
+  // Balance sheet partner (LP) gets LP dashboard
+  if (user?.role === 'balance_sheet_partner') {
+    return (
+      <div className="min-h-screen bg-terminal-bg text-terminal-text">
+        <header className="sticky top-0 z-50 bg-terminal-bg border-b border-terminal-border">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-terminal-green font-bold text-lg">&#9650;</span>
+              <h1 className="text-lg font-bold">AMPERA</h1>
+              <span className="text-xs bg-terminal-cyan/20 text-terminal-cyan px-2 py-0.5 rounded">LP PORTAL</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-terminal-muted">{user.email}</span>
+              <button onClick={logout} className="text-terminal-muted hover:text-terminal-red">
+                <LogOut size={16} />
+              </button>
+            </div>
+          </div>
+        </header>
+        <Suspense fallback={<LoadingSpinner />}>
+          <LPDashboard />
         </Suspense>
       </div>
     );

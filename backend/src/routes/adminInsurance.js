@@ -25,6 +25,17 @@ import {
   getCalibrationExports,
   createCalibrationExport,
   getTenant,
+  createBalanceSheetPartner,
+  getBalanceSheetPartner,
+  getAllBalanceSheetPartners,
+  updateBalanceSheetPartner,
+  createLPAllocation,
+  getLPAllocation,
+  getLPAllocations,
+  updateLPAllocation,
+  getPortfolioMetricsByLP,
+  getSanghaRevenueBreakdown,
+  insertAuditLog,
 } from '../cache/database.js';
 import { emitEvent } from '../services/webhookService.js';
 
@@ -739,6 +750,263 @@ router.post('/stress-test', async (req, res) => {
   } catch (error) {
     console.error('Stress test error:', error);
     res.status(500).json({ error: 'Failed to run stress test' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Balance Sheet Partner (LP) Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /lp-partners — List all balance sheet partners
+ */
+router.get('/lp-partners', async (req, res) => {
+  try {
+    const partners = getAllBalanceSheetPartners();
+    res.json({
+      partners: partners.map(p => ({
+        id: p.id,
+        name: p.name,
+        shortName: p.short_name,
+        contactEmail: p.contact_email,
+        status: p.status,
+        capitalCommitted: p.capital_committed,
+        capitalDeployed: p.capital_deployed,
+        preferredInstruments: p.preferred_instruments,
+        feeStructure: p.feeStructure,
+        createdAt: p.created_at,
+      })),
+      total: partners.length,
+    });
+  } catch (error) {
+    console.error('List LP partners error:', error);
+    res.status(500).json({ error: 'Failed to list LP partners' });
+  }
+});
+
+/**
+ * POST /lp-partners — Create a new balance sheet partner
+ */
+router.post('/lp-partners', async (req, res) => {
+  try {
+    const { name, shortName, contactEmail, capitalCommitted, preferredInstruments, feeStructure } = req.body;
+    if (!name || !contactEmail) {
+      return res.status(400).json({ error: 'name and contactEmail are required' });
+    }
+
+    const id = uuidv4();
+    createBalanceSheetPartner({
+      id,
+      name,
+      shortName: shortName || name.substring(0, 10),
+      contactEmail,
+      capitalCommitted: capitalCommitted || 0,
+      preferredInstruments: preferredInstruments || null,
+      feeStructureJson: feeStructure || { structuringFeePercent: 5, managementFeePercent: 1 },
+    });
+
+    const partner = getBalanceSheetPartner(id);
+
+    insertAuditLog({
+      id: uuidv4(), tenant_id: 'sangha', user_id: req.user.id,
+      action: 'lp_partner_created', resource_type: 'balance_sheet_partner', resource_id: id,
+      details: JSON.stringify({ name }),
+    });
+
+    res.status(201).json({ partner });
+  } catch (error) {
+    console.error('Create LP partner error:', error);
+    res.status(500).json({ error: 'Failed to create LP partner' });
+  }
+});
+
+/**
+ * GET /lp-partners/:id — Get LP partner details
+ */
+router.get('/lp-partners/:id', async (req, res) => {
+  try {
+    const partner = getBalanceSheetPartner(req.params.id);
+    if (!partner) {
+      return res.status(404).json({ error: 'LP partner not found' });
+    }
+
+    const metrics = getPortfolioMetricsByLP(partner.id);
+
+    res.json({
+      partner: {
+        id: partner.id,
+        name: partner.name,
+        shortName: partner.short_name,
+        contactEmail: partner.contact_email,
+        status: partner.status,
+        capitalCommitted: partner.capital_committed,
+        capitalDeployed: partner.capital_deployed,
+        preferredInstruments: partner.preferred_instruments,
+        feeStructure: partner.feeStructure,
+        createdAt: partner.created_at,
+      },
+      metrics,
+    });
+  } catch (error) {
+    console.error('Get LP partner error:', error);
+    res.status(500).json({ error: 'Failed to get LP partner' });
+  }
+});
+
+/**
+ * PATCH /lp-partners/:id — Update LP partner
+ */
+router.patch('/lp-partners/:id', async (req, res) => {
+  try {
+    const partner = getBalanceSheetPartner(req.params.id);
+    if (!partner) {
+      return res.status(404).json({ error: 'LP partner not found' });
+    }
+
+    const updates = {};
+    if (req.body.name) updates.name = req.body.name;
+    if (req.body.shortName) updates.shortName = req.body.shortName;
+    if (req.body.contactEmail) updates.contactEmail = req.body.contactEmail;
+    if (req.body.status) updates.status = req.body.status;
+    if (req.body.capitalCommitted != null) updates.capitalCommitted = req.body.capitalCommitted;
+    if (req.body.capitalDeployed != null) updates.capitalDeployed = req.body.capitalDeployed;
+    if (req.body.preferredInstruments) updates.preferredInstruments = req.body.preferredInstruments;
+    if (req.body.feeStructure) updates.feeStructureJson = req.body.feeStructure;
+
+    updateBalanceSheetPartner(partner.id, updates);
+
+    const updated = getBalanceSheetPartner(partner.id);
+    res.json({ partner: updated });
+  } catch (error) {
+    console.error('Update LP partner error:', error);
+    res.status(500).json({ error: 'Failed to update LP partner' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Structuring & LP Allocation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /queue/:id/structure — Structure a quote request with terms and allocate to LP
+ * Body: { lpId, instrumentType, structuredTerms, riskSummary }
+ * structuredTerms: { monthlyPremium, lpPremiumShare, structuringFee, managementFee, upsideSharePct, floorPrice, termMonths }
+ */
+router.post('/queue/:id/structure', async (req, res) => {
+  try {
+    const qr = getQuoteRequest(req.params.id);
+    if (!qr) {
+      return res.status(404).json({ error: 'Quote request not found' });
+    }
+
+    if (!['submitted', 'under_review'].includes(qr.status)) {
+      return res.status(400).json({
+        error: `Cannot structure request in status '${qr.status}'`,
+      });
+    }
+
+    const { lpId, instrumentType, structuredTerms, riskSummary } = req.body;
+    if (!lpId || !structuredTerms) {
+      return res.status(400).json({ error: 'lpId and structuredTerms are required' });
+    }
+
+    const lp = getBalanceSheetPartner(lpId);
+    if (!lp) {
+      return res.status(404).json({ error: 'LP partner not found' });
+    }
+
+    // Update quote request with structured terms
+    updateQuoteRequest(qr.id, {
+      status: 'pending_lp_approval',
+      instrumentType: instrumentType || 'quarq_spread',
+      structuredTermsJson: structuredTerms,
+      structuredBy: req.user.id,
+      structuredAt: new Date().toISOString(),
+    });
+
+    // Create LP allocation
+    const allocationId = uuidv4();
+    createLPAllocation({
+      id: allocationId,
+      lpId,
+      quoteRequestId: qr.id,
+      allocatedBy: req.user.id,
+      structuredTermsJson: structuredTerms,
+      riskSummaryJson: riskSummary || null,
+    });
+
+    insertAuditLog({
+      id: uuidv4(), tenant_id: 'sangha', user_id: req.user.id,
+      action: 'quote_structured_for_lp', resource_type: 'quote_request', resource_id: qr.id,
+      details: JSON.stringify({ lpId, allocationId, instrumentType }),
+    });
+
+    res.json({
+      allocationId,
+      quoteRequestId: qr.id,
+      lpId,
+      status: 'pending_lp_approval',
+    });
+  } catch (error) {
+    console.error('Structure quote error:', error);
+    res.status(500).json({ error: 'Failed to structure quote request' });
+  }
+});
+
+/**
+ * GET /allocations — List all LP allocations (admin view)
+ */
+router.get('/allocations', async (req, res) => {
+  try {
+    const status = req.query.status || null;
+    const lpId = req.query.lpId || null;
+    const allocations = getLPAllocations(lpId, status);
+    res.json({ allocations, total: allocations.length });
+  } catch (error) {
+    console.error('List allocations error:', error);
+    res.status(500).json({ error: 'Failed to list allocations' });
+  }
+});
+
+/**
+ * GET /revenue — Sangha revenue breakdown
+ */
+router.get('/revenue', async (req, res) => {
+  try {
+    const revenue = getSanghaRevenueBreakdown();
+    res.json({ revenue });
+  } catch (error) {
+    console.error('Revenue breakdown error:', error);
+    res.status(500).json({ error: 'Failed to get revenue breakdown' });
+  }
+});
+
+/**
+ * GET /lp-exposure — Per-LP exposure for portfolio risk panel
+ */
+router.get('/lp-exposure', async (req, res) => {
+  try {
+    const partners = getAllBalanceSheetPartners();
+    const exposure = partners.map(p => {
+      const metrics = getPortfolioMetricsByLP(p.id);
+      return {
+        lpId: p.id,
+        lpName: p.name,
+        lpShortName: p.short_name,
+        status: p.status,
+        capitalCommitted: p.capital_committed,
+        capitalDeployed: metrics?.capitalDeployed || 0,
+        activePolicies: metrics?.activePolicies || 0,
+        coveredHashrate: metrics?.totalCoveredHashrate || 0,
+        monthlyPremium: metrics?.monthlyPremiumIncome || 0,
+        totalClaimsPaid: metrics?.totalClaimsPaid || 0,
+        pendingAllocations: metrics?.pendingAllocations || 0,
+      };
+    });
+    res.json({ exposure, total: exposure.length });
+  } catch (error) {
+    console.error('LP exposure error:', error);
+    res.status(500).json({ error: 'Failed to get LP exposure' });
   }
 });
 

@@ -535,6 +535,17 @@ const InsurancePanels: PanelRegistryEntry[] = [
     status: 'active',
     icon: '✅',
   },
+  {
+    id: 'insurance-lp-management',
+    title: 'LP Management',
+    subtitle: 'Balance sheet partner CRUD and exposure',
+    category: 'insurance' as PanelCategory,
+    component: lazy(() => import('../components/panels/insurance/LPManagementPanel')),
+    defaultSize: { cols: 2, rows: 1 },
+    phase: 9,
+    status: 'active',
+    icon: '🏦',
+  },
 ];
 
 // Full registry

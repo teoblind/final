@@ -52,6 +52,7 @@ import webhookRoutes from './routes/webhooks.js';
 // Phase 9: Insurance integration routes
 import insuranceRoutes from './routes/insurance.js';
 import adminInsuranceRoutes from './routes/adminInsurance.js';
+import lpRoutes from './routes/lp.js';
 
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 
@@ -131,6 +132,7 @@ app.use('/api/v1/webhooks', webhookRoutes);
 // Phase 9: Insurance routes
 app.use('/api/v1/insurance', insuranceRoutes);
 app.use('/api/v1/admin/insurance', adminInsuranceRoutes);
+app.use('/api/v1/lp', lpRoutes);
 
 // All existing routes under /api/v1/ (versioned)
 app.use('/api/v1/yahoo', yahooRoutes);

@@ -410,9 +410,24 @@ export default function CoverageExplorerPanel({ initialMode }) {
         <div className="flex items-start gap-2 bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2">
           <AlertTriangle size={14} className="text-terminal-amber mt-0.5 flex-shrink-0" />
           <p className="text-[11px] text-terminal-amber leading-relaxed">
-            These are indicative estimates only. Formal quotes may differ based on detailed underwriting review.
+            Indicative estimates only. Sangha structures coverage backed by institutional capital partners.
+            Formal terms are set during underwriting and LP approval.
           </p>
         </div>
+
+        {/* How It Works — three-party explainer */}
+        <details className="bg-terminal-bg/50 border border-terminal-border rounded">
+          <summary className="px-3 py-2 text-[11px] text-terminal-cyan cursor-pointer hover:text-terminal-text">
+            How coverage works (three-party structure)
+          </summary>
+          <div className="px-3 pb-3 text-[10px] text-terminal-muted leading-relaxed space-y-1.5">
+            <p><span className="text-terminal-text font-semibold">1. You request coverage</span> — choose your instrument, floor price, and term.</p>
+            <p><span className="text-terminal-text font-semibold">2. Sangha structures the deal</span> — our underwriting team assesses risk and structures terms.</p>
+            <p><span className="text-terminal-text font-semibold">3. Institutional capital backs it</span> — a balance sheet partner provides the capital guarantee.</p>
+            <p><span className="text-terminal-text font-semibold">4. You pay a monthly premium</span> — if hashprice drops below your floor, the capital partner pays the difference via Sangha.</p>
+            <p className="text-terminal-muted/60 pt-1">Your identity is never shared with capital partners. Sangha manages all counterparty relationships.</p>
+          </div>
+        </details>
 
         {/* Mode Selector */}
         <div>
@@ -535,7 +550,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <Check size={32} className="text-terminal-green mb-2" />
                   <p className="text-sm text-terminal-green font-semibold">Quote request submitted!</p>
-                  <p className="text-xs text-terminal-muted mt-1">Our underwriting team will review your request.</p>
+                  <p className="text-xs text-terminal-muted mt-1">Sangha's underwriting team will structure terms with our institutional capital partners.</p>
                 </div>
               ) : (
                 <>

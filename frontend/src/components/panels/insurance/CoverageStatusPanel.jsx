@@ -27,6 +27,9 @@ const CLAIM_STATUSES = {
 const QUOTE_STATUSES = {
   submitted: { label: 'Submitted', color: 'text-terminal-amber', bg: 'bg-terminal-amber/20' },
   under_review: { label: 'Under Review', color: 'text-terminal-cyan', bg: 'bg-terminal-cyan/20' },
+  pending_lp_approval: { label: 'Structuring', color: 'text-terminal-amber', bg: 'bg-terminal-amber/20' },
+  lp_revision_requested: { label: 'Structuring', color: 'text-terminal-cyan', bg: 'bg-terminal-cyan/20' },
+  lp_rejected: { label: 'Under Review', color: 'text-terminal-amber', bg: 'bg-terminal-amber/20' },
   quote_issued: { label: 'Quote Issued', color: 'text-terminal-green', bg: 'bg-terminal-green/20' },
   accepted: { label: 'Accepted', color: 'text-terminal-green', bg: 'bg-terminal-green/20' },
   declined: { label: 'Declined', color: 'text-terminal-red', bg: 'bg-terminal-red/20' },
@@ -79,7 +82,7 @@ export default function CoverageStatusPanel() {
             <Shield size={40} className="text-terminal-muted mb-3" />
             <p className="text-sm text-terminal-muted mb-1">No active coverage</p>
             <p className="text-xs text-terminal-muted mb-4">
-              Explore coverage options to protect your mining revenue.
+              Explore coverage options backed by institutional capital partners to protect your mining revenue.
             </p>
             <a
               href="#coverage-explorer"
