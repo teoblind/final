@@ -4,7 +4,7 @@
 
 // Panel system types
 export type PanelStatus = 'connected' | 'stale' | 'error' | 'loading';
-export type PanelCategory = 'macro' | 'energy' | 'hashprice' | 'curtailment' | 'pools' | 'agents';
+export type PanelCategory = 'macro' | 'energy' | 'hashprice' | 'curtailment' | 'pools' | 'agents' | 'hpc' | 'insurance';
 export type PanelPhaseStatus = 'active' | 'placeholder' | 'coming-soon';
 
 export interface PanelAction {

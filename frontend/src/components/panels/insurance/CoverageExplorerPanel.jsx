@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Shield, Sliders, DollarSign, Clock, Zap, AlertTriangle, Send, X, Check
+  Shield, Sliders, DollarSign, Clock, Zap, AlertTriangle, Send, X, Check,
+  Activity, Gauge
 } from 'lucide-react';
 import Panel from '../../Panel';
+import GlossaryTerm from '../../GlossaryTerm';
 import { useApi, postApi } from '../../../hooks/useApi';
 import { formatNumber, formatCurrency } from '../../../utils/formatters';
 
@@ -19,12 +21,19 @@ const PRESETS = [
   { key: 'aggressive', label: 'Aggressive', percentile: 'p50', color: 'text-terminal-red' },
 ];
 
+const COVERAGE_MODES = [
+  { key: 'quarq_spread', label: 'Quarq Spread', glossaryId: 'quarq_spread', icon: '\u26A1' },
+  { key: 'synthetic_ppa', label: 'Synthetic PPA', glossaryId: 'synthetic_ppa', icon: '\uD83D\uDCC4' },
+  { key: 'proxy_revenue', label: 'Revenue Swap', glossaryId: 'proxy_revenue_swap', icon: '\uD83D\uDD04' },
+  { key: 'efficiency_hedge', label: 'Efficiency Hedge', glossaryId: 'heat_rate_hedge', icon: '\uD83D\uDD27' },
+];
+
 /**
  * Panel 9c: Interactive Coverage Explorer
- * Floor price slider, term selector, hashrate input, indicative premium display,
- * and formal quote request CTA.
+ * Supports 4 instrument modes with mode-specific controls.
  */
-export default function CoverageExplorerPanel() {
+export default function CoverageExplorerPanel({ initialMode }) {
+  const [mode, setMode] = useState(initialMode || 'quarq_spread');
   const [term, setTerm] = useState('12mo');
   const [hashrate, setHashrate] = useState('');
   const [floorPrice, setFloorPrice] = useState(50);
@@ -33,6 +42,23 @@ export default function CoverageExplorerPanel() {
   const [quoteSuccess, setQuoteSuccess] = useState(false);
   const [quoteError, setQuoteError] = useState(null);
   const debounceRef = useRef(null);
+
+  // Synthetic PPA specific
+  const [strikeHashprice, setStrikeHashprice] = useState(50);
+  const [upsideSharePct, setUpsideSharePct] = useState(15);
+
+  // Proxy Revenue Swap specific
+  const [floorRevenue, setFloorRevenue] = useState(5000);
+  const [difficultyCapMultiple, setDifficultyCapMultiple] = useState(1.5);
+
+  // Efficiency Hedge specific
+  const [targetEfficiency, setTargetEfficiency] = useState(15);
+  const [currentFleetEfficiency, setCurrentFleetEfficiency] = useState(34);
+
+  // Update mode when initialMode prop changes
+  useEffect(() => {
+    if (initialMode) setMode(initialMode);
+  }, [initialMode]);
 
   // Fetch risk profile for suggested floors and fleet data
   const { data: profileData } = useApi('/v1/insurance/risk-profile', {
@@ -71,7 +97,7 @@ export default function CoverageExplorerPanel() {
     try {
       const termConfig = TERMS.find(t => t.key === termKey);
       const res = await fetch(
-        `${import.meta.env.VITE_API_URL || '/api'}/v1/insurance/quotes/indicative?floor=${floor}&term=${termConfig?.months || 12}&hashrate=${hr}`
+        `${import.meta.env.VITE_API_URL || '/api'}/v1/insurance/quotes/indicative?floor=${floor}&term=${termConfig?.months || 12}&hashrate=${hr}&mode=${mode}`
       );
       if (res.ok) {
         const result = await res.json();
@@ -82,23 +108,25 @@ export default function CoverageExplorerPanel() {
     } finally {
       setIndicativeLoading(false);
     }
-  }, []);
+  }, [mode]);
 
   // Debounce slider / input changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchIndicative(floorPrice, term, hashrate);
+      const floor = mode === 'synthetic_ppa' ? strikeHashprice : floorPrice;
+      fetchIndicative(floor, term, hashrate);
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [floorPrice, term, hashrate, fetchIndicative]);
+  }, [floorPrice, strikeHashprice, term, hashrate, mode, fetchIndicative]);
 
   const handlePreset = (preset) => {
     const floor = suggestedFloors[preset.percentile];
     if (floor != null) {
       setFloorPrice(floor);
+      setStrikeHashprice(floor);
     }
   };
 
@@ -108,9 +136,10 @@ export default function CoverageExplorerPanel() {
     try {
       const termConfig = TERMS.find(t => t.key === term);
       await postApi('/v1/insurance/quotes/request', {
-        floor_price: floorPrice,
+        floor_price: mode === 'synthetic_ppa' ? strikeHashprice : floorPrice,
         term_months: termConfig?.months || 12,
         hashrate_th: parseFloat(hashrate),
+        coverage_mode: mode,
       });
       setQuoteSuccess(true);
       setTimeout(() => {
@@ -127,6 +156,243 @@ export default function CoverageExplorerPanel() {
   const monthlyCost = indicative?.monthlyPremium;
   const annualCost = indicative?.annualPremium;
   const costPerTH = indicative?.costPerTH;
+
+  const currentModeConfig = COVERAGE_MODES.find(m => m.key === mode);
+
+  // Mode-specific controls renderer
+  const renderModeControls = () => {
+    switch (mode) {
+      case 'quarq_spread':
+        return (
+          <>
+            {/* Guaranteed Spread Slider */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">
+                  Guaranteed <GlossaryTerm id="quarq_spread">Spread</GlossaryTerm> ($/TH/s/day)
+                </label>
+                <span className="text-sm font-bold text-terminal-cyan font-mono">
+                  ${formatNumber(floorPrice, 2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={sliderMin}
+                max={sliderMax}
+                step={0.5}
+                value={floorPrice}
+                onChange={(e) => setFloorPrice(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-cyan"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>${formatNumber(sliderMin, 0)}</span>
+                <span>${formatNumber(sliderMax, 0)}</span>
+              </div>
+            </div>
+            {/* Presets */}
+            <div className="flex gap-2">
+              {PRESETS.map(preset => (
+                <button
+                  key={preset.key}
+                  onClick={() => handlePreset(preset)}
+                  className={`flex-1 px-2 py-1.5 text-xs border border-terminal-border rounded hover:bg-terminal-border/50 transition-colors ${preset.color}`}
+                >
+                  {preset.label}
+                  {suggestedFloors[preset.percentile] != null && (
+                    <span className="block text-[10px] text-terminal-muted font-mono">
+                      ${formatNumber(suggestedFloors[preset.percentile], 2)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        );
+
+      case 'synthetic_ppa':
+        return (
+          <>
+            {/* Strike Hashprice */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">
+                  Strike <GlossaryTerm id="hashprice">Hashprice</GlossaryTerm> ($/PH/day)
+                </label>
+                <span className="text-sm font-bold text-terminal-cyan font-mono">
+                  ${formatNumber(strikeHashprice, 2)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={sliderMin}
+                max={sliderMax}
+                step={0.5}
+                value={strikeHashprice}
+                onChange={(e) => setStrikeHashprice(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-cyan"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>${formatNumber(sliderMin, 0)}</span>
+                <span>${formatNumber(sliderMax, 0)}</span>
+              </div>
+            </div>
+            {/* Upside Share */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">
+                  <GlossaryTerm id="upside_sharing">Upside Sharing</GlossaryTerm> (%)
+                </label>
+                <span className="text-sm font-bold text-terminal-amber font-mono">
+                  {upsideSharePct}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={5}
+                max={50}
+                step={1}
+                value={upsideSharePct}
+                onChange={(e) => setUpsideSharePct(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-amber"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>5%</span>
+                <span>50%</span>
+              </div>
+            </div>
+            {/* CfD explainer */}
+            <p className="text-[10px] text-terminal-muted leading-relaxed">
+              Below the strike, Sangha pays you the difference. Above the strike, you share {upsideSharePct}% of the upside.
+              Pure financial settlement — no physical delivery.
+            </p>
+          </>
+        );
+
+      case 'proxy_revenue':
+        return (
+          <>
+            {/* Floor Revenue */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">
+                  <GlossaryTerm id="revenue_floor">Revenue Floor</GlossaryTerm> ($/day)
+                </label>
+                <span className="text-sm font-bold text-terminal-cyan font-mono">
+                  ${formatNumber(floorRevenue, 0)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={1000}
+                max={50000}
+                step={500}
+                value={floorRevenue}
+                onChange={(e) => setFloorRevenue(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-cyan"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>$1,000</span>
+                <span>$50,000</span>
+              </div>
+            </div>
+            {/* Difficulty Cap */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">Difficulty Cap Multiple</label>
+                <span className="text-sm font-bold text-terminal-amber font-mono">
+                  {difficultyCapMultiple}x
+                </span>
+              </div>
+              <input
+                type="range"
+                min={1.1}
+                max={3.0}
+                step={0.1}
+                value={difficultyCapMultiple}
+                onChange={(e) => setDifficultyCapMultiple(parseFloat(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-amber"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>1.1x</span>
+                <span>3.0x</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-terminal-muted leading-relaxed">
+              Covers both BTC price drops and difficulty increases up to {difficultyCapMultiple}x the current level.
+              Settles based on actual <GlossaryTerm id="hashprice">hashprice</GlossaryTerm> which embeds both risks.
+            </p>
+          </>
+        );
+
+      case 'efficiency_hedge':
+        return (
+          <>
+            {/* Target Efficiency */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">Target Efficiency (J/TH)</label>
+                <span className="text-sm font-bold text-terminal-green font-mono">
+                  {targetEfficiency} J/TH
+                </span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={30}
+                step={1}
+                value={targetEfficiency}
+                onChange={(e) => setTargetEfficiency(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-green"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>10 J/TH (S21 Pro)</span>
+                <span>30 J/TH</span>
+              </div>
+            </div>
+            {/* Current Fleet Efficiency */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-terminal-text">Your Fleet Efficiency (J/TH)</label>
+                <span className="text-sm font-bold text-terminal-amber font-mono">
+                  {currentFleetEfficiency} J/TH
+                </span>
+              </div>
+              <input
+                type="range"
+                min={15}
+                max={50}
+                step={1}
+                value={currentFleetEfficiency}
+                onChange={(e) => setCurrentFleetEfficiency(parseInt(e.target.value))}
+                className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-amber"
+              />
+              <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
+                <span>15 J/TH</span>
+                <span>50 J/TH</span>
+              </div>
+            </div>
+            {/* Efficiency gap display */}
+            <div className="bg-terminal-bg rounded p-3 border border-terminal-border">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-terminal-muted">Efficiency Gap</span>
+                <span className={`font-bold font-mono ${currentFleetEfficiency > targetEfficiency ? 'text-terminal-amber' : 'text-terminal-green'}`}>
+                  {currentFleetEfficiency > targetEfficiency
+                    ? `${(currentFleetEfficiency / targetEfficiency).toFixed(1)}x`
+                    : 'No gap'}
+                </span>
+              </div>
+              <p className="text-[10px] text-terminal-muted mt-1 leading-relaxed">
+                Sangha absorbs the gap between your fleet's {currentFleetEfficiency} J/TH and the virtual {targetEfficiency} J/TH target,
+                effectively lowering your breakeven energy price.
+              </p>
+            </div>
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
     <Panel
@@ -148,48 +414,31 @@ export default function CoverageExplorerPanel() {
           </p>
         </div>
 
-        {/* Floor Price Slider */}
+        {/* Mode Selector */}
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold text-terminal-text">Floor Price ($/PH/day)</label>
-            <span className="text-sm font-bold text-terminal-cyan font-mono">
-              ${formatNumber(floorPrice, 2)}
-            </span>
-          </div>
-          <input
-            type="range"
-            min={sliderMin}
-            max={sliderMax}
-            step={0.5}
-            value={floorPrice}
-            onChange={(e) => setFloorPrice(parseFloat(e.target.value))}
-            className="w-full h-1.5 bg-terminal-border rounded-lg appearance-none cursor-pointer accent-terminal-cyan"
-          />
-          <div className="flex justify-between text-[10px] text-terminal-muted mt-1">
-            <span>${formatNumber(sliderMin, 0)}</span>
-            <span>${formatNumber(sliderMax, 0)}</span>
+          <label className="text-xs font-semibold text-terminal-text mb-2 block">Instrument Type</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+            {COVERAGE_MODES.map(m => (
+              <button
+                key={m.key}
+                onClick={() => setMode(m.key)}
+                className={`px-2 py-2 text-[11px] rounded transition-colors flex items-center justify-center gap-1.5 ${
+                  mode === m.key
+                    ? 'bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30'
+                    : 'text-terminal-muted border border-terminal-border hover:text-terminal-text hover:bg-terminal-border/50'
+                }`}
+              >
+                <span>{m.icon}</span>
+                {m.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Preset Buttons */}
-        <div className="flex gap-2">
-          {PRESETS.map(preset => (
-            <button
-              key={preset.key}
-              onClick={() => handlePreset(preset)}
-              className={`flex-1 px-2 py-1.5 text-xs border border-terminal-border rounded hover:bg-terminal-border/50 transition-colors ${preset.color}`}
-            >
-              {preset.label}
-              {suggestedFloors[preset.percentile] != null && (
-                <span className="block text-[10px] text-terminal-muted font-mono">
-                  ${formatNumber(suggestedFloors[preset.percentile], 2)}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        {/* Mode-specific controls */}
+        {renderModeControls()}
 
-        {/* Term Selector */}
+        {/* Term Selector (common) */}
         <div>
           <label className="text-xs font-semibold text-terminal-text mb-2 block">Coverage Term</label>
           <div className="flex gap-1">
@@ -209,7 +458,7 @@ export default function CoverageExplorerPanel() {
           </div>
         </div>
 
-        {/* Hashrate Input */}
+        {/* Hashrate Input (common) */}
         <div>
           <label className="text-xs font-semibold text-terminal-text mb-2 block">Covered Hashrate (TH/s)</label>
           <div className="relative">
@@ -229,6 +478,9 @@ export default function CoverageExplorerPanel() {
           <p className="text-xs font-semibold text-terminal-text mb-3 flex items-center gap-1.5">
             <DollarSign size={12} className="text-terminal-green" />
             Indicative Premium
+            {currentModeConfig && (
+              <span className="text-[10px] text-terminal-muted">({currentModeConfig.label})</span>
+            )}
             {indicativeLoading && (
               <span className="ml-2 text-[10px] text-terminal-muted animate-pulse">Calculating...</span>
             )}
@@ -289,8 +541,16 @@ export default function CoverageExplorerPanel() {
                 <>
                   <div className="bg-terminal-bg/50 rounded p-3 space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-terminal-muted">Floor Price</span>
-                      <span className="text-terminal-text font-mono">${formatNumber(floorPrice, 2)}/PH/day</span>
+                      <span className="text-terminal-muted">Instrument</span>
+                      <span className="text-terminal-cyan">{currentModeConfig?.label}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-terminal-muted">
+                        {mode === 'synthetic_ppa' ? 'Strike Price' : 'Floor Price'}
+                      </span>
+                      <span className="text-terminal-text font-mono">
+                        ${formatNumber(mode === 'synthetic_ppa' ? strikeHashprice : floorPrice, 2)}/PH/day
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-terminal-muted">Term</span>

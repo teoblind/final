@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { TrendingUp, BarChart3, Info } from 'lucide-react';
 import Panel from '../../Panel';
+import GlossaryTerm from '../../GlossaryTerm';
 import { useApi } from '../../../hooks/useApi';
 import { formatNumber, formatCurrency } from '../../../utils/formatters';
 
@@ -269,6 +270,10 @@ export default function RevenueProjectionPanel() {
               <span className="w-3 h-0 inline-block border-t border-dashed border-terminal-red" />
               Breakeven
             </div>
+            <div className="flex items-center gap-1.5 text-[10px] text-terminal-muted">
+              <span className="w-3 h-0 inline-block border-t border-dashed border-terminal-cyan" />
+              <GlossaryTerm id="revenue_floor">Revenue Floor</GlossaryTerm>
+            </div>
           </div>
 
           {/* Monthly Revenue Table (condensed) */}
@@ -305,7 +310,7 @@ export default function RevenueProjectionPanel() {
           {/* Info note */}
           <div className="flex items-start gap-2 text-[10px] text-terminal-muted pt-2">
             <Info size={10} className="mt-0.5 flex-shrink-0" />
-            <span>Projections based on hashprice distribution models. Actual revenue depends on network conditions, energy costs, and operational factors.</span>
+            <span>Projections based on <GlossaryTerm id="hashprice">hashprice</GlossaryTerm> distribution models. Actual revenue depends on network conditions, energy costs, and operational factors.</span>
           </div>
         </div>
       ) : null}

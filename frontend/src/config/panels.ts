@@ -478,6 +478,65 @@ const HpcPanels: PanelRegistryEntry[] = [
   },
 ];
 
+// Phase 9: Insurance panels (active)
+const InsurancePanels: PanelRegistryEntry[] = [
+  {
+    id: 'insurance-risk-profile',
+    title: 'Risk Profile',
+    subtitle: 'Composite risk score and fleet assessment',
+    category: 'insurance' as PanelCategory,
+    component: lazy(() => import('../components/panels/insurance/RiskProfilePanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 9,
+    status: 'active',
+    icon: '🛡',
+  },
+  {
+    id: 'insurance-projections',
+    title: 'Revenue Projections',
+    subtitle: 'P10-P90 revenue fan chart',
+    category: 'insurance' as PanelCategory,
+    component: lazy(() => import('../components/panels/insurance/RevenueProjectionPanel')),
+    defaultSize: { cols: 2, rows: 1 },
+    phase: 9,
+    status: 'active',
+    icon: '📈',
+  },
+  {
+    id: 'insurance-instruments',
+    title: 'Financial Instruments',
+    subtitle: 'Energy market derivative analogies',
+    category: 'insurance' as PanelCategory,
+    component: lazy(() => import('../components/panels/insurance/FinancialInstrumentsPanel')),
+    defaultSize: { cols: 3, rows: 2 },
+    phase: 9,
+    status: 'active',
+    icon: '📊',
+  },
+  {
+    id: 'insurance-explorer',
+    title: 'Coverage Explorer',
+    subtitle: 'Interactive coverage configuration',
+    category: 'insurance' as PanelCategory,
+    component: lazy(() => import('../components/panels/insurance/CoverageExplorerPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 9,
+    status: 'active',
+    icon: '🎛',
+  },
+  {
+    id: 'insurance-status',
+    title: 'Coverage Status',
+    subtitle: 'Active policies and claims',
+    category: 'insurance' as PanelCategory,
+    component: lazy(() => import('../components/panels/insurance/CoverageStatusPanel')),
+    defaultSize: { cols: 1, rows: 1 },
+    phase: 9,
+    status: 'active',
+    icon: '✅',
+  },
+];
+
 // Full registry
 export const panelRegistry: PanelRegistryEntry[] = [
   ...MacroPanels,
@@ -487,6 +546,7 @@ export const panelRegistry: PanelRegistryEntry[] = [
   ...PoolPanels,
   ...AgentPanels,
   ...HpcPanels,
+  ...InsurancePanels,
 ];
 
 /**

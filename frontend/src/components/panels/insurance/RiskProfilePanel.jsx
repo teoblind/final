@@ -3,6 +3,7 @@ import {
   Shield, RefreshCw, AlertTriangle, CheckCircle, Info, TrendingUp, Activity
 } from 'lucide-react';
 import Panel from '../../Panel';
+import GlossaryTerm from '../../GlossaryTerm';
 import { useApi, postApi } from '../../../hooks/useApi';
 import { formatNumber, formatDateTime } from '../../../utils/formatters';
 
@@ -159,6 +160,14 @@ export default function RiskProfilePanel() {
                     {energyCostPercentile != null ? `P${formatNumber(energyCostPercentile, 0)}` : '--'}
                   </p>
                 </div>
+              </div>
+              <div className="bg-terminal-bg/50 rounded p-2 mt-2">
+                <p className="text-[10px] text-terminal-muted uppercase">
+                  Current <GlossaryTerm id="quarq_spread">Quarq Spread</GlossaryTerm>
+                </p>
+                <p className="text-sm font-bold text-terminal-green">
+                  {assessment?.quarqSpread != null ? `$${formatNumber(assessment.quarqSpread, 2)}/TH/day` : '--'}
+                </p>
               </div>
             </div>
           </div>

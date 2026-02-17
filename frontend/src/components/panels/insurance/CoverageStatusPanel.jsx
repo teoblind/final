@@ -4,6 +4,7 @@ import {
   DollarSign, Calendar, ExternalLink, ChevronDown, ChevronUp
 } from 'lucide-react';
 import Panel from '../../Panel';
+import GlossaryTerm from '../../GlossaryTerm';
 import { useApi } from '../../../hooks/useApi';
 import { formatNumber, formatCurrency, formatDate, formatDateTime } from '../../../utils/formatters';
 
@@ -135,7 +136,7 @@ export default function CoverageStatusPanel() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[10px] text-terminal-muted uppercase">Floor Price</p>
+                <p className="text-[10px] text-terminal-muted uppercase"><GlossaryTerm id="revenue_floor">Floor Price</GlossaryTerm></p>
                 <p className="text-sm font-bold text-terminal-cyan font-mono">
                   ${formatNumber(policy.floorPrice, 2)}<span className="text-[10px] text-terminal-muted">/PH/day</span>
                 </p>
@@ -213,7 +214,7 @@ export default function CoverageStatusPanel() {
                   </div>
                 ) : (
                   <p className="text-xs text-terminal-green">
-                    No shortfall detected this period. Hashprice above floor.
+                    No shortfall detected this period. <GlossaryTerm id="hashprice">Hashprice</GlossaryTerm> above <GlossaryTerm id="revenue_floor">floor</GlossaryTerm>.
                   </p>
                 )}
               </div>
