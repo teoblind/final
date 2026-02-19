@@ -1,13 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 
-// In production, use the same origin. In dev, Vite proxy handles /api
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
-const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 30000
-});
+// Re-use the single shared axios instance so auth interceptors work everywhere.
+// AuthContext sets up Bearer-token interceptors on this instance at login time.
+import api from '../lib/hooks/useApi';
 
 export function useApi(endpoint, options = {}) {
   const {
@@ -25,7 +20,7 @@ export function useApi(endpoint, options = {}) {
   const [isStale, setIsStale] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabled || !endpoint) return;
 
     try {
       setLoading(true);
@@ -55,6 +50,8 @@ export function useApi(endpoint, options = {}) {
 
   // Listen for WebSocket updates
   useEffect(() => {
+    if (!endpoint) return;
+
     const handleWsUpdate = (event) => {
       const { type, data: wsData } = event.detail;
       if (type === endpoint.replace(/\//g, '-')) {

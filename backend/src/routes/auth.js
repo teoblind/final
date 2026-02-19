@@ -30,7 +30,7 @@ import {
   getInvitationByToken,
   acceptInvitation,
 } from '../cache/database.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -93,6 +93,7 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role,
         tenantId: user.tenant_id,
+        permissions: ROLE_PERMISSIONS[user.role] || {},
       },
       tokens: {
         accessToken: tokens.accessToken,
@@ -218,6 +219,7 @@ router.post('/register', async (req, res) => {
         name,
         role: userRole,
         tenantId,
+        permissions: ROLE_PERMISSIONS[userRole] || {},
       },
       tokens: {
         accessToken: tokens.accessToken,
@@ -332,6 +334,7 @@ router.get('/me', authenticate, (req, res) => {
     }
 
     const { password_hash, mfa_secret, ...safeUser } = user;
+    safeUser.permissions = ROLE_PERMISSIONS[user.role] || {};
 
     res.json({ user: safeUser });
   } catch (error) {

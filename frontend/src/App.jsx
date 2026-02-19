@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { Component, useState, useEffect, Suspense, lazy } from 'react';
 import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella
@@ -6,6 +6,47 @@ import {
 
 // Auth
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
+
+// Error boundary to prevent blank white screens on uncaught render errors
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary] Caught:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-terminal-bg flex items-center justify-center p-8">
+          <div className="text-center max-w-md">
+            <p className="text-lg font-bold text-terminal-red mb-2">Something went wrong</p>
+            <p className="text-sm text-terminal-muted mb-4">
+              {this.state.error?.message || 'An unexpected error occurred.'}
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-sm text-terminal-text hover:border-terminal-green"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Lazy-load tab content for performance
 const LoginPage = lazy(() => import('./components/auth/LoginPage'));
@@ -390,9 +431,11 @@ function MobileNavButton({ active, onClick, icon, label }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
