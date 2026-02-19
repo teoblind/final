@@ -53,6 +53,7 @@ import webhookRoutes from './routes/webhooks.js';
 import insuranceRoutes from './routes/insurance.js';
 import adminInsuranceRoutes from './routes/adminInsurance.js';
 import lpRoutes from './routes/lp.js';
+import sanghaChartRoutes from './routes/sanghaCharts.js';
 
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -134,6 +135,7 @@ app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/insurance', insuranceRoutes);
 app.use('/api/v1/admin/insurance', adminInsuranceRoutes);
 app.use('/api/v1/lp', lpRoutes);
+app.use('/api/v1/charts', sanghaChartRoutes);
 
 // All existing routes under /api/v1/ (versioned)
 app.use('/api/v1/yahoo', yahooRoutes);

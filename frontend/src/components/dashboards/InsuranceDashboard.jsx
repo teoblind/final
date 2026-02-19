@@ -1,11 +1,14 @@
 import React, { useState, Suspense, lazy } from 'react';
-import { Shield, TrendingUp, Sliders, FileCheck, BarChart3 } from 'lucide-react';
+import { Shield, TrendingUp, Sliders, FileCheck, BarChart3, Activity, Radar, Zap } from 'lucide-react';
 
 const RiskProfilePanel = lazy(() => import('../panels/insurance/RiskProfilePanel'));
 const RevenueProjectionPanel = lazy(() => import('../panels/insurance/RevenueProjectionPanel'));
 const CoverageExplorerPanel = lazy(() => import('../panels/insurance/CoverageExplorerPanel'));
 const CoverageStatusPanel = lazy(() => import('../panels/insurance/CoverageStatusPanel'));
 const FinancialInstrumentsPanel = lazy(() => import('../panels/insurance/FinancialInstrumentsPanel'));
+const RiskDetailPanel = lazy(() => import('../panels/insurance/RiskDetailPanel'));
+const StressTestPanel = lazy(() => import('../panels/insurance/StressTestPanel'));
+const NetworkContextWidget = lazy(() => import('../charts/NetworkContextWidget'));
 
 function LoadingSpinner() {
   return (
@@ -17,10 +20,12 @@ function LoadingSpinner() {
 
 const TABS = [
   { id: 'risk', label: 'Risk Profile', icon: Shield },
+  { id: 'riskDetail', label: 'Risk Detail', icon: Radar },
   { id: 'instruments', label: 'Instruments', icon: BarChart3 },
   { id: 'projections', label: 'Revenue Projections', icon: TrendingUp },
   { id: 'explore', label: 'Coverage Explorer', icon: Sliders },
   { id: 'status', label: 'Coverage Status', icon: FileCheck },
+  { id: 'stress', label: 'Stress Test', icon: Zap },
 ];
 
 export default function InsuranceDashboard() {
@@ -60,14 +65,21 @@ export default function InsuranceDashboard() {
         ))}
       </div>
 
+      {/* Network Context Widget — always visible */}
+      <Suspense fallback={<LoadingSpinner />}>
+        <NetworkContextWidget />
+      </Suspense>
+
       <Suspense fallback={<LoadingSpinner />}>
         {activeTab === 'risk' && <RiskProfilePanel />}
+        {activeTab === 'riskDetail' && <RiskDetailPanel />}
         {activeTab === 'instruments' && (
           <FinancialInstrumentsPanel onExploreCoverage={handleExploreCoverage} />
         )}
         {activeTab === 'projections' && <RevenueProjectionPanel />}
         {activeTab === 'explore' && <CoverageExplorerPanel initialMode={coverageMode} />}
         {activeTab === 'status' && <CoverageStatusPanel />}
+        {activeTab === 'stress' && <StressTestPanel />}
       </Suspense>
     </div>
   );

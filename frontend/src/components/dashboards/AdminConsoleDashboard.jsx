@@ -5,6 +5,7 @@ const UnderwritingQueuePanel = lazy(() => import('../panels/insurance/Underwriti
 const PortfolioRiskPanel = lazy(() => import('../panels/insurance/PortfolioRiskPanel'));
 const CalibrationStatusPanel = lazy(() => import('../panels/insurance/CalibrationStatusPanel'));
 const LPManagementPanel = lazy(() => import('../panels/insurance/LPManagementPanel'));
+const StressTestPanel = lazy(() => import('../panels/insurance/StressTestPanel'));
 
 export default function AdminConsoleDashboard() {
   const [aggregate, setAggregate] = useState(null);
@@ -343,6 +344,7 @@ export default function AdminConsoleDashboard() {
             <LPManagementPanel />
             <PortfolioRiskPanel />
             <CalibrationStatusPanel />
+            <StressTestPanel />
           </div>
         </Suspense>
       </div>

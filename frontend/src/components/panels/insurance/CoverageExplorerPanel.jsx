@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Shield, Sliders, DollarSign, Clock, Zap, AlertTriangle, Send, X, Check,
-  Activity, Gauge
+  Activity, Gauge, BarChart3
 } from 'lucide-react';
 import Panel from '../../Panel';
 import GlossaryTerm from '../../GlossaryTerm';
 import { useApi, postApi } from '../../../hooks/useApi';
 import { formatNumber, formatCurrency } from '../../../utils/formatters';
+import {
+  RevenueFanChart, HashpriceRibbonChart, RiskScoreGauge, FloorCards, ProbNegativeChart,
+} from '../../charts/AssessmentCharts';
 
 const TERMS = [
   { key: '6mo', label: '6 Mo', months: 6 },
@@ -64,6 +67,14 @@ export default function CoverageExplorerPanel({ initialMode }) {
   const { data: profileData } = useApi('/v1/insurance/risk-profile', {
     refreshInterval: 5 * 60 * 1000,
   });
+
+  // Chart data from SanghaModel quick assessment
+  const [showCharts, setShowCharts] = useState(false);
+  const { data: chartData } = useApi(
+    hashrate ? `/v1/charts/assessment?hashrate=${hashrate}` : null,
+    { refreshInterval: 5 * 60 * 1000 }
+  );
+  const chartAssessment = chartData?.assessment;
 
   // Indicative premium
   const [indicative, setIndicative] = useState(null);
@@ -521,6 +532,43 @@ export default function CoverageExplorerPanel({ initialMode }) {
             </div>
           </div>
         </div>
+
+        {/* Risk Assessment Charts */}
+        {chartAssessment && (
+          <div className="border-t border-terminal-border pt-4">
+            <button
+              onClick={() => setShowCharts(!showCharts)}
+              className="flex items-center gap-2 text-xs text-terminal-cyan hover:text-terminal-text transition-colors mb-3"
+            >
+              <BarChart3 size={14} />
+              {showCharts ? 'Hide' : 'Show'} Risk Assessment Charts
+              {chartAssessment._mock && (
+                <span className="text-[9px] px-1.5 py-0.5 bg-terminal-amber/20 text-terminal-amber rounded ml-1">MOCK</span>
+              )}
+            </button>
+            {showCharts && (
+              <div className="space-y-6">
+                {/* 1C + 1D side by side */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <RiskScoreGauge
+                    riskScore={chartAssessment.insurance_inputs?.risk_score}
+                    probLoss12m={chartAssessment.risk_metrics?.prob_below_breakeven_12m}
+                  />
+                  <FloorCards insuranceInputs={chartAssessment.insurance_inputs} />
+                </div>
+                {/* 1A: Revenue Fan Chart */}
+                <RevenueFanChart projections={chartAssessment.revenue_projections?.monthly_projections} />
+                {/* 1B: Hashprice Forecast Ribbon */}
+                <HashpriceRibbonChart
+                  horizons={chartAssessment.hashprice_distribution?.horizons}
+                  currentHashprice={chartAssessment.hashprice_distribution?.current_hashprice}
+                />
+                {/* 1E: Probability of Negative Revenue */}
+                <ProbNegativeChart projections={chartAssessment.revenue_projections?.monthly_projections} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* CTA Button */}
         <button
