@@ -55,6 +55,7 @@ import adminInsuranceRoutes from './routes/adminInsurance.js';
 import lpRoutes from './routes/lp.js';
 
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
+import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
 
 const app = express();
 const server = createServer(app);
@@ -293,4 +294,7 @@ server.listen(PORT, async () => {
   } catch (err) {
     console.error('Failed to initialize agent runtime:', err.message);
   }
+
+  // Verify SanghaModel simulator connectivity (Phase 9)
+  verifySanghaModel();
 });
