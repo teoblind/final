@@ -22,7 +22,7 @@ export default function PoolHashratePanel() {
   });
 
   const reconciliation = diagData?.hashrateReconciliation;
-  const hashHistory = histData?.history || [];
+  const hashHistory = Array.isArray(histData?.history) ? histData.history : [];
 
   // Chart scaling
   const maxHash = useMemo(() => {

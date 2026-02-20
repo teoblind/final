@@ -27,7 +27,7 @@ export default function MempoolFeesPanel() {
   const mempool = data?.mempool;
   const fees = feeData?.fees;
   const blocks = blocksData?.blocks || [];
-  const feeTrend = feeHistory?.history || [];
+  const feeTrend = Array.isArray(feeHistory?.history) ? feeHistory.history : [];
 
   // Fee trend chart scaling
   const maxFee = useMemo(() => {
