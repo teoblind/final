@@ -25,10 +25,10 @@ const PRESETS = [
 ];
 
 const COVERAGE_MODES = [
-  { key: 'quarq_spread', label: 'Quarq Spread', glossaryId: 'quarq_spread', icon: '\u26A1' },
-  { key: 'synthetic_ppa', label: 'Synthetic PPA', glossaryId: 'synthetic_ppa', icon: '\uD83D\uDCC4' },
-  { key: 'proxy_revenue', label: 'Revenue Swap', glossaryId: 'proxy_revenue_swap', icon: '\uD83D\uDD04' },
-  { key: 'efficiency_hedge', label: 'Efficiency Hedge', glossaryId: 'heat_rate_hedge', icon: '\uD83D\uDD27' },
+  { key: 'quarq_spread', label: 'Quarq Spread', glossaryId: 'quarq_spread', dotColor: '#8B7355' },
+  { key: 'synthetic_ppa', label: 'Synthetic PPA', glossaryId: 'synthetic_ppa', dotColor: '#4A5568' },
+  { key: 'proxy_revenue', label: 'Revenue Swap', glossaryId: 'proxy_revenue_swap', dotColor: '#8B4A5E' },
+  { key: 'efficiency_hedge', label: 'Efficiency Hedge', glossaryId: 'heat_rate_hedge', dotColor: '#5B7B6F' },
 ];
 
 /**
@@ -454,7 +454,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                     : 'text-terminal-muted border border-terminal-border hover:text-terminal-text hover:bg-terminal-border/50'
                 }`}
               >
-                <span>{m.icon}</span>
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: m.dotColor }} />
                 {m.label}
               </button>
             ))}

@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import Panel from '../../Panel';
 import { useApi, postApi } from '../../../hooks/useApi';
 
-const AGENT_ICONS = {
-  'curtailment-optimizer': '\u26A1',
-  'pool-optimizer': '\u26CF',
-  'alert-synthesizer': '\uD83D\uDD14',
-  'reporting-engine': '\uD83D\uDCCA',
+const AGENT_DOT_COLORS = {
+  'curtailment-optimizer': '#8B7355',
+  'pool-optimizer': '#4A5568',
+  'alert-synthesizer': '#8B4A5E',
+  'reporting-engine': '#5B7B6F',
 };
 
 const MODE_COLORS = {
@@ -116,7 +116,7 @@ export default function AgentCommandCenter() {
         {agents.map((agent) => {
           const state = agent.status?.state || 'stopped';
           const mode = agent.config?.mode || 'recommend';
-          const icon = AGENT_ICONS[agent.id] || '\uD83E\uDD16';
+          const dotColor = AGENT_DOT_COLORS[agent.id] || '#9a9a92';
           const actionsToday = agent.status?.actionsToday || 0;
           const lastEvent = agent.lastEvent;
 
@@ -124,7 +124,7 @@ export default function AgentCommandCenter() {
             <div key={agent.id} className="bg-terminal-bg/50 rounded p-3 border border-terminal-border/30">
               <div className="grid grid-cols-12 gap-2 items-center">
                 <div className="col-span-4 flex items-center gap-2">
-                  <span className="text-base">{icon}</span>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
                   <div>
                     <p className="text-sm text-terminal-text font-medium">{agent.name}</p>
                   </div>

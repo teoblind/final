@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import Panel from '../../Panel';
 import { useApi } from '../../../hooks/useApi';
 
-const AGENT_ICONS = {
-  'curtailment-optimizer': '\u26A1',
-  'pool-optimizer': '\u26CF',
-  'alert-synthesizer': '\uD83D\uDD14',
-  'reporting-engine': '\uD83D\uDCCA',
+const AGENT_DOT_COLORS = {
+  'curtailment-optimizer': '#8B7355',
+  'pool-optimizer': '#4A5568',
+  'alert-synthesizer': '#8B4A5E',
+  'reporting-engine': '#5B7B6F',
 };
 
 const AGENT_COLORS = {
@@ -64,10 +64,10 @@ export default function AgentActivityFeed() {
 
   const filterOptions = [
     { value: 'all', label: 'All Agents' },
-    { value: 'curtailment-optimizer', label: '\u26A1 Curtailment' },
-    { value: 'pool-optimizer', label: '\u26CF Pool' },
-    { value: 'alert-synthesizer', label: '\uD83D\uDD14 Alerts' },
-    { value: 'reporting-engine', label: '\uD83D\uDCCA Reports' },
+    { value: 'curtailment-optimizer', label: 'Curtailment' },
+    { value: 'pool-optimizer', label: 'Pool' },
+    { value: 'alert-synthesizer', label: 'Alerts' },
+    { value: 'reporting-engine', label: 'Reports' },
   ];
 
   return (
@@ -96,7 +96,7 @@ export default function AgentActivityFeed() {
             <p className="text-[10px] text-terminal-muted uppercase tracking-wider mb-2">{date}</p>
             <div className="space-y-1">
               {dayEvents.map((event) => {
-                const icon = AGENT_ICONS[event.agent_id] || '\uD83E\uDD16';
+                const dotColor = AGENT_DOT_COLORS[event.agent_id] || '#9a9a92';
                 const agentColor = AGENT_COLORS[event.agent_id] || 'text-terminal-muted';
                 const badge = TYPE_BADGES[event.event_type] || { label: event.event_type, color: 'text-terminal-muted' };
 
@@ -105,7 +105,7 @@ export default function AgentActivityFeed() {
                     <span className="text-[10px] text-terminal-muted w-10 shrink-0 pt-0.5 font-sans">
                       {formatTime(event.timestamp)}
                     </span>
-                    <span className="text-xs shrink-0">{icon}</span>
+                    <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: dotColor }} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-xs font-medium ${agentColor}`}>

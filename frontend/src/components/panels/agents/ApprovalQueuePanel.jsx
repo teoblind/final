@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import Panel from '../../Panel';
 import { useApi, postApi } from '../../../hooks/useApi';
 
-const AGENT_ICONS = {
-  'curtailment-optimizer': '\u26A1',
-  'pool-optimizer': '\u26CF',
-  'alert-synthesizer': '\uD83D\uDD14',
-  'reporting-engine': '\uD83D\uDCCA',
+const AGENT_DOT_COLORS = {
+  'curtailment-optimizer': '#8B7355',
+  'pool-optimizer': '#4A5568',
+  'alert-synthesizer': '#8B4A5E',
+  'reporting-engine': '#5B7B6F',
 };
 
 function getTimeAgo(timestamp) {
@@ -90,7 +90,7 @@ export default function ApprovalQueuePanel() {
 
         {approvals.map((approval) => {
           const decision = approval.decision || {};
-          const icon = AGENT_ICONS[approval.agent_id] || '\uD83E\uDD16';
+          const dotColor = AGENT_DOT_COLORS[approval.agent_id] || '#9a9a92';
           const expiresIn = getExpiresIn(approval.expires_at);
           const isExpired = expiresIn === 'Expired';
 
@@ -104,7 +104,7 @@ export default function ApprovalQueuePanel() {
               {/* Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span>{icon}</span>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
                   <span className="text-sm font-medium text-terminal-text">{approval.agent_name}</span>
                 </div>
                 <div className="flex items-center gap-3">
