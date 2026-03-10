@@ -7,23 +7,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Bloomberg terminal-inspired colors
         terminal: {
-          bg: '#0a0a0a',
-          panel: '#111111',
-          border: '#1e1e1e',
-          text: '#e5e5e5',
-          muted: '#666666',
-          green: '#00d26a',
-          red: '#ff3b30',
-          amber: '#ffb800',
-          blue: '#007aff',
-          cyan: '#00d4ff',
-          purple: '#af52de'
+          bg: 'var(--t-bg)',
+          panel: 'var(--t-panel)',
+          border: 'var(--t-border)',
+          text: 'var(--t-text)',
+          muted: 'var(--t-muted)',
+          green: 'var(--t-accent)',
+          red: 'var(--t-red)',
+          amber: 'var(--t-amber)',
+          blue: 'var(--t-blue)',
+          cyan: 'var(--t-cyan)',
+          purple: 'var(--t-purple)',
         }
       },
+      borderRadius: {
+        'lg': '1rem',
+        'xl': '1.25rem',
+        '2xl': '1.5rem',
+        '3xl': '2rem',
+      },
       fontFamily: {
-        mono: ['JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', 'monospace'],
+        sans: ['Exo 2', 'system-ui', '-apple-system', 'sans-serif'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

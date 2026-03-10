@@ -27,8 +27,8 @@ export default function Sidebar({ onClose }) {
         </div>
 
         <div className="mt-4 space-y-1">
-          <SidebarLink label="Thesis Resources" href="#" />
-          <SidebarLink label="Data Sources" href="#" />
+          <SidebarLink label="Thesis Resources" href="https://coppice.ai" />
+          <SidebarLink label="Data Sources" href="https://coppice.ai" />
           <SidebarLink label="API Docs" href="/api/health" />
         </div>
       </div>

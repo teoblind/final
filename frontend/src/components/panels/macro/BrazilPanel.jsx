@@ -75,15 +75,15 @@ export default function BrazilPanel() {
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="bg-terminal-bg/50 rounded p-2 text-center">
           <p className="text-xs text-terminal-muted">SELIC</p>
-          <p className="font-mono">{formatNumber(macro.selic?.current, 2)}%</p>
+          <p className="font-sans">{formatNumber(macro.selic?.current, 2)}%</p>
         </div>
         <div className="bg-terminal-bg/50 rounded p-2 text-center">
           <p className="text-xs text-terminal-muted">IPCA</p>
-          <p className="font-mono">{formatNumber(macro.ipca?.current, 2)}%</p>
+          <p className="font-sans">{formatNumber(macro.ipca?.current, 2)}%</p>
         </div>
         <div className="bg-terminal-green/10 border border-terminal-green/30 rounded p-2 text-center">
           <p className="text-xs text-terminal-muted">Real Rate</p>
-          <p className="font-mono text-terminal-green">
+          <p className="font-sans text-terminal-green">
             {formatNumber(macro.realRate?.current, 2)}%
           </p>
         </div>
@@ -135,16 +135,16 @@ export default function BrazilPanel() {
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div className="bg-terminal-bg/50 rounded p-2">
                 <p className="text-xs text-terminal-muted">Installed</p>
-                <p className="font-mono">{formatNumber(energy.installedCapacity?.value, 0)} GW</p>
+                <p className="font-sans">{formatNumber(energy.installedCapacity?.value, 0)} GW</p>
               </div>
               <div className="bg-terminal-bg/50 rounded p-2">
                 <p className="text-xs text-terminal-muted">Peak Demand</p>
-                <p className="font-mono">{formatNumber(energy.peakDemand?.value, 0)} GW</p>
+                <p className="font-sans">{formatNumber(energy.peakDemand?.value, 0)} GW</p>
               </div>
             </div>
             <div className="bg-terminal-green/10 border border-terminal-green/30 rounded p-2">
               <p className="text-xs text-terminal-muted">Headroom</p>
-              <p className="font-mono text-terminal-green text-lg">
+              <p className="font-sans text-terminal-green text-lg">
                 {formatNumber(energy.headroom?.value, 0)} GW
               </p>
             </div>
@@ -205,7 +205,7 @@ export default function BrazilPanel() {
       <div className="border-t border-terminal-border pt-3">
         <div className="flex justify-between items-center mb-2">
           <p className="text-xs text-terminal-muted uppercase">Data Center Pipeline</p>
-          <span className="text-terminal-green font-mono">{formatNumber(datacenters.totalMW, 0)} MW</span>
+          <span className="text-terminal-green font-sans">{formatNumber(datacenters.totalMW, 0)} MW</span>
         </div>
         <div className="flex flex-wrap gap-1">
           {datacenters.majorPlayers?.map((player, i) => (

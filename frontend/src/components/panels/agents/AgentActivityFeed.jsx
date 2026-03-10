@@ -102,7 +102,7 @@ export default function AgentActivityFeed() {
 
                 return (
                   <div key={event.id} className="flex items-start gap-2 py-1.5 border-b border-terminal-border/20 last:border-0">
-                    <span className="text-[10px] text-terminal-muted w-10 shrink-0 pt-0.5 font-mono">
+                    <span className="text-[10px] text-terminal-muted w-10 shrink-0 pt-0.5 font-sans">
                       {formatTime(event.timestamp)}
                     </span>
                     <span className="text-xs shrink-0">{icon}</span>

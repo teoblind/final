@@ -32,7 +32,7 @@ function NetworkStatsBar({ state }) {
       {chips.map(c => (
         <div key={c.label} className="bg-terminal-bg/50 border border-terminal-border rounded px-2.5 py-1.5 min-w-[80px]">
           <p className="text-[9px] text-terminal-muted uppercase">{c.label}</p>
-          <p className={`text-xs font-bold font-mono ${c.color}`}>{c.value}</p>
+          <p className={`text-xs font-bold font-sans ${c.color}`}>{c.value}</p>
         </div>
       ))}
     </div>
@@ -59,7 +59,7 @@ function DifficultyAdjustmentIndicator({ state }) {
           ) : (
             <TrendingDown size={12} className="text-terminal-green" />
           )}
-          <span className={`text-sm font-bold font-mono ${isPositive ? 'text-terminal-red' : 'text-terminal-green'}`}>
+          <span className={`text-sm font-bold font-sans ${isPositive ? 'text-terminal-red' : 'text-terminal-green'}`}>
             {estimate > 0 ? '+' : ''}{Number(estimate).toFixed(2)}%
           </span>
         </div>
@@ -141,7 +141,7 @@ function EfficiencyDistribution({ distribution, tenantEfficiency }) {
         )}
       </div>
       {/* Labels */}
-      <div className="flex justify-between text-[9px] text-terminal-muted font-mono">
+      <div className="flex justify-between text-[9px] text-terminal-muted font-sans">
         <span>{p10}</span>
         <span>{p25}</span>
         <span>{p50}</span>
@@ -157,7 +157,7 @@ function EfficiencyDistribution({ distribution, tenantEfficiency }) {
       </div>
       {tenantEfficiency != null && (
         <p className="text-[10px] text-terminal-muted mt-2">
-          Your fleet: <span className="text-terminal-green font-mono">{tenantEfficiency} J/TH</span> — {tenantPercentile}
+          Your fleet: <span className="text-terminal-green font-sans">{tenantEfficiency} J/TH</span> — {tenantPercentile}
         </p>
       )}
     </div>

@@ -124,7 +124,7 @@ export default function IranHashratePanel() {
               ></span>
               <span className="text-sm">{country.name}</span>
             </div>
-            <p className="font-mono text-lg ml-4">
+            <p className="font-sans text-lg ml-4">
               {country.current ? `${formatNumber(country.current, 1)}%` : '-'}
             </p>
             {country.note && (

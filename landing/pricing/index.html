@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coppice</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#fafaf8;--surface:#fff;--surface-inset:#f5f4f0;
+    --border:#e8e6e1;--border-light:#f0eeea;
+    --accent:#1e3a5f;--accent-light:#2a5080;--accent-bg:#eef3f9;
+    --green:#1a6b3c;--green-bg:#edf7f0;
+    --warm:#b8860b;--warm-bg:#fdf6e8;
+    --text-0:#0a0a09;--text-1:#333330;--text-2:#6b6b65;--text-3:#9a9a92;--text-4:#c5c5bc;
+    --mono:'JetBrains Mono',monospace;--sans:'Instrument Sans',sans-serif;--serif:'Newsreader',Georgia,serif;
+  }
+  body{font-family:var(--sans);background:var(--bg);color:var(--text-0);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+  /* NAV */
+  .nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;background:rgba(250,250,248,0.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(232,230,225,0.5)}
+  .nav-left{display:flex;align-items:center;gap:10px}
+  .nav-mark{width:32px;height:32px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center}
+  .nav-mark svg{width:16px;height:16px}
+  .nav-brand{font-size:16px;font-weight:700;color:var(--text-0);letter-spacing:.5px;text-decoration:none}
+  .nav-links{display:flex;align-items:center;gap:28px}
+  .nav-link{font-size:13px;font-weight:500;color:var(--text-2);text-decoration:none;transition:color .2s}
+  .nav-link:hover{color:var(--text-0)}
+  .nav-link.active{color:var(--accent);font-weight:600}
+  .nav-cta{padding:8px 20px;border-radius:10px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;text-decoration:none;border:none;cursor:pointer;transition:all .2s}
+  .nav-cta:hover{background:var(--accent-light)}
+
+  /* HERO */
+  .hero{padding:140px 40px 60px;text-align:center;max-width:700px;margin:0 auto}
+  .hero-label{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px}
+  .hero-h1{font-family:var(--serif);font-size:clamp(32px,5vw,52px);font-weight:400;line-height:1.15;color:var(--text-0);margin-bottom:16px}
+  .hero-h1 em{font-style:italic;color:var(--accent)}
+  .hero-sub{font-size:17px;color:var(--text-2);line-height:1.7;max-width:520px;margin:0 auto}
+
+  /* TOGGLE */
+  .toggle-wrap{display:flex;justify-content:center;margin:48px 0 40px}
+  .toggle{display:flex;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;padding:4px;gap:4px}
+  .toggle-btn{padding:10px 28px;border-radius:10px;font-family:var(--sans);font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .2s;background:transparent;color:var(--text-3)}
+  .toggle-btn.active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(30,58,95,0.2)}
+  .toggle-btn:not(.active):hover{color:var(--text-1);background:var(--surface-inset)}
+
+  /* PRICING SECTIONS */
+  .pricing-section{max-width:1000px;margin:0 auto;padding:0 40px}
+  .pricing-section.hidden{display:none}
+
+  .pricing-cards{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:60px}
+  .price-card{background:var(--surface);border:1.5px solid var(--border);border-radius:20px;padding:36px;transition:all .3s}
+  .price-card.featured{border-color:var(--accent);box-shadow:0 12px 40px rgba(30,58,95,0.1);position:relative}
+  .price-card.featured.energy-featured{border-color:var(--green);box-shadow:0 12px 40px rgba(26,107,60,0.1)}
+  .price-card.featured::after{content:'Most Popular';position:absolute;top:-12px;left:50%;transform:translateX(-50%);padding:4px 16px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;font-weight:700}
+  .price-card.featured.energy-featured::after{background:var(--green)}
+
+  .pc-name{font-size:14px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .pc-price{display:flex;align-items:baseline;gap:4px;margin-bottom:4px}
+  .pc-price-val{font-family:var(--mono);font-size:42px;font-weight:700;color:var(--text-0)}
+  .pc-price-period{font-size:14px;color:var(--text-3)}
+  .pc-annual{font-size:12px;color:var(--text-4);margin-bottom:16px;font-family:var(--mono)}
+  .pc-desc{font-size:13px;color:var(--text-3);margin-bottom:24px;line-height:1.5}
+
+  .pc-features{list-style:none;margin-bottom:28px}
+  .pc-features li{padding:9px 0;font-size:14px;color:var(--text-1);display:flex;align-items:flex-start;gap:10px;border-bottom:1px solid var(--border-light)}
+  .pc-features li:last-child{border-bottom:none}
+  .pc-check{color:var(--green);font-weight:700;flex-shrink:0;margin-top:1px}
+  .pc-features li.disabled{color:var(--text-4)}
+  .pc-features li.disabled .pc-check{color:var(--text-4)}
+
+  .pc-cta{display:block;width:100%;padding:14px;border-radius:12px;text-align:center;font-family:var(--sans);font-size:15px;font-weight:600;text-decoration:none;transition:all .2s;border:none;cursor:pointer}
+  .pc-cta.primary{background:var(--accent);color:#fff}
+  .pc-cta.primary:hover{background:var(--accent-light)}
+  .pc-cta.primary.green{background:var(--green)}
+  .pc-cta.primary.green:hover{background:#22884d}
+  .pc-cta.secondary{background:var(--surface-inset);color:var(--text-1);border:1.5px solid var(--border)}
+  .pc-cta.secondary:hover{background:var(--surface);border-color:var(--text-4)}
+
+  /* WHAT'S INCLUDED */
+  .included{max-width:1000px;margin:0 auto;padding:0 40px 80px}
+  .included-header{text-align:center;margin-bottom:40px}
+  .included-h2{font-family:var(--serif);font-size:28px;font-weight:400;color:var(--text-0);margin-bottom:8px}
+  .included-sub{font-size:14px;color:var(--text-3)}
+
+  .included-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .inc-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px}
+  .inc-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+  .inc-icon svg{width:16px;height:16px;stroke-width:1.8;fill:none}
+  .inc-icon.blue{background:var(--accent-bg)} .inc-icon.blue svg{stroke:var(--accent)}
+  .inc-icon.green{background:var(--green-bg)} .inc-icon.green svg{stroke:var(--green)}
+  .inc-icon.warm{background:var(--warm-bg)} .inc-icon.warm svg{stroke:var(--warm)}
+  .inc-title{font-size:14px;font-weight:700;color:var(--text-0);margin-bottom:4px}
+  .inc-desc{font-size:12px;color:var(--text-3);line-height:1.5}
+
+  /* FAQ */
+  .faq{max-width:700px;margin:0 auto;padding:0 40px 100px}
+  .faq-header{text-align:center;margin-bottom:36px}
+  .faq-h2{font-family:var(--serif);font-size:28px;font-weight:400;color:var(--text-0)}
+  .faq-item{border-bottom:1px solid var(--border);padding:18px 0;cursor:pointer}
+  .faq-item:first-child{border-top:1px solid var(--border)}
+  .faq-q{display:flex;align-items:center;justify-content:space-between;font-size:15px;font-weight:600;color:var(--text-0)}
+  .faq-q svg{width:18px;height:18px;stroke:var(--text-3);fill:none;stroke-width:2;transition:transform .2s;flex-shrink:0}
+  .faq-item.open .faq-q svg{transform:rotate(45deg)}
+  .faq-a{font-size:14px;color:var(--text-2);line-height:1.7;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease;padding-top:0}
+  .faq-item.open .faq-a{max-height:200px;padding-top:12px}
+
+  /* CTA */
+  .bottom-cta{padding:60px 40px 80px;text-align:center}
+  .bottom-cta-inner{max-width:500px;margin:0 auto}
+  .bottom-cta h2{font-family:var(--serif);font-size:clamp(24px,3vw,36px);font-weight:400;color:var(--text-0);margin-bottom:12px}
+  .bottom-cta p{font-size:15px;color:var(--text-3);margin-bottom:24px;line-height:1.6}
+  .btn-primary{padding:14px 32px;border-radius:12px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:15px;font-weight:600;border:none;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block;box-shadow:0 4px 16px rgba(30,58,95,0.2)}
+  .btn-primary:hover{background:var(--accent-light);transform:translateY(-2px)}
+
+  /* FOOTER */
+  .footer{padding:36px 40px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto}
+  .footer-left{display:flex;align-items:center;gap:8px}
+  .footer-brand{font-size:13px;font-weight:700;color:var(--text-3)}
+  .footer-copy{font-size:12px;color:var(--text-4)}
+  .footer-links{display:flex;gap:24px}
+  .footer-link{font-size:12px;color:var(--text-3);text-decoration:none}
+  .footer-link:hover{color:var(--text-1)}
+
+  /* COST BREAKDOWN */
+  .cost-bar{max-width:1000px;margin:0 auto 60px;padding:0 40px}
+  .cost-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:28px 32px;display:flex;align-items:center;justify-content:space-between;gap:40px}
+  .cost-left{}
+  .cost-title{font-size:15px;font-weight:700;color:var(--text-0);margin-bottom:4px}
+  .cost-desc{font-size:13px;color:var(--text-3);line-height:1.5}
+  .cost-numbers{display:flex;gap:32px;text-align:center;flex-shrink:0}
+  .cost-stat-val{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--accent)}
+  .cost-stat-label{font-size:10px;color:var(--text-3);margin-top:2px}
+
+  /* Hamburger */
+  .nav-hamburger{display:none;background:none;border:none;cursor:pointer;padding:4px;color:var(--text-1)}
+  .nav-hamburger svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2}
+
+  .mobile-menu{display:none;position:fixed;inset:0;z-index:200;background:rgba(250,250,248,0.98);backdrop-filter:blur(20px);flex-direction:column;padding:20px}
+  .mobile-menu.open{display:flex}
+  .mobile-menu-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px}
+  .mobile-menu-close{background:none;border:none;cursor:pointer;padding:4px;color:var(--text-1)}
+  .mobile-menu-close svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2}
+  .mobile-menu-links{display:flex;flex-direction:column;gap:0;flex:1}
+  .mobile-menu-links a{font-size:18px;font-weight:600;color:var(--text-1);text-decoration:none;padding:16px 0;border-bottom:1px solid var(--border-light);transition:color .2s}
+  .mobile-menu-links a:hover{color:var(--accent)}
+  .mobile-menu-cta{margin-top:auto;padding-top:24px}
+  .mobile-menu-cta button{width:100%;padding:16px;border-radius:12px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:16px;font-weight:600;border:none;cursor:pointer}
+
+  @media(max-width:768px){
+    .nav{padding:14px 16px}
+    .nav-links{display:none}
+    .nav-hamburger{display:block}
+    .hero{padding:120px 20px 40px}
+    .hero-h1{font-size:32px !important}
+    .pricing-section{padding:0 20px}
+    .pricing-cards{grid-template-columns:1fr}
+    .included{padding:0 20px 60px}
+    .included-grid{grid-template-columns:1fr}
+    .cost-bar{padding:0 20px}
+    .cost-card{flex-direction:column;text-align:center;gap:20px}
+    .cost-numbers{justify-content:center}
+    .faq{padding:0 20px 60px}
+    .bottom-cta{padding:40px 20px 60px}
+    .footer{flex-direction:column;gap:16px;text-align:center;padding:30px 20px}
+    .footer-links{flex-wrap:wrap;justify-content:center}
+    .toggle-btn{padding:8px 18px;font-size:13px}
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none">
+      <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
+      <span class="nav-brand">Coppice</span>
+    </a>
+  </div>
+  <div class="nav-links">
+    <a href="/construction" class="nav-link">Construction</a>
+    <a href="/energy" class="nav-link">Energy</a>
+    <a href="/pricing" class="nav-link active">Pricing</a>
+    <a href="/login" class="nav-link">Log In</a>
+    <button class="nav-cta" onclick="openModal()">Request Demo</button>
+  </div>
+  <button class="nav-hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+</nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu-header">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
+      <span class="nav-brand">Coppice</span>
+    </div>
+    <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="mobile-menu-links">
+    <a href="/construction">Construction</a>
+    <a href="/energy">Energy</a>
+    <a href="/pricing" onclick="document.getElementById('mobile-menu').classList.remove('open')">Pricing</a>
+    <a href="/login">Log In</a>
+  </div>
+  <div class="mobile-menu-cta">
+    <button onclick="document.getElementById('mobile-menu').classList.remove('open'); openModal();">Request Demo</button>
+  </div>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-label">Pricing</div>
+  <h1 class="hero-h1">Less than one employee.<br><em>More than a team.</em></h1>
+  <p class="hero-sub">No setup fees. No long-term contracts. Cancel anytime. Every plan includes a personal onboarding call.</p>
+</div>
+
+<!-- TOGGLE -->
+<div class="toggle-wrap">
+  <div class="toggle">
+    <button class="toggle-btn active" onclick="showPricing('construction')">Construction</button>
+    <button class="toggle-btn" onclick="showPricing('energy')">Energy & Mining</button>
+  </div>
+</div>
+
+<!-- CONSTRUCTION PRICING -->
+<div class="pricing-section" id="pricing-construction">
+  <div class="pricing-cards">
+    <div class="price-card">
+      <div class="pc-name">Pilot</div>
+      <div class="pc-price"><span class="pc-price-val">$1,000</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-annual">$12,000/year</div>
+      <div class="pc-desc">Try it for one month. See the results before you commit.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Estimating Bot</li>
+        <li><span class="pc-check">&#10003;</span> Email Agent</li>
+        <li><span class="pc-check">&#10003;</span> Meeting Bot</li>
+        <li><span class="pc-check">&#10003;</span> Dashboard + mobile PWA</li>
+        <li><span class="pc-check">&#10003;</span> 3 user seats</li>
+        <li><span class="pc-check">&#10003;</span> Personal onboarding call</li>
+        <li class="disabled"><span class="pc-check">&mdash;</span> Field Reporter</li>
+        <li class="disabled"><span class="pc-check">&mdash;</span> Reporting Engine</li>
+        <li class="disabled"><span class="pc-check">&mdash;</span> Hivemind knowledge base</li>
+      </ul>
+      <button class="pc-cta secondary" onclick="openModal()">Start Pilot</button>
+    </div>
+    <div class="price-card featured">
+      <div class="pc-name">Full Platform</div>
+      <div class="pc-price"><span class="pc-price-val">$2,500</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-annual">$30,000/year</div>
+      <div class="pc-desc">All six agents. Unlimited seats. Full operational intelligence.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Everything in Pilot</li>
+        <li><span class="pc-check">&#10003;</span> Field Reporter</li>
+        <li><span class="pc-check">&#10003;</span> Reporting Engine</li>
+        <li><span class="pc-check">&#10003;</span> Hivemind knowledge base</li>
+        <li><span class="pc-check">&#10003;</span> Unlimited seats</li>
+        <li><span class="pc-check">&#10003;</span> Google Drive integration</li>
+        <li><span class="pc-check">&#10003;</span> Custom agent training</li>
+        <li><span class="pc-check">&#10003;</span> Priority support</li>
+        <li><span class="pc-check">&#10003;</span> Quarterly business review</li>
+      </ul>
+      <button class="pc-cta primary" onclick="openModal()">Request Demo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ENERGY PRICING -->
+<div class="pricing-section hidden" id="pricing-energy">
+  <div class="pricing-cards">
+    <div class="price-card">
+      <div class="pc-name">Pilot</div>
+      <div class="pc-price"><span class="pc-price-val">$2,000</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-annual">$24,000/year</div>
+      <div class="pc-desc">Core agents for curtailment and fleet monitoring. Prove the value in 30 days.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Curtailment Engine</li>
+        <li><span class="pc-check">&#10003;</span> Pool Routing</li>
+        <li><span class="pc-check">&#10003;</span> Meeting Bot</li>
+        <li><span class="pc-check">&#10003;</span> Daily Ops Reports</li>
+        <li><span class="pc-check">&#10003;</span> Dashboard + mobile PWA</li>
+        <li><span class="pc-check">&#10003;</span> Onboarding call</li>
+        <li class="disabled"><span class="pc-check">&mdash;</span> Lead Engine</li>
+        <li class="disabled"><span class="pc-check">&mdash;</span> Outreach Engine</li>
+        <li class="disabled"><span class="pc-check">&mdash;</span> Investor Reports</li>
+      </ul>
+      <button class="pc-cta secondary" onclick="openModal()">Start Pilot</button>
+    </div>
+    <div class="price-card featured energy-featured">
+      <div class="pc-name">Full Platform</div>
+      <div class="pc-price"><span class="pc-price-val">$5,000</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-annual">$60,000/year</div>
+      <div class="pc-desc">All agents, full ERCOT data, investor-grade reporting, business development.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Everything in Pilot</li>
+        <li><span class="pc-check">&#10003;</span> Lead Engine + Outreach</li>
+        <li><span class="pc-check">&#10003;</span> Investor Reports (monthly)</li>
+        <li><span class="pc-check">&#10003;</span> ERCOT historical data (11yr)</li>
+        <li><span class="pc-check">&#10003;</span> Google Workspace integration</li>
+        <li><span class="pc-check">&#10003;</span> Hivemind knowledge base</li>
+        <li><span class="pc-check">&#10003;</span> Custom agent training</li>
+        <li><span class="pc-check">&#10003;</span> Priority support</li>
+        <li><span class="pc-check">&#10003;</span> Quarterly business review</li>
+      </ul>
+      <button class="pc-cta primary green" onclick="openModal()">Request Demo</button>
+    </div>
+  </div>
+</div>
+
+<!-- COST CONTEXT -->
+<div class="cost-bar">
+  <div class="cost-card">
+    <div class="cost-left">
+      <div class="cost-title">What you're actually paying for</div>
+      <div class="cost-desc">Six AI agents working 24/7 costs less per month than one estimator costs per week. The agents don't take vacation, don't call in sick, and get smarter every day.</div>
+    </div>
+    <div class="cost-numbers">
+      <div><div class="cost-stat-val">$0.30</div><div class="cost-stat-label">Avg daily AI cost</div></div>
+      <div><div class="cost-stat-val">97%</div><div class="cost-stat-label">Gross margin</div></div>
+      <div><div class="cost-stat-val">24/7</div><div class="cost-stat-label">Always on</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- EVERYTHING INCLUDED -->
+<div class="included">
+  <div class="included-header">
+    <h2 class="included-h2">Everything included with every plan</h2>
+    <p class="included-sub">No hidden fees. No per-seat charges on Full Platform. No usage limits.</p>
+  </div>
+  <div class="included-grid">
+    <div class="inc-card">
+      <div class="inc-icon blue"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+      <div class="inc-title">SOC 2 compliant infrastructure</div>
+      <div class="inc-desc">Your data is encrypted at rest and in transit. We never train on your data.</div>
+    </div>
+    <div class="inc-card">
+      <div class="inc-icon green"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="inc-title">Unlimited chat messages</div>
+      <div class="inc-desc">Talk to your agents as much as you want. No per-message pricing.</div>
+    </div>
+    <div class="inc-card">
+      <div class="inc-icon warm"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg></div>
+      <div class="inc-title">Google Drive integration</div>
+      <div class="inc-desc">Every report, estimate, and meeting summary saved to your shared Drive automatically.</div>
+    </div>
+    <div class="inc-card">
+      <div class="inc-icon blue"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="inc-title">Approval queue</div>
+      <div class="inc-desc">Nothing goes out without your say. Review and approve every agent action.</div>
+    </div>
+    <div class="inc-card">
+      <div class="inc-icon green"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="inc-title">Audit trail</div>
+      <div class="inc-desc">Full log of every action every agent takes. Timestamped and searchable.</div>
+    </div>
+    <div class="inc-card">
+      <div class="inc-icon warm"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
+      <div class="inc-title">Personal onboarding</div>
+      <div class="inc-desc">We set up your tenant, load your pricing data, and configure your agents on a live call.</div>
+    </div>
+  </div>
+</div>
+
+<!-- FAQ -->
+<div class="faq">
+  <div class="faq-header">
+    <h2 class="faq-h2">Frequently asked questions</h2>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">How long does setup take?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">Most customers are live within 24 hours. We schedule a 30-minute onboarding call, load your pricing data, connect your email, and configure your agents. You're up and running by end of day.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Can I cancel anytime?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">Yes. Month-to-month billing. No contracts, no cancellation fees. If the agents aren't saving you time and money, you shouldn't be paying for them.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">What if the bot makes a mistake on an estimate?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">Every estimate goes through your approval queue before it's sent. You review the numbers, adjust anything that looks off, and approve or reject. The bot learns from your corrections and gets more accurate over time. Nothing goes to a GC without your sign-off.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Is my data secure?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">Your data is encrypted, isolated per tenant, and never shared with other customers or used to train AI models. Each customer gets their own database, their own agents, and their own Drive folder. We can't see your pricing data or your bids.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">Do I need to install anything?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">No. Coppice runs in your browser and works on any device - desktop, tablet, or phone. You can add it to your phone's home screen for an app-like experience. No downloads, no IT department needed.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">What's the difference between Pilot and Full Platform?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">Pilot gives you the three core agents: Estimating Bot, Email Agent, and Meeting Bot - enough to automate your bid response cycle. Full Platform adds Field Reporter, Reporting Engine, and the Hivemind knowledge base, plus unlimited seats and custom agent training. Most customers upgrade within 60 days once they see the ROI.</div>
+  </div>
+
+  <div class="faq-item" onclick="toggleFaq(this)">
+    <div class="faq-q">How many people can use it?<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+    <div class="faq-a">Pilot includes 3 seats (e.g. owner, estimator, office manager). Full Platform has unlimited seats - your entire team, project managers, field supervisors, anyone.</div>
+  </div>
+</div>
+
+<!-- BOTTOM CTA -->
+<div class="bottom-cta">
+  <div class="bottom-cta-inner">
+    <h2>Ready to see it in action?</h2>
+    <p>We'll walk you through the platform with your actual data. No slides, no pitch - just the product working on a real bid request.</p>
+    <a href="#" class="btn-primary" onclick="openModal(); return false;">Request a Demo</a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-left">
+    <span class="footer-brand">Coppice</span>
+    <span class="footer-copy">&copy; 2026</span>
+  </div>
+  <div class="footer-links">
+    <a href="/construction" class="footer-link">Construction</a>
+    <a href="/energy" class="footer-link">Energy</a>
+    <a href="/login" class="footer-link">Log In</a>
+    <a href="mailto:hello@coppice.ai" class="footer-link">hello@coppice.ai</a>
+  </div>
+</footer>
+
+<!-- Demo Modal -->
+<div id="demo-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.5);backdrop-filter:blur(8px);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:20px;padding:40px;max-width:480px;width:90%;position:relative">
+    <button onclick="closeModal()" style="position:absolute;top:16px;right:16px;border:none;background:none;font-size:20px;color:#9a9a92;cursor:pointer">&#10005;</button>
+    <h2 style="font-family:var(--serif);font-size:24px;margin-bottom:4px">Request a Demo</h2>
+    <p style="font-size:14px;color:var(--text-3);margin-bottom:24px">We'll set up a personalized walkthrough for your company.</p>
+    <div id="demo-form">
+      <input id="demo-name" placeholder="Your name" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none">
+      <input id="demo-company" placeholder="Company name" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none">
+      <input id="demo-email" placeholder="Email address" type="email" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none">
+      <input id="demo-phone" placeholder="Phone (optional)" type="tel" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none">
+      <select id="demo-vertical" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;color:var(--text-2);background:var(--surface-inset)">
+        <option value="">Industry</option>
+        <option>Construction - Concrete</option>
+        <option>Construction - Electrical</option>
+        <option>Construction - Plumbing / HVAC</option>
+        <option>Construction - Other</option>
+        <option>Energy - Bitcoin Mining</option>
+        <option>Energy - Solar / Wind IPP</option>
+        <option>Energy - Other</option>
+        <option>Other</option>
+      </select>
+      <button onclick="submitDemo()" style="width:100%;padding:14px;border-radius:12px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:15px;font-weight:600;border:none;cursor:pointer;margin-top:6px">Submit Request</button>
+    </div>
+    <div id="demo-success" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:32px;margin-bottom:12px">&#10003;</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:6px">We'll be in touch within 24 hours.</div>
+      <div style="font-size:14px;color:var(--text-3)">Check your email for a confirmation.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showPricing(vertical) {
+  document.querySelectorAll('.pricing-section').forEach(s => s.classList.add('hidden'));
+  document.getElementById('pricing-' + vertical).classList.remove('hidden');
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function toggleFaq(el) {
+  el.classList.toggle('open');
+}
+
+function openModal() { document.getElementById('demo-modal').style.display = 'flex'; }
+function closeModal() { document.getElementById('demo-modal').style.display = 'none'; }
+
+async function submitDemo() {
+  const data = {
+    name: document.getElementById('demo-name').value,
+    company: document.getElementById('demo-company').value,
+    email: document.getElementById('demo-email').value,
+    phone: document.getElementById('demo-phone').value,
+    specialty: document.getElementById('demo-vertical').value,
+  };
+  if (!data.name || !data.email || !data.company) { alert('Please fill in your name, company, and email.'); return; }
+  try {
+    const res = await fetch('/api/v1/demo-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (res.ok) { document.getElementById('demo-form').style.display = 'none'; document.getElementById('demo-success').style.display = 'block'; }
+  } catch (e) { alert('Something went wrong. Email us at hello@coppice.ai'); }
+}
+</script>
+
+</body>
+</html>

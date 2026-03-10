@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coppice</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #fafaf8; --surface: #ffffff; --surface-inset: #f5f4f0;
+    --border: #e8e6e1; --border-light: #f0eeea;
+    --accent: #1e3a5f; --accent-light: #2a5080; --accent-bg: #eef3f9; --accent-dot: #3b82f6;
+    --green: #1a6b3c; --green-bg: #edf7f0; --green-dot: #2dd478;
+    --warm: #b8860b; --warm-bg: #fdf6e8;
+    --text-0: #0a0a09; --text-1: #333330; --text-2: #6b6b65; --text-3: #9a9a92; --text-4: #c5c5bc;
+    --mono: 'JetBrains Mono', monospace; --sans: 'Instrument Sans', sans-serif; --serif: 'Newsreader', Georgia, serif;
+  }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text-0); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+
+  /* NAV */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 16px 40px; display: flex; align-items: center; justify-content: space-between;
+    background: rgba(250,250,248,0.85); backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(232,230,225,0.5);
+  }
+  .nav-left { display: flex; align-items: center; gap: 10px; }
+  .nav-mark { width: 32px; height: 32px; background: var(--accent); border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+  .nav-mark svg { width: 16px; height: 16px; }
+  .nav-brand { font-size: 16px; font-weight: 700; color: var(--text-0); letter-spacing: 0.5px; }
+  .nav-links { display: flex; align-items: center; gap: 28px; }
+  .nav-link { font-size: 13px; font-weight: 500; color: var(--text-2); text-decoration: none; transition: color 0.2s; }
+  .nav-link:hover { color: var(--text-0); }
+  .nav-cta { padding: 8px 20px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; transition: all 0.2s; }
+  .nav-cta:hover { background: var(--accent-light); }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 120px 40px 80px; position: relative; overflow: hidden;
+  }
+  .hero-bg { position: absolute; inset: 0; pointer-events: none; }
+  .grid-plane {
+    position: absolute; bottom: -10%; left: -10%; right: -10%; height: 60%;
+    transform: perspective(800px) rotateX(55deg);
+    background-image: linear-gradient(rgba(30,58,95,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(30,58,95,0.05) 1px, transparent 1px);
+    background-size: 60px 60px;
+    animation: gridFloat 20s ease-in-out infinite;
+  }
+  @keyframes gridFloat { 0%,100%{transform:perspective(800px) rotateX(55deg) translateY(0)} 50%{transform:perspective(800px) rotateX(55deg) translateY(-15px)} }
+  .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.12; animation: orbFloat 18s ease-in-out infinite; }
+  .orb-1 { width: 500px; height: 500px; background: var(--accent); top: 5%; right: -8%; }
+  .orb-2 { width: 400px; height: 400px; background: var(--green); bottom: 15%; left: -8%; animation-delay: -6s; }
+  .orb-3 { width: 250px; height: 250px; background: var(--warm); top: 35%; left: 25%; opacity: 0.08; animation-delay: -12s; }
+  @keyframes orbFloat { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(25px,-20px) scale(1.04)} 66%{transform:translate(-15px,12px) scale(0.96)} }
+
+  .hero-content { position: relative; z-index: 2; max-width: 860px; text-align: center; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 28px; animation: fadeUp 0.8s ease both; }
+  .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .hero-h1 { font-family: var(--serif); font-size: clamp(40px, 5.5vw, 68px); font-weight: 400; line-height: 1.1; color: var(--text-0); margin-bottom: 20px; letter-spacing: -0.02em; animation: fadeUp 0.8s 0.1s ease both; }
+  .hero-h1 em { font-style: italic; color: var(--accent); }
+  .hero-sub { font-size: 18px; color: var(--text-2); line-height: 1.7; max-width: 540px; margin: 0 auto 36px; animation: fadeUp 0.8s 0.2s ease both; }
+  .hero-actions { display: flex; align-items: center; justify-content: center; gap: 14px; animation: fadeUp 0.8s 0.3s ease both; }
+  .btn-primary { padding: 14px 32px; border-radius: 12px; background: var(--accent); color: #fff; font-family: var(--sans); font-size: 15px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; text-decoration: none; box-shadow: 0 4px 16px rgba(30,58,95,0.2); }
+  .btn-primary:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(30,58,95,0.25); }
+  .btn-secondary { padding: 14px 32px; border-radius: 12px; background: var(--surface); color: var(--text-1); font-family: var(--sans); font-size: 15px; font-weight: 600; border: 1.5px solid var(--border); cursor: pointer; transition: all 0.2s; text-decoration: none; }
+  .btn-secondary:hover { background: var(--surface-inset); border-color: var(--text-4); }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+  /* VERTICALS */
+  .verticals { padding: 80px 40px 100px; max-width: 1100px; margin: 0 auto; }
+  .verticals-header { text-align: center; margin-bottom: 48px; }
+  .section-label { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .section-h2 { font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); font-weight: 400; line-height: 1.2; color: var(--text-0); }
+
+  .vertical-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .vertical-card {
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px;
+    overflow: hidden; transition: all 0.3s; cursor: pointer; text-decoration: none; color: inherit;
+    display: block;
+  }
+  .vertical-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.06); }
+
+  .vc-hero { padding: 36px 32px 28px; position: relative; overflow: hidden; }
+  .vc-hero.construction { background: linear-gradient(135deg, #1e3a5f, #2a5080); }
+  .vc-hero.energy { background: linear-gradient(135deg, #0f1f15, #1a3828); }
+  .vc-hero::before {
+    content: ''; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .vc-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; position: relative; }
+  .vc-icon svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 1.8; }
+
+  .vc-title { font-family: var(--serif); font-size: 26px; font-weight: 400; color: #fff; margin-bottom: 8px; position: relative; }
+  .vc-subtitle { font-size: 14px; color: rgba(255,255,255,0.5); line-height: 1.6; position: relative; }
+
+  .vc-body { padding: 28px 32px; }
+  .vc-agents { margin-bottom: 20px; }
+  .vc-agents-label { font-size: 10px; font-weight: 700; color: var(--text-3); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; }
+  .vc-agent-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .vc-agent-tag { font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 8px; background: var(--surface-inset); color: var(--text-1); border: 1px solid var(--border-light); }
+
+  .vc-stats { display: flex; gap: 24px; padding-top: 16px; border-top: 1px solid var(--border-light); }
+  .vc-stat-val { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--text-0); }
+  .vc-stat-label { font-size: 10px; color: var(--text-3); margin-top: 2px; }
+
+  .vc-cta { display: flex; align-items: center; gap: 6px; margin-top: 20px; font-size: 14px; font-weight: 600; color: var(--accent); }
+  .vc-cta svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; stroke-width: 2; }
+  .vertical-card.energy .vc-cta { color: var(--green); }
+  .vertical-card.energy .vc-cta svg { stroke: var(--green); }
+
+  /* WHAT IT DOES */
+  .capabilities { padding: 100px 40px; background: #111110; position: relative; overflow: hidden; }
+  .capabilities::before {
+    content: ''; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 80px 80px;
+  }
+  .cap-inner { max-width: 1100px; margin: 0 auto; position: relative; z-index: 2; }
+  .cap-header { text-align: center; margin-bottom: 56px; }
+  .cap-label { font-size: 11px; font-weight: 700; color: var(--accent-dot); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .cap-h2 { font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); font-weight: 400; color: #fff; }
+  .cap-sub { font-size: 16px; color: rgba(255,255,255,0.4); margin-top: 12px; }
+
+  .cap-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .cap-card {
+    padding: 28px 24px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; transition: all 0.3s;
+  }
+  .cap-card:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+  .cap-icon { width: 40px; height: 40px; border-radius: 10px; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.15); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+  .cap-icon svg { width: 18px; height: 18px; stroke: var(--accent-dot); fill: none; stroke-width: 1.8; }
+  .cap-icon.green { background: rgba(45,212,120,0.08); border-color: rgba(45,212,120,0.15); }
+  .cap-icon.green svg { stroke: var(--green-dot); }
+  .cap-icon.warm { background: rgba(184,134,11,0.08); border-color: rgba(184,134,11,0.15); }
+  .cap-icon.warm svg { stroke: var(--warm); }
+  .cap-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+  .cap-desc { font-size: 13px; color: rgba(255,255,255,0.4); line-height: 1.6; }
+
+  /* HOW IT WORKS */
+  .how { padding: 100px 40px; max-width: 1100px; margin: 0 auto; }
+  .how-header { text-align: center; margin-bottom: 56px; }
+  .how-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .how-step { text-align: center; padding: 24px; display: flex; flex-direction: column; }
+  .how-num { font-family: var(--mono); font-size: 40px; font-weight: 700; color: var(--border); margin-bottom: 14px; }
+  .how-step-title { font-size: 15px; font-weight: 700; color: var(--text-0); margin-bottom: 6px; }
+  .how-step-desc { font-size: 13px; color: var(--text-3); line-height: 1.6; flex: 1; }
+  .how-step-time { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 10px; }
+
+  /* STATS */
+  .stats-bar {
+    padding: 48px 40px; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  }
+  .stats-inner { max-width: 900px; margin: 0 auto; display: flex; justify-content: space-between; text-align: center; }
+  .stat-val { font-family: var(--mono); font-size: 36px; font-weight: 700; color: var(--text-0); }
+  .stat-label { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+
+  /* CTA */
+  .cta { padding: 100px 40px; text-align: center; }
+  .cta-inner { max-width: 560px; margin: 0 auto; }
+  .cta-h2 { font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); font-weight: 400; color: var(--text-0); margin-bottom: 14px; line-height: 1.2; }
+  .cta-sub { font-size: 16px; color: var(--text-3); margin-bottom: 32px; line-height: 1.6; }
+
+  /* FOOTER */
+  .footer { padding: 36px 40px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; max-width: 1100px; margin: 0 auto; }
+  .footer-left { display: flex; align-items: center; gap: 8px; }
+  .footer-brand { font-size: 13px; font-weight: 700; color: var(--text-3); }
+  .footer-copy { font-size: 12px; color: var(--text-4); }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-link { font-size: 12px; color: var(--text-3); text-decoration: none; }
+  .footer-link:hover { color: var(--text-1); }
+
+  /* Reveal */
+  .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* Hamburger */
+  .nav-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-1); }
+  .nav-hamburger svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* Mobile menu overlay */
+  .mobile-menu {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(250,250,248,0.98); backdrop-filter: blur(20px);
+    flex-direction: column; padding: 20px;
+  }
+  .mobile-menu.open { display: flex; }
+  .mobile-menu-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; }
+  .mobile-menu-close { background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-1); }
+  .mobile-menu-close svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .mobile-menu-links { display: flex; flex-direction: column; gap: 0; flex: 1; }
+  .mobile-menu-links a {
+    font-size: 18px; font-weight: 600; color: var(--text-1); text-decoration: none;
+    padding: 16px 0; border-bottom: 1px solid var(--border-light); transition: color 0.2s;
+  }
+  .mobile-menu-links a:hover { color: var(--accent); }
+  .mobile-menu-cta { margin-top: auto; padding-top: 24px; }
+  .mobile-menu-cta button {
+    width: 100%; padding: 16px; border-radius: 12px; background: var(--accent); color: #fff;
+    font-family: var(--sans); font-size: 16px; font-weight: 600; border: none; cursor: pointer;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .nav { padding: 14px 16px; }
+    .nav-links { display: none; }
+    .nav-hamburger { display: block; }
+    .hero { padding: 100px 20px 60px; }
+    .hero-h1 { font-size: 36px; }
+    .hero-sub { font-size: 16px; }
+    .hero-actions { flex-direction: column; }
+    .verticals { padding: 60px 20px 80px; }
+    .vertical-grid { grid-template-columns: 1fr; }
+    .vc-hero { padding: 28px 24px 22px; }
+    .vc-body { padding: 22px 24px; }
+    .vc-title { font-size: 22px; }
+    .vc-stats { gap: 16px; }
+    .capabilities { padding: 60px 20px; }
+    .cap-grid { grid-template-columns: 1fr; }
+    .how { padding: 60px 20px; }
+    .how-steps { grid-template-columns: 1fr; gap: 16px; }
+    .stats-bar { padding: 36px 20px; }
+    .stats-inner { flex-direction: column; gap: 24px; }
+    .stat-val { font-size: 28px; }
+    .cta { padding: 60px 20px; }
+    .cta-h2 { font-size: 28px; }
+    .footer { flex-direction: column; gap: 16px; text-align: center; padding: 30px 20px; }
+    .footer-links { flex-wrap: wrap; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
+    <span class="nav-brand">Coppice</span>
+  </div>
+  <div class="nav-links">
+    <a href="/construction" class="nav-link">Construction</a>
+    <a href="/energy" class="nav-link">Energy</a>
+    <a href="/pricing" class="nav-link">Pricing</a>
+    <a href="/login" class="nav-link">Log In</a>
+    <button class="nav-cta" onclick="openModal()">Request Demo</button>
+  </div>
+  <button class="nav-hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+</nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu-header">
+    <div class="nav-left">
+      <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
+      <span class="nav-brand">Coppice</span>
+    </div>
+    <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="mobile-menu-links">
+    <a href="/construction" onclick="document.getElementById('mobile-menu').classList.remove('open')">Construction</a>
+    <a href="/energy" onclick="document.getElementById('mobile-menu').classList.remove('open')">Energy</a>
+    <a href="/pricing" onclick="document.getElementById('mobile-menu').classList.remove('open')">Pricing</a>
+    <a href="/login">Log In</a>
+  </div>
+  <div class="mobile-menu-cta">
+    <button onclick="document.getElementById('mobile-menu').classList.remove('open'); openModal();">Request Demo</button>
+  </div>
+</div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg">
+    <div class="grid-plane"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="hero-content">
+    <div class="hero-badge"><div class="hero-badge-dot"></div> Now accepting early partners</div>
+    <h1 class="hero-h1">AI employees that<br><em>run your operations.</em></h1>
+    <p class="hero-sub">Coppice deploys autonomous agents that handle estimating, reporting, outreach, meetings, and job tracking - 24 hours a day. You review, approve, and move on.</p>
+    <div class="hero-actions">
+      <a href="#" class="btn-primary" onclick="openModal(); return false;">Request a Demo</a>
+      <a href="#verticals" class="btn-secondary">Explore Verticals</a>
+    </div>
+  </div>
+</section>
+
+<!-- VERTICALS -->
+<section class="verticals reveal" id="verticals">
+  <div class="verticals-header">
+    <div class="section-label">Built for</div>
+    <h2 class="section-h2">Two industries. One platform.</h2>
+  </div>
+  <div class="vertical-grid">
+
+    <!-- Construction -->
+    <a href="/construction" class="vertical-card">
+      <div class="vc-hero construction">
+        <div class="vc-icon"><svg viewBox="0 0 24 24"><path d="M2 20h20M5 20V10l7-7 7 7v10"/></svg></div>
+        <div class="vc-title">Construction</div>
+        <div class="vc-subtitle">AI employees for specialty trade subcontractors. Concrete, electrical, plumbing, HVAC, and more.</div>
+      </div>
+      <div class="vc-body">
+        <div class="vc-agents">
+          <div class="vc-agents-label">Agents included</div>
+          <div class="vc-agent-list">
+            <span class="vc-agent-tag">Estimating Bot</span>
+            <span class="vc-agent-tag">Email Agent</span>
+            <span class="vc-agent-tag">Meeting Bot</span>
+            <span class="vc-agent-tag">Field Reporter</span>
+            <span class="vc-agent-tag">Reporting</span>
+            <span class="vc-agent-tag">Hivemind</span>
+          </div>
+        </div>
+        <div class="vc-stats">
+          <div><div class="vc-stat-val">2 min</div><div class="vc-stat-label">Per estimate</div></div>
+          <div><div class="vc-stat-val">94%</div><div class="vc-stat-label">Accuracy</div></div>
+          <div><div class="vc-stat-val">$0.05</div><div class="vc-stat-label">Per estimate</div></div>
+        </div>
+        <div class="vc-cta">Learn more <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+    </a>
+
+    <!-- Energy -->
+    <a href="/energy" class="vertical-card energy">
+      <div class="vc-hero energy">
+        <div class="vc-icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <div class="vc-title">Energy & Mining</div>
+        <div class="vc-subtitle">Operational intelligence for Bitcoin miners, renewable IPPs, and compute infrastructure operators.</div>
+      </div>
+      <div class="vc-body">
+        <div class="vc-agents">
+          <div class="vc-agents-label">Agents included</div>
+          <div class="vc-agent-list">
+            <span class="vc-agent-tag">Curtailment</span>
+            <span class="vc-agent-tag">Pool Routing</span>
+            <span class="vc-agent-tag">Lead Engine</span>
+            <span class="vc-agent-tag">Meeting Bot</span>
+            <span class="vc-agent-tag">Outreach</span>
+            <span class="vc-agent-tag">Reporting</span>
+          </div>
+        </div>
+        <div class="vc-stats">
+          <div><div class="vc-stat-val">24/7</div><div class="vc-stat-label">Monitoring</div></div>
+          <div><div class="vc-stat-val">$940</div><div class="vc-stat-label">Saved per event</div></div>
+          <div><div class="vc-stat-val">11yr</div><div class="vc-stat-label">ERCOT data</div></div>
+        </div>
+        <div class="vc-cta">Learn more <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </div>
+    </a>
+
+  </div>
+  <p style="font-size:13px;color:var(--text-4);margin-top:24px;text-align:center;">More verticals launching 2026 - manufacturing, logistics, staffing, and more.</p>
+</section>
+
+<!-- CAPABILITIES -->
+<section class="capabilities reveal">
+  <div class="cap-inner">
+    <div class="cap-header">
+      <div class="cap-label">The Platform</div>
+      <h2 class="cap-h2">What every agent can do</h2>
+      <p class="cap-sub">Shared capabilities across all verticals. Build once, deploy everywhere.</p>
+    </div>
+    <div class="cap-grid">
+      <div class="cap-card">
+        <div class="cap-icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+        <div class="cap-title">Natural Chat Interface</div>
+        <div class="cap-desc">Talk to your agents like you'd talk to an employee. They understand context, remember history, and ask questions when they're unsure.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon green"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+        <div class="cap-title">Email & Docs Automation</div>
+        <div class="cap-desc">Agents read your inbox, draft responses, create presentations, generate reports, and upload everything to shared Drive - automatically.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon warm"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></div>
+        <div class="cap-title">Meeting Capture</div>
+        <div class="cap-desc">Bot joins your calls, transcribes everything, extracts action items with assignees and deadlines, and syncs to your knowledge base.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div class="cap-title">Approval Queue</div>
+        <div class="cap-desc">Nothing goes out without your say. Review agent work, approve or reject with one click, and see the full audit trail of every action taken.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon green"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <div class="cap-title">Knowledge Base</div>
+        <div class="cap-desc">Every call, email, document, and decision is linked and searchable. Ask the hivemind "what's our history with Turner?" and get the full picture.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon warm"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+        <div class="cap-title">Proactive Insights</div>
+        <div class="cap-desc">Agents don't wait to be asked. They analyze your data, spot patterns, flag risks, and surface recommendations - like a real analyst would.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how reveal">
+  <div class="how-header">
+    <div class="section-label">How It Works</div>
+    <h2 class="section-h2">Live in 24 hours. Learning forever.</h2>
+  </div>
+  <div class="how-steps">
+    <div class="how-step">
+      <div class="how-num">01</div>
+      <div class="how-step-title">Connect your data</div>
+      <div class="how-step-desc">Link your email, calendar, Drive, and any industry-specific data sources.</div>
+      <div class="how-step-time">15 min</div>
+    </div>
+    <div class="how-step">
+      <div class="how-num">02</div>
+      <div class="how-step-title">Configure agents</div>
+      <div class="how-step-desc">Choose which agents to activate, set their operating mode, and define approval rules.</div>
+      <div class="how-step-time">10 min</div>
+    </div>
+    <div class="how-step">
+      <div class="how-num">03</div>
+      <div class="how-step-title">Let them run</div>
+      <div class="how-step-desc">Agents work 24/7. You get a daily briefing, approve pending actions, and ask questions in chat.</div>
+      <div class="how-step-time">Always on</div>
+    </div>
+    <div class="how-step">
+      <div class="how-num">04</div>
+      <div class="how-step-title">They get smarter</div>
+      <div class="how-step-desc">Every correction, every approval, every conversation makes the agents more accurate and more useful.</div>
+      <div class="how-step-time">Compounding</div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-bar reveal">
+  <div class="stats-inner">
+    <div><div class="stat-val">$0.30</div><div class="stat-label">Average daily AI cost per client</div></div>
+    <div><div class="stat-val">6</div><div class="stat-label">Agents per deployment</div></div>
+    <div><div class="stat-val">97%</div><div class="stat-label">Gross margin</div></div>
+    <div><div class="stat-val">24/7</div><div class="stat-label">Continuous operation</div></div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta reveal">
+  <div class="cta-inner">
+    <h2 class="cta-h2">Your operations,<br>on autopilot.</h2>
+    <p class="cta-sub">Join the first companies using AI employees to estimate faster, monitor smarter, and never miss a deadline.</p>
+    <div style="display:flex; justify-content:center; gap:14px;">
+      <a href="/construction" class="btn-secondary">Construction →</a>
+      <a href="/energy" class="btn-secondary">Energy →</a>
+      <a href="#" class="btn-primary" onclick="openModal(); return false;">Request a Demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-left">
+    <span class="footer-brand">Coppice</span>
+    <span class="footer-copy">© 2026</span>
+  </div>
+  <div class="footer-links">
+    <a href="/construction" class="footer-link">Construction</a>
+    <a href="/energy" class="footer-link">Energy</a>
+    <a href="/login" class="footer-link">Log In</a>
+    <a href="#" class="footer-link">Privacy</a>
+    <a href="mailto:hello@coppice.ai" class="footer-link">hello@coppice.ai</a>
+  </div>
+</footer>
+
+<!-- Demo Modal (same as before) -->
+<div id="demo-modal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.5); backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:20px; padding:40px; max-width:480px; width:90%; position:relative;">
+    <button onclick="closeModal()" style="position:absolute;top:16px;right:16px;border:none;background:none;font-size:20px;color:#9a9a92;cursor:pointer;">✕</button>
+    <h2 style="font-family:var(--serif);font-size:24px;margin-bottom:4px;">Request a Demo</h2>
+    <p style="font-size:14px;color:var(--text-3);margin-bottom:24px;">We'll set up a personalized walkthrough for your company.</p>
+    <div id="demo-form">
+      <input id="demo-name" placeholder="Your name" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <input id="demo-company" placeholder="Company name" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <input id="demo-email" placeholder="Email address" type="email" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <input id="demo-phone" placeholder="Phone (optional)" type="tel" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <select id="demo-vertical" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;color:var(--text-2);background:var(--surface-inset);">
+        <option value="">Industry</option>
+        <option>Construction - Concrete</option>
+        <option>Construction - Electrical</option>
+        <option>Construction - Plumbing / HVAC</option>
+        <option>Construction - Framing</option>
+        <option>Construction - Other</option>
+        <option>Energy - Bitcoin Mining</option>
+        <option>Energy - Solar IPP</option>
+        <option>Energy - Wind IPP</option>
+        <option>Energy - Other</option>
+        <option>Other</option>
+      </select>
+      <button onclick="submitDemo()" style="width:100%;padding:14px;border-radius:12px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:15px;font-weight:600;border:none;cursor:pointer;margin-top:6px;">Submit Request</button>
+    </div>
+    <div id="demo-success" style="display:none;text-align:center;padding:20px 0;">
+      <div style="font-size:32px;margin-bottom:12px;">✓</div>
+      <div style="font-size:18px;font-weight:600;color:var(--text-0);margin-bottom:6px;">We'll be in touch within 24 hours.</div>
+      <div style="font-size:14px;color:var(--text-3);">Check your email for a confirmation.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Scroll reveal
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+reveals.forEach(el => observer.observe(el));
+
+// Modal
+function openModal() { document.getElementById('demo-modal').style.display = 'flex'; }
+function closeModal() { document.getElementById('demo-modal').style.display = 'none'; }
+
+async function submitDemo() {
+  const data = {
+    name: document.getElementById('demo-name').value,
+    company: document.getElementById('demo-company').value,
+    email: document.getElementById('demo-email').value,
+    phone: document.getElementById('demo-phone').value,
+    specialty: document.getElementById('demo-vertical').value,
+  };
+  if (!data.name || !data.email || !data.company) { alert('Please fill in your name, company, and email.'); return; }
+  try {
+    const res = await fetch('/api/v1/demo-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (res.ok) { document.getElementById('demo-form').style.display = 'none'; document.getElementById('demo-success').style.display = 'block'; }
+  } catch (e) { alert('Something went wrong. Email us at hello@coppice.ai'); }
+}
+</script>
+
+</body>
+</html>

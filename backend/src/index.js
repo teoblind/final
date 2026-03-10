@@ -41,6 +41,8 @@ import workloadRoutes from './routes/workloads.js';
 import gpuRoutes from './routes/gpu.js';
 import hpcRoutes from './routes/hpc.js';
 import allocationRoutes from './routes/allocation.js';
+import botsRoutes from './routes/bots.js';
+import ercotLmpRoutes from './routes/ercotLmp.js';
 
 // Phase 8: New route modules
 import authRoutes from './routes/auth.js';
@@ -55,6 +57,18 @@ import adminInsuranceRoutes from './routes/adminInsurance.js';
 import lpRoutes from './routes/lp.js';
 import sanghaChartRoutes from './routes/sanghaCharts.js';
 
+import estimateRoutes from './routes/estimate.js';
+import leadEngineRoutes from './routes/leadEngine.js';
+import chatRoutes from './routes/chat.js';
+import workspaceRoutes from './routes/workspace.js';
+import approvalRoutes from './routes/approvals.js';
+import platformNotificationRoutes from './routes/platformNotifications.js';
+import knowledgeRoutes from './routes/knowledge.js';
+import voiceRoutes from './routes/voice.js';
+import landingRoutes from './routes/landing.js';
+import filesRoutes from './routes/files.js';
+import hubspotRoutes from './routes/hubspot.js';
+import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
 
@@ -66,13 +80,28 @@ const PORT = process.env.PORT || 3002;
 
 // Middleware
 app.use(cors({
-  origin: true,
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (origin.endsWith('.coppice.ai') || origin === 'https://coppice.ai' || origin.includes('localhost')) {
+      return callback(null, true);
+    }
+    callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json());
 
 // Initialize database (includes Phase 8 tables)
 initDatabase();
+
+// Landing page routes — no tenant required (root domain)
+app.use('/api/v1', landingRoutes);
+
+// Serve demo files (estimates, reports, etc.)
+app.use('/files', express.static(join(__dirname, '../demo-files')));
+
+// Tenant resolver — runs before all routes, no auth required
+app.use(tenantResolver);
 
 // Start liquidity data refresh scheduler (every 5 minutes)
 startRefreshScheduler(5);
@@ -137,6 +166,12 @@ app.use('/api/v1/admin/insurance', adminInsuranceRoutes);
 app.use('/api/v1/lp', lpRoutes);
 app.use('/api/v1/charts', sanghaChartRoutes);
 
+// DACP Construction estimate routes
+app.use('/api/v1/estimates', estimateRoutes);
+
+// Lead Engine routes
+app.use('/api/v1/lead-engine', leadEngineRoutes);
+
 // All existing routes under /api/v1/ (versioned)
 app.use('/api/v1/yahoo', yahooRoutes);
 app.use('/api/v1/hashprice', hashpriceRoutes);
@@ -166,6 +201,16 @@ app.use('/api/v1/workloads', workloadRoutes);
 app.use('/api/v1/gpu', gpuRoutes);
 app.use('/api/v1/hpc', hpcRoutes);
 app.use('/api/v1/allocation', allocationRoutes);
+app.use('/api/v1/bots', botsRoutes);
+app.use('/api/v1/ercot/lmp', ercotLmpRoutes);
+app.use('/api/v1/chat', chatRoutes);
+app.use('/api/v1/workspace', workspaceRoutes);
+app.use('/api/v1/approvals', approvalRoutes);
+app.use('/api/v1/platform-notifications', platformNotificationRoutes);
+app.use('/api/v1/knowledge', knowledgeRoutes);
+app.use('/api/v1/files', filesRoutes);
+app.use('/api/v1/hubspot', hubspotRoutes);
+app.use('/api/v1/voice', voiceRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/
@@ -198,6 +243,15 @@ app.use('/api/workloads', workloadRoutes);
 app.use('/api/gpu', gpuRoutes);
 app.use('/api/hpc', hpcRoutes);
 app.use('/api/allocation', allocationRoutes);
+app.use('/api/bots', botsRoutes);
+app.use('/api/lead-engine', leadEngineRoutes);
+app.use('/api/ercot/lmp', ercotLmpRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/workspace', workspaceRoutes);
+app.use('/api/approvals', approvalRoutes);
+app.use('/api/platform-notifications', platformNotificationRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
+app.use('/api/voice', voiceRoutes);
 
 // =========================================================================
 // OpenAPI documentation

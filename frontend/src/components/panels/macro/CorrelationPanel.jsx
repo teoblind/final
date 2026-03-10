@@ -89,7 +89,7 @@ export default function CorrelationPanel({ fullWidth = false }) {
             <div className="text-right">
               {pair.correlation !== null ? (
                 <>
-                  <p className={`text-xl font-mono ${
+                  <p className={`text-xl font-sans ${
                     pair.correlation > 0.3 ? 'text-terminal-green' :
                     pair.correlation < -0.3 ? 'text-terminal-red' :
                     'text-terminal-muted'

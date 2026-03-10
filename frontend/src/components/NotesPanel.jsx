@@ -262,7 +262,7 @@ function NoteModal({ note, onClose, onSuccess }) {
             <textarea
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
-              className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm font-mono"
+              className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm font-sans"
               rows={15}
               placeholder="Write your note here...&#10;&#10;Supports **markdown** formatting."
               required

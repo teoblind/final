@@ -158,7 +158,7 @@ export default function WorkerFleetPanel() {
                   }`}
                 >
                   <div className="text-terminal-text truncate" title={w.name}>{w.name}</div>
-                  <div className="text-right text-terminal-text font-mono">
+                  <div className="text-right text-terminal-text font-sans">
                     {w.hashrate > 0 ? `${formatNumber(w.hashrate, 0)} TH/s` : '—'}
                   </div>
                   <div className={`text-center ${si.color}`}>{si.icon} {si.label}</div>

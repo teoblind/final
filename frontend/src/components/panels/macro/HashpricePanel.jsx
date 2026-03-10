@@ -65,11 +65,11 @@ export default function HashpricePanel() {
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div className="bg-terminal-bg/50 rounded p-2">
           <p className="text-xs text-terminal-muted">30D MA</p>
-          <p className="font-mono">${formatNumber(ma30, 4)}</p>
+          <p className="font-sans">${formatNumber(ma30, 4)}</p>
         </div>
         <div className="bg-terminal-bg/50 rounded p-2">
           <p className="text-xs text-terminal-muted">90D MA</p>
-          <p className="font-mono">${formatNumber(ma90, 4)}</p>
+          <p className="font-sans">${formatNumber(ma90, 4)}</p>
         </div>
       </div>
 

@@ -51,7 +51,7 @@ export default function TradeRoutesPanel() {
           </div>
           <div className="bg-terminal-bg/50 rounded p-3">
             <p className="text-xs text-terminal-muted">Date</p>
-            <p className="text-lg font-mono">
+            <p className="text-lg font-sans">
               {suez.currentMonth ? formatDate(suez.currentMonth.date, 'MMM yyyy') : '-'}
             </p>
           </div>

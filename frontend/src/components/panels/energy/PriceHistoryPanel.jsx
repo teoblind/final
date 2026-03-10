@@ -103,7 +103,7 @@ export default function PriceHistoryPanel() {
         ].map(({ label, value, color, noPrefix }) => (
           <div key={label} className="bg-terminal-bg/50 rounded p-2 text-center">
             <p className="text-[10px] text-terminal-muted">{label}</p>
-            <p className={`font-mono text-xs ${color}`}>
+            <p className={`font-sans text-xs ${color}`}>
               {value != null ? (noPrefix ? value : `$${formatNumber(value, 2)}`) : '—'}
             </p>
           </div>

@@ -181,12 +181,12 @@ export function RiskScoreGauge({ riskScore, probLoss12m }) {
           <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
         )}
         {/* Value text */}
-        <text x={cx} y={cy - 8} textAnchor="middle" fill={color} fontSize="24" fontWeight="bold" fontFamily="monospace">{riskScore}</text>
+        <text x={cx} y={cy - 8} textAnchor="middle" fill={color} fontSize="24" fontWeight="bold" fontFamily="'Exo 2', sans-serif">{riskScore}</text>
         <text x={cx} y={cy + 8} textAnchor="middle" fill="#999" fontSize="10">{label}</text>
       </svg>
       {probLoss12m != null && (
         <p className="text-[10px] text-terminal-muted mt-1">
-          Probability of loss in 12 months: <span className="text-terminal-text font-mono">{Math.round(probLoss12m * 100)}%</span>
+          Probability of loss in 12 months: <span className="text-terminal-text font-sans">{Math.round(probLoss12m * 100)}%</span>
         </p>
       )}
     </div>
@@ -211,16 +211,16 @@ export function FloorCards({ insuranceInputs }) {
         {cards.map(c => (
           <div key={c.label} className={`bg-terminal-bg/50 border ${c.border} rounded p-3`}>
             <p className={`text-[10px] ${c.color} uppercase font-semibold mb-1`}>{c.label}</p>
-            <p className={`text-lg font-bold font-mono ${c.color}`}>${fmt(c.floor, 4)}</p>
+            <p className={`text-lg font-bold font-sans ${c.color}`}>${fmt(c.floor, 4)}</p>
             <p className="text-[10px] text-terminal-muted">/TH/s/day</p>
             <p className="text-xs text-terminal-muted mt-2">Est. annual payout</p>
-            <p className="text-sm font-mono text-terminal-text">{fmtUsd(c.payout)}</p>
+            <p className="text-sm font-sans text-terminal-text">{fmtUsd(c.payout)}</p>
           </div>
         ))}
       </div>
       {insuranceInputs.loss_ratio_estimate != null && (
         <p className="text-[10px] text-terminal-muted mt-2">
-          Expected loss ratio: <span className="text-terminal-text font-mono">{Math.round(insuranceInputs.loss_ratio_estimate * 100)}%</span>
+          Expected loss ratio: <span className="text-terminal-text font-sans">{Math.round(insuranceInputs.loss_ratio_estimate * 100)}%</span>
         </p>
       )}
     </div>
@@ -320,7 +320,7 @@ export function VaRWaterfallChart({ riskMetrics }) {
         </BarChart>
       </ResponsiveContainer>
       <p className="text-[10px] text-terminal-muted mt-1">
-        If hashprice breaches breakeven, expected loss is <span className="text-terminal-red font-mono">{fmtUsd(riskMetrics.expected_loss_given_breach)}</span>/month
+        If hashprice breaches breakeven, expected loss is <span className="text-terminal-red font-sans">{fmtUsd(riskMetrics.expected_loss_given_breach)}</span>/month
       </p>
     </div>
   );
@@ -339,7 +339,7 @@ export function DiversificationBar({ score }) {
     <div>
       <div className="flex items-center justify-between mb-1">
         <p className="text-xs font-semibold text-terminal-text">Diversification Score</p>
-        <span className="text-sm font-bold font-mono" style={{ color }}>{pct}%</span>
+        <span className="text-sm font-bold font-sans" style={{ color }}>{pct}%</span>
       </div>
       <div className="w-full h-3 bg-terminal-border rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />

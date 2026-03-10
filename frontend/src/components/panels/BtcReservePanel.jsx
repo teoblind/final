@@ -47,7 +47,7 @@ export default function BtcReservePanel() {
           </div>
           <div className="text-right">
             <p className="text-xs text-terminal-muted">BTC Price</p>
-            <p className="font-mono">{formatCurrency(btcPrice)}</p>
+            <p className="font-sans">{formatCurrency(btcPrice)}</p>
           </div>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function BtcReservePanel() {
               </p>
             </div>
             <div className="text-right ml-4">
-              <p className="font-mono">{formatCompact(wallet.balance)} BTC</p>
+              <p className="font-sans">{formatCompact(wallet.balance)} BTC</p>
               <p className="text-xs text-terminal-muted">
                 {formatCurrency(wallet.balanceUSD, 'USD', 0)}
               </p>

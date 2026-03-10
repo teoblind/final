@@ -118,7 +118,7 @@ export default function StressTestPanel() {
                 type="number"
                 value={customParams.btc}
                 onChange={e => setCustomParams(p => ({ ...p, btc: e.target.value }))}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-cyan"
+                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-cyan"
                 placeholder="-30"
               />
             </div>
@@ -128,7 +128,7 @@ export default function StressTestPanel() {
                 type="number"
                 value={customParams.diff}
                 onChange={e => setCustomParams(p => ({ ...p, diff: e.target.value }))}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-cyan"
+                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-cyan"
                 placeholder="30"
               />
             </div>
@@ -138,7 +138,7 @@ export default function StressTestPanel() {
                 type="number"
                 value={customParams.energy}
                 onChange={e => setCustomParams(p => ({ ...p, energy: e.target.value }))}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-cyan"
+                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-cyan"
                 placeholder="50"
               />
             </div>

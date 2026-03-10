@@ -1,8 +1,8 @@
 /**
  * Ampera Theme Configuration
  *
- * Centralizes all design tokens for visual consistency across all phases.
- * Based on the Bloomberg terminal-inspired dark aesthetic from the original dashboard.
+ * Minimal dark theme — white, black, dark grey.
+ * Font: Exo 2.
  */
 
 export const theme = {
@@ -12,28 +12,28 @@ export const theme = {
     border: '#1e1e1e',
     borderHover: '#333333',
     text: '#e5e5e5',
-    muted: '#666666',
-    green: '#00d26a',
+    muted: '#777777',
+    green: '#ffffff',
     red: '#ff3b30',
-    amber: '#ffb800',
-    blue: '#007aff',
-    cyan: '#00d4ff',
-    purple: '#af52de',
+    amber: '#999999',
+    blue: '#cccccc',
+    cyan: '#bbbbbb',
+    purple: '#999999',
   },
 
   fonts: {
-    mono: "'JetBrains Mono', 'SF Mono', 'Monaco', 'Consolas', monospace",
+    sans: "'Exo 2', system-ui, -apple-system, sans-serif",
   },
 
   fontSizes: {
-    xs: '0.75rem',     // 12px — labels, attribution, timestamps
-    sm: '0.875rem',    // 14px — body text, nav items
-    base: '1rem',      // 16px — default
-    lg: '1.125rem',    // 18px — panel titles, header
-    xl: '1.25rem',     // 20px — secondary metrics
-    '2xl': '1.5rem',   // 24px — important values
-    '3xl': '1.875rem', // 30px — big metric numbers
-    '4xl': '2.25rem',  // 36px — hero metrics
+    xs: '0.75rem',     // 12px
+    sm: '0.875rem',    // 14px
+    base: '1rem',      // 16px
+    lg: '1.125rem',    // 18px
+    xl: '1.25rem',     // 20px
+    '2xl': '1.5rem',   // 24px
+    '3xl': '1.875rem', // 30px
+    '4xl': '2.25rem',  // 36px
   },
 
   spacing: {
@@ -51,18 +51,18 @@ export const theme = {
 
   shadows: {
     glow: {
-      green: '0 0 10px rgba(0, 210, 106, 0.3)',
+      green: '0 0 10px rgba(255, 255, 255, 0.15)',
       red: '0 0 10px rgba(255, 59, 48, 0.3)',
-      amber: '0 0 10px rgba(255, 184, 0, 0.3)',
+      amber: '0 0 10px rgba(153, 153, 153, 0.2)',
     },
   },
 
   chart: {
     colors: {
-      primary: '#00d26a',
-      secondary: '#ffb800',
-      tertiary: '#007aff',
-      quaternary: '#af52de',
+      primary: '#ffffff',
+      secondary: '#999999',
+      tertiary: '#cccccc',
+      quaternary: '#666666',
       negative: '#ff3b30',
     },
     tooltip: {
@@ -74,7 +74,7 @@ export const theme = {
       stroke: '#1e1e1e',
     },
     axis: {
-      stroke: '#666666',
+      stroke: '#777777',
       fontSize: 10,
     },
   },

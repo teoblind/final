@@ -62,7 +62,7 @@ export default function HpcContractsPanel() {
                 {/* Top row: ID, Customer, Status */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs font-mono text-terminal-muted">{c.id}</span>
+                    <span className="text-xs font-sans text-terminal-muted">{c.id}</span>
                     <span className="text-sm font-semibold text-terminal-text truncate">{c.customer}</span>
                   </div>
                   <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${status.color} ${status.bg} ${status.border}`}>

@@ -154,7 +154,7 @@ export default function MempoolFeesPanel() {
             <div className="space-y-1">
               {blocks.map((b, i) => (
                 <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-terminal-text font-mono">#{formatNumber(b.height, 0)}</span>
+                  <span className="text-terminal-text font-sans">#{formatNumber(b.height, 0)}</span>
                   <span className="text-terminal-muted">{b.miner || 'Unknown'}</span>
                   <span className="text-terminal-cyan">{formatNumber(b.totalReward, 2)} BTC</span>
                   <span className="text-terminal-muted">{getTimeSince(b.timestamp)}</span>

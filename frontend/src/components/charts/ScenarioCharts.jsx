@@ -60,9 +60,9 @@ export function ScenarioComparisonTable({ baseline, shocked, impact }) {
             {rows.map(r => (
               <tr key={r.label} className="border-b border-terminal-border/30">
                 <td className="py-1.5 pr-4 text-terminal-muted">{r.label}</td>
-                <td className="py-1.5 px-3 text-right font-mono text-terminal-text">{r.base}</td>
-                <td className="py-1.5 px-3 text-right font-mono text-terminal-text">{r.shock}</td>
-                <td className={`py-1.5 pl-3 text-right font-mono ${r.delta != null ? (r.delta >= 0 ? 'text-terminal-green' : 'text-terminal-red') : 'text-terminal-muted'}`}>
+                <td className="py-1.5 px-3 text-right font-sans text-terminal-text">{r.base}</td>
+                <td className="py-1.5 px-3 text-right font-sans text-terminal-text">{r.shock}</td>
+                <td className={`py-1.5 pl-3 text-right font-sans ${r.delta != null ? (r.delta >= 0 ? 'text-terminal-green' : 'text-terminal-red') : 'text-terminal-muted'}`}>
                   {r.delta != null ? fmtPct(r.delta) : '--'}
                 </td>
               </tr>
@@ -122,17 +122,17 @@ export function FleetImpactCard({ fleet }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-terminal-bg/50 border border-terminal-border rounded p-2">
           <p className="text-[10px] text-terminal-muted">Revenue (Base)</p>
-          <p className="text-sm font-bold text-terminal-text font-mono">${fmt(fleet.fleet_revenue_baseline)}</p>
+          <p className="text-sm font-bold text-terminal-text font-sans">${fmt(fleet.fleet_revenue_baseline)}</p>
         </div>
         <div className="bg-terminal-bg/50 border border-terminal-border rounded p-2">
           <p className="text-[10px] text-terminal-muted">Revenue (Stressed)</p>
-          <p className={`text-sm font-bold font-mono ${fleet.fleet_revenue_shocked < fleet.fleet_revenue_baseline ? 'text-terminal-red' : 'text-terminal-green'}`}>
+          <p className={`text-sm font-bold font-sans ${fleet.fleet_revenue_shocked < fleet.fleet_revenue_baseline ? 'text-terminal-red' : 'text-terminal-green'}`}>
             ${fmt(fleet.fleet_revenue_shocked)}
           </p>
         </div>
         <div className="bg-terminal-bg/50 border border-terminal-border rounded p-2">
           <p className="text-[10px] text-terminal-muted">Margin Change</p>
-          <p className={`text-sm font-bold font-mono ${marginDelta >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
+          <p className={`text-sm font-bold font-sans ${marginDelta >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
             {marginDelta >= 0 ? '+' : ''}{marginDelta.toFixed(1)}%
           </p>
         </div>

@@ -646,6 +646,15 @@ export function initDatabase() {
 
   // Initialize Phase 9 insurance tables
   initPhase9Tables();
+
+  // Initialize Phase 10 bot tables
+  initBotTables();
+
+  // Initialize DACP Construction tables
+  initDacpTables();
+
+  // Initialize tenant files table
+  initFilesTable();
 }
 
 // Cache helpers
@@ -1594,7 +1603,7 @@ export function initPhase8Tables() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
-      email TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -1603,9 +1612,11 @@ export function initPhase8Tables() {
       mfa_enabled INTEGER DEFAULT 0,
       mfa_secret TEXT,
       last_login DATETIME,
+      must_change_password INTEGER DEFAULT 0,
       notification_prefs_json TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(email, tenant_id)
     )
   `);
 
@@ -1782,15 +1793,22 @@ export function initPhase8Tables() {
   }
 
   // Seed default admin user if not exists
-  const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@ampera.io');
+  const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
   if (!adminUser) {
     const salt = bcryptPkg.genSaltSync(12);
     const hash = bcryptPkg.hashSync('admin123', salt);
     db.prepare(`
-      INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
-      VALUES ('seed-admin-001', 'admin@ampera.io', 'Admin', ?, 'default', 'sangha_admin', 'active')
+      INSERT OR IGNORE INTO users (id, email, name, password_hash, tenant_id, role, status)
+      VALUES ('seed-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'default', 'sangha_admin', 'active')
     `).run(hash);
-    console.log('Seed admin user created: admin@ampera.io / admin123');
+    console.log('Seed admin user created: teo@zhan.capital / admin123');
+  }
+
+  // Add custom_domain column if not exists
+  try {
+    db.exec(`ALTER TABLE tenants ADD COLUMN custom_domain TEXT`);
+  } catch (e) {
+    // Column already exists — ignore
   }
 
   // Enable WAL mode for better concurrent access
@@ -1813,6 +1831,16 @@ export function getTenant(id) {
 
 export function getTenantBySlug(slug) {
   const row = db.prepare('SELECT * FROM tenants WHERE slug = ?').get(slug);
+  if (row) {
+    row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
+    row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
+    row.limits = row.limits_json ? JSON.parse(row.limits_json) : null;
+  }
+  return row;
+}
+
+export function getTenantByDomain(domain) {
+  const row = db.prepare('SELECT * FROM tenants WHERE custom_domain = ?').get(domain);
   if (row) {
     row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
     row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
@@ -1865,7 +1893,15 @@ export function updateTenant(id, updates) {
 // ─── Phase 8: User Helpers ──────────────────────────────────────────────────
 
 export function getUserByEmail(email) {
-  return db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+}
+
+export function getUsersByEmail(email) {
+  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').all(email);
+}
+
+export function getUserByEmailAndTenant(email, tenantId) {
+  return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND tenant_id = ?').get(email, tenantId);
 }
 
 export function getUserById(id) {
@@ -1894,6 +1930,7 @@ export function updateUser(id, updates) {
   if (updates.mfaEnabled !== undefined) { sets.push('mfa_enabled = ?'); params.push(updates.mfaEnabled ? 1 : 0); }
   if (updates.mfaSecret !== undefined) { sets.push('mfa_secret = ?'); params.push(updates.mfaSecret); }
   if (updates.lastLogin !== undefined) { sets.push('last_login = ?'); params.push(updates.lastLogin); }
+  if (updates.mustChangePassword !== undefined) { sets.push('must_change_password = ?'); params.push(updates.mustChangePassword ? 1 : 0); }
   if (updates.notificationPrefs !== undefined) { sets.push('notification_prefs_json = ?'); params.push(JSON.stringify(updates.notificationPrefs)); }
   sets.push("updated_at = datetime('now')");
   params.push(id);
@@ -2859,6 +2896,1203 @@ export function getSanghaRevenueBreakdown() {
     totalLPPremiumShare: fees.total_lp_premium_share || 0,
     sanghaNetRevenue: (fees.total_structuring_fees || 0) + (fees.total_management_fees || 0),
   };
+}
+
+// ─── Phase 10: Bot Registration & Team Collaboration Tables ─────────────────
+
+export function initBotTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bot_registrations (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      bot_type TEXT NOT NULL,
+      config_json TEXT,
+      status TEXT DEFAULT 'active',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bot_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      event_key TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_reg_tenant ON bot_registrations(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_reg_user ON bot_registrations(user_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_comments_event ON bot_comments(event_key)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_comments_tenant ON bot_comments(tenant_id)'); } catch (e) {}
+}
+
+// ─── Bot Registration Helpers ───────────────────────────────────────────────
+
+export function createBotRegistration({ id, tenantId, userId, name, botType, configJson }) {
+  return db.prepare(
+    `INSERT INTO bot_registrations (id, tenant_id, user_id, name, bot_type, config_json)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id, tenantId, userId, name, botType, configJson || null);
+}
+
+export function getBotRegistrationsByTenant(tenantId) {
+  return db.prepare(
+    `SELECT br.*, u.name as owner_name, u.email as owner_email
+     FROM bot_registrations br
+     LEFT JOIN users u ON br.user_id = u.id
+     WHERE br.tenant_id = ?
+     ORDER BY br.created_at DESC`
+  ).all(tenantId);
+}
+
+export function getBotRegistrationsByUser(userId) {
+  return db.prepare(
+    'SELECT * FROM bot_registrations WHERE user_id = ? ORDER BY created_at DESC'
+  ).all(userId);
+}
+
+export function updateBotRegistration(id, userId, { name, configJson, status }) {
+  const fields = [];
+  const values = [];
+  if (name !== undefined) { fields.push('name = ?'); values.push(name); }
+  if (configJson !== undefined) { fields.push('config_json = ?'); values.push(configJson); }
+  if (status !== undefined) { fields.push('status = ?'); values.push(status); }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(id, userId);
+  return db.prepare(
+    `UPDATE bot_registrations SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`
+  ).run(...values);
+}
+
+export function deleteBotRegistration(id, userId) {
+  return db.prepare('DELETE FROM bot_registrations WHERE id = ? AND user_id = ?').run(id, userId);
+}
+
+// ─── Bot Comment Helpers ────────────────────────────────────────────────────
+
+export function addBotComment({ tenantId, userId, userName, eventKey, text }) {
+  return db.prepare(
+    `INSERT INTO bot_comments (tenant_id, user_id, user_name, event_key, text)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(tenantId, userId, userName, eventKey, text);
+}
+
+export function getBotComments(eventKey, tenantId) {
+  return db.prepare(
+    'SELECT * FROM bot_comments WHERE event_key = ? AND tenant_id = ? ORDER BY created_at ASC'
+  ).all(eventKey, tenantId);
+}
+
+export function getBotCommentCounts(eventKeys, tenantId) {
+  if (!eventKeys.length) return {};
+  const placeholders = eventKeys.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT event_key, COUNT(*) as count FROM bot_comments
+     WHERE event_key IN (${placeholders}) AND tenant_id = ?
+     GROUP BY event_key`
+  ).all(...eventKeys, tenantId);
+  const counts = {};
+  for (const row of rows) counts[row.event_key] = row.count;
+  return counts;
+}
+
+// ─── DACP Construction Tables & Helpers ──────────────────────────────────────
+
+export function initDacpTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_pricing (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      item TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      material_cost REAL,
+      labor_cost REAL,
+      equipment_cost REAL,
+      unit_price REAL,
+      notes TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_bid_requests (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      from_email TEXT,
+      from_name TEXT,
+      gc_name TEXT,
+      subject TEXT,
+      body TEXT,
+      attachments_json TEXT,
+      scope_json TEXT,
+      due_date TEXT,
+      status TEXT DEFAULT 'new',
+      urgency TEXT DEFAULT 'medium',
+      missing_info_json TEXT,
+      received_at TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_estimates (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      bid_request_id TEXT,
+      project_name TEXT,
+      gc_name TEXT,
+      status TEXT DEFAULT 'draft',
+      line_items_json TEXT,
+      subtotal REAL,
+      overhead_pct REAL DEFAULT 10,
+      profit_pct REAL DEFAULT 15,
+      mobilization REAL DEFAULT 0,
+      total_bid REAL,
+      confidence TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_jobs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      estimate_id TEXT,
+      project_name TEXT,
+      gc_name TEXT,
+      project_type TEXT,
+      location TEXT,
+      status TEXT DEFAULT 'active',
+      estimated_cost REAL,
+      actual_cost REAL,
+      bid_amount REAL,
+      margin_pct REAL,
+      start_date TEXT,
+      end_date TEXT,
+      notes TEXT
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_field_reports (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      job_id TEXT,
+      date TEXT,
+      reported_by TEXT,
+      work_json TEXT,
+      materials_json TEXT,
+      labor_json TEXT,
+      equipment_json TEXT,
+      weather TEXT,
+      notes TEXT,
+      issues_json TEXT
+    )
+  `);
+
+  // Chat messages
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+      content TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_chat_tenant_agent_user ON chat_messages(tenant_id, agent_id, user_id, created_at)'); } catch (e) {}
+
+  // Approval queue
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS approval_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      type TEXT NOT NULL CHECK(type IN ('email_draft', 'curtailment', 'estimate', 'report', 'config_change', 'document')),
+      payload_json TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+      required_role TEXT DEFAULT 'admin',
+      reviewed_by TEXT,
+      reviewed_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_approval_tenant_status ON approval_items(tenant_id, status, created_at)'); } catch (e) {}
+
+  // Platform notifications (multi-tenant)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS platform_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT,
+      agent_id TEXT,
+      title TEXT NOT NULL,
+      body TEXT,
+      type TEXT DEFAULT 'info' CHECK(type IN ('info', 'warning', 'action', 'success')),
+      link_tab TEXT,
+      read INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_notif_tenant_user ON platform_notifications(tenant_id, user_id, read, created_at)'); } catch (e) {}
+
+  // Indices
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_pricing_tenant ON dacp_pricing(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bids_tenant ON dacp_bid_requests(tenant_id, status)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_estimates_tenant ON dacp_estimates(tenant_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_jobs_tenant ON dacp_jobs(tenant_id, status)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_reports_tenant ON dacp_field_reports(tenant_id, job_id)'); } catch (e) {}
+
+  // ─── Knowledge Graph Tables ─────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knowledge_entries (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT,
+      transcript TEXT,
+      content TEXT,
+      source TEXT,
+      source_agent TEXT,
+      duration_seconds INTEGER,
+      recorded_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      processed INTEGER DEFAULT 0,
+      drive_file_id TEXT,
+      drive_url TEXT
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_tenant ON knowledge_entries(tenant_id, type, created_at)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knowledge_entities (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      metadata_json TEXT
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kn_entities_tenant ON knowledge_entities(tenant_id, entity_type)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knowledge_links (
+      id TEXT PRIMARY KEY,
+      entry_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      relationship TEXT,
+      FOREIGN KEY (entry_id) REFERENCES knowledge_entries(id),
+      FOREIGN KEY (entity_id) REFERENCES knowledge_entities(id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entry ON knowledge_links(entry_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entity ON knowledge_links(entity_id)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS action_items (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      entry_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      assignee TEXT,
+      due_date TEXT,
+      status TEXT DEFAULT 'open',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_action_items_tenant ON action_items(tenant_id, status)'); } catch (e) {}
+
+  // Add completed_at / completed_by columns to action_items (idempotent)
+  try { db.exec("ALTER TABLE action_items ADD COLUMN completed_at TEXT"); } catch (e) { /* already exists */ }
+  try { db.exec("ALTER TABLE action_items ADD COLUMN completed_by TEXT"); } catch (e) { /* already exists */ }
+
+  // Agent insights table (for Command dashboard)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_insights (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'insight',
+      category TEXT,
+      title TEXT NOT NULL,
+      description TEXT,
+      priority TEXT DEFAULT 'medium',
+      actions_json TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_insights_tenant ON agent_insights(tenant_id, status, created_at)'); } catch (e) {}
+
+  // Seed knowledge entities
+  const knEntCount = db.prepare('SELECT COUNT(*) as c FROM knowledge_entities').get();
+  if (knEntCount.c === 0) {
+    const seedEntities = db.prepare('INSERT OR IGNORE INTO knowledge_entities (id, tenant_id, entity_type, name, metadata_json) VALUES (?, ?, ?, ?, ?)');
+    const sanghaId = 'default';
+    const dacpId = 'dacp-construction-001';
+
+    // Sangha people
+    seedEntities.run('ent-s-p1', sanghaId, 'person', 'Spencer Marr', '{"role":"CEO"}');
+    seedEntities.run('ent-s-p2', sanghaId, 'person', 'Mihir Bhangley', '{"role":"Operations"}');
+    seedEntities.run('ent-s-p3', sanghaId, 'person', 'Marcel Pineda', '{"role":"Engineering"}');
+    seedEntities.run('ent-s-p4', sanghaId, 'person', 'Teo Blind', '{"role":"CTO"}');
+    seedEntities.run('ent-s-p5', sanghaId, 'person', 'Adam Reeve', '{"role":"Insurance"}');
+    seedEntities.run('ent-s-p6', sanghaId, 'person', 'Miguel Alvarez', '{"role":"Modeling"}');
+    seedEntities.run('ent-s-p7', sanghaId, 'person', 'Jason Gunderson', '{"role":"LP Relations"}');
+
+    // Sangha companies
+    seedEntities.run('ent-s-c1', sanghaId, 'company', 'Sangha Renewables', null);
+    seedEntities.run('ent-s-c2', sanghaId, 'company', 'Reassurity', null);
+    seedEntities.run('ent-s-c3', sanghaId, 'company', 'Total Energies', null);
+    seedEntities.run('ent-s-c4', sanghaId, 'company', 'Meridian Renewables', null);
+    seedEntities.run('ent-s-c5', sanghaId, 'company', 'GridScale Partners', null);
+    seedEntities.run('ent-s-c6', sanghaId, 'company', 'SunPeak Energy', null);
+
+    // Sangha projects
+    seedEntities.run('ent-s-pr1', sanghaId, 'project', 'Oberon Solar', null);
+    seedEntities.run('ent-s-pr2', sanghaId, 'project', 'Insurance Product', null);
+    seedEntities.run('ent-s-pr3', sanghaId, 'project', 'SanghaModel', null);
+
+    // Sangha sites
+    seedEntities.run('ent-s-si1', sanghaId, 'site', 'ERCOT West', null);
+    seedEntities.run('ent-s-si2', sanghaId, 'site', 'HB_WEST', null);
+    seedEntities.run('ent-s-si3', sanghaId, 'site', 'HB_NORTH', null);
+
+    // DACP people
+    seedEntities.run('ent-d-p1', dacpId, 'person', 'David Castillo', '{"role":"Owner"}');
+    seedEntities.run('ent-d-p2', dacpId, 'person', 'Mike Rodriguez', '{"role":"Superintendent"}');
+    seedEntities.run('ent-d-p3', dacpId, 'person', 'Sarah Williams', '{"role":"Estimator"}');
+    seedEntities.run('ent-d-p4', dacpId, 'person', 'James Park', '{"role":"Project Manager"}');
+    seedEntities.run('ent-d-p5', dacpId, 'person', 'Lisa Chen', '{"role":"Office Manager"}');
+    seedEntities.run('ent-d-p6', dacpId, 'person', 'Robert Torres', '{"role":"Foreman"}');
+
+    // DACP companies
+    seedEntities.run('ent-d-c1', dacpId, 'company', 'DACP Construction', null);
+    seedEntities.run('ent-d-c2', dacpId, 'company', 'Turner Construction', null);
+    seedEntities.run('ent-d-c3', dacpId, 'company', 'McCarthy Building', null);
+    seedEntities.run('ent-d-c4', dacpId, 'company', 'Hensel Phelps', null);
+    seedEntities.run('ent-d-c5', dacpId, 'company', 'DPR Construction', null);
+    seedEntities.run('ent-d-c6', dacpId, 'company', 'Skanska', null);
+
+    // DACP projects
+    seedEntities.run('ent-d-pr1', dacpId, 'project', 'Memorial Hermann Phase 1', null);
+    seedEntities.run('ent-d-pr2', dacpId, 'project', 'Memorial Hermann Phase 2', null);
+    seedEntities.run('ent-d-pr3', dacpId, 'project', 'Westpark Retail', null);
+    seedEntities.run('ent-d-pr4', dacpId, 'project', "St. Luke's Parking", null);
+
+    // DACP sites
+    seedEntities.run('ent-d-si1', dacpId, 'site', 'Houston', null);
+    seedEntities.run('ent-d-si2', dacpId, 'site', 'Austin', null);
+    seedEntities.run('ent-d-si3', dacpId, 'site', 'Dallas', null);
+    seedEntities.run('ent-d-si4', dacpId, 'site', 'San Antonio', null);
+
+    console.log('Knowledge entities seeded (Sangha + DACP)');
+  }
+
+  // Seed DACP tenant
+  const dacpTenant = db.prepare('SELECT id FROM tenants WHERE id = ?').get('dacp-construction-001');
+  if (!dacpTenant) {
+    db.prepare(`
+      INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'dacp-construction-001', 'DACP Construction', 'dacp', 'professional', 'active',
+      JSON.stringify({ companyName: 'DACP', primaryColor: '#1e3a5f', secondaryColor: '#d4cdc5', hideSanghaBranding: true }),
+      JSON.stringify({ industry: 'construction', defaultOverheadPct: 10, defaultProfitPct: 15, region: 'Texas' }),
+      JSON.stringify({ maxUsers: 25, maxSites: 5, maxWorkloads: 50, maxAgents: 10, apiRateLimit: 120, dataRetentionDays: 365 })
+    );
+    console.log('DACP tenant created');
+  }
+
+  // Seed DACP admin user
+  const dacpAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacp.localhost');
+  if (!dacpAdmin) {
+    const salt = bcryptPkg.genSaltSync(12);
+    const hash = bcryptPkg.hashSync('admin123', salt);
+    db.prepare(`
+      INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
+      VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
+    `).run(hash);
+    console.log('DACP admin user created: admin@dacp.localhost / admin123');
+  }
+
+  // Seed data from JSON files
+  const dacpDataDir = join(__dirname, '../data/dacp');
+  const existing = db.prepare('SELECT COUNT(*) as c FROM dacp_pricing WHERE tenant_id = ?').get('dacp-construction-001');
+  if (existing.c === 0 && fs.existsSync(join(dacpDataDir, 'pricing_master.json'))) {
+    const TENANT_ID = 'dacp-construction-001';
+    const loadJson = (f) => JSON.parse(fs.readFileSync(join(dacpDataDir, f), 'utf-8'));
+
+    const pricing = loadJson('pricing_master.json');
+    const insertPricing = db.prepare(`INSERT OR IGNORE INTO dacp_pricing (id, tenant_id, category, item, unit, material_cost, labor_cost, equipment_cost, unit_price, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const p of pricing) insertPricing.run(p.id, TENANT_ID, p.category, p.item, p.unit, p.material_cost, p.labor_cost, p.equipment_cost, p.unit_price, p.notes);
+
+    const jobs = loadJson('jobs_history.json');
+    const insertJob = db.prepare(`INSERT OR IGNORE INTO dacp_jobs (id, tenant_id, estimate_id, project_name, gc_name, project_type, location, status, estimated_cost, actual_cost, bid_amount, margin_pct, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const j of jobs) insertJob.run(j.id, TENANT_ID, null, j.project_name, j.gc_name, j.project_type, j.location, j.status, j.estimated_cost, j.actual_cost, j.bid_amount, j.margin_pct, j.start_date, j.end_date, j.notes);
+
+    const bidRequests = loadJson('bid_requests_inbox.json');
+    const insertBid = db.prepare(`INSERT OR IGNORE INTO dacp_bid_requests (id, tenant_id, from_email, from_name, gc_name, subject, body, attachments_json, scope_json, due_date, status, urgency, missing_info_json, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const b of bidRequests) insertBid.run(b.id, TENANT_ID, b.from_email, b.from_name, b.gc_name, b.subject, b.body, JSON.stringify(b.attachments), JSON.stringify(b.scope), b.due_date, b.status, b.urgency, JSON.stringify(b.missing_info), b.received_at);
+
+    const fieldLogs = loadJson('field_logs.json');
+    const insertReport = db.prepare(`INSERT OR IGNORE INTO dacp_field_reports (id, tenant_id, job_id, date, reported_by, work_json, materials_json, labor_json, equipment_json, weather, notes, issues_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const f of fieldLogs) insertReport.run(f.id, TENANT_ID, f.job_id, f.date, f.reported_by, JSON.stringify(f.work_performed), JSON.stringify(f.materials_used), JSON.stringify(f.labor), JSON.stringify(f.equipment), f.weather, f.notes, JSON.stringify(f.issues));
+
+    console.log(`DACP: Seeded ${pricing.length} pricing, ${jobs.length} jobs, ${bidRequests.length} bids, ${fieldLogs.length} field reports`);
+
+    // Generate demo estimates for first 5 bid requests (Step 10)
+    const pricingMap = {};
+    for (const p of pricing) pricingMap[p.id] = p;
+
+    const KEYWORD_MAP = {
+      'slab on grade': 'FW-002', 'sog': 'FW-002', 'slab': 'FW-002', 'strip footing': 'FN-001',
+      'spread footing': 'FN-002', 'grade beam': 'FN-003', 'pier': 'FN-004', 'drilled': 'FN-004',
+      'curb': 'CG-001', 'sidewalk': 'CG-003', 'retaining wall': 'WL-002', 'cast in place wall': 'WL-002',
+      'elevated deck': 'ST-001', 'pt slab': 'ST-001', 'equipment pad': 'FW-003', 'containment': 'WL-003',
+      'demo': 'DM-001', 'removal': 'DM-001', 'trench drain': 'AC-004', 'housekeeping': 'FW-001',
+      'approach slab': 'FW-003', 'barrier rail': 'CG-001', 'mat foundation': 'FW-003',
+      'elevator pit': 'WL-002', 'stair': 'ST-004', 'loading dock': 'FW-003', 'apparatus bay': 'FW-003',
+      'drive apron': 'FW-003', 'ada ramp': 'CG-003', 'foundation': 'FN-001',
+    };
+
+    for (let i = 0; i < 5 && i < bidRequests.length; i++) {
+      const br = bidRequests[i];
+      const scope = br.scope || {};
+      const items = scope.items || [];
+      const lineItems = [];
+
+      for (const item of items) {
+        const norm = item.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+        const qtyMatch = item.match(/([\d,]+(?:\.\d+)?)\s*(sf|lf|cy|ea|lb|cf)/i);
+        const qty = qtyMatch ? parseFloat(qtyMatch[1].replace(/,/g, '')) : 0;
+        const unit = qtyMatch ? qtyMatch[2].toUpperCase() : 'EA';
+
+        let matchedId = null;
+        for (const [kw, pid] of Object.entries(KEYWORD_MAP)) {
+          if (norm.includes(kw)) { matchedId = pid; break; }
+        }
+
+        const p = matchedId ? pricingMap[matchedId] : null;
+        if (p && qty > 0) {
+          lineItems.push({
+            description: item, pricingId: p.id, pricingItem: p.item, category: p.category,
+            quantity: qty, unit: unit || p.unit, unitPrice: p.unit_price,
+            extended: Math.round(qty * p.unit_price * 100) / 100,
+          });
+        }
+      }
+
+      const subtotal = lineItems.reduce((s, li) => s + li.extended, 0);
+      const overhead = subtotal * 0.10;
+      const profit = (subtotal + overhead) * 0.15;
+      let mobilization = subtotal >= 150000 ? 3500 : subtotal >= 50000 ? 2500 : 1500;
+      let testing = subtotal >= 100000 ? 2400 : 1200;
+      const totalBid = Math.round((subtotal + overhead + profit + mobilization + testing) / 500) * 500;
+
+      const estId = `EST-DEMO-${String(i + 1).padStart(3, '0')}`;
+      const projectName = br.subject.replace(/^(RFQ|ITB|RFP|Pricing Request|Budget Pricing|Budget Request|Quick Turn|Bid|Pre-Qual \+ RFQ|FYI):?\s*/i, '').trim();
+
+      db.prepare(`INSERT OR IGNORE INTO dacp_estimates (id, tenant_id, bid_request_id, project_name, gc_name, status, line_items_json, subtotal, overhead_pct, profit_pct, mobilization, total_bid, confidence, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(estId, TENANT_ID, br.id, projectName, br.gc_name, 'draft', JSON.stringify(lineItems), subtotal, 10, 15, mobilization + testing, totalBid,
+          lineItems.filter(li => !li.pricingId).length > 0 ? 'medium' : 'high',
+          `Auto-generated demo estimate. ${lineItems.length} line items matched.`);
+
+      // Mark bid request as estimated
+      db.prepare('UPDATE dacp_bid_requests SET status = ? WHERE id = ? AND tenant_id = ?').run('estimated', br.id, TENANT_ID);
+    }
+    console.log('DACP: Generated 5 demo estimates');
+  }
+
+  // ─── Lead Engine Tables ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS le_leads (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      venue_name TEXT NOT NULL,
+      region TEXT, industry TEXT, trigger_news TEXT,
+      priority_score INTEGER DEFAULT 0,
+      website TEXT,
+      status TEXT DEFAULT 'new',
+      source TEXT DEFAULT 'discovery',
+      source_query TEXT,
+      discovered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      contacted_at TEXT, responded_at TEXT,
+      notes TEXT, agent_notes TEXT,
+      UNIQUE(tenant_id, venue_name)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS le_contacts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      lead_id TEXT NOT NULL REFERENCES le_leads(id),
+      name TEXT, email TEXT NOT NULL,
+      title TEXT, phone TEXT,
+      source TEXT DEFAULT 'discovery',
+      mx_valid INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(lead_id, email)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS le_outreach_log (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      lead_id TEXT NOT NULL REFERENCES le_leads(id),
+      contact_id TEXT REFERENCES le_contacts(id),
+      email_type TEXT DEFAULT 'initial',
+      subject TEXT, body TEXT,
+      status TEXT DEFAULT 'draft',
+      sent_at TEXT, opened_at TEXT, responded_at TEXT,
+      bounce_reason TEXT,
+      gmail_message_id TEXT, gmail_thread_id TEXT,
+      approved_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS le_discovery_config (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL UNIQUE,
+      queries_json TEXT,
+      regions_json TEXT,
+      current_position INTEGER DEFAULT 0,
+      queries_per_cycle INTEGER DEFAULT 2,
+      max_emails_per_cycle INTEGER DEFAULT 10,
+      followup_delay_days INTEGER DEFAULT 5,
+      max_followups INTEGER DEFAULT 2,
+      min_send_interval_seconds INTEGER DEFAULT 300,
+      last_full_cycle TEXT, last_inbox_check TEXT,
+      enabled INTEGER DEFAULT 0,
+      mode TEXT DEFAULT 'copilot',
+      sender_name TEXT, sender_email TEXT,
+      email_signature TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_le_leads_tenant ON le_leads(tenant_id, status)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_le_contacts_lead ON le_contacts(lead_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_le_outreach_tenant ON le_outreach_log(tenant_id, status)'); } catch (e) {}
+
+  // ─── Lead Engine Seed Data ──────────────────────────────────────────────
+  const leCount = db.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get('default');
+  if (leCount.c === 0) {
+    const insertLead = db.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertContact = db.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertOutreach = db.prepare(`INSERT OR IGNORE INTO le_outreach_log (id, tenant_id, lead_id, contact_id, email_type, subject, body, status, sent_at, responded_at, approved_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
+    // Sangha leads
+    const S = 'default';
+    insertLead.run('le-s-001', S, 'Meridian Renewables', 'ERCOT', 'Solar IPP', 'Crane County portfolio facing negative LMPs', 92, 'meridianrenewables.com', 'responded', 'discovery', 'solar IPP Texas ERCOT', '2026-02-20', '2026-03-02', '2026-03-07', null, 'Strong interest — exploring BTM mining for Crane County');
+    insertLead.run('le-s-002', S, 'GridScale Partners', 'PJM', 'Wind IPP', 'Reviewing underperforming PJM wind assets', 85, 'gridscalepartners.com', 'responded', 'discovery', 'wind IPP PJM underperforming', '2026-02-22', '2026-03-03', '2026-03-05', null, 'Wants partnership structure details');
+    insertLead.run('le-s-003', S, 'Nexus Solar', 'MISO', 'Solar IPP', '95 MW portfolio in MISO', 60, 'nexussolar.com', 'contacted', 'discovery', 'solar developer MISO', '2026-02-25', '2026-03-04', null, null, 'Not right time — revisit Q3');
+    insertLead.run('le-s-004', S, 'SunPeak Energy', 'ERCOT', 'Solar IPP', '240 MW West Texas solar portfolio', 88, 'sunpeakenergy.com', 'meeting', 'discovery', 'solar IPP ERCOT West Texas', '2026-02-18', '2026-02-28', '2026-03-02', null, 'Call scheduled — two sites may fit');
+    insertLead.run('le-s-005', S, 'Apex Clean Energy Partners', 'SPP', 'Wind/Solar', '400 MW mixed portfolio struggling with negative LMPs in Oklahoma', 90, 'apexcleanenergy.com', 'responded', 'discovery', 'renewable IPP SPP negative LMP', '2026-02-15', '2026-02-26', '2026-03-01', null, 'Looping in energy team — strong signal');
+    insertLead.run('le-s-006', S, 'Clearway Energy', 'ERCOT', 'Wind IPP', '520 MW wind portfolio in ERCOT', 75, 'clearwayenergy.com', 'contacted', 'discovery', 'wind energy ERCOT large portfolio', '2026-03-01', '2026-03-04', null, null, null);
+    insertLead.run('le-s-007', S, 'EDP Renewables', 'MISO', 'Solar IPP', '350 MW solar development in MISO', 70, 'edprenewables.com', 'new', 'discovery', 'solar developer MISO 2026', '2026-03-07', null, null, null, null);
+    insertLead.run('le-s-008', S, 'NextEra Partners', 'ERCOT', 'Wind/Solar', '1.2 GW mixed portfolio', 95, 'nextera.com', 'new', 'discovery', 'large IPP ERCOT portfolio', '2026-03-07', null, null, null, null);
+
+    // Sangha contacts
+    insertContact.run('lc-s-001', S, 'le-s-001', 'Sarah Chen', 'schen@meridianrenewables.com', 'CFO', null, 'discovery', 1);
+    insertContact.run('lc-s-002', S, 'le-s-002', 'Mark Liu', 'mliu@gridscalepartners.com', 'VP Strategy', null, 'discovery', 1);
+    insertContact.run('lc-s-003', S, 'le-s-003', 'David Park', 'dpark@nexussolar.com', 'Director BD', null, 'discovery', 1);
+    insertContact.run('lc-s-004', S, 'le-s-004', 'James Torres', 'jtorres@sunpeakenergy.com', 'VP Operations', null, 'discovery', 1);
+    insertContact.run('lc-s-005', S, 'le-s-005', 'Linda Pham', 'lpham@apexcleanenergy.com', 'CEO', null, 'discovery', 1);
+    insertContact.run('lc-s-006', S, 'le-s-006', 'Ryan Brooks', 'rbrooks@clearwayenergy.com', 'BD Manager', null, 'discovery', 1);
+    insertContact.run('lc-s-007', S, 'le-s-007', 'Carlos Ruiz', 'cruiz@edprenewables.com', 'Head of BD', null, 'discovery', 1);
+    insertContact.run('lc-s-008', S, 'le-s-008', 'Amanda Foster', 'afoster@nextera.com', 'VP Partnerships', null, 'discovery', 1);
+
+    // Sangha outreach
+    insertOutreach.run('lo-s-001', S, 'le-s-001', 'lc-s-001', 'initial', 'Behind-the-meter mining for Crane County', 'Hi Sarah,\n\nI came across Meridian\'s Crane County solar portfolio and noticed your assets have been facing some of the same negative LMP challenges that many ERCOT operators are dealing with right now.\n\nWe\'ve been working with renewable operators to co-locate behind-the-meter Bitcoin mining on underperforming sites — effectively creating an additional revenue stream from the same infrastructure.\n\nWould be happy to share how this has worked on similar assets.\n\nBest,\nSangha Renewables', 'sent', '2026-03-02T09:14:00', '2026-03-07T11:42:00', 'auto', '2026-03-02');
+    insertOutreach.run('lo-s-002', S, 'le-s-002', 'lc-s-002', 'initial', 'Hashrate co-location for underperforming wind assets', 'Hi Mark,\n\nGridScale\'s PJM wind portfolio caught our attention — we work with operators who are turning curtailed or low-price hours into reliable mining revenue.\n\nWould love to share our approach if relevant.\n\nBest,\nSangha Renewables', 'sent', '2026-03-03T10:22:00', '2026-03-05T14:18:00', 'auto', '2026-03-03');
+    insertOutreach.run('lo-s-003', S, 'le-s-004', 'lc-s-004', 'initial', 'Mining + solar in West Texas', 'Hi James,\n\nSunPeak\'s West Texas solar sites are exactly the kind of assets where behind-the-meter mining adds the most value.\n\nWe have 8 years of operational data to back it up. Happy to walk through the numbers.\n\nBest,\nSangha Renewables', 'sent', '2026-02-28T08:45:00', '2026-03-02T16:30:00', 'auto', '2026-02-28');
+    insertOutreach.run('lo-s-004', S, 'le-s-001', 'lc-s-001', 'followup_1', 'Re: Behind-the-meter mining for Crane County', 'Hi Sarah,\n\nGreat to hear there\'s alignment. I\'ll put together a brief overview of our typical project structure for a site in your capacity range.\n\nWould Thursday or Friday afternoon work for a quick call?\n\nBest,\nSangha Renewables', 'draft', null, null, null, '2026-03-07');
+
+    // Sangha discovery config
+    db.prepare(`INSERT OR IGNORE INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      'ldc-default', S,
+      JSON.stringify(['solar IPP ERCOT negative LMP', 'wind energy developer PJM underperforming', 'renewable IPP curtailment MISO', 'solar farm operator SPP Oklahoma', 'wind portfolio ERCOT West Texas', 'IPP behind-the-meter colocation', 'renewable energy merchant risk', 'solar developer CAISO California', 'wind IPP Texas market', 'renewable energy asset optimization', 'curtailed wind farm operator', 'solar IPP revenue floor', 'wind energy hedge strategy', 'renewable portfolio optimization 2026', 'IPP alternative revenue stream']),
+      JSON.stringify(['ERCOT', 'PJM', 'MISO', 'SPP', 'CAISO']),
+      4, 2, 10, 5, 2, 300, 1, 'copilot', 'Sangha Renewables', 'outreach@sangha.io'
+    );
+
+    console.log('Lead Engine: Seeded 8 Sangha leads + contacts + outreach');
+  }
+
+  // DACP lead engine seed
+  const leDacpCount = db.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get('dacp-construction-001');
+  if (leDacpCount.c === 0) {
+    const insertLead = db.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertContact = db.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
+    const D = 'dacp-construction-001';
+    insertLead.run('le-d-001', D, 'Turner Construction — Houston', 'Texas', 'General Contractor', 'Multiple active projects in Houston metro', 90, 'turnerconstruction.com', 'contacted', 'discovery', 'GC Houston concrete subcontractor needed', '2026-02-10', '2026-02-20', null, null, null);
+    insertLead.run('le-d-002', D, 'DPR Construction', 'Texas', 'General Contractor', 'Expanding Texas healthcare portfolio', 85, 'dpr.com', 'responded', 'discovery', 'GC Texas healthcare construction', '2026-02-12', '2026-02-22', '2026-03-01', null, 'Interested in concrete sub for medical center');
+    insertLead.run('le-d-003', D, 'Austin Commercial', 'Texas', 'General Contractor', 'New mixed-use project in Austin', 80, 'austin-ind.com', 'contacted', 'discovery', 'GC Austin mixed use development', '2026-02-15', '2026-02-25', null, null, null);
+    insertLead.run('le-d-004', D, 'McCarthy Building', 'Texas', 'General Contractor', 'University campus expansion in San Antonio', 75, 'mccarthy.com', 'new', 'discovery', 'GC San Antonio university construction', '2026-03-01', null, null, null, null);
+    insertLead.run('le-d-005', D, 'Hensel Phelps', 'Texas', 'General Contractor', 'Federal project in Houston', 82, 'henselphelps.com', 'new', 'discovery', 'GC Houston federal construction concrete', '2026-03-03', null, null, null, null);
+    insertLead.run('le-d-006', D, 'Skanska USA', 'Texas', 'General Contractor', 'Infrastructure project TxDOT', 78, 'usa.skanska.com', 'new', 'discovery', 'GC Texas infrastructure TxDOT', '2026-03-05', null, null, null, null);
+
+    insertContact.run('lc-d-001', D, 'le-d-001', 'Mike Johnson', 'mjohnson@turnerconstruction.com', 'Project Executive', '713-555-0101', 'discovery', 1);
+    insertContact.run('lc-d-002', D, 'le-d-002', 'Karen Williams', 'kwilliams@dpr.com', 'Sr. Project Manager', '512-555-0202', 'discovery', 1);
+    insertContact.run('lc-d-003', D, 'le-d-003', 'Tom Richardson', 'trichardson@austin-ind.com', 'Preconstruction Manager', '512-555-0303', 'discovery', 1);
+    insertContact.run('lc-d-004', D, 'le-d-004', 'Steve Martinez', 'smartinez@mccarthy.com', 'VP Preconstruction', '210-555-0404', 'discovery', 1);
+    insertContact.run('lc-d-005', D, 'le-d-005', 'Rachel Lee', 'rlee@henselphelps.com', 'Project Engineer', '713-555-0505', 'discovery', 1);
+    insertContact.run('lc-d-006', D, 'le-d-006', 'Dan Thompson', 'dthompson@usa.skanska.com', 'Estimating Manager', '713-555-0606', 'discovery', 1);
+
+    db.prepare(`INSERT OR IGNORE INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      'ldc-dacp', D,
+      JSON.stringify(['GC Houston concrete subcontractor RFQ', 'general contractor Texas concrete foundation', 'Houston healthcare construction concrete', 'Austin commercial construction concrete sub', 'San Antonio university campus concrete', 'DFW industrial construction concrete', 'Houston infrastructure concrete paving', 'Texas GC seeking concrete subcontractor', 'Houston medical center construction', 'Texas mixed use development concrete', 'GC pre-qualification concrete Houston', 'TxDOT concrete subcontractor Texas', 'commercial concrete pour Houston 2026', 'multifamily construction concrete Texas', 'Houston warehouse concrete slab contractor']),
+      JSON.stringify(['Houston', 'Austin', 'San Antonio', 'Dallas-Fort Worth']),
+      2, 2, 8, 5, 2, 300, 0, 'copilot', 'DACP Construction', 'estimating@dacpconstruction.com'
+    );
+
+    console.log('Lead Engine: Seeded 6 DACP leads + contacts');
+  }
+
+  console.log('DACP tables initialized');
+}
+
+// ─── DACP CRUD Helpers ──────────────────────────────────────────────────────
+
+export function getDacpPricing(tenantId, category) {
+  if (category) {
+    return db.prepare('SELECT * FROM dacp_pricing WHERE tenant_id = ? AND category = ? ORDER BY category, id').all(tenantId, category);
+  }
+  return db.prepare('SELECT * FROM dacp_pricing WHERE tenant_id = ? ORDER BY category, id').all(tenantId);
+}
+
+export function getDacpBidRequests(tenantId, status) {
+  if (status) {
+    return db.prepare('SELECT * FROM dacp_bid_requests WHERE tenant_id = ? AND status = ? ORDER BY due_date ASC').all(tenantId, status);
+  }
+  return db.prepare('SELECT * FROM dacp_bid_requests WHERE tenant_id = ? ORDER BY due_date ASC').all(tenantId);
+}
+
+export function getDacpBidRequest(tenantId, id) {
+  const row = db.prepare('SELECT * FROM dacp_bid_requests WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+  if (row) {
+    row.attachments = row.attachments_json ? JSON.parse(row.attachments_json) : [];
+    row.scope = row.scope_json ? JSON.parse(row.scope_json) : {};
+    row.missing_info = row.missing_info_json ? JSON.parse(row.missing_info_json) : [];
+  }
+  return row;
+}
+
+export function updateDacpBidRequest(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_bid_requests SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function getDacpEstimates(tenantId) {
+  return db.prepare('SELECT * FROM dacp_estimates WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getDacpEstimate(tenantId, id) {
+  const row = db.prepare('SELECT * FROM dacp_estimates WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+  if (row && row.line_items_json) row.line_items = JSON.parse(row.line_items_json);
+  return row;
+}
+
+export function createDacpEstimate(estimate) {
+  return db.prepare(`
+    INSERT INTO dacp_estimates (id, tenant_id, bid_request_id, project_name, gc_name, status, line_items_json, subtotal, overhead_pct, profit_pct, mobilization, total_bid, confidence, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    estimate.id, estimate.tenantId, estimate.bidRequestId, estimate.projectName, estimate.gcName,
+    estimate.status || 'draft', JSON.stringify(estimate.lineItems), estimate.subtotal,
+    estimate.overheadPct, estimate.profitPct, estimate.mobilization, estimate.totalBid,
+    estimate.confidence, estimate.notes
+  );
+}
+
+export function updateDacpEstimate(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    if (k === 'lineItems') {
+      fields.push('line_items_json = ?');
+      values.push(JSON.stringify(v));
+    } else {
+      fields.push(`${k} = ?`);
+      values.push(v);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_estimates SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function getDacpJobs(tenantId, status) {
+  if (status) {
+    return db.prepare('SELECT * FROM dacp_jobs WHERE tenant_id = ? AND status = ? ORDER BY start_date DESC').all(tenantId, status);
+  }
+  return db.prepare('SELECT * FROM dacp_jobs WHERE tenant_id = ? ORDER BY start_date DESC NULLS LAST').all(tenantId);
+}
+
+export function getDacpJob(tenantId, id) {
+  return db.prepare('SELECT * FROM dacp_jobs WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function getDacpFieldReports(tenantId, jobId) {
+  if (jobId) {
+    return db.prepare('SELECT * FROM dacp_field_reports WHERE tenant_id = ? AND job_id = ? ORDER BY date DESC').all(tenantId, jobId);
+  }
+  return db.prepare('SELECT * FROM dacp_field_reports WHERE tenant_id = ? ORDER BY date DESC').all(tenantId);
+}
+
+export function getDacpFieldReport(tenantId, id) {
+  const row = db.prepare('SELECT * FROM dacp_field_reports WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+  if (row) {
+    row.work = row.work_json ? JSON.parse(row.work_json) : [];
+    row.materials = row.materials_json ? JSON.parse(row.materials_json) : [];
+    row.labor = row.labor_json ? JSON.parse(row.labor_json) : {};
+    row.equipment = row.equipment_json ? JSON.parse(row.equipment_json) : [];
+    row.issues = row.issues_json ? JSON.parse(row.issues_json) : [];
+  }
+  return row;
+}
+
+export function createDacpFieldReport(report) {
+  return db.prepare(`
+    INSERT INTO dacp_field_reports (id, tenant_id, job_id, date, reported_by, work_json, materials_json, labor_json, equipment_json, weather, notes, issues_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    report.id, report.tenantId, report.jobId, report.date, report.reportedBy,
+    JSON.stringify(report.work), JSON.stringify(report.materials),
+    JSON.stringify(report.labor), JSON.stringify(report.equipment),
+    report.weather, report.notes, JSON.stringify(report.issues)
+  );
+}
+
+export function getDacpStats(tenantId) {
+  const bidRequests = db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status = \'new\' THEN 1 ELSE 0 END) as open FROM dacp_bid_requests WHERE tenant_id = ?').get(tenantId);
+  const estimates = db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status = \'draft\' THEN 1 ELSE 0 END) as drafts, SUM(CASE WHEN status = \'sent\' THEN 1 ELSE 0 END) as sent FROM dacp_estimates WHERE tenant_id = ?').get(tenantId);
+  const jobs = db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN status = \'complete\' THEN 1 ELSE 0 END) as complete, SUM(CASE WHEN status = \'active\' THEN 1 ELSE 0 END) as active FROM dacp_jobs WHERE tenant_id = ?').get(tenantId);
+  const wonJobs = db.prepare('SELECT COUNT(*) as won, AVG(margin_pct) as avg_margin, SUM(bid_amount) as total_revenue FROM dacp_jobs WHERE tenant_id = ? AND status = \'complete\' AND margin_pct IS NOT NULL').get(tenantId);
+  const lostJobs = db.prepare('SELECT COUNT(*) as lost FROM dacp_jobs WHERE tenant_id = ? AND status = \'lost\'').get(tenantId);
+  const fieldReports = db.prepare('SELECT COUNT(*) as total FROM dacp_field_reports WHERE tenant_id = ?').get(tenantId);
+
+  const winRate = (wonJobs.won + lostJobs.lost) > 0 ? Math.round((wonJobs.won / (wonJobs.won + lostJobs.lost)) * 100) : 0;
+
+  return {
+    openRfqs: bidRequests.open || 0,
+    totalBidRequests: bidRequests.total || 0,
+    totalEstimates: estimates.total || 0,
+    draftEstimates: estimates.drafts || 0,
+    sentEstimates: estimates.sent || 0,
+    totalJobs: jobs.total || 0,
+    activeJobs: jobs.active || 0,
+    completeJobs: jobs.complete || 0,
+    wonJobs: wonJobs.won || 0,
+    lostJobs: lostJobs.lost || 0,
+    winRate,
+    avgMargin: wonJobs.avg_margin ? Math.round(wonJobs.avg_margin * 10) / 10 : 0,
+    totalRevenue: wonJobs.total_revenue || 0,
+    totalFieldReports: fieldReports.total || 0,
+  };
+}
+
+// ─── Lead Engine CRUD Helpers ────────────────────────────────────────────────
+
+export function getLeads(tenantId, status, limit = 100) {
+  if (status) {
+    return db.prepare('SELECT * FROM le_leads WHERE tenant_id = ? AND status = ? ORDER BY priority_score DESC, discovered_at DESC LIMIT ?').all(tenantId, status, limit);
+  }
+  return db.prepare('SELECT * FROM le_leads WHERE tenant_id = ? ORDER BY priority_score DESC, discovered_at DESC LIMIT ?').all(tenantId, limit);
+}
+
+export function getLead(tenantId, id) {
+  return db.prepare('SELECT * FROM le_leads WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function insertLead(lead) {
+  return db.prepare(`
+    INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, notes, agent_notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    lead.id, lead.tenantId, lead.venueName, lead.region || null, lead.industry || null,
+    lead.triggerNews || null, lead.priorityScore || 0, lead.website || null,
+    lead.status || 'new', lead.source || 'discovery', lead.sourceQuery || null,
+    lead.discoveredAt || new Date().toISOString(), lead.notes || null, lead.agentNotes || null
+  );
+}
+
+export function updateLead(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    const col = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+    fields.push(`${col} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE le_leads SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function getLeadContacts(tenantId, leadId) {
+  return db.prepare('SELECT * FROM le_contacts WHERE tenant_id = ? AND lead_id = ? ORDER BY created_at').all(tenantId, leadId);
+}
+
+export function insertLeadContact(contact) {
+  return db.prepare(`
+    INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    contact.id, contact.tenantId, contact.leadId, contact.name || null,
+    contact.email, contact.title || null, contact.phone || null,
+    contact.source || 'discovery', contact.mxValid ?? 1
+  );
+}
+
+export function getOutreachLog(tenantId, status, limit = 100) {
+  let query = `
+    SELECT o.*, l.venue_name, l.region, l.industry, c.name as contact_name, c.email as contact_email
+    FROM le_outreach_log o
+    LEFT JOIN le_leads l ON o.lead_id = l.id
+    LEFT JOIN le_contacts c ON o.contact_id = c.id
+    WHERE o.tenant_id = ?
+  `;
+  const params = [tenantId];
+  if (status) {
+    query += ' AND o.status = ?';
+    params.push(status);
+  }
+  query += ' ORDER BY o.created_at DESC LIMIT ?';
+  params.push(limit);
+  return db.prepare(query).all(...params);
+}
+
+export function insertOutreachEntry(entry) {
+  return db.prepare(`
+    INSERT INTO le_outreach_log (id, tenant_id, lead_id, contact_id, email_type, subject, body, status, sent_at, approved_by, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    entry.id, entry.tenantId, entry.leadId, entry.contactId || null,
+    entry.emailType || 'initial', entry.subject || null, entry.body || null,
+    entry.status || 'draft', entry.sentAt || null, entry.approvedBy || null,
+    entry.createdAt || new Date().toISOString()
+  );
+}
+
+export function updateOutreachEntry(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    const col = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+    fields.push(`${col} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE le_outreach_log SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function getLeadDiscoveryConfig(tenantId) {
+  const row = db.prepare('SELECT * FROM le_discovery_config WHERE tenant_id = ?').get(tenantId);
+  if (row) {
+    row.queries = row.queries_json ? JSON.parse(row.queries_json) : [];
+    row.regions = row.regions_json ? JSON.parse(row.regions_json) : [];
+  }
+  return row;
+}
+
+export function upsertLeadDiscoveryConfig(config) {
+  return db.prepare(`
+    INSERT INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email, email_signature)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(tenant_id) DO UPDATE SET
+      queries_json = excluded.queries_json,
+      regions_json = excluded.regions_json,
+      current_position = excluded.current_position,
+      queries_per_cycle = excluded.queries_per_cycle,
+      max_emails_per_cycle = excluded.max_emails_per_cycle,
+      followup_delay_days = excluded.followup_delay_days,
+      max_followups = excluded.max_followups,
+      min_send_interval_seconds = excluded.min_send_interval_seconds,
+      enabled = excluded.enabled,
+      mode = excluded.mode,
+      sender_name = excluded.sender_name,
+      sender_email = excluded.sender_email,
+      email_signature = excluded.email_signature
+  `).run(
+    config.id || `ldc-${config.tenantId}`, config.tenantId,
+    JSON.stringify(config.queries || []), JSON.stringify(config.regions || []),
+    config.currentPosition || 0, config.queriesPerCycle || 2,
+    config.maxEmailsPerCycle || 10, config.followupDelayDays || 5,
+    config.maxFollowups || 2, config.minSendIntervalSeconds || 300,
+    config.enabled ? 1 : 0, config.mode || 'copilot',
+    config.senderName || null, config.senderEmail || null,
+    config.emailSignature || null
+  );
+}
+
+export function getLeadStats(tenantId) {
+  const total = db.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get(tenantId);
+  const byStatus = db.prepare(`
+    SELECT status, COUNT(*) as c FROM le_leads WHERE tenant_id = ? GROUP BY status
+  `).all(tenantId);
+  const statusMap = {};
+  for (const row of byStatus) statusMap[row.status] = row.c;
+
+  const totalSent = db.prepare(`SELECT COUNT(*) as c FROM le_outreach_log WHERE tenant_id = ? AND status = 'sent'`).get(tenantId);
+  const totalResponded = db.prepare(`SELECT COUNT(*) as c FROM le_outreach_log WHERE tenant_id = ? AND responded_at IS NOT NULL`).get(tenantId);
+  const drafts = db.prepare(`SELECT COUNT(*) as c FROM le_outreach_log WHERE tenant_id = ? AND status = 'draft'`).get(tenantId);
+  const today = new Date().toISOString().slice(0, 10);
+  const sentToday = db.prepare(`SELECT COUNT(*) as c FROM le_outreach_log WHERE tenant_id = ? AND status = 'sent' AND sent_at LIKE ?`).get(tenantId, today + '%');
+
+  const responseRate = totalSent.c > 0 ? Math.round((totalResponded.c / totalSent.c) * 1000) / 10 : 0;
+
+  return {
+    totalLeads: total.c,
+    newLeads: statusMap.new || 0,
+    enrichedLeads: statusMap.enriched || 0,
+    contactedLeads: statusMap.contacted || 0,
+    respondedLeads: statusMap.responded || 0,
+    meetingLeads: statusMap.meeting || 0,
+    qualifiedLeads: statusMap.qualified || 0,
+    totalEmailsSent: totalSent.c,
+    totalResponded: totalResponded.c,
+    responseRate,
+    pendingDrafts: drafts.c,
+    sentToday: sentToday.c,
+  };
+}
+
+// ─── API Usage Tracking ─────────────────────────────────────────────────────
+
+export function getUsageStats(tenantId, startDate, endDate) {
+  const sql = `
+    SELECT
+      json_extract(metadata_json, '$.model') as model,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY model
+  `;
+  return db.prepare(sql).all(tenantId, startDate, endDate);
+}
+
+export function getUsageByUser(tenantId, startDate, endDate) {
+  const sql = `
+    SELECT
+      user_id,
+      json_extract(metadata_json, '$.model') as model,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY user_id, model
+  `;
+  return db.prepare(sql).all(tenantId, startDate, endDate);
+}
+
+export function getUsageByDay(tenantId, startDate, endDate) {
+  const sql = `
+    SELECT
+      date(created_at) as day,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY date(created_at)
+    ORDER BY day
+  `;
+  return db.prepare(sql).all(tenantId, startDate, endDate);
+}
+
+export function getUsageAllTenants(startDate, endDate) {
+  const sql = `
+    SELECT
+      tenant_id,
+      json_extract(metadata_json, '$.model') as model,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY tenant_id, model
+  `;
+  return db.prepare(sql).all(startDate, endDate);
+}
+
+export function getUsageByDayAllTenants(startDate, endDate) {
+  const sql = `
+    SELECT
+      date(created_at) as day,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY date(created_at)
+    ORDER BY day
+  `;
+  return db.prepare(sql).all(startDate, endDate);
+}
+
+// ─── Tenant Files ─────────────────────────────────────────────────────────
+
+function initFilesTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_files (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      file_type TEXT,
+      size_bytes INTEGER DEFAULT 0,
+      modified_at TEXT,
+      drive_file_id TEXT,
+      drive_url TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tenant_files_tenant ON tenant_files(tenant_id)'); } catch (e) { /* exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tenant_files_category ON tenant_files(tenant_id, category)'); } catch (e) { /* exists */ }
+}
+
+export function getTenantFiles(tenantId, { category, search, limit = 100 } = {}) {
+  let sql = 'SELECT * FROM tenant_files WHERE tenant_id = ?';
+  const params = [tenantId];
+
+  if (category) {
+    sql += ' AND category = ?';
+    params.push(category);
+  }
+  if (search) {
+    sql += ' AND name LIKE ?';
+    params.push(`%${search}%`);
+  }
+  sql += ' ORDER BY modified_at DESC LIMIT ?';
+  params.push(limit);
+
+  return db.prepare(sql).all(params);
+}
+
+export function getTenantFileCategories(tenantId) {
+  return db.prepare(
+    'SELECT category, COUNT(*) as count FROM tenant_files WHERE tenant_id = ? GROUP BY category ORDER BY count DESC'
+  ).all(tenantId);
+}
+
+export function upsertTenantFile(file) {
+  return db.prepare(`
+    INSERT OR REPLACE INTO tenant_files (id, tenant_id, name, category, file_type, size_bytes, modified_at, drive_file_id, drive_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(file.id, file.tenant_id, file.name, file.category, file.file_type, file.size_bytes, file.modified_at, file.drive_file_id, file.drive_url);
+}
+
+export function getTenantFileCount(tenantId) {
+  return db.prepare('SELECT COUNT(*) as count FROM tenant_files WHERE tenant_id = ?').get(tenantId).count;
+}
+
+export function getRecentApiLogs(limit = 20) {
+  const sql = `
+    SELECT
+      tenant_id,
+      content,
+      json_extract(metadata_json, '$.model') as model,
+      json_extract(metadata_json, '$.input_tokens') as input_tokens,
+      json_extract(metadata_json, '$.output_tokens') as output_tokens,
+      created_at
+    FROM chat_messages
+    WHERE role = 'assistant' AND metadata_json IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT ?
+  `;
+  return db.prepare(sql).all(limit);
+}
+
+export function getPaginatedApiLogs({ limit = 25, offset = 0, tenantId, model, search } = {}) {
+  let where = "role = 'assistant' AND metadata_json IS NOT NULL";
+  const params = [];
+
+  if (tenantId) {
+    where += ' AND tenant_id = ?';
+    params.push(tenantId);
+  }
+  if (model) {
+    where += " AND json_extract(metadata_json, '$.model') LIKE ?";
+    params.push(`%${model}%`);
+  }
+  if (search) {
+    where += ' AND content LIKE ?';
+    params.push(`%${search}%`);
+  }
+
+  const countSql = `SELECT COUNT(*) as total FROM chat_messages WHERE ${where}`;
+  const total = db.prepare(countSql).get(...params).total;
+
+  const dataSql = `
+    SELECT
+      tenant_id, agent_id, user_id, content,
+      json_extract(metadata_json, '$.model') as model,
+      json_extract(metadata_json, '$.input_tokens') as input_tokens,
+      json_extract(metadata_json, '$.output_tokens') as output_tokens,
+      metadata_json,
+      created_at
+    FROM chat_messages
+    WHERE ${where}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `;
+  const rows = db.prepare(dataSql).all(...params, limit, offset);
+
+  return { rows, total };
+}
+
+export function getUsageByDayByModel(startDate, endDate) {
+  const sql = `
+    SELECT
+      date(created_at) as day,
+      json_extract(metadata_json, '$.model') as model,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY date(created_at), model
+    ORDER BY day
+  `;
+  return db.prepare(sql).all(startDate, endDate);
 }
 
 export default db;

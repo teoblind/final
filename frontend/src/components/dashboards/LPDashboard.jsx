@@ -56,7 +56,7 @@ function PortfolioPanel({ data, performance }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div>
           <p className="text-[10px] text-terminal-muted uppercase">Capital Deployed</p>
-          <p className="text-xl font-bold text-terminal-green font-mono">{fmtCurrency(data.capitalDeployed)}</p>
+          <p className="text-xl font-bold text-terminal-green font-sans">{fmtCurrency(data.capitalDeployed)}</p>
         </div>
         <div>
           <p className="text-[10px] text-terminal-muted uppercase">Active Policies</p>
@@ -64,11 +64,11 @@ function PortfolioPanel({ data, performance }) {
         </div>
         <div>
           <p className="text-[10px] text-terminal-muted uppercase">Monthly Premium</p>
-          <p className="text-xl font-bold text-terminal-cyan font-mono">{fmtCurrency(data.monthlyPremiumIncome)}</p>
+          <p className="text-xl font-bold text-terminal-cyan font-sans">{fmtCurrency(data.monthlyPremiumIncome)}</p>
         </div>
         <div>
           <p className="text-[10px] text-terminal-muted uppercase">Covered Hashrate</p>
-          <p className="text-xl font-bold text-terminal-text font-mono">
+          <p className="text-xl font-bold text-terminal-text font-sans">
             {fmt((data.totalCoveredHashrate || 0) / 1000, 1)} <span className="text-xs text-terminal-muted">PH/s</span>
           </p>
         </div>
@@ -79,21 +79,21 @@ function PortfolioPanel({ data, performance }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <p className="text-[10px] text-terminal-muted uppercase">Annual Premium</p>
-              <p className="text-sm font-bold text-terminal-green font-mono">{fmtCurrency(performance.annualPremiumIncome)}</p>
+              <p className="text-sm font-bold text-terminal-green font-sans">{fmtCurrency(performance.annualPremiumIncome)}</p>
             </div>
             <div>
               <p className="text-[10px] text-terminal-muted uppercase">Claims Paid</p>
-              <p className="text-sm font-bold text-terminal-red font-mono">{fmtCurrency(data.totalClaimsPaid)}</p>
+              <p className="text-sm font-bold text-terminal-red font-sans">{fmtCurrency(data.totalClaimsPaid)}</p>
             </div>
             <div>
               <p className="text-[10px] text-terminal-muted uppercase">Net Income</p>
-              <p className={`text-sm font-bold font-mono ${(performance.netIncomePostFees || 0) >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
+              <p className={`text-sm font-bold font-sans ${(performance.netIncomePostFees || 0) >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
                 {fmtCurrency(performance.netIncomePostFees)}
               </p>
             </div>
             <div>
               <p className="text-[10px] text-terminal-muted uppercase">Return on Capital</p>
-              <p className={`text-sm font-bold font-mono ${(performance.returnOnDeployedCapital || 0) >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
+              <p className={`text-sm font-bold font-sans ${(performance.returnOnDeployedCapital || 0) >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
                 {fmtPct(performance.returnOnDeployedCapital)}
               </p>
             </div>
@@ -143,11 +143,11 @@ function AllocationCard({ alloc, onAction }) {
       <div className="grid grid-cols-3 gap-2 mb-2 text-xs">
         <div>
           <span className="text-terminal-muted">Floor: </span>
-          <span className="text-terminal-cyan font-mono">${fmt(terms.floorPrice, 2)}</span>
+          <span className="text-terminal-cyan font-sans">${fmt(terms.floorPrice, 2)}</span>
         </div>
         <div>
           <span className="text-terminal-muted">Premium: </span>
-          <span className="text-terminal-green font-mono">{fmtCurrency(terms.monthlyPremium)}/mo</span>
+          <span className="text-terminal-green font-sans">{fmtCurrency(terms.monthlyPremium)}/mo</span>
         </div>
         <div>
           <span className="text-terminal-muted">Term: </span>
@@ -170,19 +170,19 @@ function AllocationCard({ alloc, onAction }) {
             <p className="text-terminal-muted font-semibold">Fee Structure</p>
             <div className="flex justify-between">
               <span className="text-terminal-muted">LP Premium Share</span>
-              <span className="text-terminal-green font-mono">{fmtCurrency(terms.lpPremiumShare)}/mo</span>
+              <span className="text-terminal-green font-sans">{fmtCurrency(terms.lpPremiumShare)}/mo</span>
             </div>
             <div className="flex justify-between">
               <span className="text-terminal-muted">Sangha Structuring Fee</span>
-              <span className="text-terminal-text font-mono">{fmtCurrency(terms.structuringFee)}/mo</span>
+              <span className="text-terminal-text font-sans">{fmtCurrency(terms.structuringFee)}/mo</span>
             </div>
             <div className="flex justify-between">
               <span className="text-terminal-muted">Sangha Management Fee</span>
-              <span className="text-terminal-text font-mono">{fmtCurrency(terms.managementFee)}/mo</span>
+              <span className="text-terminal-text font-sans">{fmtCurrency(terms.managementFee)}/mo</span>
             </div>
             <div className="flex justify-between border-t border-terminal-border/30 pt-1">
               <span className="text-terminal-muted font-semibold">Total Miner Premium</span>
-              <span className="text-terminal-cyan font-mono font-semibold">{fmtCurrency(terms.monthlyPremium)}/mo</span>
+              <span className="text-terminal-cyan font-sans font-semibold">{fmtCurrency(terms.monthlyPremium)}/mo</span>
             </div>
           </div>
 
@@ -300,15 +300,15 @@ function ActivePoliciesPanel({ policies }) {
                 </div>
                 <div>
                   <span className="text-terminal-muted">Floor: </span>
-                  <span className="text-terminal-text font-mono">${fmt(p.floorPrice, 2)}</span>
+                  <span className="text-terminal-text font-sans">${fmt(p.floorPrice, 2)}</span>
                 </div>
                 <div>
                   <span className="text-terminal-muted">Premium: </span>
-                  <span className="text-terminal-green font-mono">{fmtCurrency(p.monthlyPremium)}/mo</span>
+                  <span className="text-terminal-green font-sans">{fmtCurrency(p.monthlyPremium)}/mo</span>
                 </div>
                 <div>
                   <span className="text-terminal-muted">Hashrate: </span>
-                  <span className="text-terminal-text font-mono">{fmt(p.coveredHashrate, 0)} TH/s</span>
+                  <span className="text-terminal-text font-sans">{fmt(p.coveredHashrate, 0)} TH/s</span>
                 </div>
               </div>
               <div className="flex items-center gap-4 mt-2 text-[10px] text-terminal-muted">
@@ -384,15 +384,15 @@ function ClaimsSettlementsPanel({ claims, settlements, onRefresh }) {
                 <div className="grid grid-cols-3 gap-2 text-xs mb-2">
                   <div>
                     <span className="text-terminal-muted">Gross: </span>
-                    <span className="text-terminal-amber font-mono">{fmtCurrency(c.grossClaimAmount)}</span>
+                    <span className="text-terminal-amber font-sans">{fmtCurrency(c.grossClaimAmount)}</span>
                   </div>
                   <div>
                     <span className="text-terminal-muted">Recommended: </span>
-                    <span className="text-terminal-green font-mono">{fmtCurrency(c.recommendedPayout)}</span>
+                    <span className="text-terminal-green font-sans">{fmtCurrency(c.recommendedPayout)}</span>
                   </div>
                   <div>
                     <span className="text-terminal-muted">Paid: </span>
-                    <span className="text-terminal-text font-mono">{fmtCurrency(c.paidAmount)}</span>
+                    <span className="text-terminal-text font-sans">{fmtCurrency(c.paidAmount)}</span>
                   </div>
                 </div>
 
@@ -481,7 +481,7 @@ function ClaimsSettlementsPanel({ claims, settlements, onRefresh }) {
                   <tr key={i} className="border-b border-terminal-border/30">
                     <td className="py-1.5 text-terminal-text">{s.policyNumber}</td>
                     <td className="py-1.5 text-terminal-muted">{s.claimMonth}</td>
-                    <td className="py-1.5 text-right font-mono text-terminal-green">{fmtCurrency(s.amount)}</td>
+                    <td className="py-1.5 text-right font-sans text-terminal-green">{fmtCurrency(s.amount)}</td>
                     <td className="py-1.5 text-terminal-muted">{s.settledAt?.substring(0, 10) || '--'}</td>
                     <td className="py-1.5 text-terminal-muted truncate max-w-[100px]">{s.reference || '--'}</td>
                   </tr>

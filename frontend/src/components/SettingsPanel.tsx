@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import SettingsTeamPanel from './SettingsTeamPanel';
 
 interface SettingsSectionProps {
   title: string;
@@ -385,6 +386,9 @@ export default function SettingsPanel() {
       </div>
 
       <div className="space-y-4">
+        {/* Team Management */}
+        <SettingsTeamPanel />
+
         {/* Fleet Configuration — Phase 3 ACTIVE */}
         <SettingsSection
           title="Fleet Configuration"
@@ -1055,7 +1059,7 @@ export default function SettingsPanel() {
                     value={newPool.apiKey}
                     onChange={e => setNewPool(prev => ({ ...prev, apiKey: e.target.value }))}
                     placeholder="Enter API key"
-                    className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full font-mono"
+                    className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full font-sans"
                   />
                 </div>
                 <div>
@@ -1065,7 +1069,7 @@ export default function SettingsPanel() {
                     value={newPool.apiSecret}
                     onChange={e => setNewPool(prev => ({ ...prev, apiSecret: e.target.value }))}
                     placeholder="Enter API secret"
-                    className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full font-mono"
+                    className="bg-terminal-panel border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full font-sans"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -1776,7 +1780,7 @@ export default function SettingsPanel() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-terminal-text">Font</p>
-                <p className="text-xs text-terminal-muted">JetBrains Mono</p>
+                <p className="text-xs text-terminal-muted">Exo 2</p>
               </div>
               <span className="text-xs text-terminal-muted">Default</span>
             </div>
@@ -2077,7 +2081,7 @@ function ApiKeysSection() {
           <div key={k.id} className="flex items-center justify-between p-2 bg-terminal-bg rounded border border-terminal-border">
             <div>
               <p className="text-sm text-terminal-text">{k.name}</p>
-              <p className="text-xs text-terminal-muted font-mono">{k.key_prefix}...</p>
+              <p className="text-xs text-terminal-muted font-sans">{k.key_prefix}...</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-terminal-muted">{k.last_used ? `Last used: ${new Date(k.last_used).toLocaleDateString()}` : 'Never used'}</span>
@@ -2151,7 +2155,7 @@ function WebhooksSection() {
         {(webhooksData?.webhooks || []).map((wh: any) => (
           <div key={wh.id} className="p-2 bg-terminal-bg rounded border border-terminal-border">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-terminal-text font-mono truncate">{wh.url}</p>
+              <p className="text-sm text-terminal-text font-sans truncate">{wh.url}</p>
               <span className={`text-xs px-1.5 py-0.5 rounded ${wh.status === 'active' ? 'bg-terminal-green/20 text-terminal-green' : 'bg-terminal-red/20 text-terminal-red'}`}>
                 {wh.status}
               </span>
@@ -2301,7 +2305,7 @@ function BrandingSection() {
               type="text"
               value={branding.primaryColor}
               onChange={e => setBranding({ ...branding, primaryColor: e.target.value })}
-              className="bg-terminal-bg border border-terminal-border rounded px-3 py-1.5 text-sm text-terminal-text font-mono w-28"
+              className="bg-terminal-bg border border-terminal-border rounded px-3 py-1.5 text-sm text-terminal-text font-sans w-28"
             />
           </div>
         </div>
@@ -2322,7 +2326,7 @@ function BrandingSection() {
             onChange={e => setBranding({ ...branding, hideSanghaBranding: e.target.checked })}
             className="rounded"
           />
-          Hide "Powered by Ampera" (Enterprise plans only)
+          Hide "Powered by Coppice" (Enterprise plans only)
         </label>
         <button className="px-4 py-2 bg-terminal-green/20 text-terminal-green border border-terminal-green/30 rounded text-sm hover:bg-terminal-green/30">
           Save Branding

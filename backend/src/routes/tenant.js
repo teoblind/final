@@ -27,12 +27,30 @@ import {
   updateSite,
   deleteSite,
   insertAuditLog,
+  getUserById,
 } from '../cache/database.js';
 import { generateApiKey } from '../services/authService.js';
 
 const router = express.Router();
 
-// All routes require authentication
+// ─── GET /public — Public Tenant Branding (no auth) ─────────────────────────
+
+router.get('/public', (req, res) => {
+  const tenant = req.resolvedTenant;
+  if (!tenant) {
+    return res.json({ name: 'AMPERA', slug: 'default', branding: {} });
+  }
+  const { companyName, primaryColor, logo, hideSanghaBranding } = tenant.branding || {};
+  const settings = tenant.settings || {};
+  res.json({
+    name: tenant.name,
+    slug: tenant.slug,
+    branding: { companyName, primaryColor, logo, hideSanghaBranding },
+    settings: { industry: settings.industry || null },
+  });
+});
+
+// All routes below require authentication
 router.use(authenticate);
 
 // ─── GET / — Get Current Tenant Info ────────────────────────────────────────
@@ -43,6 +61,11 @@ router.get('/', (req, res) => {
     if (!tenant) {
       return res.status(404).json({ error: 'Tenant not found' });
     }
+    // Add seat info
+    const users = getUsersByTenant(req.user.tenantId);
+    const activeUsers = users.filter(u => u.status === 'active');
+    tenant.seatCount = activeUsers.length;
+    tenant.seatLimit = (tenant.limits && tenant.limits.maxUsers) || 999;
     res.json({ tenant });
   } catch (error) {
     console.error('Get tenant error:', error);
@@ -102,6 +125,20 @@ router.post('/users/invite', requirePermission('manageUsers'), (req, res) => {
 
     if (!email || !role) {
       return res.status(400).json({ error: 'Email and role are required' });
+    }
+
+    // Seat limit check
+    const tenant = getTenant(req.user.tenantId);
+    const seatLimit = (tenant?.limits && tenant.limits.maxUsers) || 999;
+    const users = getUsersByTenant(req.user.tenantId);
+    const activeCount = users.filter(u => u.status === 'active').length;
+    if (activeCount >= seatLimit) {
+      return res.status(403).json({
+        error: 'seat_limit_reached',
+        message: `Seat limit reached (${activeCount}/${seatLimit}). Upgrade to add more users.`,
+        limit: seatLimit,
+        current: activeCount,
+      });
     }
 
     const invitationId = uuidv4();

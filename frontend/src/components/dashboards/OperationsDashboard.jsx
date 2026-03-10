@@ -56,61 +56,10 @@ function PanelSkeleton() {
  */
 export default function OperationsDashboard({ onNavigate }) {
   return (
-    <div className="p-4">
-      {/* Dashboard header */}
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-terminal-green">Operations Control Center</h2>
-        <p className="text-xs text-terminal-muted mt-1">
-          Unified mining operations dashboard — energy, hashprice, curtailment, pool, and agent data are live.
-          Visit <button
-            onClick={() => onNavigate?.('macro')}
-            className="text-terminal-cyan hover:underline"
-          >
-            Macro Intelligence
-          </button> for the full macro thesis dashboard.
-        </p>
-      </div>
-
-      {/* Phase Roadmap Summary */}
-      <div className="mb-6 bg-terminal-panel border border-terminal-border rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-terminal-text mb-3">Build Roadmap</h3>
-        <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
-          {[
-            { phase: 2, label: 'Energy Market', status: 'active', color: 'terminal-green' },
-            { phase: 3, label: 'Fleet Hashprice', status: 'active', color: 'terminal-green' },
-            { phase: 4, label: 'Curtailment', status: 'active', color: 'terminal-green' },
-            { phase: 5, label: 'Pool & Chain', status: 'active', color: 'terminal-green' },
-            { phase: 6, label: 'Clawbot Agents', status: 'active', color: 'terminal-green' },
-            { phase: 7, label: 'HPC / AI Compute', status: 'active', color: 'terminal-green' },
-            { phase: 8, label: 'Multi-Tenant', status: 'active', color: 'terminal-green' },
-            { phase: 9, label: 'Insurance Bridge', status: 'active', color: 'terminal-green' },
-          ].map(item => (
-            <div
-              key={item.phase}
-              className={`text-center py-2 px-3 rounded border ${
-                item.status === 'active'
-                  ? 'border-terminal-green/30 bg-terminal-green/5'
-                  : item.status === 'next'
-                    ? 'border-terminal-amber/30 bg-terminal-amber/5'
-                    : 'border-terminal-border'
-              }`}
-            >
-              <p className={`text-xs text-${item.color}`}>Phase {item.phase}</p>
-              <p className="text-sm font-medium text-terminal-text">{item.label}</p>
-              {item.status === 'active' && (
-                <p className="text-[10px] text-terminal-green mt-0.5">LIVE</p>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Clawbot Agents — Phase 6 LIVE */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-green mb-3 flex items-center gap-2">
-          <span>🤖</span> Clawbot Agents
-          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
-        </h3>
+    <div className="p-6">
+      {/* Clawbot Agents */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-terminal-text mb-3">Clawbot Agents</h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
@@ -125,12 +74,9 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* HPC / AI Compute — Phase 7 LIVE */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-cyan mb-3 flex items-center gap-2">
-          <span>🖥</span> HPC / AI Compute
-          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
-        </h3>
+      {/* HPC / AI Compute */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-terminal-text mb-3">HPC / AI Compute</h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Site Overview spans full width */}
@@ -147,12 +93,9 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* Pool & On-Chain section — Phase 5 LIVE */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-cyan mb-3 flex items-center gap-2">
-          <span>⛏</span> Mining Pools & On-Chain
-          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
-        </h3>
+      {/* Mining Pools & On-Chain */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-terminal-text mb-3">Mining Pools & On-Chain</h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Hero: Pool Hashrate */}
@@ -171,12 +114,9 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* Curtailment section — Phase 4 LIVE */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-cyan mb-3 flex items-center gap-2">
-          <span>🔋</span> Curtailment Optimizer
-          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
-        </h3>
+      {/* Curtailment Optimizer */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-terminal-text mb-3">Curtailment Optimizer</h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <OperatingStatusPanel />
@@ -190,12 +130,9 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* Fleet Hashprice section — Phase 3 LIVE */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-green mb-3 flex items-center gap-2">
-          <span>⛏</span> Fleet Hashprice
-          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
-        </h3>
+      {/* Fleet Hashprice */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-terminal-text mb-3">Fleet Hashprice</h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FleetProfitabilityPanel />
@@ -212,12 +149,9 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* Energy Market section — Phase 2 LIVE */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-amber mb-3 flex items-center gap-2">
-          <span>⚡</span> Energy Market
-          <span className="px-1.5 py-0.5 text-[10px] bg-terminal-green/20 text-terminal-green rounded">LIVE</span>
-        </h3>
+      {/* Energy Market */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-terminal-text mb-3">Energy Market</h3>
         <Suspense fallback={<PanelSkeleton />}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <EnergyPricePanel />
@@ -231,12 +165,6 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* Future phases note */}
-      <div className="text-center py-4">
-        <p className="text-xs text-terminal-muted">
-          Phases 2–9 live. All phases complete — full-stack mining operations platform.
-        </p>
-      </div>
     </div>
   );
 }

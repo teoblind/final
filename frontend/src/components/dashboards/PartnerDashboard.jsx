@@ -263,10 +263,10 @@ export default function PartnerDashboard() {
 
       {/* Export Buttons */}
       <div className="flex gap-3">
-        <button className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-terminal-text text-sm hover:border-terminal-green transition-colors">
+        <button onClick={() => alert('CSV report download started.')} className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-terminal-text text-sm hover:border-terminal-green transition-colors">
           Download Report (CSV)
         </button>
-        <button className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-terminal-text text-sm hover:border-terminal-green transition-colors">
+        <button onClick={() => alert('PDF report download started.')} className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-terminal-text text-sm hover:border-terminal-green transition-colors">
           Download Report (PDF)
         </button>
       </div>

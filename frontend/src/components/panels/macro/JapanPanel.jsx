@@ -40,7 +40,7 @@ export default function JapanPanel() {
           {['2Y', '5Y', '10Y', '30Y'].map((tenor) => (
             <div key={tenor} className="bg-terminal-bg/50 rounded p-2 text-center">
               <p className="text-xs text-terminal-muted">{tenor}</p>
-              <p className={`font-mono ${tenor === '10Y' ? 'text-terminal-green' : ''}`}>
+              <p className={`font-sans ${tenor === '10Y' ? 'text-terminal-green' : ''}`}>
                 {formatNumber(jgb.current?.[tenor], 3)}%
               </p>
             </div>

@@ -295,11 +295,11 @@ export default function RevenueProjectionPanel() {
                   {projectionData.filter((_, i) => i % 3 === 0 || i === projectionData.length - 1).map((m, i) => (
                     <tr key={i} className="border-b border-terminal-border/30">
                       <td className="py-1 text-terminal-muted">{m.label || `M${(projectionData.indexOf(m)) + 1}`}</td>
-                      <td className="text-right py-1 font-mono text-terminal-red/70">{formatCurrency(m.p10, 'USD', 0)}</td>
-                      <td className="text-right py-1 font-mono text-terminal-amber">{formatCurrency(m.p25, 'USD', 0)}</td>
-                      <td className="text-right py-1 font-mono text-terminal-cyan">{formatCurrency(m.p50, 'USD', 0)}</td>
-                      <td className="text-right py-1 font-mono text-terminal-green/70">{formatCurrency(m.p75, 'USD', 0)}</td>
-                      <td className="text-right py-1 font-mono text-terminal-green">{formatCurrency(m.p90, 'USD', 0)}</td>
+                      <td className="text-right py-1 font-sans text-terminal-red/70">{formatCurrency(m.p10, 'USD', 0)}</td>
+                      <td className="text-right py-1 font-sans text-terminal-amber">{formatCurrency(m.p25, 'USD', 0)}</td>
+                      <td className="text-right py-1 font-sans text-terminal-cyan">{formatCurrency(m.p50, 'USD', 0)}</td>
+                      <td className="text-right py-1 font-sans text-terminal-green/70">{formatCurrency(m.p75, 'USD', 0)}</td>
+                      <td className="text-right py-1 font-sans text-terminal-green">{formatCurrency(m.p90, 'USD', 0)}</td>
                     </tr>
                   ))}
                 </tbody>

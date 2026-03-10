@@ -108,7 +108,7 @@ function PMICell({ value, change }) {
 
   return (
     <div className={`inline-flex items-center gap-1 px-2 py-1 rounded ${colorClass}`}>
-      <span className="font-mono">{formatNumber(value, 1)}</span>
+      <span className="font-sans">{formatNumber(value, 1)}</span>
       {change !== null && change !== undefined && (
         <span className="text-xs">{getTrendArrow(change)}</span>
       )}

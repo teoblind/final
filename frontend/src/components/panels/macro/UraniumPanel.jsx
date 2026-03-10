@@ -76,7 +76,7 @@ export default function UraniumPanel() {
       {spread && (
         <div className="bg-terminal-bg/50 rounded p-2 mb-4 text-center">
           <p className="text-xs text-terminal-muted">Term-Spot Spread</p>
-          <p className="font-mono">
+          <p className="font-sans">
             ${formatNumber(spread.absolute, 2)} ({formatPercent(spread.percentage)})
           </p>
         </div>

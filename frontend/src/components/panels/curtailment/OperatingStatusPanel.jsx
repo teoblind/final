@@ -60,7 +60,7 @@ export default function OperatingStatusPanel() {
           <div className={`${stateInfo.bg} border ${stateInfo.border} rounded-lg p-4 text-center`}>
             <p className="text-2xl mb-1">{stateInfo.icon}</p>
             <p className={`text-xl font-bold ${stateInfo.color}`}>{stateInfo.label}</p>
-            <p className={`text-lg font-mono ${stateInfo.color} mt-1`}>
+            <p className={`text-lg font-sans ${stateInfo.color} mt-1`}>
               {formatNumber(summary?.fleetOnlinePercent, 0)}% online
             </p>
             <p className="text-xs text-terminal-muted mt-1">

@@ -92,15 +92,15 @@ export default function LPManagementPanel() {
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="text-[10px] text-terminal-muted">Structuring Fees</p>
-                <p className="text-sm font-bold text-terminal-green font-mono">{formatCurrency(revenue.totalStructuringFees, 'USD', 0)}</p>
+                <p className="text-sm font-bold text-terminal-green font-sans">{formatCurrency(revenue.totalStructuringFees, 'USD', 0)}</p>
               </div>
               <div>
                 <p className="text-[10px] text-terminal-muted">Management Fees</p>
-                <p className="text-sm font-bold text-terminal-green font-mono">{formatCurrency(revenue.totalManagementFees, 'USD', 0)}</p>
+                <p className="text-sm font-bold text-terminal-green font-sans">{formatCurrency(revenue.totalManagementFees, 'USD', 0)}</p>
               </div>
               <div>
                 <p className="text-[10px] text-terminal-muted">Total Revenue</p>
-                <p className="text-sm font-bold text-terminal-green font-mono">
+                <p className="text-sm font-bold text-terminal-green font-sans">
                   {formatCurrency((revenue.totalStructuringFees || 0) + (revenue.totalManagementFees || 0), 'USD', 0)}
                 </p>
               </div>
@@ -158,7 +158,7 @@ export default function LPManagementPanel() {
                   type="number"
                   value={createForm.capitalCommitted}
                   onChange={e => setCreateForm(f => ({ ...f, capitalCommitted: e.target.value }))}
-                  className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-green"
+                  className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-green"
                   placeholder="10000000"
                 />
               </div>
@@ -214,7 +214,7 @@ export default function LPManagementPanel() {
                     <div className="flex items-center gap-3">
                       {getStatusBadge(p.status)}
                       <div className="text-right hidden sm:block">
-                        <p className="text-xs text-terminal-green font-mono">{formatCurrency(exp.capitalDeployed || p.capitalDeployed, 'USD', 0)}</p>
+                        <p className="text-xs text-terminal-green font-sans">{formatCurrency(exp.capitalDeployed || p.capitalDeployed, 'USD', 0)}</p>
                         <p className="text-[10px] text-terminal-muted">deployed</p>
                       </div>
                       {isExpanded ? <ChevronUp size={14} className="text-terminal-muted" /> : <ChevronDown size={14} className="text-terminal-muted" />}
@@ -226,11 +226,11 @@ export default function LPManagementPanel() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Capital Committed</p>
-                          <p className="text-sm font-bold text-terminal-text font-mono">{formatCurrency(p.capitalCommitted, 'USD', 0)}</p>
+                          <p className="text-sm font-bold text-terminal-text font-sans">{formatCurrency(p.capitalCommitted, 'USD', 0)}</p>
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Capital Deployed</p>
-                          <p className="text-sm font-bold text-terminal-green font-mono">{formatCurrency(exp.capitalDeployed || 0, 'USD', 0)}</p>
+                          <p className="text-sm font-bold text-terminal-green font-sans">{formatCurrency(exp.capitalDeployed || 0, 'USD', 0)}</p>
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Active Policies</p>
@@ -238,17 +238,17 @@ export default function LPManagementPanel() {
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Monthly Premium</p>
-                          <p className="text-sm font-bold text-terminal-cyan font-mono">{formatCurrency(exp.monthlyPremium || 0, 'USD', 0)}</p>
+                          <p className="text-sm font-bold text-terminal-cyan font-sans">{formatCurrency(exp.monthlyPremium || 0, 'USD', 0)}</p>
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Covered Hashrate</p>
-                          <p className="text-sm font-bold text-terminal-text font-mono">
+                          <p className="text-sm font-bold text-terminal-text font-sans">
                             {formatNumber((exp.coveredHashrate || 0) / 1000, 1)} PH/s
                           </p>
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Claims Paid</p>
-                          <p className="text-sm font-bold text-terminal-red font-mono">{formatCurrency(exp.totalClaimsPaid || 0, 'USD', 0)}</p>
+                          <p className="text-sm font-bold text-terminal-red font-sans">{formatCurrency(exp.totalClaimsPaid || 0, 'USD', 0)}</p>
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Pending Allocations</p>
@@ -256,7 +256,7 @@ export default function LPManagementPanel() {
                         </div>
                         <div className="bg-terminal-bg/50 rounded p-2">
                           <p className="text-[10px] text-terminal-muted">Utilization</p>
-                          <p className="text-sm font-bold text-terminal-text font-mono">
+                          <p className="text-sm font-bold text-terminal-text font-sans">
                             {p.capitalCommitted > 0
                               ? `${formatNumber(((exp.capitalDeployed || 0) / p.capitalCommitted) * 100, 1)}%`
                               : '--'}
@@ -269,10 +269,10 @@ export default function LPManagementPanel() {
                           <p className="text-[10px] text-terminal-muted mb-1 font-semibold">Fee Structure</p>
                           <div className="flex gap-4 text-xs">
                             <span className="text-terminal-muted">
-                              Structuring: <span className="text-terminal-text font-mono">{p.feeStructure.structuringFeePercent || 5}%</span>
+                              Structuring: <span className="text-terminal-text font-sans">{p.feeStructure.structuringFeePercent || 5}%</span>
                             </span>
                             <span className="text-terminal-muted">
-                              Management: <span className="text-terminal-text font-mono">{p.feeStructure.managementFeePercent || 1}%</span>
+                              Management: <span className="text-terminal-text font-sans">{p.feeStructure.managementFeePercent || 1}%</span>
                             </span>
                           </div>
                         </div>

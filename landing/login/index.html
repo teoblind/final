@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coppice</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #fafaf8; --surface: #ffffff; --surface-inset: #f5f4f0;
+    --border: #e8e6e1; --border-light: #f0eeea;
+    --accent: #1e3a5f; --accent-light: #2a5080; --accent-bg: #eef3f9;
+    --danger: #c0392b; --danger-bg: #fbeae8;
+    --text-0: #111110; --text-1: #333330; --text-2: #6b6b65; --text-3: #9a9a92; --text-4: #c5c5bc;
+    --sans: 'Instrument Sans', sans-serif; --serif: 'Newsreader', Georgia, serif;
+  }
+  body {
+    font-family: var(--sans); background: var(--bg); color: var(--text-0);
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .login-container { width: 100%; max-width: 420px; padding: 20px; }
+
+  .login-header { text-align: center; margin-bottom: 36px; }
+  .login-mark {
+    width: 44px; height: 44px; background: var(--accent); border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center; margin-bottom: 20px;
+  }
+  .login-mark svg { width: 20px; height: 20px; }
+  .login-title { font-family: var(--serif); font-size: 26px; font-weight: 400; margin-bottom: 8px; }
+  .login-sub { font-size: 14px; color: var(--text-3); }
+
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.04);
+  }
+
+  .field { margin-bottom: 16px; }
+  .field-label { font-size: 13px; font-weight: 600; color: var(--text-1); margin-bottom: 6px; display: block; }
+  .field-input {
+    width: 100%; padding: 12px 16px; border: 1.5px solid var(--border);
+    border-radius: 12px; font-family: var(--sans); font-size: 14px;
+    color: var(--text-0); background: var(--surface-inset); outline: none;
+    transition: all 0.2s;
+  }
+  .field-input::placeholder { color: var(--text-4); }
+  .field-input:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-bg); }
+
+  .login-btn {
+    width: 100%; padding: 14px; border-radius: 12px; background: var(--accent);
+    color: #fff; font-family: var(--sans); font-size: 15px; font-weight: 600;
+    border: none; cursor: pointer; transition: all 0.2s; margin-top: 8px;
+  }
+  .login-btn:hover { background: var(--accent-light); transform: translateY(-1px); }
+  .login-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .login-error {
+    display: none; margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+    background: var(--danger-bg); color: var(--danger); font-size: 13px;
+    border: 1px solid rgba(192,57,43,0.15);
+  }
+
+  .login-divider {
+    display: flex; align-items: center; gap: 12px; margin: 20px 0;
+    font-size: 12px; color: var(--text-4);
+  }
+  .login-divider::before, .login-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border-light);
+  }
+
+  .direct-links { text-align: center; }
+  .direct-link {
+    display: inline-block; padding: 8px 16px; margin: 4px;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); font-size: 13px; font-weight: 500;
+    color: var(--text-2); text-decoration: none; transition: all 0.15s;
+  }
+  .direct-link:hover { background: var(--surface-inset); border-color: var(--accent); color: var(--accent); }
+
+  .login-footer {
+    text-align: center; margin-top: 24px; font-size: 13px; color: var(--text-3);
+  }
+  .login-footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .login-footer a:hover { text-decoration: underline; }
+
+  .loading-spinner {
+    display: none; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite;
+    margin: 0 auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="login-container">
+  <div class="login-header">
+    <div class="login-mark"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="2.4" stroke="rgba(255,255,255,0.8)" stroke-width=".6" fill="none"/><circle cx="12" cy="12" r="4.5" stroke="rgba(255,255,255,0.5)" stroke-width=".45" fill="none"/><circle cx="12" cy="12" r="6.6" stroke="rgba(255,255,255,0.25)" stroke-width=".45" fill="none"/><circle cx="12" cy="12" r="1.2" fill="#fff"/><circle cx="14.4" cy="12" r=".6" fill="rgba(255,255,255,0.9)"/><circle cx="12" cy="7.5" r=".6" fill="rgba(255,255,255,0.6)"/><circle cx="6.6" cy="9.9" r=".6" fill="rgba(255,255,255,0.35)"/></svg></div>
+    <h1 class="login-title">Log in to Coppice</h1>
+    <p class="login-sub">Enter your email and we'll take you to your dashboard.</p>
+  </div>
+
+  <div class="login-card">
+    <div id="email-step">
+      <div class="field">
+        <label class="field-label">Work email</label>
+        <input id="email-input" class="field-input" type="email" placeholder="you@yourcompany.com" autofocus>
+      </div>
+      <button id="continue-btn" class="login-btn" onclick="lookupTenant()">
+        <span id="btn-text">Continue</span>
+        <div id="btn-spinner" class="loading-spinner"></div>
+      </button>
+      <div id="error-msg" class="login-error"></div>
+    </div>
+
+    <div class="login-divider">or go directly</div>
+
+    <div class="direct-links">
+      <a href="https://dacp.coppice.ai" class="direct-link">DACP Construction</a>
+    </div>
+  </div>
+
+  <div class="login-footer">
+    Don't have an account? <a href="https://coppice.ai">Request a demo</a>
+  </div>
+</div>
+
+<script>
+document.getElementById('email-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') lookupTenant();
+});
+
+async function lookupTenant() {
+  var email = document.getElementById('email-input').value.trim();
+  var errorEl = document.getElementById('error-msg');
+  var btnText = document.getElementById('btn-text');
+  var spinner = document.getElementById('btn-spinner');
+  var btn = document.getElementById('continue-btn');
+
+  errorEl.style.display = 'none';
+
+  if (!email || !email.includes('@')) {
+    errorEl.textContent = 'Please enter a valid email address.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  btnText.style.display = 'none';
+  spinner.style.display = 'block';
+  btn.disabled = true;
+
+  try {
+    var res = await fetch('/api/v1/auth/lookup-tenant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email })
+    });
+
+    var data = await res.json();
+
+    if (data.tenant_slug) {
+      window.location.href = 'https://' + data.tenant_slug + '.coppice.ai?email=' + encodeURIComponent(email);
+    } else if (data.tenants && data.tenants.length > 0) {
+      // Multi-tenant: show picker
+      var linksEl = document.querySelector('.direct-links');
+      linksEl.innerHTML = '';
+      data.tenants.forEach(function(t) {
+        var a = document.createElement('a');
+        a.href = 'https://' + t.slug + '.coppice.ai?email=' + encodeURIComponent(email);
+        a.className = 'direct-link';
+        a.textContent = t.name;
+        linksEl.appendChild(a);
+      });
+      document.querySelector('.login-divider').textContent = 'Choose your workspace';
+    } else {
+      errorEl.textContent = 'No account found for this email. Contact your admin or request a demo.';
+      errorEl.style.display = 'block';
+    }
+  } catch (e) {
+    errorEl.textContent = 'Something went wrong. Try going directly to your company dashboard.';
+    errorEl.style.display = 'block';
+  } finally {
+    btnText.style.display = 'block';
+    spinner.style.display = 'none';
+    btn.disabled = false;
+  }
+}
+</script>
+
+</body>
+</html>

@@ -16,6 +16,8 @@ import {
 } from '../services/authService.js';
 import {
   getUserByEmail,
+  getUsersByEmail,
+  getUserByEmailAndTenant,
   getUserById,
   createUser,
   updateUser,
@@ -25,6 +27,7 @@ import {
   revokeUserSessions,
   getUserSessions,
   createTenant,
+  getTenant,
   getTenantBySlug,
   insertAuditLog,
   getInvitationByToken,
@@ -38,13 +41,31 @@ const router = express.Router();
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, tenant_id } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = getUserByEmail(email);
+    let user;
+
+    if (tenant_id) {
+      // Multi-tenant: find user by email + tenant
+      user = getUserByEmailAndTenant(email, tenant_id);
+    } else {
+      // Check if user exists in multiple tenants
+      const users = getUsersByEmail(email);
+      if (users.length > 1) {
+        // Return tenant picker — don't verify password yet
+        const tenants = users.map(u => {
+          const t = getTenant(u.tenant_id);
+          return { id: u.tenant_id, slug: t?.slug, name: t?.name };
+        });
+        return res.json({ tenant_required: true, tenants });
+      }
+      user = users[0] || null;
+    }
+
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -94,6 +115,7 @@ router.post('/login', async (req, res) => {
         role: user.role,
         tenantId: user.tenant_id,
         permissions: ROLE_PERMISSIONS[user.role] || {},
+        mustChangePassword: !!user.must_change_password,
       },
       tokens: {
         accessToken: tokens.accessToken,
@@ -335,6 +357,7 @@ router.get('/me', authenticate, (req, res) => {
 
     const { password_hash, mfa_secret, ...safeUser } = user;
     safeUser.permissions = ROLE_PERMISSIONS[user.role] || {};
+    safeUser.mustChangePassword = !!user.must_change_password;
 
     res.json({ user: safeUser });
   } catch (error) {
@@ -374,6 +397,49 @@ router.delete('/sessions/:id', authenticate, (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Revoke session error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /change-password ───────────────────────────────────────────────────
+
+router.post('/change-password', authenticate, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new passwords are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    const user = getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const passwordValid = await verifyPassword(currentPassword, user.password_hash);
+    if (!passwordValid) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const newHash = await hashPassword(newPassword);
+    updateUser(user.id, { passwordHash: newHash, mustChangePassword: false });
+
+    insertAuditLog({
+      tenantId: user.tenant_id,
+      userId: user.id,
+      action: 'user.changePassword',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: req.ip,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Change password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

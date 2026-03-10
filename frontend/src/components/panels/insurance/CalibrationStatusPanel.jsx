@@ -146,19 +146,19 @@ export default function CalibrationStatusPanel() {
             <div className="grid grid-cols-3 gap-3 text-xs">
               <div>
                 <p className="text-[10px] text-terminal-muted uppercase">Timestamp</p>
-                <p className="text-terminal-text font-mono text-[11px]">
+                <p className="text-terminal-text font-sans text-[11px]">
                   {formatDateTime(lastExport.timestamp)}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-terminal-muted uppercase">Tenants</p>
-                <p className="text-terminal-text font-mono">
+                <p className="text-terminal-text font-sans">
                   {lastExport.tenantsIncluded || 0}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-terminal-muted uppercase">Total Hashrate</p>
-                <p className="text-terminal-cyan font-mono">
+                <p className="text-terminal-cyan font-sans">
                   {formatNumber((lastExport.totalHashrateTH || 0) / 1000, 1)} PH/s
                 </p>
               </div>
@@ -175,7 +175,7 @@ export default function CalibrationStatusPanel() {
               <Calendar size={12} className="text-terminal-muted" />
               <span className="text-xs text-terminal-muted">Next Scheduled Export</span>
             </div>
-            <span className="text-xs font-bold text-terminal-amber font-mono">
+            <span className="text-xs font-bold text-terminal-amber font-sans">
               {countdown || '--'}
             </span>
           </div>
@@ -244,16 +244,16 @@ export default function CalibrationStatusPanel() {
                     const es = EXPORT_STATUSES[exp.status] || EXPORT_STATUSES.pending;
                     return (
                       <tr key={i} className="border-b border-terminal-border/30">
-                        <td className="py-1.5 text-terminal-text font-mono text-[11px]">
+                        <td className="py-1.5 text-terminal-text font-sans text-[11px]">
                           {formatDate(exp.date || exp.timestamp)}
                         </td>
                         <td className="py-1.5 text-terminal-muted">
                           {exp.version || '--'}
                         </td>
-                        <td className="text-right py-1.5 text-terminal-text font-mono">
+                        <td className="text-right py-1.5 text-terminal-text font-sans">
                           {exp.tenants || 0}
                         </td>
-                        <td className="text-right py-1.5 text-terminal-cyan font-mono">
+                        <td className="text-right py-1.5 text-terminal-cyan font-sans">
                           {formatNumber((exp.hashrateTH || 0) / 1000, 1)} PH
                         </td>
                         <td className="text-center py-1.5">

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coppice</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,300;1,6..72,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #fafaf8; --surface: #ffffff; --surface-inset: #f5f4f0;
+    --border: #e8e6e1; --border-light: #f0eeea;
+    --accent: #1a6b3c; --accent-light: #22884d; --accent-bg: #edf7f0; --accent-dot: #2dd478;
+    --blue: #1e3a5f; --blue-bg: #eef3f9;
+    --warm: #b8860b; --warm-bg: #fdf6e8;
+    --danger: #c0392b; --danger-bg: #fbeae8;
+    --purple: #7c3aed; --purple-bg: #f3f0ff;
+    --text-0: #0a0a09; --text-1: #333330; --text-2: #6b6b65; --text-3: #9a9a92; --text-4: #c5c5bc;
+    --mono: 'JetBrains Mono', monospace; --sans: 'Instrument Sans', sans-serif; --serif: 'Newsreader', Georgia, serif;
+  }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text-0); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+
+  /* NAV - Coppice blue (brand consistent) */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 16px 40px; display: flex; align-items: center; justify-content: space-between;
+    background: rgba(250,250,248,0.85); backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(232,230,225,0.5);
+  }
+  .nav-left { display: flex; align-items: center; gap: 10px; }
+  .nav-mark { width: 32px; height: 32px; background: var(--blue); border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+  .nav-mark svg { width: 16px; height: 16px; fill: #fff; }
+  .nav-brand { font-size: 16px; font-weight: 700; color: var(--text-0); letter-spacing: 0.5px; }
+  .nav-links { display: flex; align-items: center; gap: 28px; }
+  .nav-link { font-size: 13px; font-weight: 500; color: var(--text-2); text-decoration: none; transition: color 0.2s; }
+  .nav-link:hover { color: var(--text-0); }
+  .nav-link.active { color: var(--accent); font-weight: 600; }
+  .nav-back { font-size: 13px; font-weight: 500; color: var(--text-3); text-decoration: none; transition: color 0.2s; display: flex; align-items: center; gap: 4px; }
+  .nav-back:hover { color: var(--text-0); }
+  .nav-back svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .nav-cta { padding: 8px 20px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; border: none; cursor: pointer; transition: all 0.2s; }
+  .nav-cta:hover { background: var(--accent-light); }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 120px 40px 80px; position: relative; overflow: hidden;
+  }
+  .hero-bg { position: absolute; inset: 0; pointer-events: none; }
+  .grid-plane {
+    position: absolute; bottom: -10%; left: -10%; right: -10%; height: 60%;
+    transform: perspective(800px) rotateX(55deg);
+    background-image: linear-gradient(rgba(26,107,60,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(26,107,60,0.06) 1px, transparent 1px);
+    background-size: 60px 60px; animation: gridFloat 20s ease-in-out infinite;
+  }
+  @keyframes gridFloat { 0%,100%{transform:perspective(800px) rotateX(55deg) translateY(0)} 50%{transform:perspective(800px) rotateX(55deg) translateY(-15px)} }
+  .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.12; animation: orbFloat 18s ease-in-out infinite; }
+  .orb-1 { width: 500px; height: 500px; background: var(--accent); top: 5%; right: -8%; }
+  .orb-2 { width: 400px; height: 400px; background: var(--warm); bottom: 15%; left: -8%; animation-delay: -6s; }
+  .orb-3 { width: 250px; height: 250px; background: var(--purple); top: 35%; left: 25%; opacity: 0.06; animation-delay: -12s; }
+  @keyframes orbFloat { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(25px,-20px) scale(1.04)} 66%{transform:translate(-15px,12px) scale(0.96)} }
+
+  .hero-content { position: relative; z-index: 2; max-width: 860px; text-align: center; }
+  .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 28px; animation: fadeUp 0.8s ease both; }
+  .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .hero-h1 { font-family: var(--serif); font-size: clamp(40px, 5.5vw, 68px); font-weight: 400; line-height: 1.1; color: var(--text-0); margin-bottom: 20px; letter-spacing: -0.02em; animation: fadeUp 0.8s 0.1s ease both; }
+  .hero-h1 em { font-style: italic; color: var(--accent); }
+  .hero-sub { font-size: 18px; color: var(--text-2); line-height: 1.7; max-width: 560px; margin: 0 auto 36px; animation: fadeUp 0.8s 0.2s ease both; }
+  .hero-actions { display: flex; align-items: center; justify-content: center; gap: 14px; animation: fadeUp 0.8s 0.3s ease both; }
+  .btn-primary { padding: 14px 32px; border-radius: 12px; background: var(--accent); color: #fff; font-family: var(--sans); font-size: 15px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; text-decoration: none; box-shadow: 0 4px 16px rgba(26,107,60,0.2); }
+  .btn-primary:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(26,107,60,0.25); }
+  .btn-secondary { padding: 14px 32px; border-radius: 12px; background: var(--surface); color: var(--text-1); font-family: var(--sans); font-size: 15px; font-weight: 600; border: 1.5px solid var(--border); cursor: pointer; transition: all 0.2s; text-decoration: none; }
+  .btn-secondary:hover { background: var(--surface-inset); }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+  /* PROOF */
+  .proof { padding: 20px 40px 60px; text-align: center; animation: fadeUp 0.8s 0.5s ease both; }
+  .proof-label { font-size: 11px; font-weight: 700; color: var(--text-4); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .proof-stats { display: flex; justify-content: center; gap: 48px; }
+  .proof-stat-val { font-family: var(--mono); font-size: 28px; font-weight: 700; color: var(--text-0); }
+  .proof-stat-label { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+  /* PRODUCT PREVIEW */
+  .preview { padding: 0 40px 100px; max-width: 1200px; margin: 0 auto; }
+  .preview-window {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
+    animation: previewFloat 6s ease-in-out infinite;
+  }
+  @keyframes previewFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+  .pw-toolbar { padding: 14px 20px; background: var(--surface-inset); border-bottom: 1px solid var(--border-light); display: flex; align-items: center; gap: 8px; }
+  .pw-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .pw-dot.r { background: #ff5f57; } .pw-dot.y { background: #ffbd2e; } .pw-dot.g { background: #28ca41; }
+  .pw-url { margin-left: 16px; padding: 5px 14px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border-light); font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+
+  .pw-content { display: flex; height: 420px; }
+  .pw-sidebar { width: 200px; background: #111110; padding: 16px 10px; flex-shrink: 0; }
+  .pw-sb-brand { padding: 6px 10px; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.6); letter-spacing: 2px; margin-bottom: 12px; }
+  .pw-sb-label { font-size: 8px; font-weight: 700; color: rgba(255,255,255,0.2); letter-spacing: 1.5px; text-transform: uppercase; padding: 8px 10px 4px; }
+  .pw-sb-item { padding: 7px 10px; border-radius: 6px; font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.4); display: flex; align-items: center; gap: 8px; }
+  .pw-sb-item.active { background: rgba(45,212,120,0.08); color: var(--accent-dot); }
+  .pw-sb-dot { width: 4px; height: 4px; border-radius: 50%; }
+
+  .pw-main { flex: 1; padding: 20px; overflow: hidden; }
+  .pw-title { font-family: var(--serif); font-size: 16px; font-weight: 400; margin-bottom: 14px; }
+  .pw-chat { display: flex; flex-direction: column; gap: 10px; }
+  .pw-msg { max-width: 78%; padding: 10px 14px; border-radius: 12px; font-size: 12px; line-height: 1.5; animation: msgFade 0.5s ease both; }
+  .pw-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; animation-delay: 0.5s; }
+  .pw-msg.bot { align-self: flex-start; background: var(--surface-inset); border: 1px solid var(--border-light); color: var(--text-1); border-bottom-left-radius: 4px; animation-delay: 1s; }
+
+  .pw-alert { align-self: flex-start; background: var(--warm-bg); border: 1px solid rgba(184,134,11,0.2); border-radius: 12px; border-bottom-left-radius: 4px; padding: 12px 14px; max-width: 80%; animation: msgFade 0.5s 1.5s ease both; }
+  .pw-alert-title { font-size: 11px; font-weight: 700; color: var(--warm); margin-bottom: 4px; }
+  .pw-alert-body { font-size: 11px; color: var(--text-2); line-height: 1.5; }
+  .pw-alert-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .pw-alert-btn { padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; border: none; cursor: pointer; }
+  .pw-alert-btn.danger { background: var(--danger); color: #fff; }
+  .pw-alert-btn.secondary { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); }
+  @keyframes msgFade { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  .pw-ctx { width: 220px; background: var(--surface-inset); border-left: 1px solid var(--border-light); padding: 16px; flex-shrink: 0; overflow: hidden; }
+  .pw-ctx-title { font-size: 9px; font-weight: 700; color: var(--text-3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .pw-ctx-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 10px; border-bottom: 1px solid var(--border-light); }
+  .pw-ctx-row span:first-child { color: var(--text-3); }
+  .pw-ctx-row span:last-child { font-family: var(--mono); font-weight: 600; color: var(--text-0); font-size: 9px; }
+
+  /* FEATURES */
+  .features { padding: 100px 40px; max-width: 1200px; margin: 0 auto; }
+  .features-header { text-align: center; margin-bottom: 56px; }
+  .section-label { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .section-h2 { font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); font-weight: 400; line-height: 1.2; color: var(--text-0); margin-bottom: 12px; }
+  .section-sub { font-size: 16px; color: var(--text-3); max-width: 500px; margin: 0 auto; }
+
+  .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 30px 26px; transition: all 0.3s; position: relative; overflow: hidden; }
+  .feature-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.06); }
+  .feature-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), transparent); opacity: 0; transition: opacity 0.3s; }
+  .feature-card:hover::before { opacity: 1; }
+  .fc-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .fc-icon svg { width: 22px; height: 22px; stroke-width: 1.8; fill: none; }
+  .fc-icon.green { background: var(--accent-bg); } .fc-icon.green svg { stroke: var(--accent); }
+  .fc-icon.blue { background: var(--blue-bg); } .fc-icon.blue svg { stroke: var(--blue); }
+  .fc-icon.warm { background: var(--warm-bg); } .fc-icon.warm svg { stroke: var(--warm); }
+  .fc-icon.purple { background: var(--purple-bg); } .fc-icon.purple svg { stroke: var(--purple); }
+  .fc-title { font-size: 17px; font-weight: 700; color: var(--text-0); margin-bottom: 8px; }
+  .fc-desc { font-size: 14px; color: var(--text-2); line-height: 1.6; }
+  .fc-metric { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-light); display: flex; align-items: baseline; gap: 6px; }
+  .fc-metric-val { font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--accent); }
+  .fc-metric-label { font-size: 12px; color: var(--text-3); }
+
+  /* HOW IT WORKS - dark section */
+  .how { padding: 100px 40px; background: #0f1f15; color: #fff; position: relative; overflow: hidden; }
+  .how::before { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px); background-size: 80px 80px; }
+  .how-inner { max-width: 1100px; margin: 0 auto; position: relative; z-index: 2; }
+  .how-header { text-align: center; margin-bottom: 56px; }
+  .how-label { font-size: 11px; font-weight: 700; color: var(--accent-dot); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .how-h2 { font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); font-weight: 400; color: #fff; }
+
+  .how-steps { display: flex; gap: 28px; }
+  .how-step { flex: 1; padding: 28px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; position: relative; transition: all 0.3s; }
+  .how-step:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+  .how-num { font-family: var(--mono); font-size: 44px; font-weight: 700; color: rgba(255,255,255,0.05); position: absolute; top: 18px; right: 22px; }
+  .how-step-icon { width: 42px; height: 42px; border-radius: 12px; background: rgba(45,212,120,0.1); border: 1px solid rgba(45,212,120,0.15); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+  .how-step-icon svg { width: 18px; height: 18px; stroke: var(--accent-dot); fill: none; stroke-width: 1.8; }
+  .how-step-title { font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .how-step-desc { font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.6; }
+  .how-step-time { margin-top: 14px; font-family: var(--mono); font-size: 12px; color: var(--accent-dot); font-weight: 600; }
+
+  /* USE CASES */
+  .usecases { padding: 100px 40px; max-width: 1100px; margin: 0 auto; }
+  .usecase-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .usecase-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 28px; transition: all 0.3s; }
+  .usecase-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .uc-label { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; margin-bottom: 12px; }
+  .uc-label.miner { background: var(--accent-bg); color: var(--accent); }
+  .uc-label.ipp { background: var(--warm-bg); color: var(--warm); }
+  .uc-label.both { background: var(--blue-bg); color: var(--blue); }
+  .uc-title { font-size: 17px; font-weight: 700; color: var(--text-0); margin-bottom: 6px; }
+  .uc-desc { font-size: 14px; color: var(--text-2); line-height: 1.6; }
+  .uc-metric { margin-top: 14px; display: flex; align-items: baseline; gap: 6px; }
+  .uc-metric-val { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--accent); }
+  .uc-metric-label { font-size: 12px; color: var(--text-3); }
+
+  /* PRICING */
+  .pricing { padding: 100px 40px; max-width: 1000px; margin: 0 auto; }
+  .pricing-header { text-align: center; margin-bottom: 50px; }
+  .pricing-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .price-card { background: var(--surface); border: 1.5px solid var(--border); border-radius: 20px; padding: 36px; transition: all 0.3s; }
+  .price-card.featured { border-color: var(--accent); box-shadow: 0 12px 40px rgba(26,107,60,0.1); position: relative; }
+  .price-card.featured::after { content: 'Recommended'; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); padding: 4px 16px; border-radius: 99px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; }
+  .pc-name { font-size: 14px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .pc-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; }
+  .pc-price-val { font-family: var(--mono); font-size: 42px; font-weight: 700; color: var(--text-0); }
+  .pc-price-period { font-size: 14px; color: var(--text-3); }
+  .pc-desc { font-size: 13px; color: var(--text-3); margin-bottom: 24px; line-height: 1.5; }
+  .pc-features { list-style: none; margin-bottom: 28px; }
+  .pc-features li { padding: 8px 0; font-size: 14px; color: var(--text-1); display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-light); }
+  .pc-features li:last-child { border-bottom: none; }
+  .pc-check { color: var(--accent); font-weight: 700; }
+  .pc-cta { display: block; width: 100%; padding: 14px; border-radius: 12px; text-align: center; font-family: var(--sans); font-size: 15px; font-weight: 600; text-decoration: none; transition: all 0.2s; border: none; cursor: pointer; }
+  .pc-cta.primary { background: var(--accent); color: #fff; }
+  .pc-cta.primary:hover { background: var(--accent-light); }
+  .pc-cta.secondary { background: var(--surface-inset); color: var(--text-1); border: 1.5px solid var(--border); }
+
+  /* CTA */
+  .cta { padding: 100px 40px; text-align: center; }
+  .cta-inner { max-width: 560px; margin: 0 auto; }
+  .cta-h2 { font-family: var(--serif); font-size: clamp(30px, 4vw, 44px); font-weight: 400; color: var(--text-0); margin-bottom: 14px; line-height: 1.2; }
+  .cta-sub { font-size: 16px; color: var(--text-3); margin-bottom: 32px; line-height: 1.6; }
+
+  /* FOOTER */
+  .footer { padding: 36px 40px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; }
+  .footer-left { display: flex; align-items: center; gap: 8px; }
+  .footer-brand { font-size: 13px; font-weight: 700; color: var(--text-3); }
+  .footer-copy { font-size: 12px; color: var(--text-4); }
+  .footer-links { display: flex; gap: 24px; }
+  .footer-link { font-size: 12px; color: var(--text-3); text-decoration: none; }
+  .footer-link:hover { color: var(--text-1); }
+
+  .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* Hamburger */
+  .nav-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-1); }
+  .nav-hamburger svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .mobile-menu {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(250,250,248,0.98); backdrop-filter: blur(20px);
+    flex-direction: column; padding: 20px;
+  }
+  .mobile-menu.open { display: flex; }
+  .mobile-menu-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 40px; }
+  .mobile-menu-close { background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-1); }
+  .mobile-menu-close svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .mobile-menu-links { display: flex; flex-direction: column; gap: 0; flex: 1; }
+  .mobile-menu-links a {
+    font-size: 18px; font-weight: 600; color: var(--text-1); text-decoration: none;
+    padding: 16px 0; border-bottom: 1px solid var(--border-light); transition: color 0.2s;
+  }
+  .mobile-menu-links a:hover { color: var(--accent); }
+  .mobile-menu-cta { margin-top: auto; padding-top: 24px; }
+  .mobile-menu-cta button {
+    width: 100%; padding: 16px; border-radius: 12px; background: var(--accent); color: #fff;
+    font-family: var(--sans); font-size: 16px; font-weight: 600; border: none; cursor: pointer;
+  }
+
+  @media (max-width: 768px) {
+    .nav { padding: 14px 16px; }
+    .nav-links { display: none; }
+    .nav-hamburger { display: block; }
+    .hero { padding: 100px 20px 60px; }
+    .hero-h1 { font-size: 36px !important; }
+    .hero-sub { font-size: 16px; }
+    .hero-actions { flex-direction: column; }
+    .proof-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .features { padding: 60px 20px; }
+    .how { padding: 60px 20px; }
+    .how-steps { flex-direction: column; }
+    .usecases { padding: 60px 20px; }
+    .usecase-grid { grid-template-columns: 1fr; }
+    .pricing { padding: 60px 20px; }
+    .pricing-cards { grid-template-columns: 1fr; }
+    .preview { padding: 0 16px 60px; }
+    .pw-ctx, .pw-sidebar { display: none; }
+    .cta { padding: 60px 20px; }
+    .cta-h2 { font-size: 28px !important; }
+    .footer { flex-direction: column; gap: 16px; text-align: center; padding: 30px 20px; }
+    .footer-links { flex-wrap: wrap; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-left">
+    <a href="/" class="nav-back"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Coppice Home</a>
+  </div>
+  <div class="nav-links">
+    <a href="/construction" class="nav-link">Construction</a>
+    <a href="/energy" class="nav-link active">Energy</a>
+    <a href="/pricing" class="nav-link">Pricing</a>
+    <a href="/login" class="nav-link">Log In</a>
+    <button class="nav-cta" onclick="openModal()">Request Demo</button>
+  </div>
+  <button class="nav-hamburger" onclick="document.getElementById('mobile-menu').classList.add('open')">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+</nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <div class="mobile-menu-header">
+    <div style="display:flex;align-items:center;gap:4px;">
+      <a href="/" style="font-size:13px;font-weight:500;color:var(--text-3);text-decoration:none;display:flex;align-items:center;gap:4px;">
+        <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Coppice Home
+      </a>
+    </div>
+    <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="mobile-menu-links">
+    <a href="/construction" onclick="document.getElementById('mobile-menu').classList.remove('open')">Construction</a>
+    <a href="/energy" onclick="document.getElementById('mobile-menu').classList.remove('open')">Energy</a>
+    <a href="/pricing" onclick="document.getElementById('mobile-menu').classList.remove('open')">Pricing</a>
+    <a href="/login">Log In</a>
+  </div>
+  <div class="mobile-menu-cta">
+    <button onclick="document.getElementById('mobile-menu').classList.remove('open'); openModal();">Request Demo</button>
+  </div>
+</div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg">
+    <div class="grid-plane"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+  <div class="hero-content">
+    <div class="hero-badge"><div class="hero-badge-dot"></div> Now accepting energy partners</div>
+    <h1 class="hero-h1">Your fleet runs 24/7.<br><em>Your agents should too.</em></h1>
+    <p class="hero-sub">Coppice deploys AI agents that monitor energy markets, optimize curtailment, track pool earnings, capture meetings, and generate reports - while you sleep.</p>
+    <div class="hero-actions">
+      <a href="#" class="btn-primary" onclick="openModal(); return false;">Request a Demo</a>
+      <a href="#features" class="btn-secondary">See the Agents</a>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section class="proof">
+  <div class="proof-label">Platform capabilities</div>
+  <div class="proof-stats">
+    <div class="proof-stat"><div class="proof-stat-val">5 min</div><div class="proof-stat-label">ERCOT LMP monitoring</div></div>
+    <div class="proof-stat"><div class="proof-stat-val">$940</div><div class="proof-stat-label">Avg savings per curtailment</div></div>
+    <div class="proof-stat"><div class="proof-stat-val">11 yr</div><div class="proof-stat-label">Historical ERCOT data</div></div>
+    <div class="proof-stat"><div class="proof-stat-val">$0.08</div><div class="proof-stat-label">Per daily ops report</div></div>
+  </div>
+</section>
+
+<!-- PRODUCT PREVIEW -->
+<section class="preview">
+  <div class="preview-window">
+    <div class="pw-toolbar">
+      <div class="pw-dot r"></div><div class="pw-dot y"></div><div class="pw-dot g"></div>
+      <div class="pw-url">sangha.coppice.ai</div>
+    </div>
+    <div class="pw-content">
+      <div class="pw-sidebar">
+        <div class="pw-sb-brand">COPPICE</div>
+        <div class="pw-sb-label">Platform</div>
+        <div class="pw-sb-item"><div class="pw-sb-dot" style="background:rgba(255,255,255,0.3)"></div> Command</div>
+        <div class="pw-sb-item"><div class="pw-sb-dot" style="background:rgba(255,255,255,0.3)"></div> Reporting</div>
+        <div class="pw-sb-label">Agents</div>
+        <div class="pw-sb-item active"><div class="pw-sb-dot" style="background:#2dd478"></div> Curtailment</div>
+        <div class="pw-sb-item"><div class="pw-sb-dot" style="background:rgba(255,255,255,0.3)"></div> Pool Routing</div>
+        <div class="pw-sb-item"><div class="pw-sb-dot" style="background:rgba(255,255,255,0.3)"></div> Lead Engine</div>
+        <div class="pw-sb-item"><div class="pw-sb-dot" style="background:rgba(255,255,255,0.3)"></div> Meetings</div>
+      </div>
+      <div class="pw-main">
+        <div class="pw-title">Curtailment Agent</div>
+        <div class="pw-chat">
+          <div class="pw-alert">
+            <div class="pw-alert-title">&#9889; Price Spike - HB_WEST $84.20/MWh</div>
+            <div class="pw-alert-body">LMP above S19 breakeven ($68). Recommend curtailing 80 machines. Estimated savings: $312/hr.</div>
+            <div class="pw-alert-actions">
+              <button class="pw-alert-btn danger">Curtail S19 Fleet</button>
+              <button class="pw-alert-btn secondary">Wait 15 min</button>
+            </div>
+          </div>
+          <div class="pw-msg user">Go ahead, curtail the S19s. How long will prices stay high?</div>
+          <div class="pw-msg bot">Done. 80 machines offline. Based on 47 similar days in ERCOT West, prices typically stay elevated ~3.2 hours. Expect recovery around 5:00 PM. Auto-restart set at $62/MWh.</div>
+        </div>
+      </div>
+      <div class="pw-ctx">
+        <div class="pw-ctx-title">Live Market</div>
+        <div class="pw-ctx-row"><span>Current LMP</span><span style="color:#c0392b">$84.20</span></div>
+        <div class="pw-ctx-row"><span>1hr Avg</span><span>$62.40</span></div>
+        <div class="pw-ctx-row"><span>24hr Avg</span><span>$38.10</span></div>
+        <div style="margin-top:14px;"><div class="pw-ctx-title">Fleet Status</div></div>
+        <div class="pw-ctx-row"><span>Online</span><span style="color:#1a6b3c">880</span></div>
+        <div class="pw-ctx-row"><span>Curtailed</span><span style="color:#c0392b">80</span></div>
+        <div class="pw-ctx-row"><span>Hashrate</span><span>64.8 PH/s</span></div>
+        <div style="margin-top:14px;"><div class="pw-ctx-title">Hashprice</div></div>
+        <div class="pw-ctx-row"><span>Current</span><span>$48.20</span></div>
+        <div class="pw-ctx-row"><span>Difficulty Adj</span><span style="color:#b8860b">+3.2%</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features reveal" id="features">
+  <div class="features-header">
+    <div class="section-label">Energy Agents</div>
+    <h2 class="section-h2">Six agents. One command center.</h2>
+    <p class="section-sub">Every agent runs autonomously, learns your operation, and surfaces insights you'd miss.</p>
+  </div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="fc-icon green"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+      <div class="fc-title">Curtailment Engine</div>
+      <div class="fc-desc">Monitors real-time LMP pricing, calculates per-tier breakeven, and executes curtailment decisions with automatic restart triggers. Learns from 11 years of ERCOT data.</div>
+      <div class="fc-metric"><span class="fc-metric-val">$940</span><span class="fc-metric-label">avg saved per event</span></div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon blue"><svg viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8" fill="none" stroke="currentColor" stroke-width="2"/><line x1="4" y1="20" x2="21" y2="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+      <div class="fc-title">Pool Routing</div>
+      <div class="fc-desc">Compares fees, payout models, and actual earnings across mining pools. Identifies optimal allocation and surfaces savings opportunities automatically.</div>
+      <div class="fc-metric"><span class="fc-metric-val">$21.6K</span><span class="fc-metric-label">/yr identified savings</span></div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon warm"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="fc-title">Lead Engine</div>
+      <div class="fc-desc">Discovers renewable energy operators and IPPs, enriches contacts, personalizes outreach, and manages the pipeline. Runs overnight, surfaces warm leads by morning.</div>
+      <div class="fc-metric"><span class="fc-metric-val">502</span><span class="fc-metric-label">leads discovered autonomously</span></div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon purple"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/></svg></div>
+      <div class="fc-title">Meeting Capture</div>
+      <div class="fc-desc">Joins Google Meet calls automatically, transcribes with speaker identification, extracts action items, and uploads summaries to your shared Drive.</div>
+      <div class="fc-metric"><span class="fc-metric-val">$0.05</span><span class="fc-metric-label">per meeting transcribed</span></div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon green"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+      <div class="fc-title">Outreach Engine</div>
+      <div class="fc-desc">Sends personalized emails to IPP operators, monitors replies, drafts follow-ups, and manages the bid-to-deal pipeline. 7.3% reply rate on cold outreach.</div>
+      <div class="fc-metric"><span class="fc-metric-val">96</span><span class="fc-metric-label">emails sent autonomously</span></div>
+    </div>
+    <div class="feature-card">
+      <div class="fc-icon blue"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+      <div class="fc-title">Reporting Engine</div>
+      <div class="fc-desc">Auto-generates daily ops reports, weekly executive briefings, and monthly investor updates. Delivered to your inbox and Drive every morning at 6 AM.</div>
+      <div class="fc-metric"><span class="fc-metric-val">$0.08</span><span class="fc-metric-label">per report generated</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how reveal">
+  <div class="how-inner">
+    <div class="how-header">
+      <div class="how-label">How It Works</div>
+      <h2 class="how-h2">Connected in hours. Compounding forever.</h2>
+    </div>
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="how-num">01</div>
+        <div class="how-step-icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <div class="how-step-title">Connect your fleet</div>
+        <div class="how-step-desc">Link pool APIs, ERCOT data feeds, and fleet management. Share your Google workspace for meetings and docs.</div>
+        <div class="how-step-time">~30 minutes</div>
+      </div>
+      <div class="how-step">
+        <div class="how-num">02</div>
+        <div class="how-step-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06"/></svg></div>
+        <div class="how-step-title">Configure agents</div>
+        <div class="how-step-desc">Set breakeven thresholds, curtailment rules, outreach targets, and reporting schedules. Each agent runs in Autonomous or Copilot mode.</div>
+        <div class="how-step-time">~15 minutes</div>
+      </div>
+      <div class="how-step">
+        <div class="how-num">03</div>
+        <div class="how-step-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div class="how-step-title">Agents go live</div>
+        <div class="how-step-desc">Curtailment monitors prices every 5 minutes. Lead engine discovers operators overnight. Meeting bot joins every call. Reports generate at 6 AM.</div>
+        <div class="how-step-time">Always on</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section class="usecases reveal">
+  <div class="features-header">
+    <div class="section-label">Use Cases</div>
+    <h2 class="section-h2">Built for how energy operators actually work</h2>
+  </div>
+  <div class="usecase-grid">
+    <div class="usecase-card">
+      <span class="uc-label miner">Bitcoin Miner</span>
+      <div class="uc-title">Curtailment optimization for ERCOT sites</div>
+      <div class="uc-desc">Agent monitors real-time LMP, executes tiered machine shutdowns based on per-ASIC breakeven analysis, and auto-restarts when prices normalize. Uses 11 years of historical data to predict duration.</div>
+      <div class="uc-metric"><span class="uc-metric-val">3.2 hr</span><span class="uc-metric-label">avg event duration predicted</span></div>
+    </div>
+    <div class="usecase-card">
+      <span class="uc-label ipp">Renewable IPP</span>
+      <div class="uc-title">Behind-the-meter partnership development</div>
+      <div class="uc-desc">Lead engine identifies solar and wind operators in distressed pricing nodes, personalizes outreach with node-specific LMP data, and manages the pipeline from discovery to meeting booked.</div>
+      <div class="uc-metric"><span class="uc-metric-val">11.2%</span><span class="uc-metric-label">reply rate on distressed-node leads</span></div>
+    </div>
+    <div class="usecase-card">
+      <span class="uc-label miner">Bitcoin Miner</span>
+      <div class="uc-title">Pool fee optimization across providers</div>
+      <div class="uc-desc">Agent continuously compares ViaBTC, Foundry, Braiins, and other pools on fees, payout models, and actual vs. expected earnings. Surfaces savings when fees change.</div>
+      <div class="uc-metric"><span class="uc-metric-val">$17.3K</span><span class="uc-metric-label">/yr savings identified</span></div>
+    </div>
+    <div class="usecase-card">
+      <span class="uc-label both">Both</span>
+      <div class="uc-title">Investor reporting and LP updates</div>
+      <div class="uc-desc">Reporting engine auto-generates daily ops summaries, weekly KPI briefings, and monthly investor updates. Pulls from fleet data, meeting transcripts, and market conditions. Delivered as PDF or Google Slides.</div>
+      <div class="uc-metric"><span class="uc-metric-val">38</span><span class="uc-metric-label">reports generated this month</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing reveal" id="pricing">
+  <div class="pricing-header">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-h2">Costs less than one analyst.<br>Works around the clock.</h2>
+  </div>
+  <div class="pricing-cards">
+    <div class="price-card">
+      <div class="pc-name">Pilot</div>
+      <div class="pc-price"><span class="pc-price-val">$2,000</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-desc">Start with core agents. Prove the value in 30 days.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Curtailment Engine</li>
+        <li><span class="pc-check">&#10003;</span> Pool Routing</li>
+        <li><span class="pc-check">&#10003;</span> Meeting Bot</li>
+        <li><span class="pc-check">&#10003;</span> Daily Ops Reports</li>
+        <li><span class="pc-check">&#10003;</span> Dashboard + mobile</li>
+        <li><span class="pc-check">&#10003;</span> Onboarding call</li>
+      </ul>
+      <button class="pc-cta secondary" onclick="openModal()">Start Pilot</button>
+    </div>
+    <div class="price-card featured">
+      <div class="pc-name">Full Platform</div>
+      <div class="pc-price"><span class="pc-price-val">$5,000</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-desc">All agents, full data integration, investor-grade reporting.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Everything in Pilot</li>
+        <li><span class="pc-check">&#10003;</span> Lead Engine + Outreach</li>
+        <li><span class="pc-check">&#10003;</span> Investor Reports (Monthly)</li>
+        <li><span class="pc-check">&#10003;</span> ERCOT historical data (11yr)</li>
+        <li><span class="pc-check">&#10003;</span> Google Workspace integration</li>
+        <li><span class="pc-check">&#10003;</span> Hivemind knowledge base</li>
+        <li><span class="pc-check">&#10003;</span> Custom agent training</li>
+        <li><span class="pc-check">&#10003;</span> Priority support</li>
+      </ul>
+      <button class="pc-cta primary" onclick="openModal()">Request Demo</button>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta reveal">
+  <div class="cta-inner">
+    <h2 class="cta-h2">Your fleet never stops.<br>Your agents shouldn't either.</h2>
+    <p class="cta-sub">Join the first energy operators using AI agents to optimize curtailment, discover partners, and compound operational intelligence.</p>
+    <a href="#" class="btn-primary" onclick="openModal(); return false;">Request a Demo</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-left">
+    <span class="footer-brand">Coppice</span>
+    <span class="footer-copy">&copy; 2026</span>
+  </div>
+  <div class="footer-links">
+    <a href="/construction" class="footer-link">Construction</a>
+    <a href="/energy" class="footer-link">Energy</a>
+    <a href="/login" class="footer-link">Log In</a>
+    <a href="mailto:hello@coppice.ai" class="footer-link">hello@coppice.ai</a>
+  </div>
+</footer>
+
+<!-- Demo Modal -->
+<div id="demo-modal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.5); backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:20px; padding:40px; max-width:480px; width:90%; position:relative;">
+    <button onclick="closeModal()" style="position:absolute;top:16px;right:16px;border:none;background:none;font-size:20px;color:#9a9a92;cursor:pointer;">&#10005;</button>
+    <h2 style="font-family:var(--serif);font-size:24px;margin-bottom:4px;">Request a Demo</h2>
+    <p style="font-size:14px;color:var(--text-3);margin-bottom:24px;">We'll set up a walkthrough tailored to your operation.</p>
+    <div id="demo-form">
+      <input id="demo-name" placeholder="Your name" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <input id="demo-company" placeholder="Company name" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <input id="demo-email" placeholder="Email address" type="email" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <input id="demo-phone" placeholder="Phone (optional)" type="tel" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;">
+      <select id="demo-vertical" style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none;color:var(--text-2);background:var(--surface-inset);">
+        <option value="">Operation type</option>
+        <option selected>Bitcoin Mining</option>
+        <option>Solar IPP</option>
+        <option>Wind IPP</option>
+        <option>Nuclear</option>
+        <option>Data Center / HPC</option>
+        <option>Other Energy</option>
+      </select>
+      <button onclick="submitDemo()" style="width:100%;padding:14px;border-radius:12px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:15px;font-weight:600;border:none;cursor:pointer;margin-top:6px;">Submit Request</button>
+    </div>
+    <div id="demo-success" style="display:none;text-align:center;padding:20px 0;">
+      <div style="font-size:32px;margin-bottom:12px;">&#10003;</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:6px;">We'll be in touch within 24 hours.</div>
+      <div style="font-size:14px;color:var(--text-3);">Check your email for a confirmation.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => { if (entry.isIntersecting) entry.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+reveals.forEach(el => observer.observe(el));
+
+function openModal() { document.getElementById('demo-modal').style.display = 'flex'; }
+function closeModal() { document.getElementById('demo-modal').style.display = 'none'; }
+
+async function submitDemo() {
+  const data = {
+    name: document.getElementById('demo-name').value,
+    company: document.getElementById('demo-company').value,
+    email: document.getElementById('demo-email').value,
+    phone: document.getElementById('demo-phone').value,
+    specialty: document.getElementById('demo-vertical').value,
+    vertical: 'energy'
+  };
+  if (!data.name || !data.email || !data.company) { alert('Please fill in your name, company, and email.'); return; }
+  try {
+    const res = await fetch('/api/v1/demo-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (res.ok) { document.getElementById('demo-form').style.display = 'none'; document.getElementById('demo-success').style.display = 'block'; }
+  } catch (e) { alert('Something went wrong. Email us at hello@coppice.ai'); }
+}
+</script>
+
+</body>
+</html>

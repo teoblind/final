@@ -98,7 +98,7 @@ export default function EnergyPricePanel() {
         ].map(({ label, value }) => (
           <div key={label} className="bg-terminal-bg/50 rounded p-2 text-center">
             <p className="text-xs text-terminal-muted">{label}</p>
-            <p className="font-mono text-sm">
+            <p className="font-sans text-sm">
               {value != null ? `$${formatNumber(value, 2)}` : '—'}
             </p>
           </div>

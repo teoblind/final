@@ -182,7 +182,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                 <label className="text-xs font-semibold text-terminal-text">
                   Guaranteed <GlossaryTerm id="quarq_spread">Spread</GlossaryTerm> ($/TH/s/day)
                 </label>
-                <span className="text-sm font-bold text-terminal-cyan font-mono">
+                <span className="text-sm font-bold text-terminal-cyan font-sans">
                   ${formatNumber(floorPrice, 2)}
                 </span>
               </div>
@@ -210,7 +210,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                 >
                   {preset.label}
                   {suggestedFloors[preset.percentile] != null && (
-                    <span className="block text-[10px] text-terminal-muted font-mono">
+                    <span className="block text-[10px] text-terminal-muted font-sans">
                       ${formatNumber(suggestedFloors[preset.percentile], 2)}
                     </span>
                   )}
@@ -229,7 +229,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                 <label className="text-xs font-semibold text-terminal-text">
                   Strike <GlossaryTerm id="hashprice">Hashprice</GlossaryTerm> ($/PH/day)
                 </label>
-                <span className="text-sm font-bold text-terminal-cyan font-mono">
+                <span className="text-sm font-bold text-terminal-cyan font-sans">
                   ${formatNumber(strikeHashprice, 2)}
                 </span>
               </div>
@@ -253,7 +253,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                 <label className="text-xs font-semibold text-terminal-text">
                   <GlossaryTerm id="upside_sharing">Upside Sharing</GlossaryTerm> (%)
                 </label>
-                <span className="text-sm font-bold text-terminal-amber font-mono">
+                <span className="text-sm font-bold text-terminal-amber font-sans">
                   {upsideSharePct}%
                 </span>
               </div>
@@ -288,7 +288,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                 <label className="text-xs font-semibold text-terminal-text">
                   <GlossaryTerm id="revenue_floor">Revenue Floor</GlossaryTerm> ($/day)
                 </label>
-                <span className="text-sm font-bold text-terminal-cyan font-mono">
+                <span className="text-sm font-bold text-terminal-cyan font-sans">
                   ${formatNumber(floorRevenue, 0)}
                 </span>
               </div>
@@ -310,7 +310,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-terminal-text">Difficulty Cap Multiple</label>
-                <span className="text-sm font-bold text-terminal-amber font-mono">
+                <span className="text-sm font-bold text-terminal-amber font-sans">
                   {difficultyCapMultiple}x
                 </span>
               </div>
@@ -342,7 +342,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-terminal-text">Target Efficiency (J/TH)</label>
-                <span className="text-sm font-bold text-terminal-green font-mono">
+                <span className="text-sm font-bold text-terminal-green font-sans">
                   {targetEfficiency} J/TH
                 </span>
               </div>
@@ -364,7 +364,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-terminal-text">Your Fleet Efficiency (J/TH)</label>
-                <span className="text-sm font-bold text-terminal-amber font-mono">
+                <span className="text-sm font-bold text-terminal-amber font-sans">
                   {currentFleetEfficiency} J/TH
                 </span>
               </div>
@@ -386,7 +386,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
             <div className="bg-terminal-bg rounded p-3 border border-terminal-border">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-terminal-muted">Efficiency Gap</span>
-                <span className={`font-bold font-mono ${currentFleetEfficiency > targetEfficiency ? 'text-terminal-amber' : 'text-terminal-green'}`}>
+                <span className={`font-bold font-sans ${currentFleetEfficiency > targetEfficiency ? 'text-terminal-amber' : 'text-terminal-green'}`}>
                   {currentFleetEfficiency > targetEfficiency
                     ? `${(currentFleetEfficiency / targetEfficiency).toFixed(1)}x`
                     : 'No gap'}
@@ -494,7 +494,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
               value={hashrate}
               onChange={(e) => setHashrate(e.target.value)}
               placeholder="Enter hashrate"
-              className="w-full bg-terminal-bg border border-terminal-border rounded pl-8 pr-3 py-2 text-sm text-terminal-text font-mono placeholder:text-terminal-muted/50 focus:outline-none focus:border-terminal-cyan"
+              className="w-full bg-terminal-bg border border-terminal-border rounded pl-8 pr-3 py-2 text-sm text-terminal-text font-sans placeholder:text-terminal-muted/50 focus:outline-none focus:border-terminal-cyan"
             />
           </div>
         </div>
@@ -514,19 +514,19 @@ export default function CoverageExplorerPanel({ initialMode }) {
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center">
               <p className="text-[10px] text-terminal-muted uppercase">Monthly</p>
-              <p className="text-lg font-bold text-terminal-green font-mono">
+              <p className="text-lg font-bold text-terminal-green font-sans">
                 {monthlyCost != null ? formatCurrency(monthlyCost, 'USD', 0) : '--'}
               </p>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-terminal-muted uppercase">Annual</p>
-              <p className="text-lg font-bold text-terminal-text font-mono">
+              <p className="text-lg font-bold text-terminal-text font-sans">
                 {annualCost != null ? formatCurrency(annualCost, 'USD', 0) : '--'}
               </p>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-terminal-muted uppercase">Per TH/s</p>
-              <p className="text-lg font-bold text-terminal-text font-mono">
+              <p className="text-lg font-bold text-terminal-text font-sans">
                 {costPerTH != null ? `$${formatNumber(costPerTH, 2)}` : '--'}
               </p>
             </div>
@@ -611,7 +611,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
                       <span className="text-terminal-muted">
                         {mode === 'synthetic_ppa' ? 'Strike Price' : 'Floor Price'}
                       </span>
-                      <span className="text-terminal-text font-mono">
+                      <span className="text-terminal-text font-sans">
                         ${formatNumber(mode === 'synthetic_ppa' ? strikeHashprice : floorPrice, 2)}/PH/day
                       </span>
                     </div>
@@ -621,12 +621,12 @@ export default function CoverageExplorerPanel({ initialMode }) {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-terminal-muted">Hashrate</span>
-                      <span className="text-terminal-text font-mono">{formatNumber(parseFloat(hashrate) || 0, 0)} TH/s</span>
+                      <span className="text-terminal-text font-sans">{formatNumber(parseFloat(hashrate) || 0, 0)} TH/s</span>
                     </div>
                     {monthlyCost != null && (
                       <div className="flex justify-between pt-2 border-t border-terminal-border">
                         <span className="text-terminal-muted">Est. Monthly Premium</span>
-                        <span className="text-terminal-green font-mono">{formatCurrency(monthlyCost, 'USD', 0)}</span>
+                        <span className="text-terminal-green font-sans">{formatCurrency(monthlyCost, 'USD', 0)}</span>
                       </div>
                     )}
                   </div>

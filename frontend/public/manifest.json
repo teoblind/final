@@ -1,0 +1,27 @@
+{
+  "name": "Coppice",
+  "short_name": "Coppice",
+  "description": "AI employee platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafaf8",
+  "theme_color": "#1e3a5f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/coppice-logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    },
+    {
+      "src": "/coppice-logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/coppice-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

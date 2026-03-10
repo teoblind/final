@@ -1,0 +1,137 @@
+[
+  {
+    "id": "BR-001", "from_email": "estimating@rogersob.com", "from_name": "Mike Reynolds", "gc_name": "Rogers-O'Brien",
+    "subject": "RFQ: Bishop Arts Mixed-Use - Concrete Package",
+    "body": "Please find attached plans for the Bishop Arts Mixed-Use project. We need pricing on all structural concrete including foundations, SOG, and elevated decks. Bid due 3/14. Plans attached. Pre-bid walkthrough Wednesday at 2pm.",
+    "attachments": ["Bishop_Arts_Structural.pdf", "Rebar_Schedule_S1-S8.pdf"],
+    "scope": { "items": ["Strip footings - 1,200 LF", "Spread footings - 18 EA", "Grade beams - 800 LF", "6\" SOG - 45,000 SF", "Elevated deck 8\" PT - 12,000 SF"], "estimated_volume": "~2,400 CY" },
+    "due_date": "2026-03-14", "status": "new", "urgency": "high",
+    "missing_info": [], "received_at": "2026-03-05T09:15:00Z"
+  },
+  {
+    "id": "BR-002", "from_email": "bids@henselphelps.com", "from_name": "Rachel Torres", "gc_name": "Hensel Phelps",
+    "subject": "ITB: Legacy West Tower - Foundation Package",
+    "body": "Invitation to bid on Legacy West Tower foundations. 22-story office tower. Plans available on BuildingConnected. Mandatory pre-bid meeting 3/11 at 10am. Questions due by 3/12.",
+    "attachments": ["Foundation_Plans_F1-F12.pdf"],
+    "scope": { "items": ["Drilled piers 36\" dia - 45 EA, avg 40' depth", "Grade beams 24\"x36\" - 2,100 LF", "Mat foundation option - 8,500 SF", "Elevator pit - 4 EA"], "estimated_volume": "~4,200 CY" },
+    "due_date": "2026-03-17", "status": "new", "urgency": "high",
+    "missing_info": ["Soil boring report not included", "Dewatering responsibility unclear"], "received_at": "2026-03-04T14:30:00Z"
+  },
+  {
+    "id": "BR-003", "from_email": "preconstruction@dpr.com", "from_name": "Kevin Walsh", "gc_name": "DPR Construction",
+    "subject": "Pricing Request: Samsung Fab Expansion - Equipment Pads",
+    "body": "Need pricing on concrete equipment pads and containment walls for Samsung Austin fab expansion. Cleanroom adjacent work. All pours must be scheduled with facility ops. See attached specs.",
+    "attachments": ["Equipment_Pad_Layout.pdf", "Spec_Section_033000.pdf"],
+    "scope": { "items": ["8\" equipment pads - 28 EA (various sizes)", "Containment walls 12\" - 1,400 SF", "Housekeeping pads - 45 EA", "Trench drains - 600 LF"], "estimated_volume": "~800 CY" },
+    "due_date": "2026-03-20", "status": "new", "urgency": "high",
+    "missing_info": ["Rebar schedule not provided"], "received_at": "2026-03-06T08:45:00Z"
+  },
+  {
+    "id": "BR-004", "from_email": "bids@skanska.com", "from_name": "Tom Nguyen", "gc_name": "Skanska",
+    "subject": "RFP: I-35 Corridor Improvements - Retaining Walls",
+    "body": "Soliciting bids for cast-in-place retaining walls along the I-35 corridor improvement project, Segment 4. TxDOT specs apply. Must be TxDOT prequalified. Night work required for traffic management.",
+    "attachments": ["RetainingWall_Plans.pdf", "TxDOT_Spec_420.pdf", "Traffic_Control_Plan.pdf"],
+    "scope": { "items": ["CIP retaining walls 8\"-12\" - 18,500 SF", "Wall foundations - 2,800 LF", "Barrier rail - 1,200 LF", "Approach slabs - 8 EA"], "estimated_volume": "~3,100 CY" },
+    "due_date": "2026-03-21", "status": "new", "urgency": "high",
+    "missing_info": [], "received_at": "2026-03-03T11:00:00Z"
+  },
+  {
+    "id": "BR-005", "from_email": "jdunn.estimating@jedunn.com", "from_name": "Lisa Park", "gc_name": "JE Dunn",
+    "subject": "Budget Pricing: Children's Hospital Expansion",
+    "body": "We're in preconstruction on Children's Medical Center expansion. Need budget-level concrete pricing for schematic design. Not a hard bid yet - we need numbers for the GMP. Detailed plans coming in 6-8 weeks.",
+    "attachments": ["Schematic_Floor_Plans.pdf"],
+    "scope": { "items": ["Foundations (TBD) - approx 1,500 CY", "SOG 6\" - approx 35,000 SF", "Elevated decks - approx 20,000 SF", "Stairs - 6 EA", "Misc structural - allowance"], "estimated_volume": "~3,000 CY estimated" },
+    "due_date": "2026-03-28", "status": "new", "urgency": "high",
+    "missing_info": ["Structural drawings not complete", "No rebar schedule", "Geotechnical report pending"], "received_at": "2026-03-06T16:20:00Z"
+  },
+  {
+    "id": "BR-006", "from_email": "estimating@bartlettcocke.com", "from_name": "Carlos Mendez", "gc_name": "Bartlett Cocke",
+    "subject": "RFQ: Alamo Heights Retail Center - Flatwork",
+    "body": "Need pricing on all flatwork for new retail center. Plans on PlanGrid. Standard commercial specs. Looking for a sub who can start mid-April.",
+    "attachments": ["Site_Plan.pdf", "Paving_Details.pdf"],
+    "scope": { "items": ["4\" SOG retail - 22,000 SF", "6\" SOG warehouse - 8,000 SF", "Sidewalks - 3,200 SF", "Curb & gutter - 1,800 LF", "Loading dock aprons - 4 EA"], "estimated_volume": "~650 CY" },
+    "due_date": "2026-03-25", "status": "new", "urgency": "medium",
+    "missing_info": ["Subgrade prep responsibility unclear"], "received_at": "2026-03-05T10:30:00Z"
+  },
+  {
+    "id": "BR-007", "from_email": "pm@cadencemcshane.com", "from_name": "Derek Huang", "gc_name": "Cadence McShane",
+    "subject": "Bid: Leander Apartment Complex - Foundations",
+    "body": "Multi-family project, 280 units across 6 buildings. Post-tension slab on grade foundations. Geotechnical report attached shows expansive clay. Please include moisture conditioning in your bid.",
+    "attachments": ["Foundation_Plans.pdf", "Geotech_Report.pdf", "PT_Design.pdf"],
+    "scope": { "items": ["PT slab foundations - 6 buildings, 185,000 SF total", "Concrete piers - 340 EA", "Retaining walls at parking - 2,400 SF", "Pool deck - 3,500 SF"], "estimated_volume": "~2,800 CY" },
+    "due_date": "2026-03-24", "status": "new", "urgency": "medium",
+    "missing_info": [], "received_at": "2026-03-04T09:00:00Z"
+  },
+  {
+    "id": "BR-008", "from_email": "bids@spawglass.com", "from_name": "Jennifer Mills", "gc_name": "SpawGlass",
+    "subject": "RFQ: Pflugerville Fire Station #7",
+    "body": "New fire station project for City of Pflugerville. Prevailing wages apply. Plans available for download. Scope includes all site concrete and building foundations.",
+    "attachments": ["Structural_Plans.pdf", "Site_Civil.pdf"],
+    "scope": { "items": ["Strip footings - 480 LF", "Spread footings - 12 EA", "6\" SOG - 8,500 SF", "Apparatus bay 8\" SOG - 4,200 SF", "Drive apron 8\" - 2,800 SF", "Sidewalks - 1,600 SF"], "estimated_volume": "~420 CY" },
+    "due_date": "2026-03-27", "status": "new", "urgency": "medium",
+    "missing_info": ["Prevailing wage rate schedule not attached"], "received_at": "2026-03-06T13:15:00Z"
+  },
+  {
+    "id": "BR-009", "from_email": "construction@austincommercial.com", "from_name": "Sarah Kim", "gc_name": "Austin Commercial",
+    "subject": "Pricing: East Riverside Student Housing - Demo + New",
+    "body": "Student housing project near UT. Includes demo of existing parking lot and new construction. Tight urban site. Please note crane access limitations. Drawings on Procore.",
+    "attachments": ["Demo_Plan.pdf", "Foundation_Plan.pdf", "Structural_S1-S6.pdf"],
+    "scope": { "items": ["Demo existing 6\" parking slab - 15,000 SF", "New SOG 6\" - 28,000 SF", "Grade beams - 1,600 LF", "Elevated deck - 8,500 SF", "Retaining wall - 1,800 SF"], "estimated_volume": "~1,900 CY" },
+    "due_date": "2026-03-22", "status": "new", "urgency": "medium",
+    "missing_info": ["Demo quantities approximate", "Rebar schedule references missing sheets"], "received_at": "2026-03-05T15:45:00Z"
+  },
+  {
+    "id": "BR-010", "from_email": "estimating@rogersob.com", "from_name": "Mike Reynolds", "gc_name": "Rogers-O'Brien",
+    "subject": "Quick Turn: Allen Premium Outlets - Sidewalk Repairs",
+    "body": "Emergency sidewalk replacement at Allen Premium Outlets. Trip hazard issue. Need pricing ASAP for 3,500 SF of sidewalk demo and replacement. Can you start next week?",
+    "attachments": ["Site_Photos.pdf"],
+    "scope": { "items": ["Demo existing sidewalk - 3,500 SF", "New 4\" sidewalk - 3,500 SF", "ADA ramps - 6 EA"], "estimated_volume": "~45 CY" },
+    "due_date": "2026-03-12", "status": "new", "urgency": "medium",
+    "missing_info": ["No engineered drawings - field verify"], "received_at": "2026-03-07T07:30:00Z"
+  },
+  {
+    "id": "BR-011", "from_email": "pm@dpr.com", "from_name": "Brian Foster", "gc_name": "DPR Construction",
+    "subject": "Budget Request: Baylor Scott & White Clinic - Shell",
+    "body": "Early-stage budget request for medical clinic shell. We just need rough numbers for concrete scope. Schematic design only at this point. This is for a CMAR proposal.",
+    "attachments": ["Schematic_Plans.pdf"],
+    "scope": { "items": ["Foundations (assume standard) - ~600 CY", "SOG - ~12,000 SF", "Misc site concrete - allowance"], "estimated_volume": "~600 CY estimated" },
+    "due_date": "2026-04-01", "status": "new", "urgency": "low",
+    "missing_info": ["No structural drawings yet", "No specs", "Quantities are estimates only"], "received_at": "2026-03-06T11:00:00Z"
+  },
+  {
+    "id": "BR-012", "from_email": "bids@henselphelps.com", "from_name": "Rachel Torres", "gc_name": "Hensel Phelps",
+    "subject": "Pre-Qual + RFQ: DFW Airport Terminal F Renovation",
+    "body": "Pre-qualification required before bidding. Please submit your company pre-qual package along with your bid. Security clearance required for airport work. Plans available after pre-qual approval.",
+    "attachments": ["PreQual_Form.pdf"],
+    "scope": { "items": ["Scope TBD pending pre-qualification", "Estimated concrete package $400K-$600K range"], "estimated_volume": "unknown" },
+    "due_date": "2026-04-05", "status": "new", "urgency": "low",
+    "missing_info": ["Plans not yet available", "Full scope TBD", "Pre-qual required first"], "received_at": "2026-03-04T16:00:00Z"
+  },
+  {
+    "id": "BR-013", "from_email": "admin@cadencemcshane.com", "from_name": "Maria Gonzalez", "gc_name": "Cadence McShane",
+    "subject": "FYI: Upcoming Georgetown Retail - Concrete",
+    "body": "Heads up on a Georgetown retail project coming to bid in 4-6 weeks. Just wanted to get you on the bid list. Plans are in permitting now. I'll send full bid package when ready.",
+    "attachments": [],
+    "scope": { "items": ["Standard retail concrete package", "Approximate $150K-$200K range"], "estimated_volume": "unknown" },
+    "due_date": "2026-04-15", "status": "new", "urgency": "low",
+    "missing_info": ["No plans available yet", "No quantities", "No specs"], "received_at": "2026-03-05T08:00:00Z"
+  },
+  {
+    "id": "BR-014", "from_email": "estimating@balfourbeattytx.com", "from_name": "James Wright", "gc_name": "Balfour Beatty",
+    "subject": "RFQ: Ft. Worth Water Treatment Plant Upgrade",
+    "body": "Water treatment plant concrete upgrades. Specialty concrete required for chemical exposure resistance. Must provide Type V cement or approved equal. Drawings and specs on Procore share link below.",
+    "attachments": ["WTP_Structural.pdf", "Spec_033000_Chemical_Resistant.pdf"],
+    "scope": { "items": ["Chemical containment walls 12\" - 4,200 SF", "Equipment pads (Type V) - 6,500 SF", "Pipe supports - 85 EA", "Clarifier rehab - 2 EA", "Access road 8\" - 12,000 SF"], "estimated_volume": "~1,800 CY" },
+    "due_date": "2026-04-02", "status": "new", "urgency": "low",
+    "missing_info": ["Type V cement availability/lead time needed"], "received_at": "2026-03-06T14:30:00Z"
+  },
+  {
+    "id": "BR-015", "from_email": "bids@spawglass.com", "from_name": "Jennifer Mills", "gc_name": "SpawGlass",
+    "subject": "RFQ: San Marcos HS Additions - Concrete",
+    "body": "Two classroom additions to existing high school. Summer construction window only (June-August). Plans on BuildingConnected. Davis-Bacon does NOT apply (state-funded).",
+    "attachments": ["Addition_A_Structural.pdf", "Addition_B_Structural.pdf"],
+    "scope": { "items": ["Strip footings - 620 LF", "Spread footings - 16 EA", "6\" SOG - 14,000 SF", "Sidewalks & ramps - 2,400 SF", "Retaining wall - 800 SF"], "estimated_volume": "~520 CY" },
+    "due_date": "2026-04-08", "status": "new", "urgency": "low",
+    "missing_info": [], "received_at": "2026-03-07T09:00:00Z"
+  }
+]

@@ -1,120 +1,74 @@
-import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../../lib/hooks/useApi';
 
-const UnderwritingQueuePanel = lazy(() => import('../panels/insurance/UnderwritingQueuePanel'));
-const PortfolioRiskPanel = lazy(() => import('../panels/insurance/PortfolioRiskPanel'));
-const CalibrationStatusPanel = lazy(() => import('../panels/insurance/CalibrationStatusPanel'));
-const LPManagementPanel = lazy(() => import('../panels/insurance/LPManagementPanel'));
-const StressTestPanel = lazy(() => import('../panels/insurance/StressTestPanel'));
+const PERIODS = [
+  { label: '7d', value: '7' },
+  { label: '30d', value: '30' },
+  { label: '90d', value: '90' },
+];
 
 export default function AdminConsoleDashboard() {
-  const [aggregate, setAggregate] = useState(null);
+  const [period, setPeriod] = useState('30');
   const [tenants, setTenants] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [usage, setUsage] = useState(null);
+  const [byTenant, setByTenant] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sortField, setSortField] = useState('capacityMW');
-  const [sortDirection, setSortDirection] = useState('desc');
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [tenantRes, usageRes, tenantUsageRes] = await Promise.all([
+        api.get('/v1/admin/tenants'),
+        api.get(`/v1/admin/usage?period=${period}`),
+        api.get(`/v1/admin/usage/by-tenant?period=${period}`),
+      ]);
+
+      const tenantList = tenantRes.data?.tenants || tenantRes.data || [];
+      setTenants(tenantList);
+
+      // Collect all users from each tenant
+      const allUsers = [];
+      for (const t of tenantList) {
+        try {
+          const uRes = await api.get(`/v1/admin/tenants/${t.id}/users`);
+          const uList = uRes.data?.users || [];
+          allUsers.push(...uList.map(u => ({ ...u, tenantName: t.name })));
+        } catch { /* skip */ }
+      }
+      setUsers(allUsers);
+
+      setUsage(usageRes.data);
+      setByTenant(tenantUsageRes.data?.tenants || []);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to load admin data');
+    } finally {
+      setLoading(false);
+    }
+  }, [period]);
 
   useEffect(() => {
-    let cancelled = false;
+    fetchData();
+  }, [fetchData]);
 
-    const fetchAll = async () => {
-      setLoading(true);
-      try {
-        const [aggRes, tenantRes] = await Promise.all([
-          api.get('/v1/admin/aggregate'),
-          api.get('/v1/admin/tenants'),
-        ]);
-
-        if (!cancelled) {
-          setAggregate(aggRes.data);
-          setTenants(tenantRes.data?.tenants || tenantRes.data || []);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err.response?.data?.error || err.message || 'Failed to load admin data'
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchAll();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Sorted tenants
-  const sortedTenants = useMemo(() => {
-    const sorted = [...tenants];
-    sorted.sort((a, b) => {
-      const aVal = a[sortField] ?? 0;
-      const bVal = b[sortField] ?? 0;
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-      const aStr = String(aVal).toLowerCase();
-      const bStr = String(bVal).toLowerCase();
-      return sortDirection === 'asc'
-        ? aStr.localeCompare(bStr)
-        : bStr.localeCompare(aStr);
-    });
-    return sorted;
-  }, [tenants, sortField, sortDirection]);
-
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
+  const fmtTokens = (n) => {
+    if (n == null) return '--';
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return n.toLocaleString();
   };
 
-  const sortIndicator = (field) => {
-    if (sortField !== field) return '';
-    return sortDirection === 'asc' ? ' \u25B2' : ' \u25BC';
-  };
-
-  const getStatusBadge = (status) => {
-    const normalized = (status || '').toLowerCase();
-    if (normalized === 'active') {
-      return (
-        <span className="px-2 py-0.5 text-xs rounded bg-terminal-green/10 text-terminal-green border border-terminal-green/30">
-          Active
-        </span>
-      );
-    }
-    if (normalized === 'trial') {
-      return (
-        <span className="px-2 py-0.5 text-xs rounded bg-terminal-amber/10 text-terminal-amber border border-terminal-amber/30">
-          Trial
-        </span>
-      );
-    }
-    if (normalized === 'suspended') {
-      return (
-        <span className="px-2 py-0.5 text-xs rounded bg-terminal-red/10 text-terminal-red border border-terminal-red/30">
-          Suspended
-        </span>
-      );
-    }
-    return (
-      <span className="px-2 py-0.5 text-xs rounded bg-terminal-panel text-terminal-muted border border-terminal-border">
-        {status || 'Unknown'}
-      </span>
-    );
+  const fmtCost = (n) => {
+    if (n == null) return '--';
+    return `$${n.toFixed(4)}`;
   };
 
   if (loading) {
     return (
-      <div className="p-4">
+      <div className="p-6">
         <div className="flex items-center justify-center py-24">
           <div className="spinner w-10 h-10" />
         </div>
@@ -124,7 +78,7 @@ export default function AdminConsoleDashboard() {
 
   if (error) {
     return (
-      <div className="p-4">
+      <div className="p-6">
         <div className="flex flex-col items-center justify-center py-24 text-terminal-red">
           <p className="text-lg font-semibold mb-2">Admin Console Error</p>
           <p className="text-sm text-terminal-muted">{error}</p>
@@ -133,242 +87,233 @@ export default function AdminConsoleDashboard() {
     );
   }
 
+  const summary = usage?.summary || {};
+  const byDay = usage?.byDay || [];
+
   return (
-    <div className="p-4">
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-terminal-green">
-          AMPERA &mdash; Admin Console
-        </h2>
-        <p className="text-xs text-terminal-muted mt-1">
-          Platform-wide metrics and tenant management
-        </p>
+    <div className="p-6 lg:px-7 lg:py-6">
+      {/* Header + Period */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-bold text-terminal-text">Admin Console</h2>
+          <p className="text-xs text-terminal-muted mt-0.5">
+            {tenants.length} tenants &middot; {users.length} users
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          {PERIODS.map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={`px-3 py-1.5 text-[12px] rounded-lg font-semibold transition-colors ${
+                period === p.value
+                  ? 'bg-[#1e3a5f] text-white'
+                  : 'bg-terminal-panel border border-terminal-border text-terminal-muted hover:text-terminal-text'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Top Stats Row */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Total Tenants"
-          value={aggregate?.totalTenants ?? '--'}
-          color="text-terminal-green"
-        />
-        <StatCard
-          label="Total Capacity"
-          value={
-            aggregate?.totalCapacityGW != null
-              ? `${aggregate.totalCapacityGW.toFixed(2)} GW`
-              : '--'
-          }
-          color="text-terminal-green"
-        />
-        <StatCard
-          label="Total Hashrate"
-          value={
-            aggregate?.totalHashrateEH != null
-              ? `${aggregate.totalHashrateEH.toFixed(2)} EH/s`
-              : '--'
-          }
-          color="text-terminal-green"
-        />
-        <StatCard
-          label="Active GPUs"
-          value={
-            aggregate?.activeGPUs != null
-              ? aggregate.activeGPUs.toLocaleString()
-              : '--'
-          }
-          color="text-terminal-cyan"
-        />
+        <StatCard label="Total Requests" value={summary.totalRequests?.toLocaleString() ?? '0'} />
+        <StatCard label="Input Tokens" value={fmtTokens(summary.totalInputTokens)} />
+        <StatCard label="Output Tokens" value={fmtTokens(summary.totalOutputTokens)} />
+        <StatCard label="Estimated Cost" value={fmtCost(summary.totalCost)} accent />
       </div>
 
-      {/* Network Intelligence */}
-      <div className="bg-terminal-panel border border-terminal-border rounded-lg p-4 mb-6">
-        <h3 className="text-xs text-terminal-muted uppercase tracking-wider mb-3">
-          Network Intelligence
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs text-terminal-muted">BTC Network Coverage</p>
-            <p className="text-xl font-bold text-terminal-green">
-              {aggregate?.networkCoveragePct != null
-                ? `${aggregate.networkCoveragePct.toFixed(2)}%`
-                : '--'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-terminal-muted">Avg Fleet Efficiency</p>
-            <p className="text-xl font-bold text-terminal-text">
-              {aggregate?.avgEfficiencyJTH != null
-                ? `${aggregate.avgEfficiencyJTH.toFixed(1)} J/TH`
-                : '--'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-terminal-muted">Avg Curtailment Savings</p>
-            <p className="text-xl font-bold text-terminal-amber">
-              {aggregate?.avgCurtailmentSavingsPct != null
-                ? `${aggregate.avgCurtailmentSavingsPct.toFixed(1)}%`
-                : '--'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-terminal-muted">Agent Adoption</p>
-            <p className="text-xl font-bold text-terminal-cyan">
-              {aggregate?.agentAdoptionPct != null
-                ? `${aggregate.agentAdoptionPct.toFixed(1)}%`
-                : '--'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tenant List Table */}
-      <div className="bg-terminal-panel border border-terminal-border rounded-lg overflow-hidden mb-6">
-        <div className="px-4 py-3 border-b border-terminal-border">
-          <h3 className="text-sm font-semibold text-terminal-text">
-            Tenants ({tenants.length})
+      {/* Two-column: Chart + By-Model */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-6">
+        {/* Daily Chart */}
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5">
+          <h3 className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-4">
+            Requests Per Day
           </h3>
+          {byDay.length > 0 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={byDay}>
+                <XAxis
+                  dataKey="day"
+                  tick={{ fill: '#9a9a92', fontSize: 10 }}
+                  tickFormatter={(v) => v.slice(5)}
+                  axisLine={{ stroke: '#e8e6e1' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: '#9a9a92', fontSize: 10 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={30}
+                />
+                <Tooltip
+                  contentStyle={{ background: '#fff', border: '1px solid #e8e6e1', borderRadius: 10, fontSize: 12, fontFamily: 'Instrument Sans, sans-serif' }}
+                  labelStyle={{ color: '#6b6b65' }}
+                  formatter={(value, name) => {
+                    if (name === 'requests') return [value, 'Requests'];
+                    return [fmtTokens(value), name === 'input_tokens' ? 'Input' : 'Output'];
+                  }}
+                />
+                <Bar dataKey="requests" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[180px] text-terminal-muted text-sm">No data for this period</div>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-terminal-border text-terminal-muted text-xs uppercase tracking-wider">
-                <th
-                  className="px-4 py-2 text-left cursor-pointer hover:text-terminal-text"
-                  onClick={() => handleSort('name')}
-                >
-                  Name{sortIndicator('name')}
-                </th>
-                <th
-                  className="px-4 py-2 text-right cursor-pointer hover:text-terminal-text"
-                  onClick={() => handleSort('capacityMW')}
-                >
-                  Capacity MW{sortIndicator('capacityMW')}
-                </th>
-                <th
-                  className="px-4 py-2 text-right cursor-pointer hover:text-terminal-text"
-                  onClick={() => handleSort('hashrate')}
-                >
-                  Hashrate{sortIndicator('hashrate')}
-                </th>
-                <th
-                  className="px-4 py-2 text-left cursor-pointer hover:text-terminal-text"
-                  onClick={() => handleSort('plan')}
-                >
-                  Plan{sortIndicator('plan')}
-                </th>
-                <th
-                  className="px-4 py-2 text-left cursor-pointer hover:text-terminal-text"
-                  onClick={() => handleSort('status')}
-                >
-                  Status{sortIndicator('status')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedTenants.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-terminal-muted"
-                  >
-                    No tenants found
-                  </td>
+
+        {/* By Model */}
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5">
+          <h3 className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-4">
+            By Model
+          </h3>
+          {usage?.byModel?.length > 0 ? (
+            <div className="space-y-3">
+              {usage.byModel.map((row) => {
+                const total = (row.input_tokens || 0) + (row.output_tokens || 0);
+                const maxTokens = Math.max(...usage.byModel.map(r => (r.input_tokens || 0) + (r.output_tokens || 0)), 1);
+                const pct = (total / maxTokens) * 100;
+                return (
+                  <div key={row.model}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[12px] font-medium text-terminal-text truncate max-w-[200px]">{row.model || 'unknown'}</span>
+                      <span className="text-[11px] text-terminal-muted tabular-nums">{row.requests} req</span>
+                    </div>
+                    <div className="h-1.5 bg-[#f0eeea] rounded-full overflow-hidden">
+                      <div className="h-full bg-[#1e3a5f] rounded-full transition-all duration-500" style={{ width: `${Math.max(pct, 2)}%` }} />
+                    </div>
+                    <div className="flex justify-between mt-0.5">
+                      <span className="text-[10px] text-terminal-muted">{fmtTokens(row.input_tokens)} in</span>
+                      <span className="text-[10px] text-terminal-muted">{fmtTokens(row.output_tokens)} out</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-[180px] text-terminal-muted text-sm">No data</div>
+          )}
+        </div>
+      </div>
+
+      {/* Two-column: Spend by Tenant + Users */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Spend by Tenant */}
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-[#f0eeea] flex items-center justify-between">
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Spend by Tenant</span>
+            <span className="text-[11px] text-terminal-muted">{byTenant.length} tenants</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#f0eeea] text-[10px] text-terminal-muted uppercase tracking-[0.5px]">
+                  <th className="px-5 py-2 text-left font-bold">Tenant</th>
+                  <th className="px-5 py-2 text-right font-bold">Requests</th>
+                  <th className="px-5 py-2 text-right font-bold">Tokens</th>
+                  <th className="px-5 py-2 text-right font-bold">Cost</th>
                 </tr>
-              ) : (
-                sortedTenants.map((tenant, index) => (
-                  <tr
-                    key={tenant.id || index}
-                    className="border-b border-terminal-border/50 hover:bg-terminal-bg/50 transition-colors"
-                  >
-                    <td className="px-4 py-2.5 text-terminal-text font-medium">
-                      {tenant.name || '--'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-terminal-text">
-                      {tenant.capacityMW != null
-                        ? tenant.capacityMW.toLocaleString()
-                        : '--'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-terminal-text">
-                      {tenant.hashrate != null
-                        ? `${tenant.hashrate.toLocaleString()} TH/s`
-                        : '--'}
-                    </td>
-                    <td className="px-4 py-2.5 text-terminal-muted">
-                      {tenant.plan || '--'}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {getStatusBadge(tenant.status)}
+              </thead>
+              <tbody>
+                {byTenant.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-5 py-8 text-center text-terminal-muted text-[13px]">
+                      No usage data for this period
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Underwriting Pipeline */}
-      <div className="bg-terminal-panel border border-terminal-border rounded-lg p-4 mb-6">
-        <h3 className="text-xs text-terminal-muted uppercase tracking-wider mb-3">
-          Underwriting Pipeline
-        </h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs text-terminal-muted">Ready</p>
-            <p className="text-2xl font-bold text-terminal-green">
-              {aggregate?.underwriting?.ready ?? '--'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-terminal-muted">Insufficient Data</p>
-            <p className="text-2xl font-bold text-terminal-amber">
-              {aggregate?.underwriting?.insufficientData ?? '--'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-terminal-muted">Active Policies</p>
-            <p className="text-2xl font-bold text-terminal-cyan">
-              {aggregate?.underwriting?.activePolicies ?? '--'}
-            </p>
+                ) : (
+                  byTenant.map((t) => (
+                    <tr key={t.tenantId} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+                      <td className="px-5 py-2.5 text-terminal-text font-medium">{t.tenantName}</td>
+                      <td className="px-5 py-2.5 text-right text-terminal-text tabular-nums">{t.requests.toLocaleString()}</td>
+                      <td className="px-5 py-2.5 text-right text-terminal-muted tabular-nums">{fmtTokens(t.inputTokens + t.outputTokens)}</td>
+                      <td className="px-5 py-2.5 text-right font-semibold text-[#1e3a5f] tabular-nums">{fmtCost(t.cost)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
 
-      {/* Phase 9: Insurance Admin Panels */}
-      <div className="mb-6">
-        <h3 className="text-sm font-semibold text-terminal-green mb-3">Insurance & Underwriting</h3>
-        <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="spinner w-8 h-8" /></div>}>
-          <div className="space-y-4">
-            <UnderwritingQueuePanel />
-            <LPManagementPanel />
-            <PortfolioRiskPanel />
-            <CalibrationStatusPanel />
-            <StressTestPanel />
+        {/* Users */}
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-[#f0eeea] flex items-center justify-between">
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Users</span>
+            <span className="text-[11px] text-terminal-muted">{users.length} total</span>
           </div>
-        </Suspense>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex gap-3">
-        <button className="px-4 py-2 bg-terminal-green text-[#0a0a0a] font-semibold rounded hover:bg-terminal-green/90 transition-colors text-sm">
-          Generate Network Report
-        </button>
-        <button className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-terminal-text text-sm hover:border-terminal-green transition-colors">
-          Export Underwriting Data
-        </button>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-[#f0eeea] text-[10px] text-terminal-muted uppercase tracking-[0.5px]">
+                  <th className="px-5 py-2 text-left font-bold">Name</th>
+                  <th className="px-5 py-2 text-left font-bold">Email</th>
+                  <th className="px-5 py-2 text-left font-bold">Tenant</th>
+                  <th className="px-5 py-2 text-left font-bold">Role</th>
+                  <th className="px-5 py-2 text-left font-bold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-terminal-muted text-[13px]">
+                      No users found
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+                      <td className="px-5 py-2.5 text-terminal-text font-medium">{u.name || '--'}</td>
+                      <td className="px-5 py-2.5 text-terminal-muted">{u.email}</td>
+                      <td className="px-5 py-2.5 text-terminal-muted">{u.tenantName || u.tenant_id}</td>
+                      <td className="px-5 py-2.5">
+                        <RoleBadge role={u.role} />
+                      </td>
+                      <td className="px-5 py-2.5">
+                        <StatusBadge status={u.status} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function StatCard({ label, value, color = 'text-terminal-text' }) {
+// ─── Small Components ───────────────────────────────────────────────────────
+
+function StatCard({ label, value, accent }) {
   return (
-    <div className="bg-terminal-panel border border-terminal-border rounded-lg p-4">
-      <p className="text-xs text-terminal-muted uppercase tracking-wider mb-1">
+    <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5">
+      <p className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">
         {label}
       </p>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      <p className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#1e3a5f]' : 'text-terminal-text'}`}>{value}</p>
     </div>
   );
+}
+
+function RoleBadge({ role }) {
+  const r = (role || '').toLowerCase();
+  if (r.includes('admin')) {
+    return <span className="text-[9px] font-bold uppercase tracking-[0.3px] px-2 py-[3px] rounded-md bg-[#eef3f9] text-[#1e3a5f]">{role}</span>;
+  }
+  return <span className="text-[9px] font-bold uppercase tracking-[0.3px] px-2 py-[3px] rounded-md bg-[#f5f4f0] text-terminal-muted">{role}</span>;
+}
+
+function StatusBadge({ status }) {
+  const s = (status || '').toLowerCase();
+  if (s === 'active') {
+    return <span className="text-[9px] font-bold uppercase tracking-[0.3px] px-2 py-[3px] rounded-md bg-[#edf7f0] text-[#1a6b3c]">Active</span>;
+  }
+  if (s === 'suspended' || s === 'disabled') {
+    return <span className="text-[9px] font-bold uppercase tracking-[0.3px] px-2 py-[3px] rounded-md bg-[#fbeae8] text-[#c0392b]">{status}</span>;
+  }
+  return <span className="text-[9px] font-bold uppercase tracking-[0.3px] px-2 py-[3px] rounded-md bg-[#f5f4f0] text-terminal-muted">{status || 'Unknown'}</span>;
 }

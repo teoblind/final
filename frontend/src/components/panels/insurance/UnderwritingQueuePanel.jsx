@@ -249,17 +249,17 @@ export default function UnderwritingQueuePanel() {
                     <div className="col-span-2 text-terminal-muted">
                       {formatDate(req.requestedAt || req.createdAt)}
                     </div>
-                    <div className="col-span-1 text-right font-mono text-terminal-text">
+                    <div className="col-span-1 text-right font-sans text-terminal-text">
                       ${formatNumber(req.desiredFloor || req.floorPrice, 0)}
                     </div>
-                    <div className="col-span-1 text-right font-mono text-terminal-text">
+                    <div className="col-span-1 text-right font-sans text-terminal-text">
                       {formatNumber(req.hashrateTH, 0)}
                     </div>
                     <div className="col-span-1 text-right text-terminal-muted">
                       {req.termMonths}mo
                     </div>
                     <div className="col-span-1 text-right">
-                      <span className={`font-mono ${
+                      <span className={`font-sans ${
                         req.riskScore <= 30 ? 'text-terminal-green' :
                         req.riskScore <= 60 ? 'text-terminal-amber' :
                         req.riskScore > 60 ? 'text-terminal-red' : 'text-terminal-muted'
@@ -287,15 +287,15 @@ export default function UnderwritingQueuePanel() {
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <div>
                               <span className="text-terminal-muted">Risk Score: </span>
-                              <span className="text-terminal-text font-mono">{req.assessment.compositeRiskScore}</span>
+                              <span className="text-terminal-text font-sans">{req.assessment.compositeRiskScore}</span>
                             </div>
                             <div>
                               <span className="text-terminal-muted">Fleet Eff: </span>
-                              <span className="text-terminal-text font-mono">P{req.assessment.fleetEfficiencyPercentile}</span>
+                              <span className="text-terminal-text font-sans">P{req.assessment.fleetEfficiencyPercentile}</span>
                             </div>
                             <div>
                               <span className="text-terminal-muted">Energy: </span>
-                              <span className="text-terminal-text font-mono">P{req.assessment.energyCostPercentile}</span>
+                              <span className="text-terminal-text font-sans">P{req.assessment.energyCostPercentile}</span>
                             </div>
                           </div>
                           {req.assessment.summary && (
@@ -395,7 +395,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={structureForm.floorPrice}
                                 onChange={(e) => setStructureForm(f => ({ ...f, floorPrice: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-amber"
                                 placeholder="$/PH/day"
                               />
                             </div>
@@ -405,7 +405,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={structureForm.monthlyPremium}
                                 onChange={(e) => setStructureForm(f => ({ ...f, monthlyPremium: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-amber"
                                 placeholder="Total monthly"
                               />
                             </div>
@@ -415,7 +415,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={structureForm.lpPremiumShare}
                                 onChange={(e) => setStructureForm(f => ({ ...f, lpPremiumShare: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-amber"
                                 placeholder="LP share"
                               />
                             </div>
@@ -425,7 +425,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={structureForm.structuringFee}
                                 onChange={(e) => setStructureForm(f => ({ ...f, structuringFee: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-amber"
                                 placeholder="Sangha fee"
                               />
                             </div>
@@ -435,7 +435,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={structureForm.managementFee}
                                 onChange={(e) => setStructureForm(f => ({ ...f, managementFee: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-amber"
                                 placeholder="Mgmt fee"
                               />
                             </div>
@@ -445,7 +445,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={structureForm.termMonths}
                                 onChange={(e) => setStructureForm(f => ({ ...f, termMonths: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-amber"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-amber"
                                 placeholder="12"
                               />
                             </div>
@@ -488,7 +488,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={quoteForm.premium}
                                 onChange={(e) => setQuoteForm(f => ({ ...f, premium: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-green"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-green"
                                 placeholder="Monthly premium"
                                 onClick={(e) => e.stopPropagation()}
                               />
@@ -499,7 +499,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={quoteForm.upsideSharePct}
                                 onChange={(e) => setQuoteForm(f => ({ ...f, upsideSharePct: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-green"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-green"
                                 placeholder="e.g. 15"
                                 onClick={(e) => e.stopPropagation()}
                               />
@@ -510,7 +510,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={quoteForm.floorPrice}
                                 onChange={(e) => setQuoteForm(f => ({ ...f, floorPrice: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-green"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-green"
                                 placeholder="$/PH/day"
                                 onClick={(e) => e.stopPropagation()}
                               />
@@ -521,7 +521,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={quoteForm.termMonths}
                                 onChange={(e) => setQuoteForm(f => ({ ...f, termMonths: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-green"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-green"
                                 placeholder="12"
                                 onClick={(e) => e.stopPropagation()}
                               />
@@ -532,7 +532,7 @@ export default function UnderwritingQueuePanel() {
                                 type="number"
                                 value={quoteForm.expiryDays}
                                 onChange={(e) => setQuoteForm(f => ({ ...f, expiryDays: e.target.value }))}
-                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-mono focus:outline-none focus:border-terminal-green"
+                                className="w-full bg-terminal-bg border border-terminal-border rounded px-2 py-1.5 text-xs text-terminal-text font-sans focus:outline-none focus:border-terminal-green"
                                 placeholder="7"
                                 onClick={(e) => e.stopPropagation()}
                               />

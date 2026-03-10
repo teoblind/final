@@ -98,7 +98,7 @@ export default function DatacenterPanel() {
         {regions.slice(0, 4).map((region) => (
           <div key={region.code} className="bg-terminal-bg/50 rounded p-2">
             <p className="text-xs text-terminal-muted">{region.name}</p>
-            <p className="font-mono text-lg">
+            <p className="font-sans text-lg">
               {region.currentDemand ? `${formatNumber(region.currentDemand, 0)} MW` : '-'}
             </p>
             <p className="text-xs text-terminal-muted">{region.description}</p>
@@ -110,7 +110,7 @@ export default function DatacenterPanel() {
       <div className="border-t border-terminal-border pt-3">
         <div className="flex justify-between items-center mb-2">
           <p className="text-xs text-terminal-muted uppercase">Project Pipeline</p>
-          <span className="text-terminal-green font-mono">
+          <span className="text-terminal-green font-sans">
             {formatNumber(totals.totalPlannedMW, 0)} MW Total
           </span>
         </div>

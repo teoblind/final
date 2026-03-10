@@ -84,13 +84,13 @@ export default function CoverageStatusPanel() {
             <p className="text-xs text-terminal-muted mb-4">
               Explore coverage options backed by institutional capital partners to protect your mining revenue.
             </p>
-            <a
-              href="#coverage-explorer"
+            <button
+              onClick={() => alert('Coverage Explorer — explore institutional capital partner options for mining revenue protection.')}
               className="flex items-center gap-2 px-4 py-2 bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/30 transition-colors text-xs"
             >
               <ExternalLink size={12} />
               Open Coverage Explorer
-            </a>
+            </button>
           </div>
 
           {/* Quote Requests */}
@@ -140,19 +140,19 @@ export default function CoverageStatusPanel() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="text-[10px] text-terminal-muted uppercase"><GlossaryTerm id="revenue_floor">Floor Price</GlossaryTerm></p>
-                <p className="text-sm font-bold text-terminal-cyan font-mono">
+                <p className="text-sm font-bold text-terminal-cyan font-sans">
                   ${formatNumber(policy.floorPrice, 2)}<span className="text-[10px] text-terminal-muted">/PH/day</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-terminal-muted uppercase">Monthly Premium</p>
-                <p className="text-sm font-bold text-terminal-text font-mono">
+                <p className="text-sm font-bold text-terminal-text font-sans">
                   {formatCurrency(policy.monthlyPremium, 'USD', 0)}
                 </p>
               </div>
               <div>
                 <p className="text-[10px] text-terminal-muted uppercase">Covered Hashrate</p>
-                <p className="text-sm font-bold text-terminal-text font-mono">
+                <p className="text-sm font-bold text-terminal-text font-sans">
                   {formatNumber(policy.coveredHashrateTH, 0)} <span className="text-[10px] text-terminal-muted">TH/s</span>
                 </p>
               </div>
@@ -204,15 +204,15 @@ export default function CoverageStatusPanel() {
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className="text-terminal-muted">Shortfall Amount</span>
-                      <span className="text-terminal-amber font-mono">{formatCurrency(currentClaim.shortfallAmount, 'USD', 0)}</span>
+                      <span className="text-terminal-amber font-sans">{formatCurrency(currentClaim.shortfallAmount, 'USD', 0)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-terminal-muted">Accrued Claim</span>
-                      <span className="text-terminal-green font-mono">{formatCurrency(currentClaim.accruedAmount, 'USD', 0)}</span>
+                      <span className="text-terminal-green font-sans">{formatCurrency(currentClaim.accruedAmount, 'USD', 0)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-terminal-muted">Days Accrued</span>
-                      <span className="text-terminal-text font-mono">{currentClaim.daysAccrued || 0}</span>
+                      <span className="text-terminal-text font-sans">{currentClaim.daysAccrued || 0}</span>
                     </div>
                   </div>
                 ) : (
@@ -233,19 +233,19 @@ export default function CoverageStatusPanel() {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <p className="text-[10px] text-terminal-muted uppercase">Premiums Paid</p>
-                  <p className="text-sm font-bold text-terminal-red font-mono">
+                  <p className="text-sm font-bold text-terminal-red font-sans">
                     {formatCurrency(cumulativeStats.totalPremiumsPaid, 'USD', 0)}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-terminal-muted uppercase">Claims Received</p>
-                  <p className="text-sm font-bold text-terminal-green font-mono">
+                  <p className="text-sm font-bold text-terminal-green font-sans">
                     {formatCurrency(cumulativeStats.totalClaimsReceived, 'USD', 0)}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-terminal-muted uppercase">Net</p>
-                  <p className={`text-sm font-bold font-mono ${netValue >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
+                  <p className={`text-sm font-bold font-sans ${netValue >= 0 ? 'text-terminal-green' : 'text-terminal-red'}`}>
                     {netValue >= 0 ? '+' : ''}{formatCurrency(netValue, 'USD', 0)}
                   </p>
                 </div>
@@ -285,10 +285,10 @@ export default function CoverageStatusPanel() {
                               {cs.label}
                             </span>
                           </td>
-                          <td className="text-right py-1.5 font-mono text-terminal-text">
+                          <td className="text-right py-1.5 font-sans text-terminal-text">
                             {formatCurrency(claim.grossClaim, 'USD', 0)}
                           </td>
-                          <td className="text-right py-1.5 font-mono text-terminal-green">
+                          <td className="text-right py-1.5 font-sans text-terminal-green">
                             {formatCurrency(claim.paidAmount, 'USD', 0)}
                           </td>
                           <td className="text-center py-1.5">

@@ -85,7 +85,7 @@ function ScoreBar({ label, value, description }) {
     <div className="space-y-1">
       <div className="flex justify-between text-xs">
         <span className="text-terminal-muted">{label}</span>
-        <span className={`font-mono ${value >= 50 ? 'text-terminal-green' : 'text-terminal-red'}`}>{value}</span>
+        <span className={`font-sans ${value >= 50 ? 'text-terminal-green' : 'text-terminal-red'}`}>{value}</span>
       </div>
       <div className="h-2 bg-terminal-border rounded-full overflow-hidden">
         <div
@@ -132,7 +132,7 @@ function ScoreBarWithFreshness({ label, value, description, freshness }) {
           {label}
           {freshness && <FreshnessIndicator {...freshness} />}
         </span>
-        <span className={`font-mono ${value >= 50 ? 'text-terminal-green' : 'text-terminal-red'}`}>{value}</span>
+        <span className={`font-sans ${value >= 50 ? 'text-terminal-green' : 'text-terminal-red'}`}>{value}</span>
       </div>
       <div className="h-2 bg-terminal-border rounded-full overflow-hidden">
         <div
@@ -177,11 +177,11 @@ function AssetCard({ name, symbol, price, score, signal, previousSignal, factors
       <div className="flex justify-between items-center mb-3">
         <div>
           <p className="text-xs text-terminal-muted">Price</p>
-          <p className="text-xl font-mono">{formatCurrency(price, 'USD', price > 1000 ? 0 : 2)}</p>
+          <p className="text-xl font-sans">{formatCurrency(price, 'USD', price > 1000 ? 0 : 2)}</p>
         </div>
         <div className="text-right">
           <p className="text-xs text-terminal-muted">Score</p>
-          <p className={`text-2xl font-mono font-bold ${score > 0 ? 'text-terminal-green' : score < 0 ? 'text-terminal-red' : 'text-terminal-amber'}`}>
+          <p className={`text-2xl font-sans font-bold ${score > 0 ? 'text-terminal-green' : score < 0 ? 'text-terminal-red' : 'text-terminal-amber'}`}>
             {score > 0 ? '+' : ''}{score}
           </p>
         </div>
@@ -200,7 +200,7 @@ function AssetCard({ name, symbol, price, score, signal, previousSignal, factors
           {Object.entries(factors).map(([key, value]) => (
             <div key={key} className="flex justify-between">
               <span className="text-terminal-muted capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-              <span className={`font-mono ${value > 0 ? 'text-terminal-green' : value < 0 ? 'text-terminal-red' : 'text-terminal-muted'}`}>
+              <span className={`font-sans ${value > 0 ? 'text-terminal-green' : value < 0 ? 'text-terminal-red' : 'text-terminal-muted'}`}>
                 {value > 0 ? '+' : ''}{value}
               </span>
             </div>
@@ -240,7 +240,7 @@ function RegimeStatus({ regimes }) {
         <div key={key} className="bg-terminal-bg/30 rounded p-2">
           <p className="text-xs text-terminal-muted uppercase">{key}</p>
           <p className={`font-bold ${statusColors[status] || 'text-terminal-muted'}`}>{status}</p>
-          <p className="text-xs text-terminal-muted font-mono">{detail}</p>
+          <p className="text-xs text-terminal-muted font-sans">{detail}</p>
         </div>
       ))}
     </div>
@@ -289,7 +289,7 @@ function YieldCurveMini({ yieldCurve }) {
           <g key={i}>
             <circle cx={p.x} cy={p.y} r="4" fill={yieldCurve.isInverted ? '#ff3b30' : '#00d26a'} />
             <text x={p.x} y="68" textAnchor="middle" fill="#666" fontSize="10">{p.label}</text>
-            <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#e5e5e5" fontSize="9" fontFamily="monospace">
+            <text x={p.x} y={p.y - 8} textAnchor="middle" fill="#e5e5e5" fontSize="9" fontFamily="'Exo 2', sans-serif">
               {p.value.toFixed(2)}%
             </text>
           </g>
@@ -394,7 +394,7 @@ function InputEditor({ inputs, onUpdate, onClose }) {
                         value={form[field.key] ?? ''}
                         onChange={(e) => handleChange(field.key, e.target.value)}
                         placeholder={field.placeholder}
-                        className="flex-1 bg-terminal-bg border border-terminal-border rounded px-2 py-1 text-sm font-mono"
+                        className="flex-1 bg-terminal-bg border border-terminal-border rounded px-2 py-1 text-sm font-sans"
                       />
                     </div>
                   ))}
@@ -641,7 +641,7 @@ export default function LiquidityPanel() {
         {/* Composite Score Hero */}
         <div className="text-center py-6 bg-terminal-bg/30 rounded-lg">
           <p className="text-sm text-terminal-muted uppercase tracking-wider mb-2">Composite Liquidity Index</p>
-          <p className={`text-6xl font-mono font-bold ${compositeColor}`}>
+          <p className={`text-6xl font-sans font-bold ${compositeColor}`}>
             {result.composite.composite ?? '-'}
           </p>
           <p className={`text-lg mt-2 ${result.composite.isConducive ? 'text-terminal-green' : 'text-terminal-red'}`}>
@@ -736,56 +736,56 @@ export default function LiquidityPanel() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
               <p className="text-xs text-terminal-muted">Fed Funds</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.fedFundsRate || '-'}
                 <FreshnessIndicator {...getFreshness('fedFundsRate')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">CPI YoY</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.cpiYoy ? `${inputs.cpiYoy}%` : '-'}
                 <FreshnessIndicator {...getFreshness('cpiYoy')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">Core CPI</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.coreYoy ? `${inputs.coreYoy}%` : '-'}
                 <FreshnessIndicator {...getFreshness('coreYoy')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">Unemployment</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.unemployment ? `${inputs.unemployment}%` : '-'}
                 <FreshnessIndicator {...getFreshness('unemployment')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">VIX</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.vix ?? '-'}
                 <FreshnessIndicator {...getFreshness('vix')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">HY OAS</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.hyOAS ? `${inputs.hyOAS}bps` : '-'}
                 <FreshnessIndicator {...getFreshness('hyOAS')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">TGA</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.tga ? `$${inputs.tga}B` : '-'}
                 <FreshnessIndicator {...getFreshness('tga')} />
               </p>
             </div>
             <div>
               <p className="text-xs text-terminal-muted">RRP</p>
-              <p className="font-mono flex items-center">
+              <p className="font-sans flex items-center">
                 {inputs.rrp ? `$${inputs.rrp}B` : '-'}
                 <FreshnessIndicator {...getFreshness('rrp')} />
               </p>

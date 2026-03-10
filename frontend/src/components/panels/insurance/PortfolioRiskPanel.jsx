@@ -147,7 +147,7 @@ export default function PortfolioRiskPanel() {
                 <div key={tier.key}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className={tier.textColor}>{tier.label}</span>
-                    <span className="text-terminal-text font-mono">
+                    <span className="text-terminal-text font-sans">
                       {formatNumber(value / 1000, 1)} PH/s ({formatNumber(pct, 0)}%)
                     </span>
                   </div>
@@ -170,7 +170,7 @@ export default function PortfolioRiskPanel() {
             <div className="bg-terminal-bg/50 rounded p-3">
               <p className="text-[10px] text-terminal-muted uppercase">Premium Collected</p>
               <div className="flex items-end gap-2">
-                <p className="text-lg font-bold text-terminal-green font-mono">
+                <p className="text-lg font-bold text-terminal-green font-sans">
                   {formatCurrency(claimsVsPremium.premiumCollected, 'USD', 0)}
                 </p>
               </div>
@@ -182,7 +182,7 @@ export default function PortfolioRiskPanel() {
             <div className="bg-terminal-bg/50 rounded p-3">
               <p className="text-[10px] text-terminal-muted uppercase">Claims Paid</p>
               <div className="flex items-end gap-2">
-                <p className="text-lg font-bold text-terminal-red font-mono">
+                <p className="text-lg font-bold text-terminal-red font-sans">
                   {formatCurrency(claimsVsPremium.claimsPaid, 'USD', 0)}
                 </p>
               </div>
@@ -280,13 +280,13 @@ export default function PortfolioRiskPanel() {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-terminal-muted">Projected Claims: </span>
-                      <span className="text-terminal-red font-mono">
+                      <span className="text-terminal-red font-sans">
                         {formatCurrency(stressResults.projectedClaims, 'USD', 0)}
                       </span>
                     </div>
                     <div>
                       <span className="text-terminal-muted">Loss Ratio: </span>
-                      <span className={`font-mono ${
+                      <span className={`font-sans ${
                         stressResults.projectedLossRatio > 1 ? 'text-terminal-red' : 'text-terminal-amber'
                       }`}>
                         {formatNumber((stressResults.projectedLossRatio || 0) * 100, 1)}%
@@ -294,13 +294,13 @@ export default function PortfolioRiskPanel() {
                     </div>
                     <div>
                       <span className="text-terminal-muted">Policies Triggered: </span>
-                      <span className="text-terminal-text font-mono">
+                      <span className="text-terminal-text font-sans">
                         {stressResults.policiesTriggered || 0} / {metrics.activePolicies || 0}
                       </span>
                     </div>
                     <div>
                       <span className="text-terminal-muted">Capital at Risk: </span>
-                      <span className="text-terminal-red font-mono">
+                      <span className="text-terminal-red font-sans">
                         {formatCurrency(stressResults.capitalAtRisk, 'USD', 0)}
                       </span>
                     </div>

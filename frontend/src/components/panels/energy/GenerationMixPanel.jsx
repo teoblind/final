@@ -98,7 +98,7 @@ export default function GenerationMixPanel() {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-terminal-muted">{formatCompact(b.mw)} MW</span>
-              <span className="font-mono w-8 text-right">{b.pct}%</span>
+              <span className="font-sans w-8 text-right">{b.pct}%</span>
             </div>
           </div>
         ))}

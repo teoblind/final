@@ -106,7 +106,7 @@ export default function RareEarthPanel() {
                     </span>
                   </div>
                 </td>
-                <td className="text-right py-2 font-mono">
+                <td className="text-right py-2 font-sans">
                   {element.current ? `$${formatNumber(element.current, 0)}` : '-'}
                 </td>
                 <td className={`text-right py-2 ${getTrendColor(element.weekChange)}`}>

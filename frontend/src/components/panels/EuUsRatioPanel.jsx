@@ -62,11 +62,11 @@ export default function EuUsRatioPanel() {
         <div className="text-right">
           <div className="mb-2">
             <p className="text-xs text-terminal-muted">50D MA</p>
-            <p className="font-mono">{formatNumber(ma50, 3)}</p>
+            <p className="font-sans">{formatNumber(ma50, 3)}</p>
           </div>
           <div>
             <p className="text-xs text-terminal-muted">200D MA</p>
-            <p className="font-mono">{formatNumber(ma200, 3)}</p>
+            <p className="font-sans">{formatNumber(ma200, 3)}</p>
           </div>
         </div>
       </div>
