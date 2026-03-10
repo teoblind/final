@@ -608,13 +608,14 @@ When the user asks about CRM data, contacts, companies, deals, pipeline status, 
 
 const stmts = {
   insertMessage: db.prepare(`
-    INSERT INTO chat_messages (tenant_id, agent_id, user_id, role, content, metadata_json)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO chat_messages (tenant_id, agent_id, user_id, role, content, metadata_json, thread_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `),
   getHistory: db.prepare(`
     SELECT id, role, content, metadata_json, created_at
     FROM chat_messages
     WHERE tenant_id = ? AND agent_id = ? AND user_id = ?
+      AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
     ORDER BY created_at ASC
     LIMIT ?
   `),
@@ -622,28 +623,50 @@ const stmts = {
     SELECT id, role, content, metadata_json, created_at
     FROM chat_messages
     WHERE tenant_id = ? AND agent_id = ? AND user_id = ?
+      AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
     ORDER BY created_at DESC
     LIMIT ?
+  `),
+  getThreadHistory: db.prepare(`
+    SELECT id, role, content, metadata_json, created_at, user_id
+    FROM chat_messages
+    WHERE thread_id = ?
+    ORDER BY created_at ASC
+    LIMIT ?
+  `),
+  touchThread: db.prepare(`
+    UPDATE chat_threads SET updated_at = datetime('now') WHERE id = ?
   `),
 };
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Get conversation history for an agent + user.
+ * Get conversation history for an agent + user, optionally scoped to a thread.
  */
-export function getMessages(tenantId, agentId, userId, limit = 50) {
-  return stmts.getHistory.all(tenantId, agentId, userId, limit);
+export function getMessages(tenantId, agentId, userId, limit = 50, threadId = null) {
+  return stmts.getHistory.all(tenantId, agentId, userId, threadId, threadId, limit);
+}
+
+/**
+ * Get messages for a thread (any user — for team/pinned threads).
+ */
+export function getThreadMessages(threadId, limit = 200) {
+  return stmts.getThreadHistory.all(threadId, limit);
 }
 
 /**
  * Save a message to the database.
  */
-export function saveMessage(tenantId, agentId, userId, role, content, metadata = null) {
+export function saveMessage(tenantId, agentId, userId, role, content, metadata = null, threadId = null) {
   const result = stmts.insertMessage.run(
     tenantId, agentId, userId, role, content,
-    metadata ? JSON.stringify(metadata) : null
+    metadata ? JSON.stringify(metadata) : null,
+    threadId
   );
+  if (threadId) {
+    try { stmts.touchThread.run(threadId); } catch (e) { /* ignore */ }
+  }
   return result.lastInsertRowid;
 }
 
@@ -651,12 +674,15 @@ export function saveMessage(tenantId, agentId, userId, role, content, metadata =
  * Send a message to Claude and get a response.
  * Saves both user message and assistant response to DB.
  */
-export async function chat(tenantId, agentId, userId, userContent) {
+export async function chat(tenantId, agentId, userId, userContent, threadId = null) {
+  // Auto-create default thread if threadId provided but doesn't exist yet
+  // (thread creation is handled by the route layer)
+
   // 1. Save user message
-  saveMessage(tenantId, agentId, userId, 'user', userContent);
+  saveMessage(tenantId, agentId, userId, 'user', userContent, null, threadId);
 
   // 2. Load conversation history (most recent N messages, in chronological order)
-  const rows = stmts.getRecentHistory.all(tenantId, agentId, userId, MAX_HISTORY);
+  const rows = stmts.getRecentHistory.all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
   const history = rows.reverse(); // reverse to chronological order
 
   // 3. Build messages array for Claude
@@ -695,7 +721,7 @@ export async function chat(tenantId, agentId, userId, userContent) {
   if (!process.env.ANTHROPIC_API_KEY) {
     // No API key — return a helpful fallback
     const fallback = `I'm currently running in demo mode (no API key configured). To enable real AI responses, set ANTHROPIC_API_KEY in your backend .env file.`;
-    saveMessage(tenantId, agentId, userId, 'assistant', fallback);
+    saveMessage(tenantId, agentId, userId, 'assistant', fallback, null, threadId);
     return { response: fallback };
   }
 
@@ -780,7 +806,7 @@ export async function chat(tenantId, agentId, userId, userContent) {
         tool_used: toolName,
         tool_input: toolInput,
         tool_result: toolResult,
-      });
+      }, threadId);
 
       // Generate TTS audio for tool-use responses
       const audioUrl = await generateAudioIfEnabled(responseText);
@@ -806,7 +832,7 @@ export async function chat(tenantId, agentId, userId, userContent) {
       input_tokens: completion.usage?.input_tokens,
       output_tokens: completion.usage?.output_tokens,
       stop_reason: completion.stop_reason,
-    });
+    }, threadId);
 
     // Generate TTS audio
     const audioUrl = await generateAudioIfEnabled(responseText);
@@ -816,7 +842,7 @@ export async function chat(tenantId, agentId, userId, userContent) {
     console.error(`Chat error (agent=${agentId}):`, error.message);
 
     // Save error as system message for debugging
-    saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`);
+    saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
 
     throw error;
   }

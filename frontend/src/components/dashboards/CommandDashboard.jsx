@@ -21,14 +21,18 @@ const AGENT_INSIGHTS = [
 ];
 
 const AGENT_ICON_COLORS = {
-  outreach:    { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' },
-  curtailment: { letter: 'C', color: '#b8860b', bg: '#fdf6e8' },
-  pool:        { letter: 'P', color: '#5b3a8c', bg: '#f3eef8' },
-  meetings:    { letter: 'M', color: '#2c5282', bg: '#e8eef5' },
-  reporting:   { letter: 'R', color: '#5b3a8c', bg: '#f3eef8' },
-  hivemind:    { letter: 'H', color: '#1a6b3c', bg: '#edf7f0' },
-  monitoring:  { letter: 'M', color: '#b8860b', bg: '#fdf6e8' },
-  email:       { letter: 'E', color: '#2c5282', bg: '#e8eef5' },
+  outreach:       { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' },
+  curtailment:    { letter: 'C', color: '#b8860b', bg: '#fdf6e8' },
+  pool:           { letter: 'P', color: '#5b3a8c', bg: '#f3eef8' },
+  meetings:       { letter: 'M', color: '#2c5282', bg: '#e8eef5' },
+  reporting:      { letter: 'R', color: '#5b3a8c', bg: '#f3eef8' },
+  hivemind:       { letter: 'H', color: '#1a6b3c', bg: '#edf7f0' },
+  monitoring:     { letter: 'M', color: '#b8860b', bg: '#fdf6e8' },
+  email:          { letter: 'E', color: '#2c5282', bg: '#e8eef5' },
+  'lead-engine':  { letter: 'L', color: '#1a6b3c', bg: '#edf7f0' },
+  knowledge:      { letter: 'K', color: '#2c5282', bg: '#e8eef5' },
+  coppice:        { letter: 'C', color: '#1a6b3c', bg: '#edf7f0' },
+  estimating:     { letter: 'E', color: '#b8860b', bg: '#fdf6e8' },
 };
 
 const INSIGHT_TYPE_STYLES = {
@@ -37,10 +41,135 @@ const INSIGHT_TYPE_STYLES = {
   Pattern: 'bg-[#f3eef8] text-[#5b3a8c]',
   Analysis: 'bg-[#fdf6e8] text-[#b8860b]',
   'Follow-up': 'bg-[#fdedf0] text-[#dc3545]',
+  Thread: 'bg-[#fdf6e8] text-[#b8860b]',
   alert: 'bg-[#fdedf0] text-[#dc3545]',
   reminder: 'bg-[#fdf6e8] text-[#b8860b]',
   follow_up: 'bg-[#fdedf0] text-[#dc3545]',
   insight: 'bg-[#edf7f0] text-[#1a6b3c]',
+};
+
+// ─── Insight Modal Content (per agent) ───────────────────────────────────────
+
+const INSIGHT_MODAL_CONTENT = {
+  curtailment: {
+    title: 'Curtailment Revenue Forecast',
+    subtitle: 'Crane County site · ERCOT · Based on 30-day pattern recognition',
+    kpis: [
+      { label: "Yesterday's Revenue", value: '$1,247', delta: '\u2191 in 45 min window', green: true },
+      { label: 'Projected This Week', value: '$3,800', delta: '\u2191 3\u20134 similar windows' },
+      { label: 'Avg Price Threshold', value: '$85/MWh', delta: 'ERCOT real-time' },
+    ],
+    cardsLabel: 'Projected Curtailment Windows This Week',
+    cards: [
+      { label: 'Friday', value: '2:00 PM \u2013 3:15 PM', sub: 'Proj. peak: $118/MWh', highlight: '~$1,400', best: true },
+      { label: 'Saturday', value: '11:30 AM \u2013 12:30 PM', sub: 'Proj. peak: $97/MWh', highlight: '~$980' },
+      { label: 'Sunday', value: '3:30 PM \u2013 4:15 PM', sub: 'Proj. peak: $92/MWh', highlight: '~$720' },
+    ],
+    contextLabel: 'Signal Context',
+    context: [
+      { key: 'Pattern confidence', value: '87% \u2014 12 of 14 similar weeks triggered' },
+      { key: 'Current ERCOT real-time price', value: '$62/MWh \u2014 below threshold', warn: true },
+      { key: 'Next difficulty adjustment', value: '+4.24% \u00b7 913 blocks remaining' },
+      { key: 'Fleet efficiency', value: '28 J/TH \u00b7 P25\u2013P50 (above avg)' },
+      { key: 'S19j Pro fleet curtailable', value: '142 units \u00b7 ~8.2 MW' },
+    ],
+    cta: 'Set Curtailment Alert',
+  },
+  pool: {
+    title: 'Pool Routing Optimization',
+    subtitle: 'Automatic fee analysis across connected pools',
+    kpis: [
+      { label: 'Current Pool', value: 'Foundry', delta: 'Fee: 2.5% (up from 2.0%)' },
+      { label: 'Recommended', value: 'Luxor', delta: 'Fee: 1.8%', green: true },
+      { label: 'Monthly Savings', value: '$340', delta: '\u2191 per month at 15 PH/s', green: true },
+    ],
+    cardsLabel: 'Pool Comparison',
+    cards: [
+      { label: 'Foundry (current)', value: '2.5% fee', sub: 'Uptime: 99.7%', highlight: '$13,600/mo net' },
+      { label: 'Luxor', value: '1.8% fee', sub: 'Uptime: 99.8%', highlight: '$13,940/mo net', best: true },
+      { label: 'Braiins', value: '2.0% fee', sub: 'Uptime: 99.5%', highlight: '$13,780/mo net' },
+    ],
+    contextLabel: 'Routing Details',
+    context: [
+      { key: 'Hashrate to migrate', value: '15 PH/s \u00b7 all S19j Pro units' },
+      { key: 'Foundry fee change', value: '2.0% \u2192 2.5% \u2014 effective next block', warn: true },
+      { key: 'Luxor payout scheme', value: 'FPPS \u00b7 daily payout' },
+      { key: 'Migration downtime', value: '~2 minutes \u00b7 no revenue loss' },
+      { key: 'Annualized savings', value: '~$4,080 at current hashprice' },
+    ],
+    cta: 'Switch to Luxor',
+  },
+  outreach: {
+    title: 'Outreach Performance Analysis',
+    subtitle: 'ERCOT-personalized templates vs. generic \u00b7 last 30 days',
+    kpis: [
+      { label: 'Reply Rate (Before)', value: '5.1%', delta: 'Generic templates' },
+      { label: 'Reply Rate (After)', value: '7.3%', delta: 'ERCOT-personalized', green: true },
+      { label: 'Lift', value: '+43%', delta: '\u2191 relative improvement', green: true },
+    ],
+    cardsLabel: 'Template Performance Breakdown',
+    cards: [
+      { label: 'ERCOT Curtailment', value: '9.2% reply rate', sub: '38 sent \u00b7 top performer', highlight: '3.5 replies', best: true },
+      { label: 'Co-Location Pitch', value: '6.8% reply rate', sub: '44 sent', highlight: '3.0 replies' },
+      { label: 'Generic Intro', value: '4.1% reply rate', sub: '52 sent \u00b7 control', highlight: '2.1 replies' },
+    ],
+    contextLabel: 'Expansion Opportunity',
+    context: [
+      { key: 'PJM leads ready for ERCOT template', value: '47 leads \u00b7 enriched with contacts' },
+      { key: 'Projected additional replies', value: '3\u20134 replies from PJM batch' },
+      { key: 'Best day to send', value: 'Tuesday AM \u00b7 2.1x open rate vs Friday' },
+      { key: 'Current send rate', value: '12 emails/day \u00b7 within safe limit' },
+    ],
+    cta: 'Apply to PJM Leads',
+  },
+  hivemind: {
+    title: 'Operator Thread: Break-Even Pricing',
+    subtitle: 'Question from Google Chat \u00b7 auto-answered by Hivemind',
+    kpis: [
+      { label: 'Break-Even Price', value: '$0.068', delta: 'per kWh at current difficulty', green: true },
+      { label: 'Current Hashprice', value: '$48.20', delta: 'per PH/s/day' },
+      { label: 'Fleet Model', value: 'S19 XP', delta: '140 TH/s \u00b7 21.5 J/TH' },
+    ],
+    cardsLabel: 'Sensitivity Analysis',
+    cards: [
+      { label: 'Optimistic (+10% BTC)', value: '$0.074/kWh', sub: 'Break-even rises', highlight: '+8.8% margin', best: true },
+      { label: 'Base Case', value: '$0.068/kWh', sub: 'Current conditions', highlight: 'Break-even' },
+      { label: 'Pessimistic (-10% BTC)', value: '$0.061/kWh', sub: 'Break-even falls', highlight: '\u22126.2% margin' },
+    ],
+    contextLabel: 'Calculation Inputs',
+    context: [
+      { key: 'BTC price', value: '$67,420 \u00b7 spot' },
+      { key: 'Network difficulty', value: '83.95T \u00b7 next adj. +4.24%' },
+      { key: 'Pool fee (Foundry)', value: '2.5% FPPS' },
+      { key: 'Hosting / infra cost', value: '$0.012/kWh overhead' },
+      { key: 'Operator asked', value: 'Mar 10 \u00b7 Google Chat' },
+    ],
+    cta: 'View Full Thread',
+  },
+  meetings: {
+    title: 'Overdue Action Item',
+    subtitle: 'From: Reassurity Product Strategy Call \u00b7 March 3, 2026',
+    kpis: [
+      { label: 'Days Overdue', value: '4', delta: 'Assigned Mar 3', warn: true },
+      { label: 'Assigned To', value: 'You' },
+      { label: 'Meeting', value: 'Reassurity', delta: '42 min \u00b7 6 attendees' },
+    ],
+    cardsLabel: 'All Action Items from This Meeting',
+    cards: [
+      { label: 'You', value: 'Revise energy pricing \u00a74.2', sub: 'Oberon deal memo', highlight: '4 days overdue', best: false },
+      { label: 'You', value: 'Send site KMZ to Kishan', sub: 'Hanwha project', highlight: '2 days overdue' },
+      { label: 'Ops Team', value: 'Schedule Crane County visit', sub: 'Site inspection', highlight: 'On track' },
+    ],
+    contextLabel: 'Meeting Details',
+    context: [
+      { key: 'Date', value: 'March 3, 2026 \u00b7 10:00 AM' },
+      { key: 'Duration', value: '42 minutes' },
+      { key: 'Attendees', value: 'Spencer, Teo, Kishan, Colin, Mihir, Alex' },
+      { key: 'Key decision', value: 'Parametric trigger on ERCOT node prices' },
+      { key: 'Next check-in', value: 'March 14 \u00b7 calendar invite sent' },
+    ],
+    cta: 'Mark as Done',
+  },
 };
 
 // ─── Demo Data ──────────────────────────────────────────────────────────────
@@ -50,16 +179,15 @@ const METRICS = [
   { label: 'Outreach', value: '96', delta: '+12 this week', type: 'up', bar: 19 },
   { label: 'Replies', value: '7', delta: '7.3% rate', type: 'up', bar: 7.3 },
   { label: 'Meetings', value: '17', delta: '2 this week', type: 'flat', bar: 40 },
-  { label: 'API Cost', value: '$4.22', delta: '30-day total', type: 'up', bar: 4, barColor: 'var(--t-amber)' },
 ];
 
-const ACTIVITY = [
-  { type: 'out', title: 'Outreach sent to James Torres, VP Ops at SunPeak Energy', sub: 'Personalized re: ERCOT curtailment patterns on their Crane County site', time: '2m' },
-  { type: 'meet', title: 'Transcribed: Reassurity Product Strategy Call', sub: '42 min \u2014 6 attendees \u2014 4 action items extracted', time: '1h' },
-  { type: 'out', title: '12 new leads discovered \u2014 PJM region', sub: 'Solar IPPs with merchant exposure, 50 MW+ capacity', time: '3h' },
-  { type: 'alert', title: 'Reply received: Sarah Chen, CFO at Meridian Renewables', sub: 'Interested in behind-the-meter mining conversation', time: '5h' },
-  { type: 'doc', title: 'Commented on Oberon Deal Memo v3', sub: 'Notes on revised energy pricing assumptions in section 4.2', time: '6h' },
-  { type: 'in', title: 'Follow-up drafted for Mark Liu at GridScale Partners', sub: 'Awaiting approval \u2014 5 days since last contact', time: '7h' },
+const ACTIVITY_FALLBACK = [
+  { id: 0, type: 'out', title: 'Outreach sent to James Torres, VP Ops at SunPeak Energy', subtitle: 'Personalized re: ERCOT curtailment patterns on their Crane County site', time: '2m', hasDetail: false },
+  { id: 1, type: 'meet', title: 'Transcribed: Reassurity Product Strategy Call', subtitle: '42 min \u2014 6 attendees \u2014 4 action items extracted', time: '1h', hasDetail: false },
+  { id: 2, type: 'lead', title: '12 new leads discovered \u2014 PJM region', subtitle: 'Solar IPPs with merchant exposure, 50 MW+ capacity', time: '3h', hasDetail: false },
+  { id: 3, type: 'in', title: 'Reply received: Sarah Chen, CFO at Meridian Renewables', subtitle: 'Interested in behind-the-meter mining conversation', time: '5h', hasDetail: false },
+  { id: 4, type: 'doc', title: 'Commented on Oberon Deal Memo v3', subtitle: 'Notes on revised energy pricing assumptions in section 4.2', time: '6h', hasDetail: false },
+  { id: 5, type: 'out', title: 'Follow-up drafted for Mark Liu at GridScale Partners', subtitle: 'Awaiting approval \u2014 5 days since last contact', time: '7h', hasDetail: false },
 ];
 
 const AGENTS = [
@@ -112,6 +240,7 @@ const DOT_COLORS = {
   meet: 'bg-terminal-text',
   doc: 'bg-terminal-muted',
   alert: 'bg-terminal-red',
+  lead: 'bg-[#5b3a8c]',
 };
 
 const STATUS_STYLES = {
@@ -157,13 +286,94 @@ function formatRelativeTime(dateStr) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
+function ActivityDetail({ detail, type }) {
+  if (!detail) return null;
+
+  if (type === 'out' || type === 'in') {
+    return (
+      <div className="space-y-2 text-[12px]">
+        {detail.to && <div><span className="text-terminal-muted">To:</span> <span className="text-terminal-text">{detail.to}</span></div>}
+        {detail.from && <div><span className="text-terminal-muted">From:</span> <span className="text-terminal-text">{detail.fromName || detail.from}</span></div>}
+        {detail.subject && <div><span className="text-terminal-muted">Subject:</span> <span className="text-terminal-text">{detail.subject}</span></div>}
+        {detail.body && <pre className="mt-2 text-[11px] text-terminal-text whitespace-pre-wrap font-sans leading-[1.5] bg-white/50 rounded-lg p-3 border border-[#f0eeea]">{detail.body}</pre>}
+      </div>
+    );
+  }
+
+  if (type === 'meet') {
+    return (
+      <div className="space-y-2 text-[12px]">
+        {detail.summary && <p className="text-terminal-text leading-[1.5]">{detail.summary}</p>}
+        {detail.attendees?.length > 0 && (
+          <div><span className="text-terminal-muted">Attendees:</span> <span className="text-terminal-text">{detail.attendees.join(', ')}</span></div>
+        )}
+        {detail.actionItems?.length > 0 && (
+          <div className="mt-1.5">
+            <span className="text-terminal-muted text-[11px] font-semibold uppercase tracking-[0.5px]">Action Items</span>
+            <ul className="mt-1 space-y-0.5">
+              {detail.actionItems.map((item, i) => (
+                <li key={i} className="text-[11px] text-terminal-text pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-terminal-muted">{item}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (type === 'lead') {
+    return (
+      <div className="text-[12px]">
+        {detail.leads?.length > 0 && (
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-terminal-muted text-left">
+                <th className="font-semibold pb-1">Company</th>
+                <th className="font-semibold pb-1">Location</th>
+                <th className="font-semibold pb-1 text-right">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.leads.map((lead, i) => (
+                <tr key={i} className="border-t border-[#f0eeea]">
+                  <td className="py-1 text-terminal-text">{lead.company}</td>
+                  <td className="py-1 text-terminal-muted">{lead.location}</td>
+                  <td className="py-1 text-right font-semibold text-terminal-text">{lead.score}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {detail.queriesRun && <div className="mt-1 text-terminal-muted">Queries: {Array.isArray(detail.queriesRun) ? detail.queriesRun.join(', ') : detail.queriesRun}</div>}
+      </div>
+    );
+  }
+
+  if (type === 'doc') {
+    return (
+      <div className="space-y-1 text-[12px]">
+        {detail.type && <div><span className="text-terminal-muted">Type:</span> <span className="text-terminal-text">{detail.type}</span></div>}
+        {detail.source && <div><span className="text-terminal-muted">Source:</span> <span className="text-terminal-text">{detail.source}</span></div>}
+        {detail.summary && <p className="text-terminal-text leading-[1.5] mt-1">{detail.summary}</p>}
+      </div>
+    );
+  }
+
+  // Fallback: render raw JSON
+  return <pre className="text-[11px] text-terminal-muted whitespace-pre-wrap">{JSON.stringify(detail, null, 2)}</pre>;
+}
+
 export default function CommandDashboard({ onNavigate }) {
   const [timeRange, setTimeRange] = useState('30D');
-  const [approvals, setApprovals] = useState(DEMO_APPROVAL_QUEUE);
-  const [insights, setInsights] = useState(AGENT_INSIGHTS);
+  const [approvals, setApprovals] = useState([]);
+  const [insights, setInsights] = useState([]);
   const [toast, setToast] = useState(null);
   const [hubspotPipeline, setHubspotPipeline] = useState(null);
   const [actionItems, setActionItems] = useState([]);
+  const [activities, setActivities] = useState(ACTIVITY_FALLBACK);
+  const [expandedId, setExpandedId] = useState(null);
+  const [expandedDetail, setExpandedDetail] = useState(null);
+  const [insightModal, setInsightModal] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -207,18 +417,17 @@ export default function CommandDashboard({ onNavigate }) {
         const res = await fetch(`${API_BASE}/v1/approvals?status=pending`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.items?.length > 0) {
-          const mapped = data.items.map(item => ({
-            id: item.id,
-            agent: item.agent_id,
-            agentLabel: (item.agent_id || 'agent').charAt(0).toUpperCase() + (item.agent_id || 'agent').slice(1),
-            icon: AGENT_ICON_COLORS[item.agent_id] || { letter: 'A', color: '#1a6b3c', bg: '#edf7f0' },
-            title: item.title,
-            desc: item.description || '',
-            time: formatRelativeTime(item.created_at),
-          }));
-          setApprovals(mapped);
-        }
+        const mapped = (data.items || []).map(item => ({
+          id: item.id,
+          type: item.type,
+          agent: item.agentId,
+          agentLabel: (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1),
+          icon: AGENT_ICON_COLORS[item.agentId] || { letter: 'A', color: '#1a6b3c', bg: '#edf7f0' },
+          title: item.title,
+          desc: item.description || '',
+          time: formatRelativeTime(item.createdAt),
+        }));
+        setApprovals(mapped);
       } catch {}
     }
     async function fetchInsights() {
@@ -226,23 +435,58 @@ export default function CommandDashboard({ onNavigate }) {
         const res = await fetch(`${API_BASE}/v1/approvals/insights?status=active`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.items?.length > 0) {
-          const mapped = data.items.map(item => ({
-            id: item.id,
-            agent: item.agent_id,
-            agentLabel: (item.agent_id || 'agent').charAt(0).toUpperCase() + (item.agent_id || 'agent').slice(1),
-            type: item.type || 'insight',
-            time: formatRelativeTime(item.created_at),
-            title: item.title,
-            body: item.description || '',
-            actions: item.actions || ['Dismiss'],
-          }));
-          setInsights(mapped);
-        }
+        const mapped = (data.items || []).map(item => ({
+          id: item.id,
+          agent: item.agent_id,
+          agentLabel: (item.agent_id || 'agent').charAt(0).toUpperCase() + (item.agent_id || 'agent').slice(1),
+          type: item.type || 'insight',
+          time: formatRelativeTime(item.created_at),
+          title: item.title,
+          body: item.description || '',
+          actions: item.actions || ['Dismiss'],
+        }));
+
+        // Also fetch pinned threads and merge into insights
+        try {
+          const pinnedRes = await fetch(`${API_BASE}/v1/chat/pinned-threads`);
+          if (pinnedRes.ok) {
+            const pinnedData = await pinnedRes.json();
+            const pinnedInsights = (pinnedData.threads || []).map(thread => ({
+              id: `thread-${thread.id}`,
+              agent: thread.agent_id,
+              agentLabel: (thread.agent_id || 'agent').charAt(0).toUpperCase() + (thread.agent_id || 'agent').slice(1),
+              type: 'Thread',
+              time: formatRelativeTime(thread.updated_at),
+              title: thread.title || 'Pinned thread',
+              body: `Pinned conversation in <b>${(thread.agent_id || 'agent').charAt(0).toUpperCase() + (thread.agent_id || 'agent').slice(1)}</b>`,
+              actions: ['View Thread'],
+              _threadId: thread.id,
+              _agentId: thread.agent_id,
+            }));
+            mapped.push(...pinnedInsights);
+          }
+        } catch {}
+
+        setInsights(mapped);
       } catch {}
     }
     fetchApprovals();
     fetchInsights();
+  }, []);
+
+  // Fetch live activity feed
+  useEffect(() => {
+    async function fetchActivities() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/activity?limit=20`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.activities?.length > 0) setActivities(data.activities);
+      } catch {}
+    }
+    fetchActivities();
+    const interval = setInterval(fetchActivities, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch action items
@@ -287,20 +531,44 @@ export default function CommandDashboard({ onNavigate }) {
   }, [actionItems]);
 
   const handleApprove = useCallback(async (id) => {
+    const item = approvals.find(a => a.id === id);
     try {
       await fetch(`${API_BASE}/v1/approvals/${id}/approve`, { method: 'POST' });
-    } catch {}
+      showToast(item?.type === 'email_draft' ? 'Approved — email sent' : 'Approved');
+    } catch {
+      showToast('Approve failed');
+    }
     setApprovals(prev => prev.filter(a => a.id !== id));
-  }, []);
+  }, [approvals]);
 
   const handleReject = useCallback(async (id) => {
     try {
       await fetch(`${API_BASE}/v1/approvals/${id}/reject`, { method: 'POST' });
-    } catch {}
+      showToast('Rejected');
+    } catch {
+      showToast('Reject failed');
+    }
     setApprovals(prev => prev.filter(a => a.id !== id));
   }, []);
 
-  const handleInsightAction = useCallback(async (insightId, action) => {
+  const toggleExpand = useCallback(async (id) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      setExpandedDetail(null);
+      return;
+    }
+    setExpandedId(id);
+    setExpandedDetail(null);
+    try {
+      const res = await fetch(`${API_BASE}/v1/activity/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setExpandedDetail(data.detail);
+      }
+    } catch {}
+  }, [expandedId]);
+
+  const handleInsightAction = async (insightId, action) => {
     if (action === 'Dismiss' || action === 'Snooze') {
       try {
         await fetch(`${API_BASE}/v1/approvals/insights/${insightId}/dismiss`, { method: 'POST' });
@@ -313,10 +581,20 @@ export default function CommandDashboard({ onNavigate }) {
       } catch {}
       setInsights(prev => prev.filter(i => i.id !== insightId));
       showToast('Marked as done');
+    } else if (action === 'View Thread') {
+      const insight = insights.find(i => i.id === insightId);
+      if (insight?._threadId) {
+        localStorage.setItem('open_thread_id', insight._threadId);
+        const targetTab = `${insight._agentId || 'hivemind'}-chat`;
+        onNavigate?.(targetTab);
+      }
     } else {
-      showToast(`${action} — noted`);
+      const insight = insights.find(i => i.id === insightId);
+      if (insight) {
+        setInsightModal({ ...insight, triggeredAction: action });
+      }
     }
-  }, []);
+  };
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
@@ -416,7 +694,7 @@ export default function CommandDashboard({ onNavigate }) {
       </div>
 
       {/* Metrics Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
         {METRICS.map((m, i) => (
           <div key={m.label} className="bg-terminal-panel p-[18px_20px] relative">
             <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
@@ -530,14 +808,33 @@ export default function CommandDashboard({ onNavigate }) {
             <span className="text-[11px] text-terminal-muted">All agents</span>
           </div>
           <div>
-            {ACTIVITY.map((item, i) => (
-              <div key={i} className="flex items-start gap-3.5 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-                <div className={`w-1 h-1 rounded-full mt-[7px] shrink-0 ${DOT_COLORS[item.type]}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                  <div className="text-[11px] text-terminal-muted mt-0.5">{item.sub}</div>
+            {activities.map((item) => (
+              <div key={item.id}>
+                <div
+                  className={`flex items-start gap-3.5 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors ${item.hasDetail ? 'cursor-pointer' : ''}`}
+                  onClick={() => item.hasDetail && toggleExpand(item.id)}
+                >
+                  <div className={`w-1 h-1 rounded-full mt-[7px] shrink-0 ${DOT_COLORS[item.type] || 'bg-terminal-muted'}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                    <div className="text-[11px] text-terminal-muted mt-0.5">{item.subtitle}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                    <span className="text-[10px] text-[#c5c5bc] font-medium tabular-nums">{item.time}</span>
+                    {item.hasDetail && (
+                      <span className={`text-[10px] text-[#c5c5bc] transition-transform ${expandedId === item.id ? 'rotate-90' : ''}`}>&rsaquo;</span>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[10px] text-[#c5c5bc] font-medium shrink-0 mt-0.5 tabular-nums">{item.time}</div>
+                {expandedId === item.id && (
+                  <div className="px-[18px] py-3 bg-[#f9f8f5] border-b border-[#f0eeea]">
+                    {expandedDetail ? (
+                      <ActivityDetail detail={expandedDetail} type={item.type} />
+                    ) : (
+                      <div className="text-[11px] text-terminal-muted">Loading...</div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -627,6 +924,126 @@ export default function CommandDashboard({ onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Insight Modal */}
+      {insightModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]" onClick={() => setInsightModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#e5e5e0] w-full max-w-[680px] mx-4 max-h-[calc(100vh-60px)] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="px-7 pt-6 pb-5 border-b border-[#f0eeea] flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-[2px] rounded bg-[#edf7f0] text-[#1a6b3c] border border-[#d4edda]">
+                    <span className="w-[5px] h-[5px] rounded-full bg-[#1a6b3c]" />
+                    {insightModal.agentLabel} · {insightModal.type}
+                  </span>
+                </div>
+                <h2 className="text-[20px] font-semibold text-terminal-text leading-[1.2] mb-1">{INSIGHT_MODAL_CONTENT[insightModal.agent]?.title || insightModal.title}</h2>
+                <p className="text-[12px] text-[#9a9a92]">{INSIGHT_MODAL_CONTENT[insightModal.agent]?.subtitle || ''}</p>
+              </div>
+              <button onClick={() => setInsightModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] border border-[#f0eeea] hover:bg-[#f5f4f0] hover:text-terminal-text transition-colors text-base shrink-0">&times;</button>
+            </div>
+
+            {/* KPI Strip */}
+            {INSIGHT_MODAL_CONTENT[insightModal.agent]?.kpis && (
+              <div className="grid border-b border-[#f0eeea]" style={{ gridTemplateColumns: `repeat(${INSIGHT_MODAL_CONTENT[insightModal.agent].kpis.length}, 1fr)`, gap: '1px', background: '#f0eeea' }}>
+                {INSIGHT_MODAL_CONTENT[insightModal.agent].kpis.map((kpi, i) => (
+                  <div key={i} className="bg-white px-6 py-[18px]">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-1.5">{kpi.label}</div>
+                    <div className={`text-[22px] font-bold tabular-nums leading-none ${kpi.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{kpi.value}</div>
+                    {kpi.delta && <div className="text-[11px] text-[#1a6b3c] font-medium mt-1">{kpi.delta}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Chart (curtailment only) */}
+            {insightModal.agent === 'curtailment' && (
+              <div className="px-7 pt-5 pb-4 border-b border-[#f0eeea]">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-4">7-Day Price Forecast ($/MWh) · Curtailment Windows Highlighted</div>
+                <svg viewBox="0 0 620 140" className="w-full h-[140px]">
+                  <defs>
+                    <linearGradient id="igArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1a6b3c" stopOpacity="0.18"/><stop offset="100%" stopColor="#1a6b3c" stopOpacity="0"/></linearGradient>
+                    <linearGradient id="igWin" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1a6b3c" stopOpacity="0.1"/><stop offset="100%" stopColor="#1a6b3c" stopOpacity="0.02"/></linearGradient>
+                  </defs>
+                  <line x1="0" y1="28" x2="620" y2="28" stroke="#f0eeea" /><line x1="0" y1="56" x2="620" y2="56" stroke="#f0eeea" /><line x1="0" y1="84" x2="620" y2="84" stroke="#f0eeea" /><line x1="0" y1="112" x2="620" y2="112" stroke="#f0eeea" />
+                  <line x1="0" y1="42" x2="620" y2="42" stroke="#b8860b" strokeWidth="1" strokeDasharray="4 4" opacity="0.5"/>
+                  <text x="4" y="39" fontFamily="monospace" fontSize="8" fill="#b8860b" opacity="0.7">$85 threshold</text>
+                  <text x="596" y="31" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$120</text>
+                  <text x="596" y="59" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$90</text>
+                  <text x="596" y="87" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$60</text>
+                  <text x="596" y="115" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$30</text>
+                  <rect x="110" y="0" width="44" height="140" fill="url(#igWin)" rx="2"/><rect x="290" y="0" width="38" height="140" fill="url(#igWin)" rx="2"/><rect x="460" y="0" width="42" height="140" fill="url(#igWin)" rx="2"/>
+                  <path d="M0,95 C20,92 40,88 60,80 C80,72 90,60 110,38 C130,18 140,28 154,48 C168,68 180,85 200,90 C220,95 250,92 270,88 C280,86 286,82 290,68 C298,48 310,35 328,55 C336,65 345,82 360,86 C380,90 410,88 430,85 C450,82 456,78 460,62 C468,42 475,30 502,52 C512,60 518,72 535,80 C552,88 580,90 620,88 L620,140 L0,140 Z" fill="url(#igArea)"/>
+                  <path d="M0,95 C20,92 40,88 60,80 C80,72 90,60 110,38 C130,18 140,28 154,48 C168,68 180,85 200,90 C220,95 250,92 270,88 C280,86 286,82 290,68 C298,48 310,35 328,55 C336,65 345,82 360,86 C380,90 410,88 430,85 C450,82 456,78 460,62 C468,42 475,30 502,52 C512,60 518,72 535,80 C552,88 580,90 620,88" fill="none" stroke="#1a6b3c" strokeWidth="1.5"/>
+                  <circle cx="132" cy="18" r="4" fill="#1a6b3c"/><circle cx="310" cy="35" r="4" fill="#1a6b3c"/><circle cx="477" cy="30" r="4" fill="#1a6b3c"/>
+                  <circle cx="132" cy="18" r="7" fill="none" stroke="#1a6b3c" strokeWidth="1" opacity="0.4"/>
+                  <text x="132" y="12" fontFamily="monospace" fontSize="7" fill="#1a6b3c" textAnchor="middle">$1,247</text>
+                </svg>
+                <div className="flex justify-between pt-1.5">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
+                    <span key={d} className={`font-mono text-[10px] ${[1,4,6].includes(i) ? 'text-[#1a6b3c] font-medium' : 'text-[#c5c5bc]'}`}>
+                      {d}{i === 1 ? ' \u2190 yesterday' : ''}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Detail Cards */}
+            {INSIGHT_MODAL_CONTENT[insightModal.agent]?.cards && (
+              <div className="px-7 py-5 border-b border-[#f0eeea]">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-3.5">{INSIGHT_MODAL_CONTENT[insightModal.agent].cardsLabel}</div>
+                <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${INSIGHT_MODAL_CONTENT[insightModal.agent].cards.length}, 1fr)` }}>
+                  {INSIGHT_MODAL_CONTENT[insightModal.agent].cards.map((card, i) => (
+                    <div key={i} className={`rounded-lg border p-3.5 ${card.best ? 'border-[#1a6b3c]/30 bg-[#edf7f0]/50' : 'border-[#f0eeea] bg-[#fafaf8]'}`}>
+                      {card.best && <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#1a6b3c] bg-[#edf7f0] border border-[#d4edda] rounded px-1.5 py-[1px] inline-block mb-1.5">Best</span>}
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[#9a9a92] mb-1">{card.label}</div>
+                      <div className="font-mono text-[13px] text-terminal-text mb-2">{card.value}</div>
+                      {card.sub && <div className="text-[11px] text-[#9a9a92] mb-1">{card.sub}</div>}
+                      <div className="font-mono text-[15px] font-medium text-[#1a6b3c]">{card.highlight}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Context Rows */}
+            {INSIGHT_MODAL_CONTENT[insightModal.agent]?.context && (
+              <div className="px-7 py-5 border-b border-[#f0eeea]">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-3">{INSIGHT_MODAL_CONTENT[insightModal.agent].contextLabel || 'Signal Context'}</div>
+                {INSIGHT_MODAL_CONTENT[insightModal.agent].context.map((row, i) => (
+                  <div key={i} className="flex justify-between items-center py-2.5 border-b border-[#f5f4f0] last:border-b-0 text-[12px]">
+                    <span className="text-[#9a9a92]">{row.key}</span>
+                    <span className={`font-mono text-[11px] ${row.warn ? 'text-[#b8860b]' : 'text-terminal-text'}`}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="px-7 py-[18px] flex items-center justify-between">
+              <span className="text-[10px] text-[#c5c5bc] tabular-nums">{insightModal.time}</span>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => { setInsightModal(null); handleInsightAction(insightModal.id, 'Dismiss'); }}
+                  className="px-4 py-2 rounded-lg text-[12px] font-medium text-[#1a6b3c] border border-[#f0eeea] hover:border-[#1a6b3c]/30 hover:bg-[#edf7f0]/30 transition-all"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={() => setInsightModal(null)}
+                  className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-[#1a6b3c] text-white hover:bg-[#22884d] transition-colors flex items-center gap-1.5"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  {INSIGHT_MODAL_CONTENT[insightModal.agent]?.cta || 'Got it'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
