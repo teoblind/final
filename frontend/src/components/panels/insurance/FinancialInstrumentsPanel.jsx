@@ -11,7 +11,7 @@ const INSTRUMENTS = [
   {
     id: 'quarq_spread',
     name: 'Quarq Spread',
-    icon: '\u26A1',
+    dotColor: '#8B7355',
     energyAnalogy: 'Spark Spread (gas plant gross margin)',
     plainEnglish:
       "Like measuring a gas plant's profit margin, but for Bitcoin mining: hashprice revenue minus electricity cost, adjusted for how efficient your machines are.",
@@ -29,7 +29,7 @@ const INSTRUMENTS = [
   {
     id: 'synthetic_ppa',
     name: 'Synthetic PPA (CfD)',
-    icon: '\uD83D\uDCC4',
+    dotColor: '#4A5568',
     energyAnalogy: 'Contract for Difference / Virtual PPA',
     plainEnglish:
       'A financial bet where no physical electricity changes hands \u2014 you lock a strike price for hashprice, and Sangha settles the difference vs. market in cash.',
@@ -47,7 +47,7 @@ const INSTRUMENTS = [
   {
     id: 'proxy_revenue_swap',
     name: 'Proxy Revenue Swap',
-    icon: '\uD83D\uDD04',
+    dotColor: '#8B4A5E',
     energyAnalogy: 'Proxy Revenue Swap (wind/solar)',
     plainEnglish:
       'A hedge that covers both price risk (BTC crashes) and volume risk (difficulty spikes reduce your effective output) \u2014 like insuring a wind farm against both low power prices AND no wind.',
@@ -69,7 +69,7 @@ const INSTRUMENTS = [
   {
     id: 'heat_rate_hedge',
     name: 'Heat Rate / Efficiency Hedge',
-    icon: '\uD83D\uDD27',
+    dotColor: '#5B7B6F',
     energyAnalogy: 'Heat Rate Call Option (gas plant)',
     plainEnglish:
       'Insurance that lets an inefficient miner operate as if they had better machines \u2014 Sangha absorbs the efficiency gap so the miner still hits their floor.',
@@ -91,14 +91,14 @@ const INSTRUMENTS = [
 ];
 
 function InstrumentCard({ instrument, onExplore }) {
-  const { name, icon, energyAnalogy, plainEnglish, howItWorks, risksAddressed, Visualization, glossaryId } = instrument;
+  const { name, dotColor, energyAnalogy, plainEnglish, howItWorks, risksAddressed, Visualization, glossaryId } = instrument;
   const [expanded, setExpanded] = React.useState(false);
 
   return (
     <div className="bg-terminal-bg/50 border border-terminal-border rounded-lg p-4 flex flex-col hover:border-terminal-green/30 transition-colors">
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-lg">{icon}</span>
+        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
         <div className="min-w-0">
           <h4 className="text-sm font-bold text-terminal-text truncate">
             <GlossaryTerm id={glossaryId}>{name}</GlossaryTerm>
