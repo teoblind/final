@@ -82,7 +82,6 @@ const GEO = [
 
 const AGENT_CONFIG = [
   { k: 'Mode', v: 'Autonomous', cls: 'accent' },
-  { k: 'Discovery Source', v: 'Perplexity API', cls: 'sans' },
   { k: 'Enrichment', v: 'Apollo', cls: 'sans' },
   { k: 'Personalization', v: 'Sonnet 4.6', cls: 'sans' },
   { k: 'Sending', v: 'Gmail API', cls: 'sans' },
@@ -92,7 +91,6 @@ const AGENT_CONFIG = [
   { k: 'Target Verticals', v: 'Solar, Wind IPPs', cls: 'sans' },
   { k: 'Min Asset Size', v: '50 MW', cls: '' },
   { k: 'Approval Required', v: 'First touch only', cls: 'muted' },
-  { k: 'Avg Cost per Email', v: '$0.025', cls: 'green' },
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

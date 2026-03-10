@@ -470,7 +470,6 @@ export default function LeadEngineDashboard() {
           <div>
             <KVRow label="Mode" value={config.mode === 'autonomous' ? 'Autonomous' : 'Copilot'} cls="accent" />
             <KVRow label="Status" value={config.enabled ? 'Active' : 'Paused'} cls={config.enabled ? 'green' : 'muted'} />
-            <KVRow label="Discovery Source" value="Perplexity API" cls="sans" />
             <KVRow label="Email Generator" value="Claude Sonnet" cls="sans" />
             <KVRow label="Queries" value={`${(config.queries || []).length} configured`} cls="" />
             <KVRow label="Regions" value={(config.regions || []).join(', ')} cls="sans" />
