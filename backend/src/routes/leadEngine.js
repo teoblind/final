@@ -13,6 +13,7 @@ import {
   getLeadDiscoveryConfig,
   upsertLeadDiscoveryConfig,
   getLeadStats,
+  getTenantFiles,
 } from '../cache/database.js';
 import {
   discoverLeads,
@@ -76,6 +77,10 @@ router.put('/leads/:id', (req, res) => {
 router.get('/stats', (req, res) => {
   try {
     const stats = getLeadStats(req.user.tenantId);
+    // Find the lead pipeline Google Sheet for this tenant
+    const files = getTenantFiles(req.user.tenantId, { category: 'Leads' });
+    const sheet = files.find(f => f.file_type === 'google_sheet');
+    if (sheet) stats.sheetUrl = sheet.drive_url;
     res.json(stats);
   } catch (error) {
     console.error('Get lead stats error:', error);
