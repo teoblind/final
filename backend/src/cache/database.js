@@ -655,7 +655,19 @@ export function initDatabase() {
 
   // Initialize tenant files table
   initFilesTable();
+
+  // Initialize Opus rate limiting table
+  initOpusLimitsTable();
+
+  // Initialize background jobs + key vault tables
+  initBackgroundJobsTables();
+
+  // Initialize activity log table
+  initActivityLogTable();
 }
+
+// Auto-init on import so tables exist before other modules prepare statements
+initDatabase();
 
 // Cache helpers
 export function getCache(key) {
@@ -1605,7 +1617,7 @@ export function initPhase8Tables() {
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL,
       name TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
       role TEXT NOT NULL DEFAULT 'viewer',
       status TEXT NOT NULL DEFAULT 'invited',
@@ -2067,6 +2079,71 @@ export function getCrosstenantAuditLog(limit = 100, offset = 0) {
     FROM audit_log al LEFT JOIN users u ON al.user_id = u.id LEFT JOIN tenants t ON al.tenant_id = t.id
     ORDER BY al.timestamp DESC LIMIT ? OFFSET ?
   `).all(limit, offset);
+}
+
+// ─── Chat Thread Helpers ────────────────────────────────────────────────────
+
+export function createThread(id, tenantId, agentId, userId, title, visibility = 'private') {
+  return db.prepare(`
+    INSERT INTO chat_threads (id, tenant_id, agent_id, user_id, title, visibility)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, tenantId, agentId, userId, title, visibility);
+}
+
+export function getThread(id) {
+  return db.prepare('SELECT * FROM chat_threads WHERE id = ?').get(id);
+}
+
+export function updateThreadVisibility(id, visibility) {
+  return db.prepare("UPDATE chat_threads SET visibility = ?, updated_at = datetime('now') WHERE id = ?").run(visibility, id);
+}
+
+export function updateThreadTitle(id, title) {
+  return db.prepare("UPDATE chat_threads SET title = ?, updated_at = datetime('now') WHERE id = ?").run(title, id);
+}
+
+export function deleteThread(id) {
+  db.prepare('DELETE FROM chat_messages WHERE thread_id = ?').run(id);
+  return db.prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
+}
+
+export function listThreads(tenantId, agentId, userId, { isAdmin = false, limit = 50, offset = 0 } = {}) {
+  if (isAdmin) {
+    return db.prepare(`
+      SELECT * FROM chat_threads
+      WHERE tenant_id = ? AND agent_id = ?
+      ORDER BY updated_at DESC LIMIT ? OFFSET ?
+    `).all(tenantId, agentId, limit, offset);
+  }
+  return db.prepare(`
+    SELECT * FROM chat_threads
+    WHERE tenant_id = ? AND agent_id = ?
+      AND (user_id = ? OR visibility IN ('team', 'pinned'))
+    ORDER BY updated_at DESC LIMIT ? OFFSET ?
+  `).all(tenantId, agentId, userId, limit, offset);
+}
+
+export function getPinnedThreads(tenantId, { limit = 10 } = {}) {
+  return db.prepare(`
+    SELECT * FROM chat_threads
+    WHERE tenant_id = ? AND visibility = 'pinned'
+    ORDER BY updated_at DESC LIMIT ?
+  `).all(tenantId, limit);
+}
+
+export function getOrphanMessageCount(tenantId, agentId, userId) {
+  const row = db.prepare(`
+    SELECT COUNT(*) as count FROM chat_messages
+    WHERE tenant_id = ? AND agent_id = ? AND user_id = ? AND thread_id IS NULL
+  `).get(tenantId, agentId, userId);
+  return row.count;
+}
+
+export function backfillOrphanMessages(tenantId, agentId, userId, threadId) {
+  return db.prepare(`
+    UPDATE chat_messages SET thread_id = ?
+    WHERE tenant_id = ? AND agent_id = ? AND user_id = ? AND thread_id IS NULL
+  `).run(threadId, tenantId, agentId, userId);
 }
 
 // ─── Phase 8: Webhook Helpers ───────────────────────────────────────────────
@@ -3113,6 +3190,26 @@ export function initDacpTables() {
   `);
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_chat_tenant_agent_user ON chat_messages(tenant_id, agent_id, user_id, created_at)'); } catch (e) {}
 
+  // Chat threads
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_threads (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      title TEXT,
+      visibility TEXT NOT NULL DEFAULT 'private'
+        CHECK(visibility IN ('private', 'team', 'pinned')),
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_threads_tenant_agent ON chat_threads(tenant_id, agent_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_threads_visibility ON chat_threads(tenant_id, visibility)'); } catch (e) {}
+
+  // Add thread_id column to chat_messages (idempotent)
+  try { db.exec('ALTER TABLE chat_messages ADD COLUMN thread_id TEXT REFERENCES chat_threads(id)'); } catch (e) { /* already exists */ }
+
   // Approval queue
   db.exec(`
     CREATE TABLE IF NOT EXISTS approval_items (
@@ -4093,6 +4190,283 @@ export function getUsageByDayByModel(startDate, endDate) {
     ORDER BY day
   `;
   return db.prepare(sql).all(startDate, endDate);
+}
+
+// ─── Background Jobs + Key Vault ────────────────────────────────────────────
+
+export function initBackgroundJobsTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS background_jobs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      agent_id TEXT DEFAULT 'hivemind',
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      progress_pct INTEGER DEFAULT 0,
+      progress_message TEXT,
+      result_json TEXT,
+      error_message TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      completed_at TEXT
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bg_jobs_tenant ON background_jobs(tenant_id, status)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS job_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL REFERENCES background_jobs(id),
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      message_type TEXT DEFAULT 'info',
+      request_type TEXT,
+      response TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_job_messages_job ON job_messages(job_id)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS key_vault (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      service TEXT NOT NULL,
+      key_name TEXT NOT NULL,
+      key_value TEXT NOT NULL,
+      added_by TEXT DEFAULT 'user',
+      created_at TEXT DEFAULT (datetime('now')),
+      expires_at TEXT
+    )
+  `);
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_key_vault_tenant_service ON key_vault(tenant_id, service, key_name)'); } catch (e) {}
+}
+
+// Background Jobs CRUD
+
+export function createBackgroundJob(job) {
+  const id = job.id || `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO background_jobs (id, tenant_id, user_id, agent_id, title, description, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending')
+  `).run(id, job.tenantId, job.userId, job.agentId || 'hivemind', job.title, job.description || null);
+  return id;
+}
+
+export function getBackgroundJobs(tenantId, status = null) {
+  let sql = 'SELECT * FROM background_jobs WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (status) { sql += ' AND status = ?'; params.push(status); }
+  sql += ' ORDER BY created_at DESC';
+  return db.prepare(sql).all(...params);
+}
+
+export function getBackgroundJob(id) {
+  return db.prepare('SELECT * FROM background_jobs WHERE id = ?').get(id);
+}
+
+export function updateBackgroundJob(id, updates) {
+  const sets = ["updated_at = datetime('now')"];
+  const params = [];
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.progressPct !== undefined) { sets.push('progress_pct = ?'); params.push(updates.progressPct); }
+  if (updates.progressMessage !== undefined) { sets.push('progress_message = ?'); params.push(updates.progressMessage); }
+  if (updates.resultJson !== undefined) { sets.push('result_json = ?'); params.push(JSON.stringify(updates.resultJson)); }
+  if (updates.errorMessage !== undefined) { sets.push('error_message = ?'); params.push(updates.errorMessage); }
+  if (updates.status === 'completed' || updates.status === 'failed') { sets.push("completed_at = datetime('now')"); }
+  params.push(id);
+  return db.prepare(`UPDATE background_jobs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+}
+
+// Job Messages CRUD
+
+export function addJobMessage(jobId, role, content, messageType = 'info', requestType = null) {
+  return db.prepare(`
+    INSERT INTO job_messages (job_id, role, content, message_type, request_type)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(jobId, role, content, messageType, requestType);
+}
+
+export function getJobMessages(jobId) {
+  return db.prepare('SELECT * FROM job_messages WHERE job_id = ? ORDER BY created_at').all(jobId);
+}
+
+export function respondToJobMessage(messageId, response) {
+  return db.prepare('UPDATE job_messages SET response = ? WHERE id = ?').run(response, messageId);
+}
+
+export function getPendingJobRequests(tenantId) {
+  return db.prepare(`
+    SELECT jm.*, bj.title as job_title, bj.id as job_id
+    FROM job_messages jm
+    JOIN background_jobs bj ON bj.id = jm.job_id
+    WHERE bj.tenant_id = ? AND jm.message_type = 'request' AND jm.response IS NULL
+    ORDER BY jm.created_at DESC
+  `).all(tenantId);
+}
+
+// Key Vault CRUD
+
+export function getKeyVaultEntries(tenantId) {
+  return db.prepare('SELECT id, tenant_id, service, key_name, added_by, created_at, expires_at FROM key_vault WHERE tenant_id = ? ORDER BY service').all(tenantId);
+}
+
+export function getKeyVaultValue(tenantId, service, keyName = 'default') {
+  const row = db.prepare('SELECT key_value FROM key_vault WHERE tenant_id = ? AND service = ? AND key_name = ?').get(tenantId, service, keyName);
+  return row?.key_value || null;
+}
+
+export function upsertKeyVaultEntry(entry) {
+  const id = entry.id || `key-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO key_vault (id, tenant_id, service, key_name, key_value, added_by, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(tenant_id, service, key_name) DO UPDATE SET key_value = ?, added_by = ?, expires_at = ?
+  `).run(id, entry.tenantId, entry.service, entry.keyName || 'default', entry.keyValue, entry.addedBy || 'user', entry.expiresAt || null,
+    entry.keyValue, entry.addedBy || 'user', entry.expiresAt || null);
+  return id;
+}
+
+export function deleteKeyVaultEntry(id, tenantId) {
+  return db.prepare('DELETE FROM key_vault WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+}
+
+// ─── Opus Rate Limiting ─────────────────────────────────────────────────────
+
+export function initOpusLimitsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      limit_type TEXT NOT NULL,
+      date TEXT NOT NULL,
+      count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_api_limits_tenant_type_date ON api_limits(tenant_id, limit_type, date)`);
+}
+
+export function checkOpusLimit(tenantId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const row = db.prepare(
+    "SELECT count FROM api_limits WHERE tenant_id = ? AND limit_type = 'opus_report' AND date = ?"
+  ).get(tenantId, today);
+  const count = row?.count || 0;
+
+  // Read per-tenant limit from limits_json
+  const tenant = db.prepare('SELECT limits_json FROM tenants WHERE id = ?').get(tenantId);
+  const limits = tenant?.limits_json ? JSON.parse(tenant.limits_json) : {};
+  const limit = limits.maxOpusReportsPerDay ?? 1;
+
+  const tomorrow = new Date();
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(0, 0, 0, 0);
+
+  return { allowed: count < limit, count, limit, resetsAt: tomorrow.toISOString() };
+}
+
+export function incrementOpusUsage(tenantId) {
+  const today = new Date().toISOString().slice(0, 10);
+  db.prepare(`
+    INSERT INTO api_limits (tenant_id, limit_type, date, count)
+    VALUES (?, 'opus_report', ?, 1)
+    ON CONFLICT(tenant_id, limit_type, date) DO UPDATE SET count = count + 1
+  `).run(tenantId, today);
+}
+
+export function getOpusUsageForMonth(tenantId, yearMonth) {
+  const row = db.prepare(
+    "SELECT COALESCE(SUM(count), 0) as total FROM api_limits WHERE tenant_id = ? AND limit_type = 'opus_report' AND date LIKE ?"
+  ).get(tenantId, `${yearMonth}%`);
+  return row?.total || 0;
+}
+
+export function getOpusUsageAllTenants(yearMonth) {
+  return db.prepare(`
+    SELECT a.tenant_id, t.name as tenant_name, COALESCE(SUM(a.count), 0) as monthly_count
+    FROM api_limits a
+    LEFT JOIN tenants t ON t.id = a.tenant_id
+    WHERE a.limit_type = 'opus_report' AND a.date LIKE ?
+    GROUP BY a.tenant_id
+    ORDER BY monthly_count DESC
+  `).all(`${yearMonth}%`);
+}
+
+export function getOpusDailyCount(tenantId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const row = db.prepare(
+    "SELECT count FROM api_limits WHERE tenant_id = ? AND limit_type = 'opus_report' AND date = ?"
+  ).get(tenantId, today);
+  return row?.count || 0;
+}
+
+// ─── Activity Log ────────────────────────────────────────────────────────────
+
+function initActivityLogTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      subtitle TEXT,
+      detail_json TEXT,
+      source_type TEXT,
+      source_id TEXT,
+      agent_id TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_activity_tenant ON activity_log(tenant_id, created_at DESC)'); } catch (e) {}
+
+  // Seed demo activity data if empty
+  const count = db.prepare('SELECT COUNT(*) as c FROM activity_log').get();
+  if (count.c === 0) {
+    const insert = db.prepare('INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, agent_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const now = Date.now();
+    const ts = (minAgo) => new Date(now - minAgo * 60000).toISOString().replace('T', ' ').slice(0, 19);
+
+    insert.run('default', 'out', 'Outreach sent to James Torres, VP Ops at SunPeak Energy', 'Personalized re: ERCOT curtailment patterns on their Crane County site', JSON.stringify({ to: 'jtorres@sunpeak.com', subject: 'ERCOT curtailment optimization for Crane County', body: 'Hi James,\n\nI noticed SunPeak\'s Crane County site has been seeing significant curtailment during afternoon price spikes. We\'ve helped similar operators capture $1,200+ per curtailment event through our automated response system.\n\nWould you have 15 minutes this week to discuss how this could work for your fleet?\n\nBest,\nCoppice' }), 'email', 'lead-engine', ts(2));
+    insert.run('default', 'meet', 'Transcribed: Reassurity Product Strategy Call', '42 min \u2014 6 attendees \u2014 4 action items extracted', JSON.stringify({ summary: 'Discussed insurance product structure for behind-the-meter mining operations. Agreed on parametric trigger design using ERCOT price data. Next steps: finalize term sheet, schedule actuarial review.', actionItems: ['Finalize term sheet draft by Friday', 'Schedule actuarial review with Munich Re', 'Send updated loss model to Adam', 'Prepare board presentation for March 20'], attendees: ['Spencer Marr', 'Adam Reeve', 'Teo Blind', 'Miguel Alvarez', 'Sarah Chen', 'Jason Gunderson'] }), 'meeting', 'knowledge', ts(60));
+    insert.run('default', 'lead', '12 new leads discovered \u2014 PJM region', 'Solar IPPs with merchant exposure, 50 MW+ capacity', JSON.stringify({ leads: [{ company: 'Apex Clean Energy', location: 'Virginia', score: 82 }, { company: 'Clearway Energy', location: 'New Jersey', score: 78 }, { company: 'NextEra Energy Partners', location: 'Pennsylvania', score: 75 }] }), 'lead_engine', 'lead-engine', ts(180));
+    insert.run('default', 'in', 'Reply received: Sarah Chen, CFO at Meridian Renewables', 'Re: Behind-the-meter mining conversation', JSON.stringify({ from: 'sarah.chen@meridian-renewables.com', subject: 'Re: Behind-the-meter mining conversation', body: 'Hi,\n\nThanks for reaching out. We\'ve actually been exploring this exact concept for our West Texas sites. Would love to connect — how does Thursday at 2pm CT work?\n\nBest,\nSarah' }), 'email', 'coppice', ts(300));
+    insert.run('default', 'doc', 'Ingested: Oberon Deal Memo v3', 'deal_memo \u2014 Revised energy pricing assumptions and site economics for Oberon Solar project', JSON.stringify({ summary: 'Updated deal memo incorporating revised PPA pricing at $0.042/kWh, new interconnection timeline (Q3 2026), and updated IRR projections showing 18.2% levered returns.', type: 'deal_memo', source: 'drive' }), 'knowledge', 'knowledge', ts(360));
+    insert.run('default', 'out', 'Follow-up drafted for Mark Liu at GridScale Partners', 'Awaiting approval \u2014 5 days since last contact', JSON.stringify({ to: 'mliu@gridscale.com', subject: 'Re: Mining infrastructure partnership', body: 'Hi Mark,\n\nJust following up on our conversation last week about co-locating mining infrastructure at your solar sites. Happy to share the economics model we discussed.\n\nLet me know if you\'d like to reconnect.\n\nBest,\nCoppice' }), 'email', 'lead-engine', ts(420));
+
+    console.log('Activity log: seeded 6 demo activities');
+  }
+}
+
+export function insertActivity({ tenantId, type, title, subtitle, detailJson, sourceType, sourceId, agentId }) {
+  const result = db.prepare(
+    'INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, source_id, agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(tenantId, type, title, subtitle || null, detailJson || null, sourceType || null, sourceId || null, agentId || null);
+  return result.lastInsertRowid;
+}
+
+export function getActivities(tenantId, { limit = 20, offset = 0, type } = {}) {
+  if (type) {
+    return db.prepare(
+      'SELECT id, type, title, subtitle, source_type, agent_id, created_at, CASE WHEN detail_json IS NOT NULL THEN 1 ELSE 0 END as has_detail FROM activity_log WHERE tenant_id = ? AND type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all(tenantId, type, limit, offset);
+  }
+  return db.prepare(
+    'SELECT id, type, title, subtitle, source_type, agent_id, created_at, CASE WHEN detail_json IS NOT NULL THEN 1 ELSE 0 END as has_detail FROM activity_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(tenantId, limit, offset);
+}
+
+export function getActivityDetail(id) {
+  return db.prepare('SELECT * FROM activity_log WHERE id = ?').get(id);
+}
+
+export function getActivityCount(tenantId, type) {
+  if (type) {
+    return db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE tenant_id = ? AND type = ?').get(tenantId, type).c;
+  }
+  return db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE tenant_id = ?').get(tenantId).c;
 }
 
 export default db;

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const FILE_BASE = window.location.hostname.includes('localhost') ? 'http://localhost:3002' : '';
@@ -75,7 +76,7 @@ const DEMO_MESSAGES = {
   ],
   sangha: [
     { id: 1, role: 'system', type: 'invoke', content: 'Sangha Agent online' },
-    { id: 2, role: 'agent', content: 'Good morning Spencer. Fleet status:\n\n— **42 units** online, hashing at **4.2 PH/s**\n— ERCOT DA price: **$28.40/MWh** (below breakeven)\n— Current hashprice: **$48.12/PH/day**\n— Pool split: Foundry 60%, Luxor 25%, Ocean 15%\n— No curtailment events in last 12 hours\n\nAll systems nominal. Anything you want to look at?', time: '7:00 AM' },
+    { id: 2, role: 'agent', content: 'Good morning {USER}. Fleet status:\n\n— **42 units** online, hashing at **4.2 PH/s**\n— ERCOT DA price: **$28.40/MWh** (below breakeven)\n— Current hashprice: **$48.12/PH/day**\n— Pool split: Foundry 60%, Luxor 25%, Ocean 15%\n— No curtailment events in last 12 hours\n\nAll systems nominal. Anything you want to look at?', time: '7:00 AM' },
   ],
   curtailment: [
     { id: 1, role: 'system', type: 'invoke', content: 'Curtailment Agent activated' },
@@ -1498,23 +1499,175 @@ function ConfigTab({ accent }) {
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
+// ─── Visibility Helpers ──────────────────────────────────────────────────────
+const VISIBILITY_CONFIG = {
+  private: { icon: Lock, label: 'Private', color: '#9a9a92' },
+  team:    { icon: Users, label: 'Team', color: '#2563eb' },
+  pinned:  { icon: Pin, label: 'Pinned', color: '#f59e0b' },
+};
+const VISIBILITY_ORDER = ['private', 'team', 'pinned'];
+
+function formatRelativeTime(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+// ─── Thread Sidebar ─────────────────────────────────────────────────────────
+function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, onUpdateVisibility, agentDef, currentUserId, isAdmin }) {
+  const accent = agentDef?.accentColor || '#1e3a5f';
+
+  return (
+    <div className="w-[240px] flex flex-col border-r border-terminal-border bg-[#f5f4f0] shrink-0">
+      {/* Header */}
+      <div className="px-3 py-3 border-b border-terminal-border flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <MessageSquare size={13} className="text-[#9a9a92]" />
+          <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.5px]">Threads</span>
+        </div>
+        <button
+          onClick={onNewThread}
+          className="w-6 h-6 rounded-md flex items-center justify-center text-white transition-opacity hover:opacity-90"
+          style={{ backgroundColor: accent }}
+          title="New Thread"
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+
+      {/* Thread List */}
+      <div className="flex-1 overflow-y-auto">
+        {threads.map(thread => {
+          const isActive = thread.id === activeThreadId;
+          const vis = VISIBILITY_CONFIG[thread.visibility] || VISIBILITY_CONFIG.private;
+          const VisIcon = vis.icon;
+          const isOwner = thread.userId === currentUserId;
+          const canToggle = isOwner || isAdmin;
+
+          return (
+            <div
+              key={thread.id}
+              onClick={() => onSelectThread(thread.id)}
+              className={`px-3 py-2.5 cursor-pointer border-b border-[#eeece7] transition-colors group ${
+                isActive ? 'bg-terminal-panel border-l-2' : 'hover:bg-[#eceae5] border-l-2 border-l-transparent'
+              }`}
+              style={isActive ? { borderLeftColor: accent } : undefined}
+            >
+              <div className="flex items-center gap-1.5 mb-0.5">
+                {/* Visibility badge */}
+                {canToggle ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const idx = VISIBILITY_ORDER.indexOf(thread.visibility);
+                      const next = VISIBILITY_ORDER[(idx + 1) % VISIBILITY_ORDER.length];
+                      onUpdateVisibility(thread.id, next);
+                    }}
+                    className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-[0.3px] hover:opacity-70 transition-opacity"
+                    style={{ color: vis.color, backgroundColor: vis.color + '15' }}
+                    title={`Click to change (${vis.label})`}
+                  >
+                    <VisIcon size={8} />
+                  </button>
+                ) : (
+                  <span
+                    className="flex items-center gap-0.5 px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-[0.3px]"
+                    style={{ color: vis.color, backgroundColor: vis.color + '15' }}
+                  >
+                    <VisIcon size={8} />
+                  </span>
+                )}
+                <span className="text-[10px] text-[#c5c5bc] ml-auto tabular-nums">{formatRelativeTime(thread.updatedAt)}</span>
+              </div>
+              <div className="text-[12px] font-medium text-terminal-text truncate leading-[1.3]">
+                {thread.title || 'Untitled thread'}
+              </div>
+            </div>
+          );
+        })}
+        {threads.length === 0 && (
+          <div className="px-3 py-6 text-center text-[11px] text-[#c5c5bc]">
+            No threads yet
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AgentChat({ agentId = 'estimating' }) {
-  const agent = AGENTS[agentId] || AGENTS.estimating;
+  const { user: authUser } = useAuth();
+  const firstName = authUser?.name?.split(' ')[0] || 'there';
+  const userInitials = authUser?.name ? authUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'U';
+  const rawAgent = AGENTS[agentId] || AGENTS.estimating;
+  const agent = { ...rawAgent, userName: authUser?.name || rawAgent.userName, userInitial: userInitials };
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [activeTab, setActiveTab] = useState('Chat');
   const [autoVoice, setAutoVoice] = useState(false);
   const [showCallPanel, setShowCallPanel] = useState(false);
+  const [threads, setThreads] = useState([]);
+  const [activeThreadId, setActiveThreadId] = useState(null);
+  const [threadsLoaded, setThreadsLoaded] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const autoVoiceRef = useRef(false);
+  const isAdmin = ['owner', 'admin'].includes(authUser?.role);
 
-  // Load conversation history (fall back to demo messages if no history)
+  // Load threads on mount / agent change
   useEffect(() => {
     setActiveTab('Chat');
+    setThreadsLoaded(false);
+    setThreads([]);
+    setActiveThreadId(null);
+    setMessages([]);
+
     const token = localStorage.getItem('auth_token');
-    fetch(`${API_BASE}/v1/chat/${agentId}/messages`, {
+
+    // Check if Command Dashboard wants to open a specific thread
+    const pendingThreadId = localStorage.getItem('open_thread_id');
+    if (pendingThreadId) localStorage.removeItem('open_thread_id');
+
+    fetch(`${API_BASE}/v1/chat/${agentId}/threads`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.threads && data.threads.length > 0) {
+          setThreads(data.threads);
+          const targetId = pendingThreadId && data.threads.find(t => t.id === pendingThreadId)
+            ? pendingThreadId
+            : data.threads[0].id;
+          setActiveThreadId(targetId);
+        } else {
+          // No threads — fall back to demo messages
+          const demo = (DEMO_MESSAGES[agentId] || DEMO_MESSAGES.hivemind || []).map(m => ({
+            ...m, content: m.content?.replace('{USER}', firstName),
+          }));
+          setMessages(demo);
+        }
+        setThreadsLoaded(true);
+      })
+      .catch(() => {
+        const demo = (DEMO_MESSAGES[agentId] || DEMO_MESSAGES.hivemind || []).map(m => ({
+          ...m, content: m.content?.replace('{USER}', firstName),
+        }));
+        setMessages(demo);
+        setThreadsLoaded(true);
+      });
+  }, [agentId]);
+
+  // Load messages when activeThreadId changes
+  useEffect(() => {
+    if (!activeThreadId) return;
+    const token = localStorage.getItem('auth_token');
+    fetch(`${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(res => res.json())
@@ -1527,12 +1680,46 @@ export default function AgentChat({ agentId = 'estimating' }) {
             time: new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
           })));
         } else {
-          setMessages(DEMO_MESSAGES[agentId] || DEMO_MESSAGES.hivemind || []);
+          setMessages([]);
         }
       })
-      .catch(() => {
-        setMessages(DEMO_MESSAGES[agentId] || DEMO_MESSAGES.hivemind || []);
+      .catch(() => setMessages([]));
+  }, [activeThreadId, agentId]);
+
+  // Create new thread
+  const handleNewThread = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    try {
+      const res = await fetch(`${API_BASE}/v1/chat/${agentId}/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({}),
       });
+      const data = await res.json();
+      if (data.id) {
+        const newThread = { id: data.id, title: data.title, visibility: data.visibility, userId: data.userId, createdAt: data.createdAt, updatedAt: data.updatedAt };
+        setThreads(prev => [newThread, ...prev]);
+        setActiveThreadId(data.id);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error('Failed to create thread:', err);
+    }
+  }, [agentId]);
+
+  // Update thread visibility
+  const handleUpdateVisibility = useCallback(async (threadId, newVisibility) => {
+    const token = localStorage.getItem('auth_token');
+    try {
+      await fetch(`${API_BASE}/v1/chat/${agentId}/threads/${threadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ visibility: newVisibility }),
+      });
+      setThreads(prev => prev.map(t => t.id === threadId ? { ...t, visibility: newVisibility } : t));
+    } catch (err) {
+      console.error('Failed to update visibility:', err);
+    }
   }, [agentId]);
 
   // Keep ref in sync with state (so callbacks see latest value)
@@ -1604,10 +1791,13 @@ export default function AgentChat({ agentId = 'estimating' }) {
     setInput('');
     setSending(true);
 
-    // Store message via API
+    // Store message via API — use thread endpoint if active, otherwise legacy
     const token = localStorage.getItem('auth_token');
+    const postUrl = activeThreadId
+      ? `${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`
+      : `${API_BASE}/v1/chat/${agentId}/messages`;
     try {
-      const res = await fetch(`${API_BASE}/v1/chat/${agentId}/messages`, {
+      const res = await fetch(postUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ content: text }),
@@ -1634,6 +1824,16 @@ export default function AgentChat({ agentId = 'estimating' }) {
           }
         }
         setMessages(prev => [...prev, agentMsg]);
+      }
+      // Update thread title in sidebar if this was the first message
+      if (activeThreadId) {
+        setThreads(prev => prev.map(t =>
+          t.id === activeThreadId && !t.title
+            ? { ...t, title: text.slice(0, 60), updatedAt: new Date().toISOString() }
+            : t.id === activeThreadId
+              ? { ...t, updatedAt: new Date().toISOString() }
+              : t
+        ));
       }
     } catch (err) {
       // Show error in chat
@@ -1726,6 +1926,20 @@ export default function AgentChat({ agentId = 'estimating' }) {
       {/* ── Content Split ────────────────────────────────────────────────────── */}
       {activeTab === 'Chat' && (
       <div className="flex flex-1 min-h-0">
+        {/* Thread Sidebar */}
+        {threadsLoaded && threads.length > 0 && (
+          <ThreadSidebar
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onSelectThread={setActiveThreadId}
+            onNewThread={handleNewThread}
+            onUpdateVisibility={handleUpdateVisibility}
+            agentDef={agent}
+            currentUserId={authUser?.id || 'anonymous'}
+            isAdmin={isAdmin}
+          />
+        )}
+
         {/* Chat area */}
         <div className="flex-[3] flex flex-col border-r border-terminal-border min-w-0 min-h-0">
           {/* Messages */}
