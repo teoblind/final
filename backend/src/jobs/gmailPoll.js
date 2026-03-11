@@ -34,8 +34,8 @@ function getOAuth2Client() {
 function matchContactToTenant(email) {
   const row = db.prepare(`
     SELECT c.name, c.title, l.venue_name as company, l.tenant_id
-    FROM lead_contacts c
-    JOIN leads l ON c.lead_id = l.id AND c.tenant_id = l.tenant_id
+    FROM le_contacts c
+    JOIN le_leads l ON c.lead_id = l.id AND c.tenant_id = l.tenant_id
     WHERE LOWER(c.email) = LOWER(?)
     LIMIT 1
   `).get(email);
