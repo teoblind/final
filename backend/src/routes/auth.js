@@ -38,6 +38,7 @@ import {
   markPasswordResetUsed,
 } from '../cache/database.js';
 import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
+import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
 import { sendHtmlEmail } from '../services/emailService.js';
 
 // ─── Google OAuth Config ─────────────────────────────────────────────────────
@@ -710,15 +711,21 @@ router.get('/google/callback', async (req, res) => {
       ipAddress: req.ip,
     });
 
-    // Redirect to frontend with tokens as URL params
-    // Frontend AuthContext will pick these up and store them
+    // Redirect to the correct tenant subdomain with tokens
     const params = new URLSearchParams({
       access_token: jwtTokens.accessToken,
       refresh_token: jwtTokens.refreshToken,
       expires_at: jwtTokens.expiresAt,
     });
 
-    res.redirect(`/?oauth=success&${params.toString()}`);
+    // Compute canonical subdomain for the user's tenant
+    const tenantRow = getTenant(user.tenant_id);
+    const tenantSlug = tenantRow?.slug || user.tenant_id;
+    const correctSubdomain = getSubdomainForSlug(tenantSlug);
+    const baseDomain = process.env.APP_BASE_DOMAIN || 'coppice.ai';
+    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+
+    res.redirect(`${proto}://${correctSubdomain}.${baseDomain}/?oauth=success&${params.toString()}`);
   } catch (error) {
     console.error('Google OAuth callback error:', error);
     res.redirect('/?error=oauth_failed');
