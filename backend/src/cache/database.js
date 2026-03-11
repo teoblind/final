@@ -4702,6 +4702,11 @@ function initActivityLogTable() {
 }
 
 export function insertActivity({ tenantId, type, title, subtitle, detailJson, sourceType, sourceId, agentId }) {
+  // Deduplicate by source_id if provided
+  if (sourceId) {
+    const existing = db.prepare('SELECT id FROM activity_log WHERE source_id = ? LIMIT 1').get(sourceId);
+    if (existing) return existing.id;
+  }
   const result = db.prepare(
     'INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, source_id, agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(tenantId, type, title, subtitle || null, detailJson || null, sourceType || null, sourceId || null, agentId || null);

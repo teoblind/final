@@ -93,11 +93,18 @@ async function pollInbox() {
       const senderEmail = emailMatch[1];
       const senderName = from.replace(/<[^>]+>/, '').trim().replace(/^"(.*)"$/, '$1');
 
-      const body = extractEmailBody(full.data.payload);
       const contact = matchContactToTenant(senderEmail);
-      const tenantId = contact?.tenant_id || 'default';
-      const displayName = contact?.name || senderName || senderEmail;
-      const company = contact?.company || '';
+
+      // Skip emails from unknown senders (Google Docs notifications, spam, etc.)
+      if (!contact) {
+        processedIds.add(msg.id);
+        continue;
+      }
+
+      const body = extractEmailBody(full.data.payload);
+      const tenantId = contact.tenant_id;
+      const displayName = contact.name || senderName || senderEmail;
+      const company = contact.company || '';
 
       insertActivity({
         tenantId,
