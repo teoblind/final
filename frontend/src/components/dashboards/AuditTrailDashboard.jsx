@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Suspense, lazy } from 'react';
 import { useTenant } from '../../contexts/TenantContext';
+
+const FilesDashboard = lazy(() => import('./FilesDashboard'));
 
 // ─── Agent Icon Config ──────────────────────────────────────────────────────
 
@@ -85,6 +87,39 @@ const DACP_EVENTS = {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AuditTrailDashboard() {
+  const [activeView, setActiveView] = useState('audit');
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 px-6 pt-5 pb-0">
+        {[{ id: 'audit', label: 'Audit Trail' }, { id: 'files', label: 'Files' }].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveView(tab.id)}
+            className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
+              activeView === tab.id
+                ? 'bg-terminal-text text-white'
+                : 'text-terminal-muted hover:bg-[#f5f4f0] hover:text-terminal-text'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeView === 'files' ? (
+        <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="spinner w-10 h-10" /></div>}>
+          <FilesDashboard />
+        </Suspense>
+      ) : (
+        <AuditTrailContent />
+      )}
+    </div>
+  );
+}
+
+function AuditTrailContent() {
   const { tenant } = useTenant();
   const isConstruction = tenant?.settings?.industry === 'construction';
 
