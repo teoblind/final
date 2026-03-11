@@ -280,7 +280,6 @@ function AppContent() {
     ];
   } else {
     platformItems.push({ id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 });
-    platformItems.push({ id: 'curtailment-chat', label: 'Curtailment', icon: Zap, live: true });
     if (!user || hasPermission('viewOperations')) {
       platformItems.push({ id: 'operations', label: 'Sites', icon: Hammer });
     }
@@ -289,9 +288,9 @@ function AppContent() {
 
     agentItems.push({ id: 'hivemind-chat', label: 'Sangha Agent', icon: Bot, hivemind: true });
     agentItems.push({ id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 502 });
+    agentItems.push({ id: 'curtailment-chat', label: 'Curtailment', icon: Zap, live: true });
+    agentItems.push({ id: 'pools-chat', label: 'Pool Routing', icon: Activity });
     agentItems.push({ id: 'meetings', label: 'Meetings', icon: Mic, live: true });
-
-    infraItems.push({ id: 'pools-chat', label: 'Pool Routing', icon: Activity });
     infraItems.push({ id: 'insurance', label: 'Insurance & Coverage', icon: Umbrella });
     if (!user || hasPermission('viewOperations')) {
       infraItems.push({ id: 'reporting', label: 'Operations', icon: BarChart3 });
