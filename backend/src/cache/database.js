@@ -3911,6 +3911,13 @@ export function getDacpBidRequest(tenantId, id) {
   return row;
 }
 
+export function createDacpBidRequest(bid) {
+  return db.prepare(
+    `INSERT INTO dacp_bid_requests (id, tenant_id, from_email, from_name, gc_name, subject, body, attachments_json, scope_json, due_date, status, urgency, missing_info_json, received_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(bid.id, bid.tenant_id, bid.from_email, bid.from_name, bid.gc_name, bid.subject, bid.body, bid.attachments_json || '[]', bid.scope_json || '{}', bid.due_date, bid.status || 'new', bid.urgency || 'medium', bid.missing_info_json || '[]', bid.received_at || new Date().toISOString());
+}
+
 export function updateDacpBidRequest(tenantId, id, updates) {
   const fields = [];
   const values = [];

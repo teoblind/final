@@ -3,10 +3,12 @@
  *
  * Polls for unread emails, matches senders to known contacts,
  * and creates activity_log entries for inbound replies.
+ * Detects RFQ/bid request emails and routes them through the estimate pipeline.
  */
 
 import { google } from 'googleapis';
 import { insertActivity } from '../cache/database.js';
+import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -93,6 +95,41 @@ async function pollInbox() {
       const senderEmail = emailMatch[1];
       const senderName = from.replace(/<[^>]+>/, '').trim().replace(/^"(.*)"$/, '$1');
 
+      const body = extractEmailBody(full.data.payload);
+
+      // Check if this is an RFQ/bid request email → route to estimate pipeline
+      if (isRfqEmail(subject, body)) {
+        try {
+          const result = await processRfqEmail({
+            messageId: msg.id,
+            threadId: full.data.threadId,
+            from: senderEmail,
+            fromName: senderName,
+            subject,
+            body,
+          });
+          if (result) {
+            console.log(`[GmailPoll] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
+          }
+        } catch (err) {
+          console.error(`[GmailPoll] RFQ pipeline error:`, err.message);
+        }
+
+        // Mark as read
+        try {
+          await gmail.users.messages.modify({
+            userId: 'me',
+            id: msg.id,
+            requestBody: { removeLabelIds: ['UNREAD'] },
+          });
+        } catch {}
+
+        processedIds.add(msg.id);
+        newReplies++;
+        continue;
+      }
+
+      // Not an RFQ — check if it's from a known contact
       const contact = matchContactToTenant(senderEmail);
 
       // Skip emails from unknown senders (Google Docs notifications, spam, etc.)
@@ -101,7 +138,6 @@ async function pollInbox() {
         continue;
       }
 
-      const body = extractEmailBody(full.data.payload);
       const tenantId = contact.tenant_id;
       const displayName = contact.name || senderName || senderEmail;
       const company = contact.company || '';
@@ -125,11 +161,13 @@ async function pollInbox() {
       });
 
       // Mark as read
-      await gmail.users.messages.modify({
-        userId: 'me',
-        id: msg.id,
-        requestBody: { removeLabelIds: ['UNREAD'] },
-      });
+      try {
+        await gmail.users.messages.modify({
+          userId: 'me',
+          id: msg.id,
+          requestBody: { removeLabelIds: ['UNREAD'] },
+        });
+      } catch {}
 
       processedIds.add(msg.id);
       newReplies++;
@@ -152,7 +190,7 @@ async function pollInbox() {
   }
 }
 
-export function startGmailPollScheduler(intervalMinutes = 2) {
+export function startGmailPollScheduler(intervalMinutes = 1) {
   if (pollInterval) {
     console.log('[GmailPoll] Scheduler already running');
     return;
