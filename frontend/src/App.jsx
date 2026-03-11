@@ -3,7 +3,7 @@ import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
-  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks
+  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone
 } from 'lucide-react';
 
 // Auth
@@ -277,6 +277,8 @@ function AppContent() {
       { id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 12 },
       { id: 'meetings-chat', label: 'Meetings', icon: Mic, live: true },
       { id: 'email-chat', label: 'Email', icon: Mail },
+      { id: 'pitch-deck-chat', label: 'Pitch Deck', icon: Presentation },
+      { id: 'sales-chat', label: 'Sales Agent', icon: Phone },
     ];
   } else {
     platformItems.push({ id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 });
@@ -286,6 +288,8 @@ function AppContent() {
     agentItems.push({ id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 502 });
     agentItems.push({ id: 'curtailment-chat', label: 'Curtailment', icon: Zap, live: true });
     agentItems.push({ id: 'pools-chat', label: 'Pool Routing', icon: Activity });
+    agentItems.push({ id: 'pitch-deck-chat', label: 'Pitch Deck', icon: Presentation });
+    agentItems.push({ id: 'sales-chat', label: 'Sales Agent', icon: Phone });
     agentItems.push({ id: 'meetings', label: 'Meetings', icon: Mic, live: true });
 
     if (!user || hasPermission('viewOperations')) {
@@ -552,6 +556,8 @@ function AppContent() {
       case 'email-chat':
       case 'curtailment-chat':
       case 'pools-chat':
+      case 'pitch-deck-chat':
+      case 'sales-chat':
         return <AgentChat agentId={activeTab.replace('-chat', '')} />;
       default:
         return <CommandDashboard onNavigate={setActiveTab} />;
