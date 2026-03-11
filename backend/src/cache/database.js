@@ -14,7 +14,86 @@ if (!fs.existsSync(dataDir)) {
 
 const db = new Database(join(dataDir, 'cache.db'));
 
+// ─── SQL Reserved Word Sanitizer ─────────────────────────────────────────────
+// Prevents tenant names or slugs from corrupting sqlite_master if they ever
+// leak into DDL (e.g. CHECK constraints, DEFAULT values, index names).
+const SQL_RESERVED = new Set([
+  'ABORT','ACTION','ADD','AFTER','ALL','ALTER','ALWAYS','ANALYZE','AND','AS',
+  'ASC','ATTACH','AUTOINCREMENT','BEFORE','BEGIN','BETWEEN','BY','CASCADE',
+  'CASE','CAST','CHECK','COLLATE','COLUMN','COMMIT','CONFLICT','CONSTRAINT',
+  'CREATE','CROSS','CURRENT','CURRENT_DATE','CURRENT_TIME','CURRENT_TIMESTAMP',
+  'DATABASE','DEFAULT','DEFERRABLE','DEFERRED','DELETE','DESC','DETACH',
+  'DISTINCT','DO','DROP','EACH','ELSE','END','ESCAPE','EXCEPT','EXCLUDE',
+  'EXCLUSIVE','EXISTS','EXPLAIN','FAIL','FILTER','FIRST','FOLLOWING','FOR',
+  'FOREIGN','FROM','FULL','GENERATED','GLOB','GROUP','GROUPS','HAVING','IF',
+  'IGNORE','IMMEDIATE','IN','INDEX','INDEXED','INITIALLY','INNER','INSERT',
+  'INSTEAD','INTERSECT','INTO','IS','ISNULL','JOIN','KEY','LAST','LEFT',
+  'LIKE','LIMIT','MATCH','MATERIALIZED','NATURAL','NO','NOT','NOTHING',
+  'NOTNULL','NULL','NULLS','OF','OFFSET','ON','OR','ORDER','OTHERS','OUTER',
+  'OVER','PARTITION','PLAN','PRAGMA','PRECEDING','PRIMARY','QUERY','RAISE',
+  'RANGE','RECURSIVE','REFERENCES','REGEXP','REINDEX','RELEASE','RENAME',
+  'REPLACE','RESTRICT','RETURNING','RIGHT','ROLLBACK','ROW','ROWS','SAVEPOINT',
+  'SELECT','SET','TABLE','TEMP','TEMPORARY','THEN','TIES','TO','TRANSACTION',
+  'TRIGGER','UNBOUNDED','UNION','UNIQUE','UPDATE','USING','VACUUM','VALUES',
+  'VIEW','VIRTUAL','WHEN','WHERE','WINDOW','WITH','WITHOUT',
+]);
+
+/**
+ * Sanitize a string before it touches any DDL or schema-level SQL.
+ * - Strips characters that could break SQL syntax: quotes, semicolons, parens, backslashes
+ * - Trims whitespace
+ * - Used on tenant name, slug, and id at creation/update time
+ */
+export function sanitizeTenantField(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/[;'"\\()]/g, '')  // strip SQL-dangerous chars
+    .replace(/\s+/g, ' ')       // collapse whitespace
+    .trim();
+}
+
+/**
+ * Check if a string is a SQL reserved word (case-insensitive).
+ * Returns true if reserved — callers should reject or quote.
+ */
+export function isSqlReserved(value) {
+  if (typeof value !== 'string') return false;
+  return SQL_RESERVED.has(value.toUpperCase().trim());
+}
+
 export function initDatabase() {
+  // ─── Startup Integrity Check ───────────────────────────────────────────────
+  try {
+    const integrityResult = db.pragma('integrity_check');
+    const isOk = integrityResult.length === 1 && integrityResult[0].integrity_check === 'ok';
+    if (!isOk) {
+      const errors = integrityResult.map(r => r.integrity_check).join('\n');
+      console.error(`\n╔══════════════════════════════════════════════════════════╗`);
+      console.error(`║  DATABASE INTEGRITY CHECK FAILED — REFUSING TO START    ║`);
+      console.error(`╠══════════════════════════════════════════════════════════╣`);
+      console.error(`║  Errors found:                                          ║`);
+      errors.split('\n').forEach(e => console.error(`║  ${e.padEnd(54)}║`));
+      console.error(`║                                                          ║`);
+      console.error(`║  To recover, restore from backup:                        ║`);
+      console.error(`║  cp data/backups/cache_XX.db data/cache.db               ║`);
+      console.error(`║  Or delete data/cache.db to rebuild from scratch.        ║`);
+      console.error(`╚══════════════════════════════════════════════════════════╝\n`);
+      process.exit(1);
+    }
+    console.log('[DB] Integrity check passed');
+  } catch (err) {
+    console.error(`\n╔══════════════════════════════════════════════════════════╗`);
+    console.error(`║  DATABASE CORRUPT — REFUSING TO START                   ║`);
+    console.error(`╠══════════════════════════════════════════════════════════╣`);
+    console.error(`║  ${(err.message || '').padEnd(54)}║`);
+    console.error(`║                                                          ║`);
+    console.error(`║  To recover, restore from backup:                        ║`);
+    console.error(`║  cp data/backups/cache_XX.db data/cache.db               ║`);
+    console.error(`║  Or delete data/cache.db to rebuild from scratch.        ║`);
+    console.error(`╚══════════════════════════════════════════════════════════╝\n`);
+    process.exit(1);
+  }
+
   // Cache table for API responses
   db.exec(`
     CREATE TABLE IF NOT EXISTS cache (
@@ -664,6 +743,22 @@ export function initDatabase() {
 
   // Initialize activity log table
   initActivityLogTable();
+
+  // Initialize report comments table
+  initReportComments();
+
+  // Password reset tokens
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_pw_reset_hash ON password_resets(token_hash)'); } catch (e) {}
 }
 
 // Auto-init on import so tables exist before other modules prepare statements
@@ -1381,6 +1476,86 @@ export function dismissNotification(id) {
   db.prepare('UPDATE notifications SET dismissed = 1 WHERE id = ?').run(id);
 }
 
+// ─── Password Resets ─────────────────────────────────────────────────────────
+
+export function createPasswordReset({ id, userId, tokenHash, expiresAt }) {
+  // Invalidate any existing unused reset tokens for this user
+  db.prepare('UPDATE password_resets SET used = 1 WHERE user_id = ? AND used = 0').run(userId);
+  return db.prepare(
+    'INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)'
+  ).run(id, userId, tokenHash, expiresAt);
+}
+
+export function getPasswordResetByHash(tokenHash) {
+  return db.prepare(
+    'SELECT * FROM password_resets WHERE token_hash = ? AND used = 0 AND expires_at > datetime(\'now\')'
+  ).get(tokenHash);
+}
+
+export function markPasswordResetUsed(id) {
+  db.prepare('UPDATE password_resets SET used = 1 WHERE id = ?').run(id);
+}
+
+// ─── Report Comments ────────────────────────────────────────────────────────
+
+export function initReportComments() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS report_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      report_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      user_role TEXT DEFAULT 'member',
+      message TEXT NOT NULL,
+      reactions_json TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_report ON report_comments(tenant_id, report_id, created_at)'); } catch (e) { /* exists */ }
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_created ON report_comments(created_at)'); } catch (e) { /* exists */ }
+}
+
+export function getReportComments(tenantId, reportId) {
+  return db.prepare(
+    'SELECT * FROM report_comments WHERE tenant_id = ? AND report_id = ? ORDER BY created_at ASC'
+  ).all(tenantId, reportId);
+}
+
+export function createReportComment(tenantId, reportId, userId, userName, userRole, message) {
+  const result = db.prepare(`
+    INSERT INTO report_comments (tenant_id, report_id, user_id, user_name, user_role, message)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tenantId, reportId, userId, userName, userRole, message);
+  return db.prepare('SELECT * FROM report_comments WHERE id = ?').get(result.lastInsertRowid);
+}
+
+export function addReportCommentReaction(commentId, userId, emoji) {
+  const comment = db.prepare('SELECT reactions_json FROM report_comments WHERE id = ?').get(commentId);
+  if (!comment) return null;
+  const reactions = JSON.parse(comment.reactions_json || '{}');
+  if (!reactions[emoji]) reactions[emoji] = [];
+  if (reactions[emoji].includes(userId)) {
+    reactions[emoji] = reactions[emoji].filter(id => id !== userId);
+    if (reactions[emoji].length === 0) delete reactions[emoji];
+  } else {
+    reactions[emoji].push(userId);
+  }
+  db.prepare('UPDATE report_comments SET reactions_json = ? WHERE id = ?').run(JSON.stringify(reactions), commentId);
+  return db.prepare('SELECT * FROM report_comments WHERE id = ?').get(commentId);
+}
+
+export function getReportCommentCounts(tenantId, reportIds) {
+  if (!reportIds.length) return {};
+  const placeholders = reportIds.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT report_id, COUNT(*) as count FROM report_comments WHERE tenant_id = ? AND report_id IN (${placeholders}) GROUP BY report_id`
+  ).all(tenantId, ...reportIds);
+  const counts = {};
+  for (const row of rows) counts[row.report_id] = row.count;
+  return counts;
+}
+
 // ─── Phase 7: HPC / AI Compute Helpers ──────────────────────────────────────
 
 // Workload CRUD
@@ -1792,23 +1967,49 @@ export function initPhase8Tables() {
   const defaultTenant = db.prepare('SELECT id FROM tenants WHERE id = ?').get('default');
   if (!defaultTenant) {
     db.prepare(`
-      INSERT INTO tenants (id, name, slug, plan, status, limits_json)
-      VALUES ('default', 'Default Organization', 'default', 'professional', 'active', ?)
-    `).run(JSON.stringify({
-      maxUsers: 50,
-      maxSites: 10,
-      maxWorkloads: 100,
-      maxAgents: 20,
-      apiRateLimit: 120,
-      dataRetentionDays: 365
-    }));
+      INSERT INTO tenants (id, name, slug, plan, status, settings_json, limits_json)
+      VALUES ('default', 'Default Organization', 'default', 'professional', 'active', ?, ?)
+    `).run(
+      JSON.stringify({
+        industry: 'mining',
+        macro_intelligence: true,
+        correlations: true,
+        liquidity: true,
+        hpc_enabled: false,
+        thread_privacy: true,
+      }),
+      JSON.stringify({
+        maxUsers: 50,
+        maxSites: 10,
+        maxWorkloads: 100,
+        maxAgents: 20,
+        apiRateLimit: 120,
+        dataRetentionDays: 365,
+      })
+    );
+  }
+
+  // Backfill settings_json for existing default tenant if missing
+  const existingDefault = db.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('default');
+  if (existingDefault && !existingDefault.settings_json) {
+    db.prepare('UPDATE tenants SET settings_json = ? WHERE id = ?').run(
+      JSON.stringify({
+        industry: 'mining',
+        macro_intelligence: true,
+        correlations: true,
+        liquidity: true,
+        hpc_enabled: false,
+        thread_privacy: true,
+      }),
+      'default'
+    );
   }
 
   // Seed default admin user if not exists
   const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
   if (!adminUser) {
     const salt = bcryptPkg.genSaltSync(12);
-    const hash = bcryptPkg.hashSync('admin123', salt);
+    const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
     db.prepare(`
       INSERT OR IGNORE INTO users (id, email, name, password_hash, tenant_id, role, status)
       VALUES ('seed-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'default', 'sangha_admin', 'active')
@@ -1871,11 +2072,20 @@ export function getAllTenants() {
 }
 
 export function createTenant(tenant) {
+  // Sanitize fields that could touch DDL/schema if misused
+  const safeName = sanitizeTenantField(tenant.name);
+  const safeSlug = sanitizeTenantField(tenant.slug);
+  const safeId = sanitizeTenantField(tenant.id);
+
+  if (isSqlReserved(safeSlug)) {
+    throw new Error(`Tenant slug "${safeSlug}" is a SQL reserved word and cannot be used`);
+  }
+
   return db.prepare(`
     INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json, trial_ends_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    tenant.id, tenant.name, tenant.slug,
+    safeId, safeName, safeSlug,
     tenant.plan || 'trial', tenant.status || 'trial',
     tenant.branding ? JSON.stringify(tenant.branding) : null,
     tenant.settings ? JSON.stringify(tenant.settings) : null,
@@ -1889,8 +2099,14 @@ export function createTenant(tenant) {
 export function updateTenant(id, updates) {
   const sets = [];
   const params = [];
-  if (updates.name !== undefined) { sets.push('name = ?'); params.push(updates.name); }
-  if (updates.slug !== undefined) { sets.push('slug = ?'); params.push(updates.slug); }
+  if (updates.name !== undefined) { sets.push('name = ?'); params.push(sanitizeTenantField(updates.name)); }
+  if (updates.slug !== undefined) {
+    const safeSlug = sanitizeTenantField(updates.slug);
+    if (isSqlReserved(safeSlug)) {
+      throw new Error(`Tenant slug "${safeSlug}" is a SQL reserved word and cannot be used`);
+    }
+    sets.push('slug = ?'); params.push(safeSlug);
+  }
   if (updates.plan !== undefined) { sets.push('plan = ?'); params.push(updates.plan); }
   if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
   if (updates.branding !== undefined) { sets.push('branding_json = ?'); params.push(JSON.stringify(updates.branding)); }
@@ -3419,7 +3635,7 @@ export function initDacpTables() {
   const dacpAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacp.localhost');
   if (!dacpAdmin) {
     const salt = bcryptPkg.genSaltSync(12);
-    const hash = bcryptPkg.hashSync('admin123', salt);
+    const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
     db.prepare(`
       INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
       VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
@@ -3981,6 +4197,51 @@ export function getLeadStats(tenantId) {
     pendingDrafts: drafts.c,
     sentToday: sentToday.c,
   };
+}
+
+// ─── Lead Engine Extended Queries ────────────────────────────────────────────
+
+export function getAllContacts(tenantId, { search, limit = 100, offset = 0 } = {}) {
+  let query = `
+    SELECT c.*, l.venue_name, l.region, l.industry, l.status as lead_status
+    FROM le_contacts c
+    LEFT JOIN le_leads l ON c.lead_id = l.id
+    WHERE c.tenant_id = ?
+  `;
+  const params = [tenantId];
+  if (search) {
+    query += ` AND (c.name LIKE ? OR c.email LIKE ? OR c.title LIKE ? OR l.venue_name LIKE ?)`;
+    const term = `%${search}%`;
+    params.push(term, term, term, term);
+  }
+  query += ` ORDER BY c.created_at DESC LIMIT ? OFFSET ?`;
+  params.push(limit, offset);
+  return db.prepare(query).all(...params);
+}
+
+export function getOutreachReplies(tenantId, limit = 50) {
+  return db.prepare(`
+    SELECT o.*, l.venue_name, l.region, l.industry, c.name as contact_name, c.email as contact_email
+    FROM le_outreach_log o
+    LEFT JOIN le_leads l ON o.lead_id = l.id
+    LEFT JOIN le_contacts c ON o.contact_id = c.id
+    WHERE o.tenant_id = ? AND o.responded_at IS NOT NULL
+    ORDER BY o.responded_at DESC
+    LIMIT ?
+  `).all(tenantId, limit);
+}
+
+export function getFollowupQueue(tenantId, delayDays = 5) {
+  return db.prepare(`
+    SELECT o.*, l.venue_name, l.region, l.industry, c.name as contact_name, c.email as contact_email,
+      CAST(julianday('now') - julianday(o.sent_at) AS INTEGER) as days_since_sent
+    FROM le_outreach_log o
+    LEFT JOIN le_leads l ON o.lead_id = l.id
+    LEFT JOIN le_contacts c ON o.contact_id = c.id
+    WHERE o.tenant_id = ? AND o.status = 'sent' AND o.responded_at IS NULL
+      AND julianday('now') - julianday(o.sent_at) >= ?
+    ORDER BY o.sent_at ASC
+  `).all(tenantId, delayDays);
 }
 
 // ─── API Usage Tracking ─────────────────────────────────────────────────────

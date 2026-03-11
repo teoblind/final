@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Coppice</title>
+<title>Sign In | Coppice</title>
+<meta name="description" content="Sign in to your Coppice dashboard. Access your AI agents, estimates, reports, and team workspace.">
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://coppice.ai/login">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -116,11 +119,6 @@
       <div id="error-msg" class="login-error"></div>
     </div>
 
-    <div class="login-divider">or go directly</div>
-
-    <div class="direct-links">
-      <a href="https://dacp.coppice.ai" class="direct-link">DACP Construction</a>
-    </div>
   </div>
 
   <div class="login-footer">
@@ -171,7 +169,14 @@ async function lookupTenant() {
         var a = document.createElement('a');
         a.href = 'https://' + t.slug + '.coppice.ai?email=' + encodeURIComponent(email);
         a.className = 'direct-link';
-        a.textContent = t.name;
+        // Style admin tenant differently
+        if (t.slug === 'admin') {
+          a.style.borderColor = '#3b82f6';
+          a.style.color = '#3b82f6';
+          a.textContent = 'Admin Console';
+        } else {
+          a.textContent = t.name;
+        }
         linksEl.appendChild(a);
       });
       document.querySelector('.login-divider').textContent = 'Choose your workspace';

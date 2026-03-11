@@ -18,6 +18,8 @@ import {
   getEntityKnowledge,
   getOpenActionItems,
 } from '../services/knowledgeProcessor.js';
+import { processMeetingComplete } from '../services/meetingProcessor.js';
+import { insertActivity } from '../cache/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -71,6 +73,14 @@ router.post('/ingest', async (req, res) => {
     // Process asynchronously
     processKnowledgeEntry(entryId, tenantId).catch(err => {
       console.error(`Knowledge processing failed for ${entryId}:`, err.message);
+    });
+
+    insertActivity({
+      tenantId, type: 'doc',
+      title: `Ingested: ${title || 'Untitled'}`,
+      subtitle: `${type} — ${(content || transcript || '').slice(0, 80)}`,
+      detailJson: JSON.stringify({ type, source, title }),
+      sourceType: 'knowledge', sourceId: entryId, agentId: 'knowledge',
     });
 
     res.json({ id: entryId, status: 'processing' });
@@ -196,6 +206,60 @@ router.get('/recent', async (req, res) => {
     res.json(entries);
   } catch (error) {
     console.error('Knowledge recent error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /meeting-complete — Process a completed meeting: extract per-person tasks + send emails
+ *
+ * Called by MeetingBot after transcription + summarization.
+ * Body: { title, transcript, summary, attendees: string[] }
+ */
+router.post('/meeting-complete', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { title, transcript, summary, attendees } = req.body;
+
+    if (!transcript || !attendees?.length) {
+      return res.status(400).json({ error: 'transcript and attendees are required' });
+    }
+
+    // 1. Ingest into knowledge base
+    const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    db.prepare(`
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at)
+      VALUES (?, ?, 'meeting', ?, ?, ?, 'meetingbot', 'coppice', ?)
+    `).run(
+      entryId, tenantId,
+      title || 'Untitled Meeting',
+      transcript,
+      summary || null,
+      new Date().toISOString(),
+    );
+
+    // 2. Run standard knowledge processing (entities, Drive upload, etc.)
+    processKnowledgeEntry(entryId, tenantId).catch(err => {
+      console.error(`Knowledge processing failed for ${entryId}:`, err.message);
+    });
+
+    // 3. Run meeting-specific processing (per-person tasks + emails) async
+    processMeetingComplete({
+      tenantId,
+      entryId,
+      meetingTitle: title || 'Untitled Meeting',
+      transcript,
+      summary: summary || '',
+      attendees,
+    }).then(result => {
+      console.log(`[MeetingComplete] Done: ${result.actionItemsInserted} items, ${result.emailsSent.length} emails`);
+    }).catch(err => {
+      console.error(`[MeetingComplete] Failed:`, err.message);
+    });
+
+    res.json({ id: entryId, status: 'processing', message: 'Meeting ingested — extracting tasks and sending emails' });
+  } catch (error) {
+    console.error('Meeting-complete error:', error);
     res.status(500).json({ error: error.message });
   }
 });

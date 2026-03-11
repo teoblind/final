@@ -16,6 +16,7 @@ import bcryptPkg from 'bcryptjs';
 import {
   getAllTenants,
   getTenant,
+  updateTenant,
   getUsersByTenant,
   getUserById,
   updateUser,
@@ -32,6 +33,9 @@ import {
   getRecentApiLogs,
   getPaginatedApiLogs,
   getUsageByDayByModel,
+  getOpusUsageAllTenants,
+  getOpusDailyCount,
+  checkOpusLimit,
 } from '../cache/database.js';
 
 const router = express.Router();
@@ -414,12 +418,13 @@ router.get('/audit', (req, res) => {
 const MODEL_PRICING = {
   'claude-sonnet-4-20250514': { input: 3, output: 15 },
   'claude-haiku-4-20250414': { input: 0.80, output: 4 },
+  'claude-opus-4-20250514': { input: 15, output: 75 },
 };
 
 function getModelPricing(model) {
   if (!model) return { input: 3, output: 15 };
   for (const [key, pricing] of Object.entries(MODEL_PRICING)) {
-    if (model.includes(key) || model.includes('sonnet') && key.includes('sonnet') || model.includes('haiku') && key.includes('haiku')) {
+    if (model.includes(key) || model.includes('sonnet') && key.includes('sonnet') || model.includes('haiku') && key.includes('haiku') || model.includes('opus') && key.includes('opus')) {
       return pricing;
     }
   }
@@ -839,6 +844,72 @@ router.get('/system/health', async (req, res) => {
     res.json(health);
   } catch (error) {
     console.error('System health error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /usage/opus — Opus Report Usage Per Tenant ─────────────────────────
+
+router.get('/usage/opus', (req, res) => {
+  try {
+    const now = new Date();
+    const yearMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    const rows = getOpusUsageAllTenants(yearMonth);
+
+    const allTenants = getAllTenants();
+    const tenants = allTenants.map(t => {
+      const usage = rows.find(r => r.tenant_id === t.id);
+      const limits = t.limits || {};
+      const limit = limits.maxOpusReportsPerDay ?? 1;
+      const dailyCount = getOpusDailyCount(t.id);
+      return {
+        tenantId: t.id,
+        tenantName: t.name,
+        monthlyCount: usage?.monthly_count || 0,
+        dailyCount,
+        limitPerDay: limit,
+      };
+    });
+
+    res.json({ yearMonth, tenants });
+  } catch (error) {
+    console.error('Opus usage error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET/PUT /tenants/:id/opus-limit — Per-Tenant Opus Limit ────────────────
+
+router.get('/tenants/:id/opus-limit', (req, res) => {
+  try {
+    const tenant = getTenant(req.params.id);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+    const limits = tenant.limits || {};
+    const { allowed, count, limit, resetsAt } = checkOpusLimit(tenant.id);
+    res.json({ maxOpusReportsPerDay: limits.maxOpusReportsPerDay ?? 1, todayCount: count, allowed, resetsAt });
+  } catch (error) {
+    console.error('Get opus limit error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/tenants/:id/opus-limit', (req, res) => {
+  try {
+    const tenant = getTenant(req.params.id);
+    if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+
+    const { maxOpusReportsPerDay } = req.body;
+    if (maxOpusReportsPerDay == null || typeof maxOpusReportsPerDay !== 'number' || maxOpusReportsPerDay < 0) {
+      return res.status(400).json({ error: 'maxOpusReportsPerDay must be a non-negative number' });
+    }
+
+    const limits = tenant.limits || {};
+    limits.maxOpusReportsPerDay = maxOpusReportsPerDay;
+    updateTenant(tenant.id, { limits });
+
+    res.json({ success: true, maxOpusReportsPerDay });
+  } catch (error) {
+    console.error('Update opus limit error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

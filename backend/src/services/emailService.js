@@ -10,6 +10,7 @@ import { readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { insertActivity } from '../cache/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,7 +37,7 @@ function encodeSubject(subject) {
 /**
  * Send a plain-text email (no attachments).
  */
-export async function sendEmail({ to, subject, body, cc, bcc }) {
+export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
   const headers = [
     `From: Coppice <coppice@zhan.capital>`,
     `To: ${to}`,
@@ -60,6 +61,17 @@ export async function sendEmail({ to, subject, body, cc, bcc }) {
   });
 
   console.log(`Email sent to ${to}: ${result.data.id}`);
+
+  try {
+    insertActivity({
+      tenantId: tenantId || 'default', type: 'out',
+      title: `Email sent to ${to}`,
+      subtitle: subject,
+      detailJson: JSON.stringify({ to, subject, body: body.slice(0, 5000), cc, bcc }),
+      sourceType: 'email', agentId: 'coppice',
+    });
+  } catch (e) { /* non-critical */ }
+
   return { messageId: result.data.id, threadId: result.data.threadId };
 }
 
@@ -151,4 +163,43 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename })
   });
 }
 
-export default { sendEmail, sendEmailWithAttachments, sendEstimateEmail };
+/**
+ * Send an HTML email.
+ */
+export async function sendHtmlEmail({ to, subject, html, tenantId }) {
+  const headers = [
+    `From: Coppice <coppice@zhan.capital>`,
+    `To: ${to}`,
+    `Subject: ${encodeSubject(subject)}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=utf-8',
+  ];
+
+  const rawMessage = [...headers, '', html].join('\r\n');
+  const encodedMessage = Buffer.from(rawMessage)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  const result = await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: { raw: encodedMessage },
+  });
+
+  console.log(`HTML email sent to ${to}: ${result.data.id}`);
+
+  try {
+    insertActivity({
+      tenantId: tenantId || 'default', type: 'out',
+      title: `Email sent to ${to}`,
+      subtitle: subject,
+      detailJson: JSON.stringify({ to, subject }),
+      sourceType: 'email', agentId: 'coppice',
+    });
+  } catch (e) { /* non-critical */ }
+
+  return { messageId: result.data.id, threadId: result.data.threadId };
+}
+
+export default { sendEmail, sendHtmlEmail, sendEmailWithAttachments, sendEstimateEmail };

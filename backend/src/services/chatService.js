@@ -214,6 +214,38 @@ const LEAD_ENGINE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'get_outreach_log',
+    description: 'Get the outreach log — all emails sent, with status, contact info, and response tracking.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', description: 'Filter by outreach status (draft, sent, bounced, responded)', enum: ['draft', 'sent', 'bounced', 'responded'] },
+        limit: { type: 'integer', description: 'Max entries to return (default 50)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_reply_inbox',
+    description: 'Get all outreach emails that received replies — shows who responded and when.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', description: 'Max replies to return (default 50)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_followup_queue',
+    description: 'Get outreach emails that were sent but never got a reply and are past the follow-up delay — shows overdue follow-ups.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ─── HubSpot CRM Tools (Sangha tenant only) ────────────────────────────────
@@ -446,6 +478,23 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
     }
     case 'generate_outreach':
       return await le.generateOutreach(tenantId);
+    case 'get_outreach_log': {
+      const { getOutreachLog: dbGetOutreach } = await import('../cache/database.js');
+      const log = dbGetOutreach(tenantId, toolInput.status || null, toolInput.limit || 50);
+      return { outreach: log, count: log.length };
+    }
+    case 'get_reply_inbox': {
+      const { getOutreachReplies: dbGetReplies } = await import('../cache/database.js');
+      const replies = dbGetReplies(tenantId, toolInput.limit || 50);
+      return { replies, count: replies.length };
+    }
+    case 'get_followup_queue': {
+      const { getFollowupQueue: dbGetFollowups, getLeadDiscoveryConfig: dbGetConfig } = await import('../cache/database.js');
+      const config = dbGetConfig(tenantId);
+      const delayDays = config?.followup_delay_days || 5;
+      const followups = dbGetFollowups(tenantId, delayDays);
+      return { followups, count: followups.length, delayDays };
+    }
     default:
       throw new Error(`Unknown lead engine tool: ${toolName}`);
   }
@@ -570,6 +619,21 @@ Your knowledge includes:
 - Historical pricing patterns and seasonal trends
 
 When discussing curtailment decisions, reference specific LMP values, breakeven thresholds, and revenue impact. Be data-driven.`,
+
+  'lead-engine': `You are the Lead Engine Agent — an AI-powered lead discovery and outreach management system. You handle the full pipeline from finding prospects to managing email campaigns and follow-ups.
+
+You can:
+- Discover new leads using Perplexity search (discover_leads)
+- View and filter the lead pipeline by status (get_leads)
+- Get pipeline statistics and conversion rates (get_lead_stats)
+- Generate personalized outreach emails (generate_outreach)
+- View the full outreach log with status tracking (get_outreach_log)
+- Check the reply inbox for responses (get_reply_inbox)
+- Review overdue follow-ups (get_followup_queue)
+
+When users ask about leads, pipeline health, outreach performance, replies, or follow-ups, use the appropriate tools. Present data clearly with key metrics highlighted. Be proactive about suggesting next steps — if there are overdue follow-ups, mention them. If response rates are low, suggest adjustments.
+
+Keep responses concise and data-driven.`,
 
   pools: `You are the Pool Routing Agent for Sangha Holdings. You optimize hashrate distribution across mining pools (Foundry, Braiins, Ocean, etc.) for maximum yield.
 
@@ -717,7 +781,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
   const knowledgeContext = buildKnowledgeContext(tenantId, userContent);
   // Add lead engine prompt for agents that have access
-  const leAgents = ['sangha', 'hivemind', 'email'];
+  const leAgents = ['sangha', 'hivemind', 'email', 'lead-engine'];
   const leadEngineAddon = leAgents.includes(agentId) ? LEAD_ENGINE_PROMPT_ADDON : '';
   // HubSpot tools for Sangha agents only (when API key is configured)
   const hsAgents = ['sangha', 'hivemind'];
@@ -771,7 +835,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       // Call the tool — route to appropriate handler
       let toolResult;
       let toolIsError = false;
-      const leadEngineToolNames = ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach'];
+      const leadEngineToolNames = ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue'];
       const knowledgeToolNames = ['search_knowledge'];
       const hubspotToolNames = ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'];
       try {

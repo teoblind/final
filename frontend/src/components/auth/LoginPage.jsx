@@ -2,25 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTenant } from '../../contexts/TenantContext';
 import CoppiceLogo from '../ui/CoppiceLogo';
 
-// Admin emails that trigger the dark admin login
-const ADMIN_EMAILS = ['teo@zhan.capital'];
-
 export default function LoginPage({ onLogin }) {
   const { tenant } = useTenant();
   const [mode, setMode] = useState('login');
   const prefillEmail = new URLSearchParams(window.location.search).get('email') || '';
-  const isAdminParam = new URLSearchParams(window.location.search).has('admin');
+  const isAdminSubdomain = window.location.hostname.startsWith('admin.');
+  const isAdmin = isAdminSubdomain || new URLSearchParams(window.location.search).has('admin');
   const [email, setEmail] = useState(prefillEmail);
   const passwordRef = useRef(null);
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
   const [inviteToken, setInviteToken] = useState(null);
   const [tenantPicker, setTenantPicker] = useState(null); // array of { id, slug, name }
-
-  const isAdmin = isAdminParam || ADMIN_EMAILS.includes(email.trim().toLowerCase());
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -28,6 +25,10 @@ export default function LoginPage({ onLogin }) {
     if (invite) {
       setInviteToken(invite);
       setMode('register');
+    }
+    const resetToken = params.get('reset_token');
+    if (resetToken) {
+      setMode('reset');
     }
   }, []);
 
@@ -40,10 +41,45 @@ export default function LoginPage({ onLogin }) {
   const handleSubmit = async (e, selectedTenantId) => {
     if (e) e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
 
     try {
+      // Forgot password flow
+      if (mode === 'forgot') {
+        const res = await fetch('/api/v1/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+        setSuccess('If that email exists, a reset link has been sent. Check your inbox.');
+        setLoading(false);
+        return;
+      }
+
+      // Reset password flow
+      if (mode === 'reset') {
+        const resetToken = new URLSearchParams(window.location.search).get('reset_token');
+        const res = await fetch('/api/v1/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: resetToken, newPassword: password }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Reset failed');
+        setSuccess('Password has been reset. You can now sign in.');
+        setMode('login');
+        setPassword('');
+        // Clean URL
+        window.history.replaceState({}, '', window.location.pathname);
+        setLoading(false);
+        return;
+      }
+
       const endpoint = mode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/register';
+      // If a tenant was explicitly selected (from picker), pass it; otherwise let the backend resolve from hostname
       const body = mode === 'login'
         ? { email: email.trim(), password: password.trim(), ...(selectedTenantId ? { tenant_id: selectedTenantId } : {}) }
         : { email: email.trim(), password, name: fullName, companyName, ...(inviteToken ? { invitationToken: inviteToken } : {}) };
@@ -68,7 +104,7 @@ export default function LoginPage({ onLogin }) {
       }
 
       if (onLogin) {
-        onLogin({ user: data.user, tokens: data.tokens });
+        onLogin({ user: data.user, tokens: data.tokens, adminConsole: isAdmin });
       }
     } catch (err) {
       setError(err.message || 'An unexpected error occurred');
@@ -85,6 +121,7 @@ export default function LoginPage({ onLogin }) {
   const toggleMode = () => {
     setMode(mode === 'login' ? 'register' : 'login');
     setError(null);
+    setSuccess(null);
   };
 
   // ─── Admin dark login ───────────────────────────────────────────────────
@@ -343,15 +380,21 @@ export default function LoginPage({ onLogin }) {
       }}>
         <div style={{ width: '100%', maxWidth: 360 }}>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#111110', marginBottom: 4 }}>
-            {mode === 'login' ? 'Sign in' : 'Create account'}
+            {mode === 'forgot' ? 'Reset password' : mode === 'reset' ? 'Set new password' : mode === 'login' ? 'Sign in' : 'Create account'}
           </div>
           <div style={{ fontSize: 13, color: '#9a9a92', marginBottom: 28 }}>
-            {mode === 'login' ? 'Enter your credentials to continue' : 'Set up your workspace'}
+            {mode === 'forgot' ? 'Enter your email to receive a reset link' : mode === 'reset' ? 'Choose a new password (min 8 characters)' : mode === 'login' ? 'Enter your credentials to continue' : 'Set up your workspace'}
           </div>
 
           {inviteToken && mode === 'register' && (
             <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 10, background: '#eef3f9', color: '#1e3a5f', fontSize: 13, border: '1px solid rgba(30,58,95,0.15)' }}>
               You have been invited to join {brandName}. Complete registration below.
+            </div>
+          )}
+
+          {success && (
+            <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 10, background: '#eaf5ee', color: '#1a6b3c', fontSize: 13, border: '1px solid rgba(26,107,60,0.15)' }}>
+              {success}
             </div>
           )}
 
@@ -375,24 +418,28 @@ export default function LoginPage({ onLogin }) {
               </>
             )}
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Email address</label>
-              <input
-                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                required placeholder={placeholderEmail} autoFocus={!prefillEmail}
-                style={inputStyle} onFocus={onFocus} onBlur={onBlur}
-                onKeyDown={(e) => { if (e.key === 'Enter' && passwordRef.current) { e.preventDefault(); passwordRef.current.focus(); } }}
-              />
-            </div>
+            {mode !== 'reset' && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>Email address</label>
+                <input
+                  type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                  required placeholder={placeholderEmail} autoFocus={!prefillEmail}
+                  style={inputStyle} onFocus={onFocus} onBlur={onBlur}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && passwordRef.current && mode !== 'forgot') { e.preventDefault(); passwordRef.current.focus(); } }}
+                />
+              </div>
+            )}
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Password</label>
-              <input
-                ref={passwordRef} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                required minLength={8} placeholder="Enter your password"
-                style={inputStyle} onFocus={onFocus} onBlur={onBlur}
-              />
-            </div>
+            {mode !== 'forgot' && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelStyle}>{mode === 'reset' ? 'New password' : 'Password'}</label>
+                <input
+                  ref={passwordRef} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                  required minLength={8} placeholder={mode === 'reset' ? 'Min 8 characters' : 'Enter your password'}
+                  style={inputStyle} onFocus={onFocus} onBlur={onBlur}
+                />
+              </div>
+            )}
 
             {mode === 'login' && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -400,7 +447,7 @@ export default function LoginPage({ onLogin }) {
                   <input type="checkbox" style={{ width: 15, height: 15, accentColor: primaryColor, cursor: 'pointer' }} />
                   Remember me
                 </label>
-                <button type="button" style={{ fontSize: 12, color: primaryColor, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>
+                <button type="button" onClick={() => { setMode('forgot'); setError(null); setSuccess(null); }} style={{ fontSize: 12, color: primaryColor, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>
                   Forgot?
                 </button>
               </div>
@@ -419,10 +466,11 @@ export default function LoginPage({ onLogin }) {
               {loading && (
                 <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
               )}
-              {mode === 'login' ? 'Continue' : 'Create Account'}
+              {mode === 'forgot' ? 'Send Reset Link' : mode === 'reset' ? 'Reset Password' : mode === 'login' ? 'Continue' : 'Create Account'}
             </button>
           </form>
 
+          {(mode === 'login' || mode === 'register') && (<>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0', fontSize: 11, color: '#c5c5bc', textTransform: 'uppercase', letterSpacing: 1 }}>
             <div style={{ flex: 1, height: 1, background: '#f0eeea' }} />or<div style={{ flex: 1, height: 1, background: '#f0eeea' }} />
           </div>
@@ -446,12 +494,21 @@ export default function LoginPage({ onLogin }) {
               GitHub
             </button>
           </div>
+          </>)}
 
           <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: '#9a9a92' }}>
-            {mode === 'login' ? 'No account yet? ' : 'Already have an account? '}
-            <button onClick={toggleMode} style={{ background: 'none', border: 'none', color: primaryColor, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
-              {mode === 'login' ? 'Request access' : 'Sign in'}
-            </button>
+            {(mode === 'forgot' || mode === 'reset') ? (
+              <button onClick={() => { setMode('login'); setError(null); setSuccess(null); }} style={{ background: 'none', border: 'none', color: primaryColor, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
+                Back to sign in
+              </button>
+            ) : (
+              <>
+                {mode === 'login' ? 'No account yet? ' : 'Already have an account? '}
+                <button onClick={toggleMode} style={{ background: 'none', border: 'none', color: primaryColor, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
+                  {mode === 'login' ? 'Request access' : 'Sign in'}
+                </button>
+              </>
+            )}
           </div>
 
           <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: '#c5c5bc' }}>

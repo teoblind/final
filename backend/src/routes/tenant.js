@@ -30,6 +30,7 @@ import {
   getUserById,
 } from '../cache/database.js';
 import { generateApiKey } from '../services/authService.js';
+import { sendHtmlEmail } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -46,7 +47,14 @@ router.get('/public', (req, res) => {
     name: tenant.name,
     slug: tenant.slug,
     branding: { companyName, primaryColor, logo, hideSanghaBranding },
-    settings: { industry: settings.industry || null },
+    settings: {
+      industry: settings.industry || null,
+      macro_intelligence: !!settings.macro_intelligence,
+      correlations: !!settings.correlations,
+      liquidity: !!settings.liquidity,
+      hpc_enabled: !!settings.hpc_enabled,
+      thread_privacy: !!settings.thread_privacy,
+    },
   });
 });
 
@@ -119,7 +127,7 @@ router.get('/users', requirePermission('manageUsers'), (req, res) => {
 
 // ─── POST /users/invite — Invite User ───────────────────────────────────────
 
-router.post('/users/invite', requirePermission('manageUsers'), (req, res) => {
+router.post('/users/invite', requirePermission('manageUsers'), async (req, res) => {
   try {
     const { email, role } = req.body;
 
@@ -164,6 +172,40 @@ router.post('/users/invite', requirePermission('manageUsers'), (req, res) => {
       details: { email, role },
       ipAddress: req.ip,
     });
+
+    // Auto-send invitation email
+    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const origin = req.headers.origin || `${proto}://${host}`;
+    const inviteUrl = `${origin}/login?invite=${token}&email=${encodeURIComponent(email)}`;
+    const inviterName = req.user.name || 'Your team';
+    const tenantName = tenant.name || 'Coppice';
+
+    try {
+      await sendHtmlEmail({
+        to: email,
+        subject: `${inviterName} invited you to ${tenantName} on Coppice`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+            <h2 style="color: #1a1a1a; margin-bottom: 8px;">You're invited</h2>
+            <p style="color: #666; font-size: 14px; line-height: 1.5;">
+              ${inviterName} has invited you to join <strong>${tenantName}</strong> on Coppice as a <strong>${role}</strong>.
+            </p>
+            <a href="${inviteUrl}" style="display: inline-block; margin: 24px 0; padding: 12px 32px; background: #1a6b3c; color: #fff; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+              Accept Invitation
+            </a>
+            <p style="color: #999; font-size: 12px; line-height: 1.5;">
+              This invitation expires in 7 days.<br>
+              Link: <a href="${inviteUrl}" style="color: #999;">${inviteUrl}</a>
+            </p>
+          </div>
+        `,
+        tenantId: req.user.tenantId,
+      });
+    } catch (emailErr) {
+      console.warn('Failed to send invitation email:', emailErr.message);
+      // Non-blocking — invitation still created, link still works
+    }
 
     res.status(201).json({
       invitation: {

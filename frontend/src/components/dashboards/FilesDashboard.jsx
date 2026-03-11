@@ -49,17 +49,33 @@ COMPETITOR SNAPSHOT
 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 Key Competitor Actions (Last 24-72 Hours):
+\u2022 Bitfarms (BITF): Bitfarms completes deleveraging with Keel rebrand, consolidating 4 EH/s fleet under new identity after selling Argentinian operations at 30% discount.
+  Strategic Read: Forced capital restructuring signals distress; reduced hashrate lowers competitive pressure.
+  Risk: Keel rebrand may attract fresh institutional capital if successful, re-entering as leaner competitor.
+  Sangha Implication: Bitfarms' 4 EH/s reduction directly benefits Sangha's difficulty-adjusted margins. Argentine asset fire sale may signal more distressed assets becoming available at below-replacement cost.
 
+\u2022 Core Scientific (CORZ): Core Scientific announces 200 MW AI hosting agreement with CoreWeave, converting 40% of mining capacity to HPC workloads by Q3 2026.
+  Strategic Read: Largest public miner pivoting aggressively to AI/HPC, removing significant hashrate from Bitcoin network.
+  Sangha Implication: Core Scientific's 200 MW conversion removes ~8 EH/s from network, creating immediate difficulty tailwind for pure-play miners. Validates Sangha's decision to remain focused on mining.
+
+\u2022 Marathon Digital (MARA): Marathon reports Q4 loss of $142M, announces $200M at-the-market equity offering to fund operations through halving cycle.
+  Strategic Read: Largest US miner diluting equity to survive, signaling cash flow pressures across the industry.
+  Sangha Implication: Marathon's dilutive financing at cycle lows demonstrates the advantage of Sangha's behind-the-meter model with sub-3-cent power. No equity dilution needed when operating costs are 60% below public miner averages.
+
+\u2022 Hut 8 (HUT): Hut 8 secures $150M credit facility backed by 9,100 BTC treasury reserves, signaling shift to balance-sheet-driven strategy.
+  Strategic Read: Using BTC treasury as collateral suggests mining revenues insufficient to fund operations independently.
+  Sangha Implication: Hut 8 leveraging BTC reserves indicates industry-wide margin compression. Sangha's low-cost structure means no need to encumber BTC holdings for operating capital.
 
 
 Trending Themes:
 \u2022 mining_difficulty_decline [new]
 \u2022 industry_consolidation [new]
 \u2022 cost_advantage_critical [new]
+\u2022 ai_hpc_pivot_accelerating
+\u2022 public_miner_distress
 
 
-
-Our Positioning: Competitive landscape stable - continue monitoring for emerging opportunities.
+Our Positioning: Strongly favorable. Multiple competitors exiting or reducing hashrate creates significant difficulty tailwind. Sangha's sub-3-cent power cost positions us in the top 5% of efficient operators globally.
 
 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
@@ -86,9 +102,261 @@ TOP NEWS ITEMS
 3. Bitcoin Is Crashing So Hard That Miners Are Unplugging Their Equipment - Futurism
    [credible] [near_term] [high] [opportunity]
 
-   Why it matters: Bitcoin price crash forcing miner shutdowns validates the importance of low-cost energy as the primary competitive moat in mining operations.
-   Sangha impact: Sangha's behind-the-meter model with sub-3-cent power provides crucial margin buffer that keeps operations profitable even as competitors shut down, strengthening long-term market position.
-   Actionability: Use current market conditions to demonstrate model resilience in investor conversations`,
+   Why it matters: Equipment shutdowns across the industry will trigger automatic difficulty adjustments, making mining more profitable for operators who can continue running.
+   Sangha impact: Sangha's behind-the-meter cost structure allows continued operation while grid-dependent competitors shut down. This creates immediate margin expansion opportunity as difficulty decreases.
+   Actionability: Calculate potential margin improvement from expected difficulty drop and communicate to stakeholders
+
+
+4. Bitcoin Mining Revenue Gauge Falls to Record Low During Selloff - Bloomberg.com
+   [credible] [near_term] [high] [opportunity]
+
+   Why it matters: Record low mining revenues will force marginal miners offline, reducing network difficulty and improving economics for efficient operators who can weather the downturn.
+   Sangha impact: Sangha's lowest-in-industry power costs provide crucial survival advantage during this downturn. As weaker competitors exit, Sangha gains larger share of remaining mining rewards when difficulty adjusts downward.
+   Actionability: Prepare investor communication emphasizing cost advantage and ability to maintain operations while competitors shut down
+
+
+5. Miners are being squeezed as bitcoin's $70,000 price fails to cover $87,000 production costs - CoinDesk
+   [credible] [near_term] [high] [opportunity]
+
+   Why it matters: Industry-wide negative margins will force widespread shutdowns, significantly reducing network hashrate and triggering beneficial difficulty adjustments for surviving miners.
+   Sangha impact: If Sangha's production costs are below $70k (likely given lowest-cost positioning), this represents massive competitive advantage as most industry players operate at losses. Sangha can continue mining profitably while competitors exit.
+   Actionability: Verify Sangha's production cost per Bitcoin vs industry average and highlight this spread to investors
+
+════════════════════════════════════════════════════════════
+
+RECOMMENDED OUTREACH
+────────────────────────────────────────
+
+Stats: Total Contacts: 9 | High Priority: 0 | Competitor-Triggered: 0 | Re-Engagements: 0
+
+1. Chris Brown
+   Title: Founder and Managing Director | Company: Brown Equity Group | Email: cbrown@brownequitygroup.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Chris Brown is Founder and Managing Director at Brown Equity Group. Given their industry focus, the recent developments around Bitfarms Deleverages, Unveils Keel Rebrand as... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Bitfarms Deleverages, Unveils Keel..., Sangha's behind-the-meter model and flexible load capabilities position us to help Brown Equity Group navigate these market dynamics.
+
+2. Carlos Mendez
+   Title: Managing Director & CoFounder | Company: Crayhill | Email: cherrera@crayhill.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Carlos Mendez is Managing Director & CoFounder at Crayhill. Given their industry focus, the recent developments around Bitfarms Deleverages, Unveils Keel Rebrand as... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Bitfarms Deleverages, Unveils Keel..., Sangha's behind-the-meter model and flexible load capabilities position us to help Crayhill navigate these market dynamics.
+
+3. Gary Blitz
+   Title: Global Co-CEO of M&A and Transaction Solutions/Global Head of Tax | Company: Aon | Email: gary.blitz@aon.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Gary Blitz is Global Co-CEO of M&A and Transaction Solutions/Global Head of Tax at Aon. Given their industry focus, the recent developments around Bitfarms Deleverages, Unveils Keel Rebrand as... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Bitfarms Deleverages, Unveils Keel..., Sangha's behind-the-meter model and flexible load capabilities position us to help Aon navigate these market dynamics.
+
+4. Doug Beebe
+   Title: Senior Vice President, Clean Energy | Company: Key Equipment Finance | Email: douglas_beebe@key.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Doug Beebe is Senior Vice President, Clean Energy at Key Equipment Finance. Given their industry focus, the recent developments around Bitfarms Deleverages, Unveils Keel Rebrand as... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Bitfarms Deleverages, Unveils Keel..., Sangha's behind-the-meter model and flexible load capabilities position us to help Key Equipment Finance navigate these market dynamics.
+
+5. Peter Hennessy
+   Title: Co-founder and Board Director | Company: Enfinity Global | Email: phennessy@enfinityglobal.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Peter Hennessy is Co-founder and Board Director at Enfinity Global. Given their industry focus, the recent developments around Bitfarms Deleverages, Unveils Keel Rebrand as... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Bitfarms Deleverages, Unveils Keel..., Sangha's behind-the-meter model and flexible load capabilities position us to help Enfinity Global navigate these market dynamics.
+
+6. Michael Avidan
+   Title: President & VP, Enlight Renewable Energy LLC | Company: Clenera, an Enlight Company | Email: michaela@enlightenergy.us
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Michael Avidan is President & VP, Enlight Renewable Energy LLC at Clenera, an Enlight Company. Given their industry focus, the recent developments around Miner Weekly: ERCOT Hits Reset on Texas' AI and... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Miner Weekly: ERCOT Hits Reset on..., Sangha's behind-the-meter model and flexible load capabilities position us to help Clenera, an Enlight Company navigate these market dynamics.
+
+7. Bill Gallagher
+   Title: Senior Vice President, Director Project Finance - Renewable Energy Investments | Company: U.S. Bancorp Community Development Corporation | Email: bill.gallagher@usbank.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Bill Gallagher is Senior Vice President, Director Project Finance - Renewable Energy Investments at U.S. Bancorp Community Development Corporation. Given their industry focus, the recent developments around Miner Weekly: ERCOT Hits Reset on Texas' AI and... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Miner Weekly: ERCOT Hits Reset on..., Sangha's behind-the-meter model and flexible load capabilities position us to help U.S. Bancorp Community Development Corporation navigate these market dynamics.
+
+8. Larry E. Keith
+   Title: Vice President & Managing Director of U.S. Renewables | Company: Solvent Energy | Email: lk@jcmontfort.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Larry E. Keith is Vice President & Managing Director of U.S. Renewables at Solvent Energy. Given their industry focus, the recent developments around Miner Weekly: ERCOT Hits Reset on Texas' AI and... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Miner Weekly: ERCOT Hits Reset on..., Sangha's behind-the-meter model and flexible load capabilities position us to help Solvent Energy navigate these market dynamics.
+
+9. Patrick Monino
+   Title: President and CEO, Head Renewable Business North America | Company: Eni New Energy US, Inc. | Email: patrick.monino@eniplenitude.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Patrick Monino is President and CEO, Head Renewable Business North America at Eni New Energy US, Inc. Given their industry focus, the recent developments around Miner Weekly: ERCOT Hits Reset on Texas' AI and... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SANGHA VALUE PROP: Given the recent news about Miner Weekly: ERCOT Hits Reset on..., Sangha's behind-the-meter model and flexible load capabilities position us to help Eni New Energy US, Inc. navigate these market dynamics.
+
+
+DRAFT OUTREACH MESSAGES
+────────────────────────────────────────
+
+Draft 1: Chris Brown (Brown Equity Group)
+Subject: Bitcoin mining margins squeeze - energy efficiency matters more than ever
+Body: Chris, Saw the Bitfarms deleveraging news - margins below $30/PH/s are forcing real operational changes across the industry. At Sangha Renewables, we're helping miners maintain profitability through integrated renewable energy solutions that cut power costs by 40-60%. The operators surviving this downturn are those who control their energy stack. Worth exploring how this applies to Brown Equity's portfolio companies? Best, Spencer
+Words: 61 | Hook: Bitfarms Deleverages, Unveils Keel Rebrand as Bitcoin Mining Margins Sink Below $30/PH/s
+
+Draft 2: Carlos Mendez (Crayhill)
+Subject: Bitcoin mining margins & energy strategy
+Body: Hi Carlos, Saw the Bitfarms deleveraging news - margins dropping below $30/PH/s is putting real pressure on the mining sector. At Sangha Renewables, we're working with mining operations to restructure their energy costs and improve unit economics through renewable integration. Given Crayhill's portfolio focus, curious if you're seeing similar margin compression themes across your investments. Best, Spencer
+Words: 57 | Hook: Bitfarms Deleverages, Unveils Keel Rebrand as Bitcoin Mining Margins Sink Below $30/PH/s
+
+Draft 3: Gary Blitz (Aon)
+Subject: Bitcoin mining consolidation accelerating
+Body: Gary, Bitfarms' recent deleveraging and rebrand signals broader consolidation in bitcoin mining as margins compress below $30/PH/s. Companies are restructuring operations and seeking strategic alternatives. At Sangha Renewables, we're seeing increased interest from miners exploring energy partnerships and operational restructuring to weather this downturn. Would be interested in your perspective on how tax considerations are shaping these transactions. Best, Spencer
+Words: 60 | Hook: Bitfarms Deleverages, Unveils Keel Rebrand as Bitcoin Mining Margins Sink Below $30/PH/s
+
+Draft 4: Doug Beebe (Key Equipment Finance)
+Subject: Bitcoin mining margins at $30/PH/s - financing challenges ahead
+Body: Doug, Saw the Bitfarms deleveraging news - margins dropping below $30/PH/s is creating real pressure across the mining sector. Companies are scrambling to restructure financing while maintaining operations. At Sangha Renewables, we're seeing increased interest in our energy-integrated mining solutions as operators look for ways to reduce power costs and improve unit economics. Would be curious to hear your perspective on how this margin compression is affecting equipment financing demand.
+Words: 70 | Hook: Bitfarms Deleverages, Unveils Keel Rebrand as Bitcoin Mining Margins Sink Below $30/PH/s
+
+Draft 5: Michael Avidan (Clenera, an Enlight Company)
+Subject: Texas grid dynamics + bitcoin mining
+Body: Hi Michael, Saw the recent coverage on ERCOT's queue reset affecting AI and mining projects. At Sangha Renewables, we're working with bitcoin miners who need reliable renewable energy partnerships that can navigate these grid complexities. Given Clenera's Texas presence and renewable expertise, there might be some interesting alignment around flexible load solutions. Would you be open to a brief conversation? Best, Spencer
+Words: 63 | Hook: Miner Weekly: ERCOT Hits Reset on Texas' AI and Mining Power Queue
+
+Draft 6: Larry E. Keith (Solvent Energy)
+Subject: ERCOT queue reset implications
+Body: Larry, Saw the recent ERCOT queue reset news and its potential impact on data center and mining projects in Texas. At Sangha Renewables, we're navigating similar grid interconnection challenges while developing Bitcoin mining operations paired with renewable energy. Would be interested in your perspective on how this affects renewable developers' strategies moving forward. Best regards, Spencer
+Words: 57 | Hook: Miner Weekly: ERCOT Hits Reset on Texas' AI and Mining Power Queue
+
+Draft 7: Patrick Monino (Eni New Energy US, Inc.)
+Subject: ERCOT queue changes - impact on renewable partnerships
+Body: Patrick, Saw the recent ERCOT reset affecting AI and mining power queues in Texas. At Sangha Renewables, we're navigating similar grid interconnection challenges while pairing Bitcoin mining operations with renewable energy projects. Given Eni's North American renewable portfolio, curious about your perspective on these market shifts and whether there might be alignment opportunities. Best regards, Spencer
+Words: 57 | Hook: Miner Weekly: ERCOT Hits Reset on Texas' AI and Mining Power Queue
+
+
+════════════════════════════════════════════════════════════
+
+PART 2: RENEWABLES MARKET DYNAMICS
+────────────────────────────────────────
+
+Potential Customers — Solar, Wind, Battery, Hydro IPPs
+
+CUSTOMER/TARGET SNAPSHOT
+Target 1: Zelestra | Sector: Solar | Activity: Meta signs solar PPA with Zelestra in Texas for clean energy supply | Opportunity: growth | Why Relevant: Texas solar projects frequently face curtailment due to transmission constraints and negative pricing during peak generation. Sangha can partner with Zelestra to monetize curtailed energy through behind-the-meter mining.
+Target 2: Origis Energy | Sector: Solar | Activity: Crux closes $340 million tax equity investment for Origis Energy's Texas utility-scale solar development | Opportunity: growth | Why Relevant: Texas utility-scale solar projects regularly face curtailment and negative pricing due to transmission bottlenecks. Sangha can help Origis maximize returns by monetizing curtailed energy.
+Target 3: Stardust Solar | Sector: Solar | Activity: Stardust Solar is developing utility-scale solar projects with focus on long-term sustainability strategy | Opportunity: growth | Why Relevant: Stardust may face grid constraints or curtailment on their utility-scale projects. Sangha can offer behind-the-meter Bitcoin mining to monetize excess generation.
+Target 4: Arevon Energy | Sector: Solar | Activity: Arevon Energy is expanding utility-scale solar-plus-storage projects in the U.S. | Opportunity: growth | Why Relevant: Even with storage, solar projects can face curtailment during extended sunny periods when batteries are full. Sangha's behind-the-meter mining can provide additional load.
+Target 5: Scatec | Sector: Solar | Activity: Scatec secures 25-year PPA for 120 MW solar facility in Tunisia | Opportunity: growth | Why Relevant: Limited near-term opportunity due to international location and regulatory uncertainties around Bitcoin mining in Tunisia.
+
+
+DISTRESS SIGNALS:
+• ERCOT wind volatility requiring futures hedging
+• Texas transmission constraints affecting solar development
+• Need for revenue optimization beyond storage arbitrage
+
+GROWTH SIGNALS:
+• Major tax equity investments in utility-scale solar
+• Corporate tech companies signing large renewable PPAs
+• Multi-GWh energy storage deals
+• International renewable project development
+
+
+TOP RENEWABLES NEWS
+────────────────────────────────────────
+
+1. Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas - ESG Today
+   [high] [opportunity]
+
+   Why it matters: Large corporate PPAs in Texas indicate significant new solar capacity, but ERCOT's grid constraints often lead to curtailment and negative pricing events.
+   Sangha opportunity: Texas solar projects frequently face curtailment due to transmission constraints and negative pricing during peak generation. Sangha can partner with Zelestra to monetize curtailed energy through behind-the-meter mining, improving project returns while Meta still receives their contracted clean energy.
+   Actionability: Reach out to Zelestra immediately about optimizing their Texas solar project economics through flexible load solutions
+
+2. Enwex ERCOT Onshore Wind Futures Now Live for Trading on Abaxx Exchange - GlobeNewswire
+   [high] [opportunity]
+
+   Why it matters: The launch of wind futures trading signals significant price volatility and revenue uncertainty in ERCOT wind generation, suggesting curtailment and negative pricing issues.
+   Sangha opportunity: ERCOT wind farms clearly face revenue volatility and curtailment risk, creating perfect conditions for Sangha's flexible load solution. Behind-the-meter mining can provide guaranteed revenue during negative pricing events and curtailment periods, reducing the need for expensive hedging instruments.
+   Actionability: Research ERCOT wind farm owners and operators immediately - this futures market launch indicates acute revenue optimization needs
+
+3. Crux closes $340 million tax equity investment for Origis Energy's Texas utility-scale solar development - renewableenergymagazine.com
+   [high] [opportunity]
+
+   Why it matters: Large-scale solar development in Texas faces well-documented grid constraints and curtailment issues that could impact investor returns.
+   Sangha opportunity: Texas utility-scale solar projects regularly face curtailment and negative pricing due to transmission bottlenecks. Sangha can help Origis maximize returns on this significant investment by monetizing curtailed energy through behind-the-meter mining, protecting investor returns and improving project economics.
+   Actionability: Contact Origis Energy development team immediately about revenue optimization for their Texas solar portfolio
+
+4. Stardust Solar Aligns Utility-Scale Project Development with Long-Term Sustainability Strategy - Investing News Network
+   [medium] [opportunity]
+
+   Why it matters: Utility-scale solar development indicates significant new capacity coming online that may face grid interconnection delays or curtailment issues.
+   Sangha opportunity: Stardust may face grid constraints or curtailment on their utility-scale projects. Sangha can offer behind-the-meter Bitcoin mining to monetize excess generation during peak production periods, improving project economics and providing flexible load management.
+   Actionability: Research Stardust Solar's project pipeline and reach out to development team about revenue optimization solutions
+
+5. Utility-Scale Solar-Plus-Storage Project Highlights Arevon Energy's Expansion in U.S. Renewables - TipRanks
+   [medium] [opportunity]
+
+   Why it matters: Solar-plus-storage combinations suggest awareness of grid integration challenges and need for additional revenue streams beyond storage arbitrage.
+   Sangha opportunity: Even with storage, solar projects can face curtailment during extended sunny periods when batteries are full. Sangha's behind-the-meter mining can provide additional load during these periods, maximizing asset utilization and creating incremental revenue streams.
+   Actionability: Add Arevon Energy to target list and research their current project locations for curtailment risk assessment
+
+
+RENEWABLES OUTREACH RECOMMENDATIONS
+────────────────────────────────────────
+
+1. Michael Avidan
+   Title: President & VP, Enlight Renewable Energy LLC | Company: Clenera, an Enlight Company | Email: michaela@enlightenergy.us
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Michael Avidan is President & VP, Enlight Renewable Energy LLC at Clenera, an Enlight Company. Given their industry focus, the recent developments around Meta Inks Solar Energy Purchase Agreement with... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SALES ANGLE: Given the recent news about Meta Inks Solar Energy Purchase..., Sangha's behind-the-meter model and flexible load capabilities position us to help Clenera, an Enlight Company navigate these market dynamics.
+
+2. Bill Gallagher
+   Title: Senior Vice President, Director Project Finance - Renewable Energy Investments | Company: U.S. Bancorp Community Development Corporation | Email: bill.gallagher@usbank.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Bill Gallagher is Senior Vice President, Director Project Finance - Renewable Energy Investments at U.S. Bancorp Community Development Corporation. Given their industry focus, the recent developments around Meta Inks Solar Energy Purchase Agreement with... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SALES ANGLE: Given the recent news about Meta Inks Solar Energy Purchase..., Sangha's behind-the-meter model and flexible load capabilities position us to help U.S. Bancorp Community Development Corporation navigate these market dynamics.
+
+3. Larry E. Keith
+   Title: Vice President & Managing Director of U.S. Renewables | Company: Solvent Energy | Email: lk@jcmontfort.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Larry E. Keith is Vice President & Managing Director of U.S. Renewables at Solvent Energy. Given their industry focus, the recent developments around Meta Inks Solar Energy Purchase Agreement with... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SALES ANGLE: Given the recent news about Meta Inks Solar Energy Purchase..., Sangha's behind-the-meter model and flexible load capabilities position us to help Solvent Energy navigate these market dynamics.
+
+4. Patrick Monino
+   Title: President and CEO, Head Renewable Business North America | Company: Eni New Energy US, Inc. | Email: patrick.monino@eniplenitude.com
+   Trigger: News-triggered | Last Contact: Never
+   WHY REACH OUT NOW: Patrick Monino is President and CEO, Head Renewable Business North America at Eni New Energy US, Inc. Given their industry focus, the recent developments around Meta Inks Solar Energy Purchase Agreement with... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SALES ANGLE: Given the recent news about Meta Inks Solar Energy Purchase..., Sangha's behind-the-meter model and flexible load capabilities position us to help Eni New Energy US, Inc. navigate these market dynamics.
+
+5. Sandeep Arora
+   Title: Senior Vice President, Head of Transmission & Markets | Company: REV Renewables | Email: sarora@revrenewables.com
+   Trigger: News-triggered | Last Contact: 375 days ago
+   WHY REACH OUT NOW: Sandeep Arora is Senior Vice President, Head of Transmission & Markets at REV Renewables. Given their industry focus, the recent developments around Meta Inks Solar Energy Purchase Agreement with... present a relevant touchpoint to discuss how market shifts could affect their business and where Sangha might add value.
+   SALES ANGLE: Given the recent news about Meta Inks Solar Energy Purchase..., Sangha's behind-the-meter model and flexible load capabilities position us to help REV Renewables navigate these market dynamics.
+
+
+RENEWABLES DRAFT OUTREACH MESSAGES
+────────────────────────────────────────
+
+Draft 1: Michael Avidan (Clenera, an Enlight Company)
+Subject: Behind-the-meter optimization for renewable assets
+Body: Hi Michael, With renewed focus on solar PPAs like Meta's recent Zelestra agreement, maximizing asset utilization becomes critical. Sangha helps renewable developers monetize curtailed energy through behind-the-meter Bitcoin mining—creating flexible load that ramps instantly with generation while avoiding grid constraints. Given Clenera's portfolio scale, this could transform economics on projects facing curtailment or transmission limitations. Would you be open to a brief call to explore applications for your pipeline? Best regards, Spencer
+Words: 72 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas
+
+Draft 2: Larry E. Keith (Solvent Energy)
+Subject: Exploring flexible load solutions for renewable portfolio optimization
+Body: Larry, With Meta's recent Texas solar agreement highlighting the growing demand for corporate renewable energy, I'm curious about Solvent Energy's approach to managing curtailment and grid constraints in your portfolio. At Sangha Renewables, we help developers monetize stranded energy through behind-the-meter flexible loads that can instantly ramp up/down with generation variability. Would you be open to a brief call to explore how this might apply to your current projects? Best, Spencer
+Words: 71 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas
+
+Draft 3: Patrick Monino (Eni New Energy US, Inc.)
+Subject: Monetizing curtailed renewable capacity - exploring synergies
+Body: Patrick, With Eni's expanding North American renewable portfolio, you're likely encountering curtailment challenges and grid constraints that impact project economics. We're helping renewables operators turn stranded energy into revenue through behind-the-meter flexible load solutions that ramp instantly with generation variability - essentially converting curtailed capacity into profitable operations without grid dependencies. Would you be open to a brief call to explore potential applications for your projects?
+Words: 66 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas
+
+Draft 4: Sandeep Arora (REV Renewables)
+Subject: Optimizing curtailed energy economics at REV Renewables
+Body: Hi Sandeep, With ERCOT's growing renewable capacity and trading innovations like the new Enwex futures, managing curtailment economics becomes increasingly critical. We've been helping renewables operators monetize stranded energy through flexible, behind-the-meter Bitcoin mining that ramps instantly with your generation curves—turning curtailed MWh into revenue streams without grid constraints. Would you be open to a brief call to explore how this might apply to REV's portfolio? Best regards, Spencer
+Words: 70 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas
+
+
+NEXT STEPS
+────────────────────────────────────────
+- Review competitor snapshot and flag any concerning moves
+- Review renewables targets for sales opportunities
+- Review outreach lists and flag any contacts to exclude
+- Approve messages or request edits
+- Send within 24 hours for time-sensitive opportunities
+
+Market Signal Check: Bitcoin mining industry faces severe profitability crisis with widespread shutdowns and record losses. This creates significant consolidation opportunity favoring lowest-cost operators. Texas regulatory changes add complexity to expansion plans but may limit new competition.
+Competitive Posture: Sangha remains well-positioned in the renewable energy mining space.`,
 
   '2026-02-02': `\u26a1 Weekly Intel: Feb 2, 2026 \u2013 Mining Market Dynamics
 ============================================================
@@ -196,6 +464,22 @@ function parseReport(raw) {
       positioning: '',
     },
     newsItems: [],
+    outreach: {
+      stats: { total: 0, highPriority: 0, competitorTriggered: 0, reEngagements: 0 },
+      contacts: [],
+      draftMessages: [],
+    },
+    renewables: {
+      targets: [],
+      distressSignals: [],
+      growthSignals: [],
+      newsItems: [],
+      outreachContacts: [],
+      draftMessages: [],
+      nextSteps: [],
+      marketSignal: '',
+      competitivePosture: '',
+    },
   };
 
   // Extract title (first non-empty line)
@@ -325,6 +609,190 @@ function parseReport(raw) {
         sanghaImpact: sanghaMatch ? sanghaMatch[1].trim() : '',
         actionability: actionMatch ? actionMatch[1].trim() : '',
       });
+    }
+  }
+
+  // ─── Parse Recommended Outreach ───
+  const outreachStart = raw.indexOf('RECOMMENDED OUTREACH');
+  const draftMsgStart = raw.indexOf('DRAFT OUTREACH MESSAGES');
+  const part2Start = raw.indexOf('PART 2: RENEWABLES');
+
+  if (outreachStart !== -1) {
+    const outreachEnd = draftMsgStart !== -1 ? draftMsgStart : (part2Start !== -1 ? part2Start : raw.length);
+    const outreachSection = raw.substring(outreachStart, outreachEnd);
+
+    // Parse stats line
+    const statsMatch = outreachSection.match(/Stats:\s*Total Contacts:\s*(\d+)\s*\|\s*High Priority:\s*(\d+)\s*\|\s*Competitor-Triggered:\s*(\d+)\s*\|\s*Re-Engagements:\s*(\d+)/);
+    if (statsMatch) {
+      report.outreach.stats = {
+        total: parseInt(statsMatch[1]),
+        highPriority: parseInt(statsMatch[2]),
+        competitorTriggered: parseInt(statsMatch[3]),
+        reEngagements: parseInt(statsMatch[4]),
+      };
+    }
+
+    // Parse contact cards
+    const contactRegex = /(\d+)\.\s+(.+?)\n\s+Title:\s*(.+?)\s*\|\s*Company:\s*(.+?)\s*\|\s*Email:\s*(.+?)\n\s+Trigger:\s*(.+?)\s*\|\s*Last Contact:\s*(.+?)\n\s+WHY REACH OUT NOW:\s*([\s\S]*?)(?:\n\s+SANGHA VALUE PROP:\s*([\s\S]*?))?(?=\n\n\d+\.\s|\nDRAFT OUTREACH|\nPART 2|\n═|$)/g;
+    let contactMatch;
+    while ((contactMatch = contactRegex.exec(outreachSection)) !== null) {
+      report.outreach.contacts.push({
+        name: contactMatch[2].trim(),
+        title: contactMatch[3].trim(),
+        company: contactMatch[4].trim(),
+        email: contactMatch[5].trim(),
+        trigger: contactMatch[6].trim(),
+        lastContact: contactMatch[7].trim(),
+        whyReachOut: contactMatch[8].trim(),
+        valueProp: contactMatch[9] ? contactMatch[9].trim() : '',
+      });
+    }
+  }
+
+  // ─── Parse Draft Outreach Messages ───
+  if (draftMsgStart !== -1) {
+    const draftEnd = part2Start !== -1 ? part2Start : raw.length;
+    const draftSection = raw.substring(draftMsgStart, draftEnd);
+
+    const draftRegex = /Draft \d+:\s*(.+?)\s*\((.+?)\)\nSubject:\s*(.+?)\nBody:\s*([\s\S]*?)\nWords:\s*(\d+)\s*\|\s*Hook:\s*(.+?)(?=\n\nDraft \d+|\n\n═|\n\nPART 2|$)/g;
+    let draftMatch;
+    while ((draftMatch = draftRegex.exec(draftSection)) !== null) {
+      report.outreach.draftMessages.push({
+        contactName: draftMatch[1].trim(),
+        company: draftMatch[2].trim(),
+        subject: draftMatch[3].trim(),
+        body: draftMatch[4].trim(),
+        wordCount: parseInt(draftMatch[5]),
+        hook: draftMatch[6].trim(),
+      });
+    }
+  }
+
+  // ─── Parse Renewables Section ───
+  if (part2Start !== -1) {
+    const renewSection = raw.substring(part2Start);
+
+    // Parse targets
+    const targetRegex = /Target \d+:\s*(.+?)\s*\|\s*Sector:\s*(.+?)\s*\|\s*Activity:\s*([\s\S]*?)\s*\|\s*Opportunity:\s*(.+?)\s*\|\s*Why Relevant:\s*([\s\S]*?)(?=\nTarget \d+|\n\nDISTRESS|$)/g;
+    let targetMatch;
+    while ((targetMatch = targetRegex.exec(renewSection)) !== null) {
+      report.renewables.targets.push({
+        company: targetMatch[1].trim(),
+        sector: targetMatch[2].trim(),
+        activity: targetMatch[3].trim(),
+        opportunityType: targetMatch[4].trim(),
+        whyRelevant: targetMatch[5].trim(),
+      });
+    }
+
+    // Parse distress signals
+    const distressMatch = renewSection.match(/DISTRESS SIGNALS:\n([\s\S]*?)(?=\nGROWTH SIGNALS:|$)/);
+    if (distressMatch) {
+      report.renewables.distressSignals = distressMatch[1].split('\n')
+        .filter(l => l.trim().startsWith('\u2022'))
+        .map(l => l.replace(/^\u2022\s*/, '').trim());
+    }
+
+    // Parse growth signals
+    const growthMatch = renewSection.match(/GROWTH SIGNALS:\n([\s\S]*?)(?=\n\nTOP RENEWABLES|$)/);
+    if (growthMatch) {
+      report.renewables.growthSignals = growthMatch[1].split('\n')
+        .filter(l => l.trim().startsWith('\u2022'))
+        .map(l => l.replace(/^\u2022\s*/, '').trim());
+    }
+
+    // Parse renewables news
+    const renewNewsStart = renewSection.indexOf('TOP RENEWABLES NEWS');
+    const renewOutreachStart = renewSection.indexOf('RENEWABLES OUTREACH RECOMMENDATIONS');
+    if (renewNewsStart !== -1) {
+      const renewNewsEnd = renewOutreachStart !== -1 ? renewOutreachStart : renewSection.length;
+      const renewNewsSection = renewSection.substring(renewNewsStart, renewNewsEnd);
+
+      const newsRegex = /(\d+)\.\s+(.+?)(?:\n\s+Source:[^\n]*)?(?:\n\s+(\[.+?\]))\n([\s\S]*?)(?=\n\d+\.\s|\nRENEWABLES OUTREACH|$)/g;
+      let rnMatch;
+      while ((rnMatch = newsRegex.exec(renewNewsSection)) !== null) {
+        const headline = rnMatch[2].trim();
+        const tagsStr = rnMatch[3] || '';
+        const body = rnMatch[4].trim();
+        const tags = [];
+        const tagRx = /\[([^\]]+)\]/g;
+        let tM;
+        while ((tM = tagRx.exec(tagsStr)) !== null) tags.push(tM[1]);
+
+        const whyM = body.match(/Why it matters:\s*([\s\S]*?)(?=\n\s+Sangha opportunity:|$)/);
+        const sanghaM = body.match(/Sangha opportunity:\s*([\s\S]*?)(?=\n\s+Actionability:|$)/);
+        const actM = body.match(/Actionability:\s*([\s\S]*?)$/);
+
+        const srcMatch = headline.match(/\s*-\s*([^-]+)$/);
+        const source = srcMatch ? srcMatch[1].trim() : '';
+        const cleanHL = srcMatch ? headline.substring(0, headline.lastIndexOf(' - ')).trim() : headline;
+
+        report.renewables.newsItems.push({
+          number: parseInt(rnMatch[1]),
+          headline: cleanHL,
+          source,
+          tags,
+          whyItMatters: whyM ? whyM[1].trim() : '',
+          sanghaOpportunity: sanghaM ? sanghaM[1].trim() : '',
+          actionability: actM ? actM[1].trim() : '',
+        });
+      }
+    }
+
+    // Parse renewables outreach contacts
+    if (renewOutreachStart !== -1) {
+      const renewDraftStart = renewSection.indexOf('RENEWABLES DRAFT OUTREACH');
+      const renewContactEnd = renewDraftStart !== -1 ? renewDraftStart : renewSection.length;
+      const renewContactSection = renewSection.substring(renewOutreachStart, renewContactEnd);
+
+      const rcRegex = /(\d+)\.\s+(.+?)\n\s+Title:\s*(.+?)\s*\|\s*Company:\s*(.+?)\s*\|\s*Email:\s*(.+?)\n\s+Trigger:\s*(.+?)\s*\|\s*Last Contact:\s*(.+?)\n\s+WHY REACH OUT NOW:\s*([\s\S]*?)(?:\n\s+SALES ANGLE:\s*([\s\S]*?))?(?=\n\n\d+\.\s|\nRENEWABLES DRAFT|$)/g;
+      let rcMatch;
+      while ((rcMatch = rcRegex.exec(renewContactSection)) !== null) {
+        report.renewables.outreachContacts.push({
+          name: rcMatch[2].trim(),
+          title: rcMatch[3].trim(),
+          company: rcMatch[4].trim(),
+          email: rcMatch[5].trim(),
+          trigger: rcMatch[6].trim(),
+          lastContact: rcMatch[7].trim(),
+          whyReachOut: rcMatch[8].trim(),
+          salesAngle: rcMatch[9] ? rcMatch[9].trim() : '',
+        });
+      }
+    }
+
+    // Parse renewables draft messages
+    const renewDraftStart = renewSection.indexOf('RENEWABLES DRAFT OUTREACH');
+    const nextStepsStart = renewSection.indexOf('NEXT STEPS');
+    if (renewDraftStart !== -1) {
+      const rdEnd = nextStepsStart !== -1 ? nextStepsStart : renewSection.length;
+      const rdSection = renewSection.substring(renewDraftStart, rdEnd);
+
+      const rdRegex = /Draft \d+:\s*(.+?)\s*\((.+?)\)\nSubject:\s*(.+?)\nBody:\s*([\s\S]*?)\nWords:\s*(\d+)\s*\|\s*Hook:\s*(.+?)(?=\n\nDraft \d+|\n\nNEXT STEPS|$)/g;
+      let rdMatch;
+      while ((rdMatch = rdRegex.exec(rdSection)) !== null) {
+        report.renewables.draftMessages.push({
+          contactName: rdMatch[1].trim(),
+          company: rdMatch[2].trim(),
+          subject: rdMatch[3].trim(),
+          body: rdMatch[4].trim(),
+          wordCount: parseInt(rdMatch[5]),
+          hook: rdMatch[6].trim(),
+        });
+      }
+    }
+
+    // Parse next steps
+    if (nextStepsStart !== -1) {
+      const nsSection = renewSection.substring(nextStepsStart);
+      const stepLines = nsSection.split('\n').filter(l => l.trim().startsWith('-'));
+      report.renewables.nextSteps = stepLines.map(l => l.replace(/^-\s*/, '').trim());
+
+      const mktMatch = nsSection.match(/Market Signal Check:\s*([\s\S]*?)(?=\nCompetitive Posture:|$)/);
+      if (mktMatch) report.renewables.marketSignal = mktMatch[1].trim();
+
+      const cpMatch = nsSection.match(/Competitive Posture:\s*([\s\S]*?)$/);
+      if (cpMatch) report.renewables.competitivePosture = cpMatch[1].trim();
     }
   }
 
@@ -731,12 +1199,16 @@ function ReportViewerModal({ file, onClose }) {
     if (!report) return [];
     const moves = report.competitorSnapshot.keyMoves.length;
     const news = report.newsItems.length;
-    const themes = report.competitorSnapshot.themes.length;
-    return [
+    const outreach = report.outreach.contacts.length;
+    const renewTargets = report.renewables.targets.length;
+    const stats = [
       { value: moves, label: 'Competitor Moves' },
       { value: news, label: 'News Items' },
-      { value: themes, label: 'Trending Themes' },
     ];
+    if (outreach > 0) stats.push({ value: outreach, label: 'Outreach Contacts' });
+    if (renewTargets > 0) stats.push({ value: renewTargets, label: 'Renewables Targets' });
+    if (stats.length < 3) stats.push({ value: report.competitorSnapshot.themes.length, label: 'Trending Themes' });
+    return stats;
   };
 
   if (!report) {
@@ -1043,6 +1515,364 @@ function ReportViewerModal({ file, onClose }) {
                 })}
               </div>
             </section>
+          )}
+
+          {/* ─── Recommended Outreach ─── */}
+          {report.outreach.contacts.length > 0 && (
+            <>
+              <div style={{ height: '1px', background: '#e8e8e3' }} />
+              <section>
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#edf7f0' }}>
+                    <Mail size={14} style={{ color: '#1a6b3c' }} />
+                  </div>
+                  <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '18px', fontWeight: 400, color: '#1a1a1a', margin: 0 }}>
+                    Recommended Outreach
+                  </h3>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: '#999', marginLeft: '4px' }}>
+                    {report.outreach.contacts.length}
+                  </span>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {[
+                    { value: report.outreach.stats.total, label: 'Total Contacts' },
+                    { value: report.outreach.stats.highPriority, label: 'High Priority' },
+                    { value: report.outreach.stats.competitorTriggered, label: 'Competitor-Triggered' },
+                    { value: report.outreach.stats.reEngagements, label: 'Re-Engagements' },
+                  ].map((s, i) => (
+                    <div key={i} className="text-center py-3 rounded-lg" style={{ background: '#fff', border: '1px solid #e8e8e3' }}>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: '20px', fontWeight: 500, color: '#1a2e1a' }}>{s.value}</div>
+                      <div style={{ fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#999', marginTop: '2px' }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Contact Cards */}
+                <div className="space-y-3">
+                  {report.outreach.contacts.map((contact, i) => (
+                    <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e8e8e3' }}>
+                      <div className="px-5 py-4">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div>
+                            <span style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a' }}>{i + 1}. {contact.name}</span>
+                            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{contact.title} at {contact.company}</div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '20px', background: contact.trigger.includes('News') ? '#e8eef5' : contact.trigger.includes('Competitor') ? '#fdf6e8' : '#f3eef8', color: contact.trigger.includes('News') ? '#2c5282' : contact.trigger.includes('Competitor') ? '#b8860b' : '#5b3a8c' }}>
+                              {contact.trigger}
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#999' }}>{contact.lastContact}</span>
+                          </div>
+                        </div>
+                        <div style={{ padding: '10px 14px', background: '#f8faff', borderRadius: '8px', borderLeft: '3px solid #2c5282', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#2c5282' }}>Why Reach Out Now</span>
+                          <p style={{ fontSize: '12px', color: '#444', lineHeight: 1.6, marginTop: '4px' }}>{contact.whyReachOut}</p>
+                        </div>
+                        {contact.valueProp && (
+                          <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: '8px', borderLeft: '3px solid #1a6b3c' }}>
+                            <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#1a6b3c' }}>Sangha Value Prop</span>
+                            <p style={{ fontSize: '12px', color: '#444', lineHeight: 1.6, marginTop: '4px' }}>{contact.valueProp}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* ─── Draft Outreach Messages ─── */}
+          {report.outreach.draftMessages.length > 0 && (
+            <>
+              <div style={{ height: '1px', background: '#e8e8e3' }} />
+              <section>
+                <div className="flex items-center gap-2.5 mb-4">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#e8eef5' }}>
+                    <Send size={14} style={{ color: '#2c5282' }} />
+                  </div>
+                  <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '18px', fontWeight: 400, color: '#1a1a1a', margin: 0 }}>
+                    Draft Outreach Messages
+                  </h3>
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: '#999', marginLeft: '4px' }}>
+                    {report.outreach.draftMessages.length}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {report.outreach.draftMessages.map((msg, i) => (
+                    <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e8e8e3' }}>
+                      <div className="px-5 py-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span style={{ fontSize: '13px', fontWeight: 600, color: '#1a1a1a' }}>{msg.contactName}</span>
+                          <span style={{ fontSize: '11px', color: '#999' }}>{msg.company}</span>
+                        </div>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#2c5282', marginBottom: '8px' }}>Subject: {msg.subject}</div>
+                        <div style={{ padding: '12px', background: '#f9faf8', borderRadius: '8px', fontSize: '12.5px', color: '#444', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                          {msg.body}
+                        </div>
+                        <div className="flex items-center gap-3 mt-3" style={{ fontSize: '10px', color: '#999' }}>
+                          <span>{msg.wordCount} words</span>
+                          <span>Hook: {msg.hook}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* ─── Part 2: Renewables Market Dynamics ─── */}
+          {(report.renewables.targets.length > 0 || report.renewables.newsItems.length > 0) && (
+            <>
+              <div style={{ height: '3px', background: 'linear-gradient(90deg, #22c55e, #16a34a)', borderRadius: '2px', marginTop: '8px' }} />
+              <section>
+                <div className="flex items-center gap-2.5 mb-1">
+                  <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '22px', fontWeight: 400, color: '#166534', margin: 0 }}>
+                    Part 2: Renewables Market Dynamics
+                  </h3>
+                </div>
+                <p style={{ fontSize: '12px', color: '#16a34a', fontStyle: 'italic', marginBottom: '20px' }}>Potential Customers — Solar, Wind, Battery, Hydro IPPs</p>
+
+                {/* Customer/Target Snapshot Table */}
+                {report.renewables.targets.length > 0 && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px', color: '#999', display: 'block', marginBottom: '10px' }}>
+                      Customer / Target Snapshot
+                    </span>
+                    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #e8e8e3' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ background: '#f9faf8' }}>
+                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e8e8e3', fontSize: '11px' }}>Company</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e8e8e3', fontSize: '11px' }}>Sector</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e8e8e3', fontSize: '11px' }}>Recent Activity</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #e8e8e3', fontSize: '11px' }}>Type</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {report.renewables.targets.map((t, i) => (
+                            <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf8' }}>
+                              <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1a1a1a', borderBottom: '1px solid #f0eeea' }}>{t.company}</td>
+                              <td style={{ padding: '10px 14px', borderBottom: '1px solid #f0eeea' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '20px', background: '#edf7f0', color: '#1a6b3c' }}>{t.sector}</span>
+                              </td>
+                              <td style={{ padding: '10px 14px', color: '#444', lineHeight: 1.5, borderBottom: '1px solid #f0eeea' }}>{t.activity}</td>
+                              <td style={{ padding: '10px 14px', borderBottom: '1px solid #f0eeea' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '20px', background: t.opportunityType === 'distress' ? '#fdedf0' : '#edf7f0', color: t.opportunityType === 'distress' ? '#dc3545' : '#1a6b3c' }}>{t.opportunityType}</span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Distress Signals */}
+                {report.renewables.distressSignals.length > 0 && (
+                  <div style={{ padding: '14px 16px', background: '#fef2f2', borderRadius: '10px', borderLeft: '4px solid #dc3545', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#dc3545', display: 'block', marginBottom: '8px' }}>Distress Signals (Best Opportunities)</span>
+                    <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                      {report.renewables.distressSignals.map((s, i) => (
+                        <li key={i} style={{ fontSize: '12px', color: '#991b1b', lineHeight: 1.6, marginBottom: '4px' }}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Growth Signals */}
+                {report.renewables.growthSignals.length > 0 && (
+                  <div style={{ padding: '14px 16px', background: '#f0fdf4', borderRadius: '10px', borderLeft: '4px solid #22c55e', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#166534', display: 'block', marginBottom: '8px' }}>Growth Signals</span>
+                    <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                      {report.renewables.growthSignals.map((s, i) => (
+                        <li key={i} style={{ fontSize: '12px', color: '#166534', lineHeight: 1.6, marginBottom: '4px' }}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Renewables News */}
+                {report.renewables.newsItems.length > 0 && (
+                  <>
+                    <div style={{ height: '1px', background: '#e8e8e3', margin: '8px 0 16px' }} />
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#edf7f0' }}>
+                        <FileText size={14} style={{ color: '#16a34a' }} />
+                      </div>
+                      <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '18px', fontWeight: 400, color: '#1a1a1a', margin: 0 }}>
+                        Top Renewables News
+                      </h3>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: '#999', marginLeft: '4px' }}>
+                        {report.renewables.newsItems.length}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {report.renewables.newsItems.map((item, i) => (
+                        <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e8e8e3' }}>
+                          <div style={{ height: '3px', background: '#22c55e' }} />
+                          <div className="px-5 py-3.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ fontFamily: "'DM Mono', monospace", fontSize: '12px', fontWeight: 500, background: '#edf7f0', color: '#16a34a' }}>
+                                  {item.number}
+                                </span>
+                                <div className="min-w-0">
+                                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a', lineHeight: 1.4, margin: 0 }}>{item.headline}</h4>
+                                  {item.source && <span style={{ fontSize: '11px', color: '#999', display: 'block', marginTop: '2px' }}>{item.source}</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                                {item.tags.map((tag, j) => <TagBadge key={j} tag={tag} />)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="px-5 pb-4 space-y-3" style={{ borderTop: '1px solid #f0eeea' }}>
+                            <div style={{ paddingTop: '12px' }} />
+                            {item.whyItMatters && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <AlertTriangle size={10} style={{ color: '#b8860b' }} />
+                                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#b8860b' }}>Why it matters</span>
+                                </div>
+                                <p style={{ fontSize: '12.5px', color: '#444', lineHeight: 1.6, paddingLeft: '18px' }}>{item.whyItMatters}</p>
+                              </div>
+                            )}
+                            {item.sanghaOpportunity && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Target size={10} style={{ color: '#16a34a' }} />
+                                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#16a34a' }}>Sangha opportunity</span>
+                                </div>
+                                <p style={{ fontSize: '12.5px', color: '#444', lineHeight: 1.6, paddingLeft: '18px' }}>{item.sanghaOpportunity}</p>
+                              </div>
+                            )}
+                            {item.actionability && (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Zap size={10} style={{ color: '#2c5282' }} />
+                                  <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#2c5282' }}>Actionability</span>
+                                </div>
+                                <p style={{ fontSize: '12.5px', color: '#444', lineHeight: 1.6, paddingLeft: '18px' }}>{item.actionability}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Renewables Outreach Contacts */}
+                {report.renewables.outreachContacts.length > 0 && (
+                  <>
+                    <div style={{ height: '1px', background: '#e8e8e3', margin: '16px 0' }} />
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#edf7f0' }}>
+                        <Mail size={14} style={{ color: '#16a34a' }} />
+                      </div>
+                      <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '18px', fontWeight: 400, color: '#1a1a1a', margin: 0 }}>
+                        Renewables Outreach
+                      </h3>
+                    </div>
+                    <div className="space-y-3">
+                      {report.renewables.outreachContacts.map((contact, i) => (
+                        <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e8e8e3', borderLeft: '3px solid #22c55e' }}>
+                          <div className="px-5 py-4">
+                            <div className="flex items-start justify-between gap-3 mb-3">
+                              <div>
+                                <span style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a' }}>{i + 1}. {contact.name}</span>
+                                <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{contact.title} at {contact.company}</div>
+                              </div>
+                              <span style={{ fontSize: '10px', color: '#999' }}>{contact.lastContact}</span>
+                            </div>
+                            <div style={{ padding: '10px 14px', background: '#f8faff', borderRadius: '8px', borderLeft: '3px solid #16a34a', marginBottom: '8px' }}>
+                              <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#166534' }}>Why Reach Out Now</span>
+                              <p style={{ fontSize: '12px', color: '#444', lineHeight: 1.6, marginTop: '4px' }}>{contact.whyReachOut}</p>
+                            </div>
+                            {contact.salesAngle && (
+                              <div style={{ padding: '10px 14px', background: '#f0fdf4', borderRadius: '8px', borderLeft: '3px solid #22c55e' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: '#166534' }}>Sales Angle</span>
+                                <p style={{ fontSize: '12px', color: '#444', lineHeight: 1.6, marginTop: '4px' }}>{contact.salesAngle}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Renewables Draft Messages */}
+                {report.renewables.draftMessages.length > 0 && (
+                  <>
+                    <div style={{ height: '1px', background: '#e8e8e3', margin: '16px 0' }} />
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: '#edf7f0' }}>
+                        <Send size={14} style={{ color: '#16a34a' }} />
+                      </div>
+                      <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '18px', fontWeight: 400, color: '#1a1a1a', margin: 0 }}>
+                        Renewables Draft Messages
+                      </h3>
+                    </div>
+                    <div className="space-y-3">
+                      {report.renewables.draftMessages.map((msg, i) => (
+                        <div key={i} className="rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e8e8e3', borderLeft: '3px solid #22c55e' }}>
+                          <div className="px-5 py-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: '#1a1a1a' }}>{msg.contactName}</span>
+                              <span style={{ fontSize: '11px', color: '#999' }}>{msg.company}</span>
+                            </div>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: '#166534', marginBottom: '8px' }}>Subject: {msg.subject}</div>
+                            <div style={{ padding: '12px', background: '#f9faf8', borderRadius: '8px', fontSize: '12.5px', color: '#444', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                              {msg.body}
+                            </div>
+                            <div className="flex items-center gap-3 mt-3" style={{ fontSize: '10px', color: '#999' }}>
+                              <span>{msg.wordCount} words</span>
+                              <span>Hook: {msg.hook}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Next Steps */}
+                {report.renewables.nextSteps.length > 0 && (
+                  <>
+                    <div style={{ height: '1px', background: '#e8e8e3', margin: '16px 0' }} />
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <h3 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '16px', fontWeight: 400, color: '#1a1a1a', margin: 0 }}>
+                        Next Steps
+                      </h3>
+                    </div>
+                    <div className="rounded-xl" style={{ background: '#fff', border: '1px solid #e8e8e3', padding: '16px 20px' }}>
+                      <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                        {report.renewables.nextSteps.map((step, i) => (
+                          <li key={i} style={{ fontSize: '12.5px', color: '#444', lineHeight: 1.6, marginBottom: '6px' }}>{step}</li>
+                        ))}
+                      </ul>
+                      {report.renewables.marketSignal && (
+                        <div style={{ marginTop: '14px', padding: '12px', background: '#eff6ff', borderRadius: '8px' }}>
+                          <p style={{ fontSize: '12px', color: '#1e40af', lineHeight: 1.6, margin: 0 }}>
+                            <strong>Market Signal:</strong> {report.renewables.marketSignal}
+                          </p>
+                          {report.renewables.competitivePosture && (
+                            <p style={{ fontSize: '12px', color: '#1e40af', lineHeight: 1.6, margin: '6px 0 0' }}>
+                              <strong>Competitive Posture:</strong> {report.renewables.competitivePosture}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </section>
+            </>
           )}
         </div>
 

@@ -7,6 +7,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import dns from 'dns';
+import db from '../cache/database.js';
 import {
   getLeads,
   getLead,
@@ -20,6 +21,7 @@ import {
   getLeadDiscoveryConfig,
   upsertLeadDiscoveryConfig,
   getLeadStats,
+  insertActivity,
 } from '../cache/database.js';
 
 // ─── API Clients ────────────────────────────────────────────────────────────
@@ -166,8 +168,14 @@ function isJunkEmail(email) {
 function isUsRegion(region) {
   if (!region) return true; // default to included
   const lower = region.toLowerCase();
-  const usKeywords = ['ercot', 'pjm', 'miso', 'spp', 'caiso', 'nyiso', 'isone', 'texas', 'california', 'new york', 'houston', 'austin', 'dallas', 'san antonio'];
-  return usKeywords.some(kw => lower.includes(kw));
+  const intlBlocklist = ['uk', 'united kingdom', 'london', 'germany', 'france', 'japan', 'china', 'india', 'brazil', 'australia', 'canada', 'mexico', 'singapore', 'hong kong', 'dubai', 'uae'];
+  if (intlBlocklist.some(kw => lower.includes(kw))) return false;
+  const usStates = ['al','ak','az','ar','ca','co','ct','de','fl','ga','hi','id','il','in','ia','ks','ky','la','me','md','ma','mi','mn','ms','mo','mt','ne','nv','nh','nj','nm','ny','nc','nd','oh','ok','or','pa','ri','sc','sd','tn','tx','ut','vt','va','wa','wv','wi','wy'];
+  const usKeywords = ['usa', 'united states', 'ercot', 'pjm', 'miso', 'spp', 'caiso', 'nyiso', 'isone', 'texas', 'california', 'new york', 'florida', 'miami', 'houston', 'austin', 'dallas', 'san antonio', 'fort lauderdale', 'orlando', 'tampa', 'atlanta', 'chicago', 'los angeles', 'san francisco', 'seattle', 'denver', 'phoenix', 'boston', 'philadelphia', 'washington', 'dc', 'nashville', 'charlotte', 'las vegas'];
+  if (usKeywords.some(kw => lower.includes(kw))) return true;
+  // Check for state abbreviation patterns like "Miami, FL" or "TX"
+  const parts = lower.split(/[,\s]+/);
+  return parts.some(p => usStates.includes(p.replace(/[^a-z]/g, '')));
 }
 
 // ─── Core Pipeline Functions ────────────────────────────────────────────────
@@ -234,6 +242,16 @@ export async function discoverLeads(tenantId) {
   // Advance position
   const newPos = (pos + perCycle) % queries.length;
   upsertLeadDiscoveryConfig({ ...config, tenantId, currentPosition: newPos, queries: config.queries, regions: config.regions });
+
+  if (totalNew > 0) {
+    insertActivity({
+      tenantId, type: 'lead',
+      title: `${totalNew} new leads discovered`,
+      subtitle: selectedQueries.slice(0, 2).join(', '),
+      detailJson: JSON.stringify({ queriesRun: selectedQueries, newLeads: totalNew }),
+      sourceType: 'lead_engine', agentId: 'lead-engine',
+    });
+  }
 
   return { newLeads: totalNew, queriesRun: selectedQueries.length };
 }
@@ -331,6 +349,33 @@ Sign off as: ${senderName}`;
         body,
         status,
       });
+
+      insertActivity({
+        tenantId, type: 'out',
+        title: `Outreach drafted for ${contact.name || 'contact'} at ${lead.venue_name}`,
+        subtitle: `Subject: ${subject.trim()}`,
+        detailJson: JSON.stringify({ to: contact.email, subject: subject.trim(), body, leadId: lead.id }),
+        sourceType: 'email', sourceId: outreachId, agentId: 'lead-engine',
+      });
+
+      // Insert into approval queue so operator can approve/reject before sending
+      try {
+        db.prepare(`INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json) VALUES (?, 'outreach', ?, ?, 'email_draft', ?)`)
+          .run(
+            tenantId,
+            `Outreach draft: ${contact.name || 'contact'} — ${lead.venue_name}`,
+            `Subject: ${subject.trim()}`,
+            JSON.stringify({
+              to: contact.email,
+              demo_to: 'teo@zhan.capital',
+              subject: subject.trim(),
+              body,
+              outreach_id: outreachId,
+            }),
+          );
+      } catch (approvalErr) {
+        console.error('Failed to insert approval item:', approvalErr.message);
+      }
 
       updateLead(tenantId, lead.id, { status: 'contacted', contactedAt: new Date().toISOString() });
       generated++;

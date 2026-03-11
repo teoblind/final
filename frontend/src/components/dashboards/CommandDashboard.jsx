@@ -374,6 +374,7 @@ export default function CommandDashboard({ onNavigate }) {
   const [expandedId, setExpandedId] = useState(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [insightModal, setInsightModal] = useState(null);
+  const [threadModal, setThreadModal] = useState(null); // { thread, messages, loading }
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -467,8 +468,10 @@ export default function CommandDashboard({ onNavigate }) {
           }
         } catch {}
 
-        setInsights(mapped);
-      } catch {}
+        setInsights(mapped.length > 0 ? mapped : AGENT_INSIGHTS);
+      } catch {
+        setInsights(AGENT_INSIGHTS);
+      }
     }
     fetchApprovals();
     fetchInsights();
@@ -583,10 +586,26 @@ export default function CommandDashboard({ onNavigate }) {
       showToast('Marked as done');
     } else if (action === 'View Thread') {
       const insight = insights.find(i => i.id === insightId);
-      if (insight?._threadId) {
-        localStorage.setItem('open_thread_id', insight._threadId);
-        const targetTab = `${insight._agentId || 'hivemind'}-chat`;
-        onNavigate?.(targetTab);
+      if (insight?._threadId && insight?._agentId) {
+        // Open thread modal for real threads
+        setThreadModal({ threadId: insight._threadId, agentId: insight._agentId, title: insight.title, agentLabel: insight.agentLabel, type: insight.type, time: insight.time, messages: [], loading: true });
+        try {
+          const token = localStorage.getItem('auth_token');
+          const res = await fetch(`${API_BASE}/v1/chat/${insight._agentId}/threads/${insight._threadId}/messages`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setThreadModal(prev => prev ? { ...prev, messages: data.messages || [], loading: false, thread: data.thread } : null);
+          } else {
+            setThreadModal(prev => prev ? { ...prev, loading: false } : null);
+          }
+        } catch {
+          setThreadModal(prev => prev ? { ...prev, loading: false } : null);
+        }
+      } else if (insight) {
+        // Fallback: open detail modal for demo/hardcoded insights
+        setInsightModal({ ...insight, triggeredAction: action });
       }
     } else {
       const insight = insights.find(i => i.id === insightId);
@@ -615,8 +634,111 @@ export default function CommandDashboard({ onNavigate }) {
         ))}
       </div>
 
-      {/* Approval Queue + Agent Insights */}
+      {/* Metrics Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
+        {METRICS.map((m, i) => (
+          <div key={m.label} className="bg-terminal-panel p-[18px_20px] relative">
+            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
+            <div className="text-2xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
+            <div className={`text-[11px] font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
+            <div className="absolute bottom-0 left-5 right-5 h-[3px] rounded-[3px] bg-[#f0eeea] overflow-hidden">
+              <div
+                className="h-full rounded-[3px] transition-all duration-1000"
+                style={{ width: `${m.bar}%`, background: m.barColor || 'var(--t-accent)' }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Row 1: Team Action Items + Approval Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
+        {/* Team Action Items */}
+        {(() => {
+          const openCount = actionItems.filter(a => a.status !== 'completed').length;
+          const ASSIGNEE_META = {
+            Spencer: { full: 'Spencer Marr', role: 'President', color: '#1a6b3c' },
+            Mihir: { full: 'Mihir Bhangley', role: 'Finance', color: '#5b3a8c' },
+            Colin: { full: 'Colin Peirce', role: 'Fundraising', color: '#2c5282' },
+          };
+          const grouped = {};
+          const order = [];
+          for (const item of actionItems) {
+            const key = item.assignee || 'Unassigned';
+            if (!grouped[key]) { grouped[key] = []; order.push(key); }
+            grouped[key].push(item);
+          }
+          const getDuePillClass = (dueDate) => {
+            if (!dueDate) return 'text-terminal-muted bg-[#f5f4f0]';
+            const today = new Date(); today.setHours(0,0,0,0);
+            const due = new Date(dueDate + 'T00:00:00'); due.setHours(0,0,0,0);
+            const diff = (due - today) / 86400000;
+            if (diff < 0) return 'text-terminal-red bg-[#fdedf0] font-semibold';
+            if (diff === 0) return 'text-[#b8860b] bg-[#fdf6e8] font-semibold';
+            return 'text-terminal-muted bg-[#f5f4f0]';
+          };
+          const formatDue = (dueDate) => {
+            if (!dueDate) return '';
+            const d = new Date(dueDate + 'T00:00:00');
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          };
+          return (
+            <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+              <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Team Action Items</span>
+                  <span className="text-[10px] font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{openCount}</span>
+                </div>
+                <span className="text-[11px] text-terminal-muted">From leadership sync</span>
+              </div>
+              <div className="px-[18px] py-2">
+                {order.map((assignee) => {
+                  const meta = ASSIGNEE_META[assignee] || { full: assignee, role: '', color: '#6b6b65' };
+                  return (
+                    <div key={assignee} className="mb-3 last:mb-1">
+                      <div className="flex items-center gap-2 mb-1.5 pt-1">
+                        <div className="w-[3px] h-4 rounded-full" style={{ background: meta.color }} />
+                        <span className="text-[12px] font-bold text-terminal-text">{meta.full}</span>
+                        {meta.role && <span className="text-[10px] text-terminal-muted">{meta.role}</span>}
+                      </div>
+                      {grouped[assignee].map((item) => {
+                        const done = item.status === 'completed';
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-3 py-[7px] pl-3 pr-1 rounded-lg hover:bg-[#f5f4f0] transition-colors cursor-pointer group"
+                            onClick={() => handleToggleActionItem(item.id)}
+                          >
+                            <div className={`w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-all ${
+                              done
+                                ? 'bg-[#1a6b3c] border-[#1a6b3c]'
+                                : 'border-[#d1d1cb] group-hover:border-[#a0a098]'
+                            }`}>
+                              {done && (
+                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                            <span className={`flex-1 text-[13px] leading-[1.4] transition-all ${
+                              done ? 'line-through text-[#c5c5bc]' : 'text-terminal-text'
+                            }`}>
+                              {item.title}
+                            </span>
+                            <span className={`text-[10px] px-2 py-[2px] rounded-md shrink-0 tabular-nums ${getDuePillClass(item.due_date)}`}>
+                              {formatDue(item.due_date)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Approval Queue */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
@@ -650,7 +772,10 @@ export default function CommandDashboard({ onNavigate }) {
             ))}
           </div>
         </div>
+      </div>
 
+      {/* Row 2: Agent Insights + HubSpot Pipeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
         {/* Agent Insights */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
@@ -691,114 +816,32 @@ export default function CommandDashboard({ onNavigate }) {
             })}
           </div>
         </div>
-      </div>
 
-      {/* Metrics Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
-        {METRICS.map((m, i) => (
-          <div key={m.label} className="bg-terminal-panel p-[18px_20px] relative">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
-            <div className="text-2xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
-            <div className={`text-[11px] font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
-            <div className="absolute bottom-0 left-5 right-5 h-[3px] rounded-[3px] bg-[#f0eeea] overflow-hidden">
-              <div
-                className="h-full rounded-[3px] transition-all duration-1000"
-                style={{ width: `${m.bar}%`, background: m.barColor || 'var(--t-accent)' }}
-              />
-            </div>
+        {/* HubSpot CRM Pipeline */}
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">HubSpot CRM</span>
+            <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-terminal-green" />
+              Live
+            </span>
           </div>
-        ))}
-      </div>
-
-      {/* Team Action Items */}
-      {actionItems.length > 0 && (() => {
-        const openCount = actionItems.filter(a => a.status !== 'completed').length;
-        const ASSIGNEE_META = {
-          Spencer: { full: 'Spencer Marr', role: 'President', color: '#1a6b3c' },
-          Mihir: { full: 'Mihir Bhangley', role: 'Finance', color: '#5b3a8c' },
-          Colin: { full: 'Colin Peirce', role: 'Fundraising', color: '#2c5282' },
-        };
-        const grouped = {};
-        const order = [];
-        for (const item of actionItems) {
-          const key = item.assignee || 'Unassigned';
-          if (!grouped[key]) { grouped[key] = []; order.push(key); }
-          grouped[key].push(item);
-        }
-        const getDuePillClass = (dueDate) => {
-          if (!dueDate) return 'text-terminal-muted bg-[#f5f4f0]';
-          const today = new Date(); today.setHours(0,0,0,0);
-          const due = new Date(dueDate + 'T00:00:00'); due.setHours(0,0,0,0);
-          const diff = (due - today) / 86400000;
-          if (diff < 0) return 'text-terminal-red bg-[#fdedf0] font-semibold';
-          if (diff === 0) return 'text-[#b8860b] bg-[#fdf6e8] font-semibold';
-          return 'text-terminal-muted bg-[#f5f4f0]';
-        };
-        const formatDue = (dueDate) => {
-          if (!dueDate) return '';
-          const d = new Date(dueDate + 'T00:00:00');
-          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        };
-        return (
-          <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
-            <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Team Action Items</span>
-                <span className="text-[10px] font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{openCount}</span>
+          <div>
+            {(hubspotPipeline || HUBSPOT_DEMO_PIPELINE).map((row, i) => (
+              <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
+                <span className="text-[#6b6b65]">{row.stage}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-terminal-muted tabular-nums">{row.value}</span>
+                  <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
+                </div>
               </div>
-              <span className="text-[11px] text-terminal-muted">From leadership sync</span>
-            </div>
-            <div className="px-[18px] py-2">
-              {order.map((assignee) => {
-                const meta = ASSIGNEE_META[assignee] || { full: assignee, role: '', color: '#6b6b65' };
-                return (
-                  <div key={assignee} className="mb-3 last:mb-1">
-                    <div className="flex items-center gap-2 mb-1.5 pt-1">
-                      <div className="w-[3px] h-4 rounded-full" style={{ background: meta.color }} />
-                      <span className="text-[12px] font-bold text-terminal-text">{meta.full}</span>
-                      {meta.role && <span className="text-[10px] text-terminal-muted">{meta.role}</span>}
-                    </div>
-                    {grouped[assignee].map((item) => {
-                      const done = item.status === 'completed';
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex items-center gap-3 py-[7px] pl-3 pr-1 rounded-lg hover:bg-[#f5f4f0] transition-colors cursor-pointer group"
-                          onClick={() => handleToggleActionItem(item.id)}
-                        >
-                          <div className={`w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-all ${
-                            done
-                              ? 'bg-[#1a6b3c] border-[#1a6b3c]'
-                              : 'border-[#d1d1cb] group-hover:border-[#a0a098]'
-                          }`}>
-                            {done && (
-                              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            )}
-                          </div>
-                          <span className={`flex-1 text-[13px] leading-[1.4] transition-all ${
-                            done ? 'line-through text-[#c5c5bc]' : 'text-terminal-text'
-                          }`}>
-                            {item.title}
-                          </span>
-                          <span className={`text-[10px] px-2 py-[2px] rounded-md shrink-0 tabular-nums ${getDuePillClass(item.due_date)}`}>
-                            {formatDue(item.due_date)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
+            ))}
           </div>
-        );
-      })()}
+        </div>
+      </div>
 
-      {/* Two-column: Activity + Agents */}
-      <div className="grid grid-cols-1 lg:grid-cols-[5fr_3fr] gap-4 mb-4">
-        {/* Activity Feed */}
+      {/* Row 3: Activity Feed (full width) */}
+      <div className="mb-4">
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
@@ -839,30 +882,9 @@ export default function CommandDashboard({ onNavigate }) {
             ))}
           </div>
         </div>
-
-        {/* Agents Table */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agents</span>
-            <span className="text-[11px] text-terminal-muted">{AGENTS.filter(a => a.status === 'on').length} of {AGENTS.length} active</span>
-          </div>
-          <div>
-            {AGENTS.map((agent, i) => (
-              <div key={i} onClick={() => onNavigate?.(agent.tabId)} className="flex items-center gap-3 px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] cursor-pointer transition-colors">
-                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_STYLES[agent.status]}`} />
-                <div className="text-[13px] font-medium text-terminal-text flex-1">{agent.name}</div>
-                <span className={`text-[10px] font-semibold px-2.5 py-[3px] rounded-md uppercase tracking-[0.3px] ${MODE_STYLES[agent.mode]}`}>
-                  {agent.mode}
-                </span>
-                <span className="text-xs text-[#6b6b65] font-medium min-w-[56px] text-right tabular-nums">{agent.stat}</span>
-                <span className="text-[#c5c5bc] text-sm">&rsaquo;</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
-      {/* Three-column: Pipeline + Follow-Ups + This Week */}
+      {/* Pipeline + Follow-Ups + Agents */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* Pipeline */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
@@ -902,23 +924,22 @@ export default function CommandDashboard({ onNavigate }) {
           </div>
         </div>
 
-        {/* HubSpot CRM Pipeline */}
+        {/* Agents Table */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">HubSpot CRM</span>
-            <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-terminal-green" />
-              Live
-            </span>
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agents</span>
+            <span className="text-[11px] text-terminal-muted">{AGENTS.filter(a => a.status === 'on').length} of {AGENTS.length} active</span>
           </div>
           <div>
-            {(hubspotPipeline || HUBSPOT_DEMO_PIPELINE).map((row, i) => (
-              <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
-                <span className="text-[#6b6b65]">{row.stage}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-terminal-muted tabular-nums">{row.value}</span>
-                  <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
-                </div>
+            {AGENTS.map((agent, i) => (
+              <div key={i} onClick={() => onNavigate?.(agent.tabId)} className="flex items-center gap-3 px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] cursor-pointer transition-colors">
+                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_STYLES[agent.status]}`} />
+                <div className="text-[13px] font-medium text-terminal-text flex-1">{agent.name}</div>
+                <span className={`text-[10px] font-semibold px-2.5 py-[3px] rounded-md uppercase tracking-[0.3px] ${MODE_STYLES[agent.mode]}`}>
+                  {agent.mode}
+                </span>
+                <span className="text-xs text-[#6b6b65] font-medium min-w-[56px] text-right tabular-nums">{agent.stat}</span>
+                <span className="text-[#c5c5bc] text-sm">&rsaquo;</span>
               </div>
             ))}
           </div>
@@ -1040,6 +1061,103 @@ export default function CommandDashboard({ onNavigate }) {
                   {INSIGHT_MODAL_CONTENT[insightModal.agent]?.cta || 'Got it'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thread Modal */}
+      {threadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }} onClick={() => setThreadModal(null)}>
+          <div
+            className="flex flex-col w-full max-w-[660px] mx-4 max-h-[calc(100vh-60px)] rounded-[14px] overflow-hidden"
+            style={{ background: '#141f19', border: '1px solid #1e3028', boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-[26px] pt-[22px] pb-[18px] flex items-start justify-between gap-4 shrink-0" style={{ borderBottom: '1px solid #1e3028' }}>
+              <div>
+                <div className="inline-flex items-center gap-1.5 mb-2.5 px-2 py-[3px] rounded text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ background: 'rgba(45,106,79,0.2)', border: '1px solid rgba(64,145,108,0.25)', color: '#74c69d', letterSpacing: '0.08em' }}>
+                  <span className="w-[5px] h-[5px] rounded-full" style={{ background: '#74c69d' }} />
+                  {threadModal.agentLabel} · {threadModal.type || 'Thread'}
+                </div>
+                <h2 className="text-[20px] leading-[1.25] mb-[3px]" style={{ fontFamily: "'Instrument Serif', Georgia, serif", color: '#e8f5ee' }}>{threadModal.title || 'Thread'}</h2>
+                <p className="text-[11px]" style={{ color: '#3d6b57' }}>{threadModal.agentLabel} · {threadModal.time} · {threadModal.messages.length} messages</p>
+              </div>
+              <button
+                onClick={() => setThreadModal(null)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 transition-colors"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #1e3028', color: '#52796f' }}
+                onMouseEnter={e => { e.target.style.background = 'rgba(255,255,255,0.08)'; e.target.style.color = '#d8f3dc'; }}
+                onMouseLeave={e => { e.target.style.background = 'rgba(255,255,255,0.04)'; e.target.style.color = '#52796f'; }}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-[26px] py-5 flex flex-col gap-4" style={{ scrollbarWidth: 'thin', scrollbarColor: '#1e3028 transparent' }}>
+              {threadModal.loading ? (
+                <div className="text-center py-10 text-[13px]" style={{ color: '#3d6b57' }}>Loading thread...</div>
+              ) : threadModal.messages.length === 0 ? (
+                <div className="text-center py-10 text-[13px]" style={{ color: '#3d6b57' }}>No messages in this thread</div>
+              ) : (
+                threadModal.messages.map((msg, i) => {
+                  const isAgent = msg.role === 'assistant';
+                  return (
+                    <div key={msg.id || i} className={`flex gap-3 ${isAgent ? 'flex-row-reverse' : ''}`}>
+                      {/* Avatar */}
+                      <div
+                        className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0"
+                        style={isAgent
+                          ? { background: 'rgba(45,106,79,0.3)', color: '#d8f3dc', border: '1px solid rgba(64,145,108,0.3)', fontSize: '9px' }
+                          : { background: '#1e3028', color: '#74c69d', border: '1px solid #2d4a3e' }
+                        }
+                      >
+                        {isAgent ? 'AI' : (msg.userId || 'U').slice(0, 2).toUpperCase()}
+                      </div>
+                      {/* Bubble */}
+                      <div className={`flex-1 max-w-[78%] ${isAgent ? 'flex flex-col items-end' : ''}`}>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.05em] mb-[5px]" style={{ color: isAgent ? '#52796f' : '#3d6b57', textAlign: isAgent ? 'right' : 'left' }}>
+                          {isAgent ? (threadModal.agentLabel || 'Agent') : 'User'}
+                        </div>
+                        <div
+                          className="px-[15px] py-[13px] text-[13px] leading-[1.6] whitespace-pre-wrap"
+                          style={isAgent
+                            ? { background: 'rgba(45,106,79,0.12)', border: '1px solid rgba(64,145,108,0.2)', borderRadius: '10px 10px 3px 10px', color: '#d8f3dc' }
+                            : { background: '#1a2b22', border: '1px solid #1e3028', borderRadius: '10px 10px 10px 3px', color: '#b7d5c4' }
+                          }
+                        >
+                          {msg.content}
+                        </div>
+                        <div className="text-[10px] mt-[5px]" style={{ color: '#2d4a3e', textAlign: isAgent ? 'right' : 'left' }}>
+                          {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer — open in chat */}
+            <div className="px-[26px] py-[14px] flex items-center justify-between shrink-0" style={{ borderTop: '1px solid #1e3028' }}>
+              <span className="text-[10px] tabular-nums" style={{ color: '#2d4a3e' }}>{threadModal.messages.length} messages</span>
+              <button
+                onClick={() => {
+                  localStorage.setItem('open_thread_id', threadModal.threadId);
+                  const targetTab = `${threadModal.agentId || 'hivemind'}-chat`;
+                  setThreadModal(null);
+                  onNavigate?.(targetTab);
+                }}
+                className="px-4 py-2 rounded-lg text-[12px] font-semibold flex items-center gap-1.5 transition-colors"
+                style={{ background: '#2d6a4f', border: '1px solid #40916c', color: '#d8f3dc' }}
+                onMouseEnter={e => e.target.style.background = '#40916c'}
+                onMouseLeave={e => e.target.style.background = '#2d6a4f'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Open in Chat
+              </button>
             </div>
           </div>
         </div>

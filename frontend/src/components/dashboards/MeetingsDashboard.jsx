@@ -48,20 +48,6 @@ const PEOPLE = [
   { initials: 'TB', name: 'Teo Blind', role: 'Quant Analyst', count: 12, color: 'bg-[#1a6b3c]' },
 ];
 
-const AGENT_CONFIG = [
-  { k: 'Mode', v: 'Autonomous', cls: 'accent' },
-  { k: 'Calendar Source', v: 'Google Calendar API', cls: 'sans' },
-  { k: 'Auto-Join', v: 'Enabled', cls: 'accent' },
-  { k: 'Transcription Engine', v: 'faster-whisper (local)', cls: 'sans' },
-  { k: 'Summary Model', v: 'Sonnet 4.6', cls: 'sans' },
-  { k: 'Action Item Extraction', v: 'Enabled', cls: 'accent' },
-  { k: 'Speaker Identification', v: 'Enabled', cls: 'accent' },
-  { k: 'Knowledge Base Sync', v: 'Auto', cls: 'accent' },
-  { k: 'Delivery', v: 'Telegram + Dashboard', cls: 'sans' },
-  { k: 'Avg Processing Time', v: '3 min 20 sec', cls: '' },
-  { k: 'Avg API Cost', v: '$0.05 / meeting', cls: 'green' },
-  { k: 'Storage Used', v: '1.2 GB', cls: '' },
-];
 
 const TRANSCRIPT_LINES = [
   { time: '02:34', speaker: 'Spencer', ext: false, text: 'We\'ve had a theory that it\'s actually possible instead of looking at the revenues of mining as infinitely volatile, there are ways of ', hl: 'bounding how you think about cash flows over time', after: '.' },
@@ -349,9 +335,8 @@ export default function MeetingsDashboard() {
         </Card>
       </div>
 
-      {/* People + Config */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* People */}
+      {/* People */}
+      <div className="grid grid-cols-1 gap-4 mb-6">
         <Card title="People Mentioned Across Meetings" meta="18 tracked">
           <div className="flex flex-wrap gap-2 p-[18px]">
             {PEOPLE.map(p => (
@@ -365,13 +350,6 @@ export default function MeetingsDashboard() {
               </div>
             ))}
           </div>
-        </Card>
-
-        {/* Agent Config */}
-        <Card title="Agent Configuration" meta="Meeting Bot">
-          {AGENT_CONFIG.map((item, i) => (
-            <KVRow key={i} label={item.k} value={item.v} cls={item.cls} />
-          ))}
         </Card>
       </div>
     </div>

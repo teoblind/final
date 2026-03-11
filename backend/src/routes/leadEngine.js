@@ -14,6 +14,9 @@ import {
   upsertLeadDiscoveryConfig,
   getLeadStats,
   getTenantFiles,
+  getAllContacts,
+  getOutreachReplies,
+  getFollowupQueue,
 } from '../cache/database.js';
 import {
   discoverLeads,
@@ -97,6 +100,50 @@ router.get('/outreach', (req, res) => {
     res.json({ outreach: log });
   } catch (error) {
     console.error('Get outreach log error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Contacts ──────────────────────────────────────────────────────────────
+
+router.get('/contacts', (req, res) => {
+  try {
+    const { search, limit, offset } = req.query;
+    const contacts = getAllContacts(req.user.tenantId, {
+      search: search || undefined,
+      limit: parseInt(limit) || 100,
+      offset: parseInt(offset) || 0,
+    });
+    res.json({ contacts });
+  } catch (error) {
+    console.error('Get contacts error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Replies ───────────────────────────────────────────────────────────────
+
+router.get('/replies', (req, res) => {
+  try {
+    const { limit } = req.query;
+    const replies = getOutreachReplies(req.user.tenantId, parseInt(limit) || 50);
+    res.json({ replies });
+  } catch (error) {
+    console.error('Get replies error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Follow-ups ────────────────────────────────────────────────────────────
+
+router.get('/followups', (req, res) => {
+  try {
+    const config = getLeadDiscoveryConfig(req.user.tenantId);
+    const delayDays = config?.followup_delay_days || 5;
+    const followups = getFollowupQueue(req.user.tenantId, delayDays);
+    res.json({ followups });
+  } catch (error) {
+    console.error('Get followups error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
