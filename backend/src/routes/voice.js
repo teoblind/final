@@ -12,6 +12,10 @@
  */
 
 import express from 'express';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { readFileSync, unlinkSync } from 'fs';
 import {
   textToSpeech,
   streamTextToSpeech,
@@ -23,11 +27,75 @@ import {
 
 const router = express.Router();
 
+const __filename_voice = fileURLToPath(import.meta.url);
+const __dirname_voice = dirname(__filename_voice);
+
+// Multer for audio file uploads (store in /tmp)
+const upload = multer({
+  dest: join(__dirname_voice, '../../data/audio/uploads/'),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB (Whisper limit)
+});
+
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || '';
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || '';
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || '';
 const ELEVENLABS_AGENT_ID = process.env.ELEVENLABS_AGENT_ID || '';
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3002';
+
+// ─── STT (Whisper) ──────────────────────────────────────────────────────────
+
+/**
+ * POST /transcribe — Transcribe audio to text via OpenAI Whisper
+ *
+ * Accepts multipart form data with an 'audio' file field.
+ * Returns { text, language, duration }.
+ */
+router.post('/transcribe', upload.single('audio'), async (req, res) => {
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'No audio file provided' });
+  }
+
+  try {
+    // Read the uploaded file and build FormData for Whisper API
+    const audioBuffer = readFileSync(req.file.path);
+    const blob = new Blob([audioBuffer], { type: req.file.mimetype || 'audio/m4a' });
+
+    const formData = new FormData();
+    formData.append('file', blob, req.file.originalname || 'recording.m4a');
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'verbose_json');
+
+    const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}` },
+      body: formData,
+    });
+
+    if (!whisperRes.ok) {
+      const errBody = await whisperRes.text();
+      throw new Error(`Whisper API ${whisperRes.status}: ${errBody}`);
+    }
+
+    const result = await whisperRes.json();
+
+    res.json({
+      text: result.text || '',
+      language: result.language || null,
+      duration: result.duration || null,
+    });
+  } catch (error) {
+    console.error('Transcribe error:', error.message);
+    res.status(500).json({ error: error.message });
+  } finally {
+    // Clean up uploaded file
+    try { unlinkSync(req.file.path); } catch {}
+  }
+});
 
 // ─── TTS Endpoints ──────────────────────────────────────────────────────────
 

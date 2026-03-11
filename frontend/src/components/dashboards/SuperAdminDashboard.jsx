@@ -90,9 +90,28 @@ function Sidebar({ activeTab, setActiveTab, user, logout }) {
 
 // ─── Main Export ─────────────────────────────────────────────────────────────
 
+// Hash routing helper
+function useHashRoute(defaultTab) {
+  const getTab = () => (window.location.hash.replace('#/', '') || defaultTab);
+  const [tab, setTabState] = useState(getTab);
+
+  useEffect(() => {
+    const onHash = () => setTabState(getTab());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const setTab = (id) => {
+    window.location.hash = `#/${id}`;
+    setTabState(id);
+  };
+
+  return [tab, setTab];
+}
+
 export default function SuperAdminDashboard() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useHashRoute('dashboard');
 
   useEffect(() => { document.title = 'Coppice Admin'; }, []);
 
@@ -101,8 +120,8 @@ export default function SuperAdminDashboard() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={user} logout={logout} />
       <main className="flex-1 overflow-y-auto">
         {activeTab === 'dashboard' && <DashboardPage />}
-        {activeTab === 'tenants' && <DashboardPage scrollTo="tenants" />}
-        {activeTab === 'users' && <DashboardPage scrollTo="users" />}
+        {activeTab === 'tenants' && <TenantsPage />}
+        {activeTab === 'users' && <UsersPage />}
         {activeTab === 'spend' && <ApiSpendPage />}
         {activeTab === 'logs' && <ApiLogsPage />}
         {activeTab === 'health' && <SystemHealthPage />}
@@ -380,6 +399,9 @@ function DashboardPage() {
         </div>
       )}
 
+      {/* Opus Report Usage */}
+      <OpusUsageCard />
+
       {/* Recent API Calls */}
       <Section title="Recent API Calls">
         {recentLogs.length > 0 ? (
@@ -402,6 +424,294 @@ function DashboardPage() {
           <EmptyCard>No recent API calls logged</EmptyCard>
         )}
       </Section>
+    </div>
+  );
+}
+
+// ─── Opus Usage Card ─────────────────────────────────────────────────────────
+
+function OpusUsageCard() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    api.get('/v1/admin/usage/opus').then(res => setData(res.data)).catch(() => {});
+  }, []);
+
+  if (!data) return null;
+
+  const totalMonthly = data.tenants.reduce((s, t) => s + t.monthlyCount, 0);
+  const opusCostPerReport = 0.50; // rough estimate per report
+
+  return (
+    <Section title="Opus Report Usage">
+      <div className="bg-white border border-[#e8e6e1] rounded-2xl p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-[#7c3aed]/10 flex items-center justify-center">
+            <FileText size={16} className="text-[#7c3aed]" />
+          </div>
+          <div>
+            <p className="text-[14px] font-bold text-[#111110]">Opus 4.6 Reports — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+            <p className="text-[11px] text-[#9a9a92]">{totalMonthly} reports generated · ~${(totalMonthly * opusCostPerReport).toFixed(2)} estimated spend</p>
+          </div>
+        </div>
+        {data.tenants.length > 0 ? (
+          <div className="space-y-2">
+            {data.tenants.map(t => (
+              <div key={t.tenantId} className="flex items-center justify-between py-2 px-3 bg-[#f9f9f7] rounded-lg">
+                <div>
+                  <span className="text-[12px] font-semibold text-[#111110]">{t.tenantName}</span>
+                  <span className="text-[10px] text-[#9a9a92] ml-2">Today: {t.dailyCount}/{t.limitPerDay}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[12px] font-mono font-bold text-[#7c3aed]">{t.monthlyCount}</span>
+                  <span className="text-[10px] text-[#9a9a92]">this month</span>
+                  <div className={`w-2 h-2 rounded-full ${t.dailyCount >= t.limitPerDay ? 'bg-[#c0392b]' : 'bg-[#1a6b3c]'}`} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[12px] text-[#c5c5bc] text-center py-3">No Opus reports generated this month</p>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+// ─── Tenants Page ────────────────────────────────────────────────────────────
+
+function TenantsPage() {
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/v1/admin/tenants');
+        setTenants(res.data?.tenants || res.data || []);
+      } catch (err) { console.error('Failed to load tenants:', err); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  if (loading) return <div className="flex items-center justify-center py-32"><div className="spinner w-10 h-10" /></div>;
+
+  return (
+    <div className="p-6 lg:px-8 lg:py-6 max-w-[1200px]">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#111110]">Tenants</h1>
+          <p className="text-[13px] text-[#9a9a92] mt-0.5">{tenants.length} organization{tenants.length !== 1 ? 's' : ''} on the platform</p>
+        </div>
+        <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#3b82f6] text-white hover:bg-[#2563eb]">+ Add Tenant</button>
+      </div>
+
+      {tenants.length === 0 ? (
+        <EmptyCard>No tenants found</EmptyCard>
+      ) : (
+        <div className="bg-white border border-[#e8e6e1] rounded-2xl overflow-hidden">
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr>
+                {['Tenant', 'Slug', 'Plan', 'Status', 'Users', 'Sites', 'Created'].map(h => (
+                  <th key={h} className="text-left px-4 py-3 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {tenants.filter(t => t.slug !== 'admin').map(t => {
+                const isDACP = (t.id || '').includes('dacp');
+                return (
+                  <tr key={t.id} className="hover:bg-[#f5f4f0] cursor-pointer">
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea]">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold text-white" style={{ background: isDACP ? '#1e3a5f' : '#1a6b3c' }}>
+                          {isDACP ? 'D' : 'S'}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-[13px] text-[#111110]">{t.name}</div>
+                          <div className="text-[10px] text-[#9a9a92] font-mono">{t.slug}.coppice.ai</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea] font-mono text-[11px] text-[#6b6b65]">{t.slug}</td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea]">
+                      <span className="text-[10px] font-bold py-[2px] px-2 rounded bg-[#fdf6e8] text-[#b8860b] uppercase">{t.plan || 'trial'}</span>
+                    </td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea]">
+                      <span className="flex items-center gap-1 text-[11px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#2dd478]" />
+                        <span className="text-[#6b6b65]">{t.status || 'active'}</span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea] font-mono text-[13px] font-bold">{t.userCount || 0}</td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea] font-mono text-[13px]">{t.siteCount || 0}</td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea] text-[11px] text-[#9a9a92]">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Users Page ──────────────────────────────────────────────────────────────
+
+function UsersPage() {
+  const [users, setUsers] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionMenu, setActionMenu] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [resetResult, setResetResult] = useState(null);
+  const [filterTenant, setFilterTenant] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const tenantRes = await api.get('/v1/admin/tenants');
+        const tenantList = tenantRes.data?.tenants || tenantRes.data || [];
+        setTenants(tenantList);
+
+        const allUsers = [];
+        for (const t of tenantList) {
+          try {
+            const uRes = await api.get(`/v1/admin/tenants/${t.id}/users`);
+            const uList = uRes.data?.users || [];
+            allUsers.push(...uList.map(u => ({ ...u, tenantName: t.name })));
+          } catch { /* skip */ }
+        }
+        setUsers(allUsers);
+      } catch (err) { console.error('Failed to load users:', err); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  const handleDeleteUser = async (userId) => {
+    try {
+      await api.delete(`/v1/admin/users/${userId}`);
+      setUsers(prev => prev.filter(u => u.id !== userId));
+      setConfirmDelete(null);
+    } catch (err) { alert(err.response?.data?.error || 'Failed to delete user'); }
+  };
+
+  const handleResetPassword = async (userId) => {
+    try {
+      const res = await api.post(`/v1/admin/users/${userId}/reset-password`);
+      setResetResult({ userId, password: res.data.temporaryPassword, email: res.data.message });
+      setActionMenu(null);
+      setTimeout(() => setResetResult(null), 15000);
+    } catch (err) { alert(err.response?.data?.error || 'Failed to reset password'); }
+  };
+
+  const filtered = filterTenant ? users.filter(u => u.tenant_id === filterTenant) : users;
+
+  if (loading) return <div className="flex items-center justify-center py-32"><div className="spinner w-10 h-10" /></div>;
+
+  return (
+    <div className="p-6 lg:px-8 lg:py-6 max-w-[1200px]">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-[22px] font-bold text-[#111110]">Users</h1>
+          <p className="text-[13px] text-[#9a9a92] mt-0.5">{users.length} user{users.length !== 1 ? 's' : ''} across {tenants.length} tenants</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={filterTenant} onChange={e => setFilterTenant(e.target.value)}
+            className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[11px] bg-white text-[#333] outline-none">
+            <option value="">All Tenants</option>
+            {tenants.filter(t => t.slug !== 'admin').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {resetResult && (
+        <div className="mb-3 bg-[#edf7f0] border border-[#c8e6c9] rounded-xl px-4 py-3 flex items-center justify-between">
+          <div>
+            <span className="text-[12px] font-semibold text-[#1a6b3c]">{resetResult.email}</span>
+            <span className="text-[12px] text-[#1a6b3c] ml-2">New password: <code className="bg-white px-1.5 py-0.5 rounded font-mono text-[11px] font-bold">{resetResult.password}</code></span>
+          </div>
+          <button onClick={() => setResetResult(null)} className="text-[#1a6b3c]/50 hover:text-[#1a6b3c] text-[11px]">Dismiss</button>
+        </div>
+      )}
+
+      <div className="bg-white border border-[#e8e6e1] rounded-2xl overflow-hidden">
+        <table className="w-full border-collapse text-[12px]">
+          <thead>
+            <tr>
+              {['User', 'Email', 'Tenant', 'Role', 'Status', 'Last Login', ''].map(h => (
+                <th key={h} className="text-left px-4 py-3 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} className="py-12 text-center text-[#c5c5bc] text-[14px]">No users found</td></tr>
+            ) : filtered.map(u => (
+              <tr key={u.id} className="hover:bg-[#f5f4f0]">
+                <td className="px-4 py-3 border-b border-[#f0eeea]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white" style={{ background: avatarColor(u.name || u.email) }}>
+                      {initials(u.name || u.email)}
+                    </div>
+                    <span className="font-semibold text-[13px] text-[#111110]">{u.name || '—'}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 border-b border-[#f0eeea] font-mono text-[11px] text-[#6b6b65]">{u.email}</td>
+                <td className="px-4 py-3 border-b border-[#f0eeea] text-[11px] text-[#9a9a92]">{u.tenantName || u.tenant_id}</td>
+                <td className="px-4 py-3 border-b border-[#f0eeea]"><RoleBadge role={u.role} /></td>
+                <td className="px-4 py-3 border-b border-[#f0eeea]">
+                  <span className={`text-[10px] font-bold py-[2px] px-2 rounded uppercase ${u.status === 'active' ? 'bg-[#edf7f0] text-[#1a6b3c]' : 'bg-[#f5f4f0] text-[#9a9a92]'}`}>
+                    {u.status || 'invited'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 border-b border-[#f0eeea] text-[11px] text-[#9a9a92]">
+                  {u.last_login ? formatLastLogin(u.last_login) : 'Never'}
+                </td>
+                <td className="px-4 py-3 border-b border-[#f0eeea]">
+                  <div className="relative">
+                    <button onClick={() => setActionMenu(actionMenu === u.id ? null : u.id)}
+                      className="p-1.5 rounded-lg hover:bg-[#f5f4f0] text-[#9a9a92] hover:text-[#333]">
+                      <MoreVertical size={14} />
+                    </button>
+                    {actionMenu === u.id && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setActionMenu(null)} />
+                        <div className="absolute right-0 top-8 z-50 bg-white border border-[#e8e6e1] rounded-xl shadow-lg py-1.5 w-[180px]">
+                          <button onClick={() => { setActionMenu(null); handleResetPassword(u.id); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-[#333] hover:bg-[#f5f4f0]">
+                            <KeyRound size={13} className="text-[#6b6b65]" /> Reset Password
+                          </button>
+                          <button onClick={() => { setActionMenu(null); setConfirmDelete(u); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-[#c0392b] hover:bg-[#fbeae8]">
+                            <Trash2 size={13} /> Remove User
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setConfirmDelete(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[16px] font-bold text-[#111110] mb-2">Remove User</h3>
+            <p className="text-[13px] text-[#6b6b65] mb-4">
+              Are you sure you want to remove <strong>{confirmDelete.name || confirmDelete.email}</strong>? This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 rounded-lg text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0]">Cancel</button>
+              <button onClick={() => handleDeleteUser(confirmDelete.id)} className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-[#c0392b] text-white hover:bg-[#a93226]">Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1118,7 +1428,7 @@ function SettingsPage() {
               { label: 'Reports — Section Writing', desc: 'Generate report prose from structured data', model: 'opus' },
               { label: 'Knowledge — Document Processing', desc: 'Summarize and index uploaded documents', model: 'haiku' },
             ].map((item, i, arr) => (
-              <SettingRow key={item.label} label={item.label} desc={item.desc} last={i === arr.length - 1}>
+              <SettingRow key={item.label} label={item.label} desc={item.desc} last={false}>
                 <select className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] bg-white outline-none cursor-pointer"
                   defaultValue={item.model}>
                   <option value="haiku">Haiku 4.5</option>
@@ -1128,6 +1438,9 @@ function SettingsPage() {
                 </select>
               </SettingRow>
             ))}
+            <SettingRow label="Max Opus Reports / Day" desc="Per-tenant daily limit on Opus report generation. Override per-tenant in Tenant settings." last>
+              <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[60px] text-center outline-none focus:border-[#3b82f6]" defaultValue="1" type="number" min="0" />
+            </SettingRow>
           </SettingsCard>
         </SettingsSection>
       )}
@@ -1153,6 +1466,9 @@ function SettingsPage() {
             </SettingRow>
             <SettingRow label="API Spend Cap" desc="Alert when tenant exceeds this monthly API spend">
               <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[100px] outline-none focus:border-[#3b82f6]" defaultValue="$50.00" />
+            </SettingRow>
+            <SettingRow label="Max Opus Reports / Day" desc="Default daily Opus report limit for new tenants">
+              <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[60px] text-center outline-none focus:border-[#3b82f6]" defaultValue="1" type="number" min="0" />
             </SettingRow>
             <SettingRow label="Audit Trail Retention" desc="How long to keep audit log entries" last>
               <select className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] bg-white outline-none cursor-pointer">

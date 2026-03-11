@@ -15,9 +15,9 @@ function loadSession() {
   }
 }
 
-function saveSession(user, tokens) {
+function saveSession(user, tokens, adminConsole) {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, tokens }));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ user, tokens, adminConsole: !!adminConsole }));
   } catch {
     // sessionStorage may be unavailable in some contexts
   }
@@ -34,6 +34,7 @@ function clearSession() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [tokens, setTokens] = useState(null);
+  const [adminConsole, setAdminConsole] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const requestInterceptorRef = useRef(null);
@@ -163,16 +164,18 @@ export function AuthProvider({ children }) {
 
     setUser(null);
     setTokens(null);
+    setAdminConsole(false);
     clearSession();
   }, []);
 
   // Login — called by LoginPage after successful auth
   const login = useCallback(
     (data) => {
-      const { user: userData, tokens: tokenData } = data;
+      const { user: userData, tokens: tokenData, adminConsole: isAdminConsole } = data;
       setUser(userData);
       setTokens(tokenData);
-      saveSession(userData, tokenData);
+      setAdminConsole(!!isAdminConsole);
+      saveSession(userData, tokenData, isAdminConsole);
       setupInterceptors(tokenData.accessToken);
     },
     [setupInterceptors]
@@ -200,6 +203,43 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     const restoreSession = async () => {
+      // Check for OAuth callback params in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('oauth') === 'success' && urlParams.get('access_token')) {
+        const oauthTokens = {
+          accessToken: urlParams.get('access_token'),
+          refreshToken: urlParams.get('refresh_token'),
+          expiresAt: urlParams.get('expires_at'),
+        };
+
+        // Clean URL
+        window.history.replaceState({}, '', window.location.pathname);
+
+        // Set up interceptors and fetch user info
+        setupInterceptors(oauthTokens.accessToken);
+        try {
+          const response = await api.get('/v1/auth/me');
+          const userData = response.data.user || response.data;
+          if (!cancelled) {
+            setUser(userData);
+            setTokens(oauthTokens);
+            saveSession(userData, oauthTokens);
+            setLoading(false);
+          }
+        } catch {
+          if (!cancelled) {
+            clearSession();
+            setLoading(false);
+          }
+        }
+        return;
+      }
+
+      // Check for OAuth error
+      if (urlParams.get('error')) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+
       const session = loadSession();
 
       if (!session?.tokens?.accessToken) {
@@ -217,7 +257,8 @@ export function AuthProvider({ children }) {
           const userData = response.data.user || response.data;
           setUser(userData);
           setTokens(session.tokens);
-          saveSession(userData, session.tokens);
+          setAdminConsole(!!session.adminConsole);
+          saveSession(userData, session.tokens, session.adminConsole);
         }
       } catch (err) {
         // Token might be expired, try refresh
@@ -286,6 +327,7 @@ export function AuthProvider({ children }) {
     logout: handleLogout,
     hasPermission,
     hasRole,
+    adminConsole,
   };
 
   return (

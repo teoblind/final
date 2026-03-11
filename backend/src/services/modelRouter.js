@@ -7,6 +7,7 @@
 
 const HAIKU = 'claude-haiku-4-5-20251001';
 const SONNET = process.env.CHAT_MODEL || 'claude-sonnet-4-20250514';
+const OPUS = 'claude-opus-4-20250514';
 
 // Patterns that indicate simple classification/extraction tasks → Haiku
 const HAIKU_PATTERNS = [
@@ -56,7 +57,10 @@ export function estimateCost(inputTokens, outputTokens, model) {
   const pricing = {
     [HAIKU]: { input: 0.001, output: 0.005 },    // per 1K tokens
     [SONNET]: { input: 0.003, output: 0.015 },
+    [OPUS]: { input: 0.015, output: 0.075 },
   };
   const rate = pricing[model] || pricing[SONNET];
   return (inputTokens / 1000 * rate.input) + (outputTokens / 1000 * rate.output);
 }
+
+export function getOpusModel() { return OPUS; }

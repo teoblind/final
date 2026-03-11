@@ -33,7 +33,7 @@ const FALLBACK_TENANTS = {
   },
   sangha: {
     name: 'Sangha Renewables',
-    slug: 'default',
+    slug: 'sangha',
     branding: { companyName: 'COPPICE', primaryColor: '#1a6b3c', logo: null },
     settings: { industry: 'mining' },
   },

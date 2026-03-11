@@ -68,6 +68,9 @@ import voiceRoutes from './routes/voice.js';
 import landingRoutes from './routes/landing.js';
 import filesRoutes from './routes/files.js';
 import hubspotRoutes from './routes/hubspot.js';
+import jobsRoutes from './routes/jobs.js';
+import activityRoutes from './routes/activity.js';
+import reportCommentRoutes from './routes/reportComments.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -112,6 +115,16 @@ try {
   startWebhookRetryScheduler(2);
 } catch (err) {
   console.warn('Webhook retry scheduler not started:', err.message);
+}
+
+// Start Gmail inbox poll scheduler (for activity feed reply detection)
+try {
+  const { startGmailPollScheduler } = await import('./jobs/gmailPoll.js');
+  if (process.env.GMAIL_REFRESH_TOKEN) {
+    startGmailPollScheduler(2);
+  }
+} catch (err) {
+  console.warn('Gmail poll scheduler not started:', err.message);
 }
 
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
@@ -210,6 +223,9 @@ app.use('/api/v1/platform-notifications', platformNotificationRoutes);
 app.use('/api/v1/knowledge', knowledgeRoutes);
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/hubspot', hubspotRoutes);
+app.use('/api/v1/jobs', jobsRoutes);
+app.use('/api/v1/activity', activityRoutes);
+app.use('/api/v1/report-comments', reportCommentRoutes);
 app.use('/api/v1/voice', voiceRoutes);
 
 // =========================================================================
@@ -297,6 +313,13 @@ app.get('/api/health', (req, res) => {
 });
 app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
+});
+
+// SEO: serve robots.txt and sitemap.xml from project root
+app.get('/robots.txt', (req, res) => res.sendFile(join(__dirname, '../../robots.txt')));
+app.get('/sitemap.xml', (req, res) => {
+  res.setHeader('Content-Type', 'application/xml');
+  res.sendFile(join(__dirname, '../../sitemap.xml'));
 });
 
 // Serve static frontend files in production

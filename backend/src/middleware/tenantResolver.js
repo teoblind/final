@@ -2,10 +2,8 @@ import { getTenantBySlug, getTenantByDomain } from '../cache/database.js';
 
 const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 
-// Slug aliases — 'sangha' subdomain maps to the 'default' tenant (mining/energy)
-const SLUG_ALIASES = {
-  sangha: 'default',
-};
+// Slug aliases — map subdomain to DB slug if they differ
+const SLUG_ALIASES = { sangha: 'default' };
 
 /**
  * Tenant resolver middleware — runs before auth.
@@ -53,7 +51,7 @@ export default function tenantResolver(req, res, next) {
     }
   }
 
-  // 3. Fallback: no subdomain → default tenant
+  // 3. Fallback: no subdomain → Sangha tenant
   if (!tenant) {
     tenant = getTenantBySlug('default');
   }

@@ -7,6 +7,7 @@
 
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { google } from 'googleapis';
 import {
   hashPassword,
   verifyPassword,
@@ -32,8 +33,29 @@ import {
   insertAuditLog,
   getInvitationByToken,
   acceptInvitation,
+  createPasswordReset,
+  getPasswordResetByHash,
+  markPasswordResetUsed,
 } from '../cache/database.js';
 import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
+import { sendHtmlEmail } from '../services/emailService.js';
+
+// ─── Google OAuth Config ─────────────────────────────────────────────────────
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_OAUTH_REDIRECT_URI || '/api/v1/auth/google/callback';
+
+function getGoogleOAuth2Client(req) {
+  // Build absolute redirect URI from request if relative
+  let redirectUri = GOOGLE_REDIRECT_URI;
+  if (redirectUri.startsWith('/')) {
+    // Always use https in production (Nginx terminates SSL)
+    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    redirectUri = `${proto}://${host}${redirectUri}`;
+  }
+  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
+}
 
 const router = express.Router();
 
@@ -49,11 +71,14 @@ router.post('/login', async (req, res) => {
 
     let user;
 
-    if (tenant_id) {
-      // Multi-tenant: find user by email + tenant
-      user = getUserByEmailAndTenant(email, tenant_id);
+    // Resolve tenant: explicit tenant_id > hostname-resolved tenant > multi-tenant picker
+    const resolvedTenantId = tenant_id || req.resolvedTenant?.id;
+
+    if (resolvedTenantId) {
+      // Single tenant context (subdomain or explicit selection)
+      user = getUserByEmailAndTenant(email, resolvedTenantId);
     } else {
-      // Check if user exists in multiple tenants
+      // No tenant context — check if user exists in multiple tenants
       const users = getUsersByEmail(email);
       if (users.length > 1) {
         // Return tenant picker — don't verify password yet
@@ -441,6 +466,262 @@ router.post('/change-password', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /forgot-password ───────────────────────────────────────────────────
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Always return success to avoid email enumeration
+    const successResponse = { success: true, message: 'If that email exists, a reset link has been sent.' };
+
+    const user = getUserByEmail(email);
+    if (!user) {
+      return res.json(successResponse);
+    }
+
+    // Generate reset token (raw + hashed)
+    const crypto = await import('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+
+    createPasswordReset({ id: resetId, userId: user.id, tokenHash, expiresAt });
+
+    // Build reset URL from request origin
+    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const origin = req.headers.origin || `${proto}://${host}`;
+    const resetUrl = `${origin}/login?reset_token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+    // Send reset email
+    try {
+      await sendHtmlEmail({
+        to: email,
+        subject: 'Reset your Coppice password',
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
+            <h2 style="color: #1a1a1a; margin-bottom: 8px;">Password Reset</h2>
+            <p style="color: #666; font-size: 14px; line-height: 1.5;">
+              Hi ${user.name},<br><br>
+              Someone requested a password reset for your Coppice account. Click the button below to set a new password. This link expires in 1 hour.
+            </p>
+            <a href="${resetUrl}" style="display: inline-block; margin: 24px 0; padding: 12px 32px; background: #1a6b3c; color: #fff; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
+              Reset Password
+            </a>
+            <p style="color: #999; font-size: 12px; line-height: 1.5;">
+              If you didn't request this, you can safely ignore this email.<br>
+              Link: <a href="${resetUrl}" style="color: #999;">${resetUrl}</a>
+            </p>
+          </div>
+        `,
+        tenantId: user.tenant_id,
+      });
+    } catch (emailErr) {
+      console.error('Failed to send password reset email:', emailErr.message);
+      // Still return success — don't leak whether email sending works
+    }
+
+    insertAuditLog({
+      tenantId: user.tenant_id,
+      userId: user.id,
+      action: 'user.forgotPassword',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: req.ip,
+    });
+
+    res.json(successResponse);
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /reset-password ───────────────────────────────────────────────────
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    const crypto = await import('crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const resetRecord = getPasswordResetByHash(tokenHash);
+
+    if (!resetRecord) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const user = getUserById(resetRecord.user_id);
+    if (!user) {
+      return res.status(400).json({ error: 'User not found' });
+    }
+
+    // Update password
+    const newHash = await hashPassword(newPassword);
+    updateUser(user.id, { passwordHash: newHash, mustChangePassword: false });
+
+    // Mark token as used
+    markPasswordResetUsed(resetRecord.id);
+
+    // Revoke all existing sessions (force re-login)
+    revokeUserSessions(user.id);
+
+    insertAuditLog({
+      tenantId: user.tenant_id,
+      userId: user.id,
+      action: 'user.resetPassword',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: req.ip,
+    });
+
+    res.json({ success: true, message: 'Password has been reset. Please log in.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /google — Start Google OAuth flow ──────────────────────────────────
+
+router.get('/google', (req, res) => {
+  if (!GOOGLE_CLIENT_ID) {
+    return res.status(501).json({ error: 'Google OAuth not configured' });
+  }
+
+  const oauth2Client = getGoogleOAuth2Client(req);
+  const authUrl = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    prompt: 'select_account',
+    scope: [
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile',
+    ],
+  });
+
+  res.redirect(authUrl);
+});
+
+// ─── GET /google/callback — Handle Google OAuth callback ─────────────────────
+
+router.get('/google/callback', async (req, res) => {
+  try {
+    const { code, error: oauthError } = req.query;
+
+    if (oauthError || !code) {
+      return res.redirect('/?error=oauth_cancelled');
+    }
+
+    const oauth2Client = getGoogleOAuth2Client(req);
+    const { tokens: googleTokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(googleTokens);
+
+    // Get user info from Google
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    const { data: profile } = await oauth2.userinfo.get();
+
+    if (!profile.email) {
+      return res.redirect('/?error=no_email');
+    }
+
+    // Resolve tenant from hostname
+    const tenantId = req.resolvedTenant?.id || 'default';
+
+    // Find or create user
+    let user = getUserByEmailAndTenant(profile.email, tenantId);
+
+    if (!user) {
+      // Check if user exists in any tenant
+      const existingUsers = getUsersByEmail(profile.email);
+
+      if (existingUsers.length > 0) {
+        // User exists in another tenant — use the first one
+        user = existingUsers[0];
+      } else {
+        // Create new user
+        const userId = uuidv4();
+        createUser({
+          id: userId,
+          email: profile.email,
+          name: profile.name || profile.email.split('@')[0],
+          passwordHash: null,  // OAuth users don't have passwords
+          tenantId,
+          role: 'member',
+          status: 'active',
+        });
+        user = getUserById(userId);
+
+        insertAuditLog({
+          tenantId,
+          userId,
+          action: 'user.register.google',
+          resourceType: 'user',
+          resourceId: userId,
+          details: { provider: 'google', googleId: profile.id },
+          ipAddress: req.ip,
+        });
+      }
+    }
+
+    if (user.status !== 'active') {
+      return res.redirect('/?error=account_inactive');
+    }
+
+    // Generate JWT tokens
+    const jwtTokens = generateTokens(user);
+
+    // Create session
+    const sessionId = uuidv4();
+    const refreshTokenHash = hashToken(jwtTokens.refreshToken);
+    createSession({
+      id: sessionId,
+      userId: user.id,
+      refreshTokenHash,
+      device: req.headers['user-agent'] || null,
+      ipAddress: req.ip,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    updateUser(user.id, { lastLogin: new Date().toISOString() });
+
+    insertAuditLog({
+      tenantId: user.tenant_id,
+      userId: user.id,
+      action: 'user.login.google',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: req.ip,
+    });
+
+    // Redirect to frontend with tokens as URL params
+    // Frontend AuthContext will pick these up and store them
+    const params = new URLSearchParams({
+      access_token: jwtTokens.accessToken,
+      refresh_token: jwtTokens.refreshToken,
+      expires_at: jwtTokens.expiresAt,
+    });
+
+    res.redirect(`/?oauth=success&${params.toString()}`);
+  } catch (error) {
+    console.error('Google OAuth callback error:', error);
+    res.redirect('/?error=oauth_failed');
   }
 });
 

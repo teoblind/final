@@ -3,7 +3,7 @@ import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
-  HardHat, ClipboardList, FileCheck, Search, FolderOpen
+  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks
 } from 'lucide-react';
 
 // Auth
@@ -69,16 +69,16 @@ const LiquidityPanel = lazy(() => import('./components/LiquidityPanel'));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel'));
 const InsuranceDashboard = lazy(() => import('./components/dashboards/InsuranceDashboard'));
 const BotsDashboard = lazy(() => import('./components/dashboards/BotsDashboard'));
-const LeadEngineDashboard = lazy(() => import('./components/dashboards/LeadEngineDashboard'));
+const LeadEngineWorkspace = lazy(() => import('./components/dashboards/LeadEngineWorkspace'));
 const CommandDashboard = lazy(() => import('./components/dashboards/CommandDashboard'));
 const CurtailmentDashboard = lazy(() => import('./components/dashboards/CurtailmentDashboard'));
 const PoolRoutingDashboard = lazy(() => import('./components/dashboards/PoolRoutingDashboard'));
 const ReportingDashboard = lazy(() => import('./components/dashboards/ReportingDashboard'));
 const MeetingsDashboard = lazy(() => import('./components/dashboards/MeetingsDashboard'));
-const OutreachDashboard = lazy(() => import('./components/dashboards/OutreachDashboard'));
 const DacpCommandDashboard = lazy(() => import('./components/dashboards/DacpCommandDashboard'));
 const DacpEstimatingDashboard = lazy(() => import('./components/dashboards/DacpEstimatingDashboard'));
 const DacpJobsDashboard = lazy(() => import('./components/dashboards/DacpJobsDashboard'));
+const TaskTrackerDashboard = lazy(() => import('./components/dashboards/TaskTrackerDashboard'));
 const DacpFieldReportsDashboard = lazy(() => import('./components/dashboards/DacpFieldReportsDashboard'));
 const DacpSettingsPanel = lazy(() => import('./components/DacpSettingsPanel'));
 const AuditTrailDashboard = lazy(() => import('./components/dashboards/AuditTrailDashboard'));
@@ -129,7 +129,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
           {logo ? (
             <img src={logo} className="h-8 rounded-lg" alt="" />
           ) : (
-            <CoppiceLogo color={tenant?.branding?.primaryColor || '#1e3a5f'} size={32} />
+            <CoppiceLogo color={tenant?.branding?.sidebarColor || '#1a2e1a'} size={32} />
           )}
           <span className="text-[13px] font-bold tracking-[2.5px] text-white/70 uppercase">{brandName}</span>
           <button onClick={() => setSidebarOpen(false)} className="ml-auto lg:hidden text-white/50 hover:text-white">
@@ -267,6 +267,7 @@ function AppContent() {
       { id: 'estimating', label: 'Estimating', icon: ClipboardList },
       { id: 'jobs', label: 'Jobs', icon: HardHat },
       { id: 'field-reports', label: 'Field Reports', icon: FileCheck },
+      { id: 'agent-tasks', label: 'Agent Tasks', icon: ListChecks },
       { id: 'audit-trail', label: 'Audit Trail', icon: FileText },
       { id: 'files', label: 'Files', icon: FolderOpen },
     ];
@@ -279,29 +280,22 @@ function AppContent() {
     ];
   } else {
     platformItems.push({ id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 });
+    platformItems.push({ id: 'curtailment-chat', label: 'Curtailment', icon: Zap, live: true });
     if (!user || hasPermission('viewOperations')) {
-      platformItems.push({ id: 'operations', label: 'Operations', icon: Hammer });
+      platformItems.push({ id: 'operations', label: 'Sites', icon: Hammer });
     }
-    if (!user || hasPermission('viewMacroIntelligence')) {
-      platformItems.push({ id: 'macro', label: 'Macro Intelligence', icon: TrendingUp });
-      platformItems.push({ id: 'correlations', label: 'Correlations', icon: BarChart3 });
-    }
-    platformItems.push({ id: 'liquidity', label: 'Liquidity', icon: DollarSign });
-    platformItems.push({ id: 'insurance', label: 'Insurance', icon: Umbrella });
     platformItems.push({ id: 'audit-trail', label: 'Audit Trail', icon: FileText });
     platformItems.push({ id: 'files', label: 'Files', icon: FolderOpen });
 
     agentItems.push({ id: 'hivemind-chat', label: 'Sangha Agent', icon: Bot, hivemind: true });
-    agentItems.push({ id: 'curtailment-chat', label: 'Curtailment', icon: Zap, live: true });
-    agentItems.push({ id: 'pools-chat', label: 'Pool Routing', icon: Activity });
     agentItems.push({ id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 502 });
     agentItems.push({ id: 'meetings', label: 'Meetings', icon: Mic, live: true });
-    agentItems.push({ id: 'outreach', label: 'Outreach', icon: Mail, count: 96 });
-    if (!user || hasPermission('viewAlerts')) {
-      agentItems.push({ id: 'alerts', label: 'Alerts', icon: Bell, count: 3 });
-    }
 
-    infraItems.push({ id: 'reporting', label: 'Reporting', icon: BarChart3 });
+    infraItems.push({ id: 'pools-chat', label: 'Pool Routing', icon: Activity });
+    infraItems.push({ id: 'insurance', label: 'Insurance & Coverage', icon: Umbrella });
+    if (!user || hasPermission('viewOperations')) {
+      infraItems.push({ id: 'reporting', label: 'Operations', icon: BarChart3 });
+    }
   }
 
   const systemItems = [];
@@ -329,7 +323,6 @@ function AppContent() {
     insurance: 'Insurance',
     bots: isConstruction ? 'Estimating Bot' : 'Lead Engine',
     meetings: 'Meetings',
-    outreach: 'Outreach',
     alerts: 'Alerts',
     notes: 'Documents',
     curtailment: 'Curtailment',
@@ -339,12 +332,13 @@ function AppContent() {
     admin: 'Admin Console',
     estimating: 'Estimating',
     jobs: 'Jobs',
+    'agent-tasks': 'Agent Tasks',
     'field-reports': 'Field Reports',
     'audit-trail': 'Audit Trail',
     'files': 'Files',
   };
 
-  const isChatView = activeTab.endsWith('-chat');
+  const isChatView = activeTab.endsWith('-chat') || activeTab === 'bots';
 
   // WebSocket connection for real-time updates
   useEffect(() => {
@@ -495,6 +489,8 @@ function AppContent() {
         return <DacpEstimatingDashboard />;
       case 'jobs':
         return <DacpJobsDashboard />;
+      case 'agent-tasks':
+        return <TaskTrackerDashboard />;
       case 'field-reports':
         return <DacpFieldReportsDashboard />;
       case 'operations':
@@ -526,15 +522,13 @@ function AppContent() {
           </div>
         );
       case 'bots':
-        return <LeadEngineDashboard />;
+        return <LeadEngineWorkspace />;
       case 'curtailment':
         return <CurtailmentDashboard />;
       case 'pools':
         return <PoolRoutingDashboard />;
       case 'meetings':
         return <MeetingsDashboard />;
-      case 'outreach':
-        return <OutreachDashboard />;
       case 'reporting':
         return <ReportingDashboard />;
       case 'insurance':
