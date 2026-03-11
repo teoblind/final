@@ -851,35 +851,52 @@ export default function CommandDashboard({ onNavigate }) {
             <span className="text-[11px] text-terminal-muted">All agents</span>
           </div>
           <div>
-            {activities.map((item) => (
-              <div key={item.id}>
-                <div
-                  className={`flex items-start gap-3.5 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors ${item.hasDetail ? 'cursor-pointer' : ''}`}
-                  onClick={() => item.hasDetail && toggleExpand(item.id)}
-                >
-                  <div className={`w-1 h-1 rounded-full mt-[7px] shrink-0 ${DOT_COLORS[item.type] || 'bg-terminal-muted'}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                    <div className="text-[11px] text-terminal-muted mt-0.5">{item.subtitle}</div>
+            {(() => {
+              // Group consecutive activities with same title+subtitle
+              const grouped = [];
+              for (const item of activities) {
+                const key = `${item.title}|||${item.subtitle}`;
+                const last = grouped[grouped.length - 1];
+                if (last && last._key === key) {
+                  last.times.push(item.time);
+                } else {
+                  grouped.push({ ...item, _key: key, times: [item.time] });
+                }
+              }
+              return grouped.map((item) => (
+                <div key={item.id}>
+                  <div
+                    className={`flex items-start gap-3.5 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors ${item.hasDetail ? 'cursor-pointer' : ''}`}
+                    onClick={() => item.hasDetail && toggleExpand(item.id)}
+                  >
+                    <div className={`w-1 h-1 rounded-full mt-[7px] shrink-0 ${DOT_COLORS[item.type] || 'bg-terminal-muted'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                      <div className="text-[11px] text-terminal-muted mt-0.5">{item.subtitle}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      <span className="text-[10px] text-[#c5c5bc] font-medium tabular-nums">
+                        {item.times.length > 1
+                          ? item.times.join(', ')
+                          : item.time}
+                      </span>
+                      {item.hasDetail && (
+                        <span className={`text-[10px] text-[#c5c5bc] transition-transform ${expandedId === item.id ? 'rotate-90' : ''}`}>&rsaquo;</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                    <span className="text-[10px] text-[#c5c5bc] font-medium tabular-nums">{item.time}</span>
-                    {item.hasDetail && (
-                      <span className={`text-[10px] text-[#c5c5bc] transition-transform ${expandedId === item.id ? 'rotate-90' : ''}`}>&rsaquo;</span>
-                    )}
-                  </div>
+                  {expandedId === item.id && (
+                    <div className="px-[18px] py-3 bg-[#f9f8f5] border-b border-[#f0eeea]">
+                      {expandedDetail ? (
+                        <ActivityDetail detail={expandedDetail} type={item.type} />
+                      ) : (
+                        <div className="text-[11px] text-terminal-muted">Loading...</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {expandedId === item.id && (
-                  <div className="px-[18px] py-3 bg-[#f9f8f5] border-b border-[#f0eeea]">
-                    {expandedDetail ? (
-                      <ActivityDetail detail={expandedDetail} type={item.type} />
-                    ) : (
-                      <div className="text-[11px] text-terminal-muted">Loading...</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
       </div>
