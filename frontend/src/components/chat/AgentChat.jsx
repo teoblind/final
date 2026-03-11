@@ -19,6 +19,8 @@ const AGENTS = {
   sangha: { name: 'Sangha Agent', initial: 'S', color: '#1a6b3c', bgColor: '#edf7f0', accentColor: '#1a6b3c', status: 'Hivemind — always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer' },
   curtailment: { name: 'Curtailment Agent', initial: 'C', color: '#1a6b3c', bgColor: '#edf7f0', accentColor: '#1a6b3c', status: 'Online — monitoring ERCOT', placeholder: 'Ask about curtailment, pricing, fleet status...', hint: 'Curtailment Agent monitors ERCOT real-time pricing, manages fleet power states, and optimizes pool routing for maximum revenue.', tabs: ['Chat', 'Fleet', 'Market', 'Config'], userInitial: 'SP', userName: 'Spencer' },
   pools: { name: 'Pool Routing', initial: 'P', color: '#2563eb', bgColor: '#eef3f9', accentColor: '#1a6b3c', status: 'Online — 3 pools active', placeholder: 'Ask about pool performance, hashrate allocation...', hint: 'Pool Routing agent optimizes hashrate distribution across mining pools for maximum yield.', userInitial: 'SP', userName: 'Spencer' },
+  'pitch-deck': { name: 'Pitch Deck Agent', initial: 'P', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#7c3aed', status: 'Online', placeholder: 'Describe a deck you need or paste a brief...', hint: 'Pitch Deck Agent creates investor-grade HTML presentations. It will ask about detail level, slide count, and backgrounds before building.', userInitial: 'A', userName: 'Admin' },
+  sales: { name: 'Sales Agent', initial: 'S', color: '#dc2626', bgColor: '#fef2f2', accentColor: '#991b1b', status: 'Online — Shelby Method', placeholder: 'Practice a sales call, prep for a meeting, or ask for objection handling...', hint: 'Sales Agent uses the Shelby Haas "Hot Potato" framework. It can roleplay sales calls, prep you for meetings, and generate question playbooks for specific prospects.', userInitial: 'A', userName: 'Admin' },
 };
 
 // ─── Demo Conversation ──────────────────────────────────────────────────────────
@@ -161,6 +163,10 @@ const DEMO_MESSAGES = {
   pools: [
     { id: 1, role: 'system', type: 'invoke', content: 'Pool Routing online' },
     { id: 2, role: 'agent', content: 'Current pool allocation:\n\n— **Foundry USA** — 2.52 PH/s (60%) — FPPS, 2.5% fee\n— **Luxor** — 1.05 PH/s (25%) — FPPS+, 2.0% fee\n— **Ocean** — 0.63 PH/s (15%) — TIDES, 0% fee\n\n24hr yield: **$98.33** across all pools. Foundry outperforming by **3.2%** vs. expected. Ocean variance is high due to small pool luck.\n\nWant me to rebalance?', time: '7:05 AM' },
+  ],
+  sales: [
+    { id: 1, role: 'system', type: 'invoke', content: 'Sales Agent online — Shelby Method' },
+    { id: 2, role: 'agent', content: 'Hey. I\'m your sales closer — trained on the Shelby Haas "Hot Potato" framework.\n\nI can help you:\n\n— **Practice a sales call** — I play the salesperson, you play the prospect. I\'ll use the Shelby method so you can hear how it sounds.\n— **Prep for a real call** — Tell me who you\'re meeting and I\'ll build a question playbook with objection handling.\n— **Roleplay objections** — Throw any objection at me and I\'ll show you how to hot-potato it back.\n\nWhat are we working on?', time: '9:00 AM' },
   ],
 };
 
