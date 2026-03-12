@@ -174,11 +174,11 @@ const INSIGHT_MODAL_CONTENT = {
 
 // ─── Demo Data ──────────────────────────────────────────────────────────────
 
-const METRICS = [
-  { label: 'Leads', value: '502', delta: '+34 today', type: 'up', bar: 68 },
-  { label: 'Outreach', value: '96', delta: '+12 this week', type: 'up', bar: 19 },
-  { label: 'Replies', value: '7', delta: '7.3% rate', type: 'up', bar: 7.3 },
-  { label: 'Meetings', value: '17', delta: '2 this week', type: 'flat', bar: 40 },
+const DEFAULT_METRICS = [
+  { label: 'Leads', value: '—', delta: 'loading...', type: 'flat', bar: 0 },
+  { label: 'Outreach', value: '—', delta: '', type: 'flat', bar: 0 },
+  { label: 'Replies', value: '—', delta: '', type: 'flat', bar: 0 },
+  { label: 'Meetings', value: '—', delta: '', type: 'flat', bar: 0 },
 ];
 
 const ACTIVITY_FALLBACK = [
@@ -190,10 +190,10 @@ const ACTIVITY_FALLBACK = [
   { id: 5, type: 'out', title: 'Follow-up drafted for Mark Liu at GridScale Partners', subtitle: 'Awaiting approval \u2014 5 days since last contact', time: '7h', hasDetail: false },
 ];
 
-const AGENTS = [
-  { name: 'Lead Engine', status: 'on', mode: 'Auto', stat: '502', tabId: 'bots' },
-  { name: 'Meeting Capture', status: 'on', mode: 'Auto', stat: '17', tabId: 'meetings' },
-  { name: 'Outreach', status: 'on', mode: 'Auto', stat: '96', tabId: 'outreach' },
+const AGENTS_TEMPLATE = [
+  { name: 'Lead Engine', status: 'on', mode: 'Auto', statKey: 'totalLeads', tabId: 'bots' },
+  { name: 'Meeting Capture', status: 'on', mode: 'Auto', statKey: 'meetingLeads', tabId: 'meetings' },
+  { name: 'Outreach', status: 'on', mode: 'Auto', statKey: 'totalEmailsSent', tabId: 'outreach' },
   { name: 'Documents', status: 'on', mode: 'Auto', stat: '8', tabId: 'hivemind-chat' },
   { name: 'Alert Synthesizer', status: 'on', mode: 'Auto', stat: '3', tabId: 'alerts' },
   { name: 'Curtailment', status: 'standby', mode: 'Copilot', stat: '\u2014', tabId: 'curtailment-chat' },
@@ -201,20 +201,15 @@ const AGENTS = [
   { name: 'Reporting', status: 'off', mode: 'Off', stat: '\u2014', tabId: 'reporting' },
 ];
 
-const PIPELINE = [
-  { label: 'Discovered', value: 389, pct: 100 },
-  { label: 'Contacted', value: 96, pct: 24.6 },
-  { label: 'Replied', value: 7, pct: 1.8 },
-  { label: 'Scheduled', value: 2, pct: 0.5 },
-  { label: 'Active Deal', value: 1, pct: 0.25 },
+const DEFAULT_PIPELINE = [
+  { label: 'Discovered', value: 0, pct: 0 },
+  { label: 'Contacted', value: 0, pct: 0 },
+  { label: 'Replied', value: 0, pct: 0 },
+  { label: 'Scheduled', value: 0, pct: 0 },
+  { label: 'Active Deal', value: 0, pct: 0 },
 ];
 
-const FOLLOWUPS = [
-  { name: 'Sarah Chen \u2014 Meridian', due: 'Today', urgency: 'danger' },
-  { name: 'Mark Liu \u2014 GridScale', due: 'Tomorrow', urgency: 'warn' },
-  { name: 'James Torres \u2014 SunPeak', due: '3 days', urgency: 'normal' },
-  { name: 'Linda Pham \u2014 Apex Clean', due: '5 days', urgency: 'normal' },
-];
+const FOLLOWUPS = [];
 
 const WEEKLY = [
   { label: 'Emails Sent', value: '12' },
@@ -375,8 +370,27 @@ export default function CommandDashboard({ onNavigate }) {
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [insightModal, setInsightModal] = useState(null);
   const [threadModal, setThreadModal] = useState(null); // { thread, messages, loading }
+  const [leadStats, setLeadStats] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+
+  // Fetch lead stats from API
+  useEffect(() => {
+    async function fetchLeadStats() {
+      try {
+        const token = localStorage.getItem('accessToken');
+        const res = await fetch(`${API_BASE}/v1/lead-engine/stats`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setLeadStats(data);
+      } catch {}
+    }
+    fetchLeadStats();
+    const interval = setInterval(fetchLeadStats, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch HubSpot pipeline data
   useEffect(() => {
@@ -614,6 +628,27 @@ export default function CommandDashboard({ onNavigate }) {
       }
     }
   };
+
+  // Compute dynamic metrics from leadStats
+  const METRICS = leadStats ? [
+    { label: 'Leads', value: String(leadStats.totalLeads || 0), delta: leadStats.withEmail ? `${leadStats.withEmail} with email` : '', type: 'up', bar: Math.min(100, (leadStats.totalLeads || 0) / 2) },
+    { label: 'Outreach', value: String(leadStats.totalEmailsSent || 0), delta: leadStats.sentToday ? `+${leadStats.sentToday} today` : '', type: leadStats.totalEmailsSent > 0 ? 'up' : 'flat', bar: leadStats.totalLeads > 0 ? Math.round((leadStats.totalEmailsSent / leadStats.totalLeads) * 100) : 0 },
+    { label: 'Replies', value: String(leadStats.totalResponded || 0), delta: leadStats.responseRate ? `${leadStats.responseRate}% rate` : '', type: leadStats.totalResponded > 0 ? 'up' : 'flat', bar: leadStats.responseRate || 0 },
+    { label: 'Meetings', value: String(leadStats.meetingLeads || 0), delta: '', type: 'flat', bar: leadStats.totalLeads > 0 ? Math.round((leadStats.meetingLeads || 0) / leadStats.totalLeads * 100) : 0 },
+  ] : DEFAULT_METRICS;
+
+  const AGENTS = AGENTS_TEMPLATE.map(a => ({
+    ...a,
+    stat: a.statKey && leadStats ? String(leadStats[a.statKey] || 0) : (a.stat || '\u2014'),
+  }));
+
+  const PIPELINE = leadStats ? [
+    { label: 'Discovered', value: leadStats.totalLeads || 0, pct: 100 },
+    { label: 'Contacted', value: leadStats.contactedLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.contactedLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
+    { label: 'Replied', value: leadStats.respondedLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.respondedLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
+    { label: 'Scheduled', value: leadStats.meetingLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.meetingLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
+    { label: 'Active Deal', value: leadStats.qualifiedLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.qualifiedLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
+  ] : DEFAULT_PIPELINE;
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
@@ -907,7 +942,7 @@ export default function CommandDashboard({ onNavigate }) {
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Pipeline</span>
-            <span className="text-[11px] text-terminal-muted">502 total</span>
+            <span className="text-[11px] text-terminal-muted">{leadStats ? `${leadStats.totalLeads || 0} total` : '—'}</span>
           </div>
           <div className="py-1">
             {PIPELINE.map((row, i) => (

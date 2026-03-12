@@ -26,17 +26,22 @@ import {
   runFullCycle,
   getLeadDetail,
 } from '../services/leadEngine.js';
+import { getSheetLeads, getSheetLeadStats } from '../services/sheetsLeadReader.js';
 
 const router = express.Router();
 router.use(authenticate);
 
 // ─── Leads ──────────────────────────────────────────────────────────────────
 
-router.get('/leads', (req, res) => {
+router.get('/leads', async (req, res) => {
   try {
     const { status, limit } = req.query;
+    // Try Google Sheets first, fall back to SQLite
+    const sheetLeads = await getSheetLeads(req.user.tenantId, status || null, parseInt(limit) || 100);
+    if (sheetLeads && sheetLeads.length > 0) {
+      return res.json({ leads: sheetLeads });
+    }
     const leads = getLeads(req.user.tenantId, status || null, parseInt(limit) || 100);
-    // Attach contact count per lead
     const enriched = leads.map(l => {
       const contacts = getLeadContacts(req.user.tenantId, l.id);
       return { ...l, contactCount: contacts.length };
@@ -77,9 +82,11 @@ router.put('/leads/:id', (req, res) => {
 
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
-router.get('/stats', (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const stats = getLeadStats(req.user.tenantId);
+    // Try Google Sheets first, fall back to SQLite
+    const sheetStats = await getSheetLeadStats(req.user.tenantId);
+    const stats = sheetStats || getLeadStats(req.user.tenantId);
     // Find the lead pipeline Google Sheet for this tenant
     const files = getTenantFiles(req.user.tenantId, { category: 'Leads' });
     const sheet = files.find(f => f.file_type === 'google_sheet');
