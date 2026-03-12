@@ -60,6 +60,7 @@ export async function getSheetLeads(tenantId, status = null, limit = 100) {
 
     for (let i = 1; i < rows.length && leads.length < limit; i++) {
       const row = rows[i];
+      if (!row || row.length === 0 || !row[0]) continue; // skip empty rows
       const lead = {};
       headers.forEach((h, idx) => {
         lead[h] = row[idx] || '';
@@ -67,22 +68,35 @@ export async function getSheetLeads(tenantId, status = null, limit = 100) {
 
       // Normalize status field
       const leadStatus = (lead.status || 'new').toLowerCase().trim();
-      if (status && leadStatus !== status.toLowerCase()) return;
+      if (status && leadStatus !== status.toLowerCase()) continue;
+
+      // Count contacts (up to 3 contact slots in sheet)
+      const c1email = lead['contact 1 email'] || '';
+      const c2email = lead['contact 2 email'] || '';
+      const c3email = lead['contact 3 email'] || '';
+      const contactCount = [c1email, c2email, c3email].filter(e => e.trim()).length;
 
       leads.push({
         id: lead.id || `sheet-${i}`,
-        company_name: lead.company || lead['company name'] || lead.company_name || '',
+        company_name: lead.company || '',
         status: leadStatus,
-        source: lead.source || 'discovery',
+        source: lead['sub-vertical'] || 'discovery',
         priority_score: parseInt(lead.priority || lead.priority_score) || 50,
-        notes: lead.notes || '',
+        notes: lead.description || '',
         website: lead.website || '',
-        city: lead.city || '',
-        state: lead.state || '',
-        contact_name: lead['contact name'] || lead.contact_name || lead['decision maker'] || '',
-        contact_email: lead['contact email'] || lead.contact_email || lead.email || '',
-        contact_title: lead['contact title'] || lead.contact_title || lead.title || '',
-        contactCount: (lead['contact email'] || lead.email) ? 1 : 0,
+        hq_location: lead['hq location'] || '',
+        size_scale: lead['size/scale'] || '',
+        why_prospect: lead['why prospect'] || '',
+        contact_name: lead['contact 1 name'] || '',
+        contact_email: c1email,
+        contact_title: lead['contact 1 title'] || '',
+        contact_phone: lead['contact 1 phone'] || '',
+        contacts: [
+          c1email && { name: lead['contact 1 name'], title: lead['contact 1 title'], email: c1email, phone: lead['contact 1 phone'] || '' },
+          c2email && { name: lead['contact 2 name'], title: lead['contact 2 title'], email: c2email, phone: lead['contact 2 phone'] || '' },
+          c3email && { name: lead['contact 3 name'], title: lead['contact 3 title'], email: c3email, phone: lead['contact 3 phone'] || '' },
+        ].filter(Boolean),
+        contactCount,
         created_at: lead['date added'] || lead.created_at || new Date().toISOString(),
       });
     }
@@ -107,7 +121,7 @@ export async function getSheetLeadStats(tenantId) {
   for (const lead of leads) {
     const s = lead.status || 'new';
     statusMap[s] = (statusMap[s] || 0) + 1;
-    if (lead.contact_email) withEmail++;
+    if (lead.contactCount > 0) withEmail++;
   }
 
   return {
