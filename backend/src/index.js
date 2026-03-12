@@ -121,7 +121,7 @@ try {
 try {
   const { startGmailPollScheduler } = await import('./jobs/gmailPoll.js');
   if (process.env.GMAIL_REFRESH_TOKEN) {
-    startGmailPollScheduler(2);
+    startGmailPollScheduler(1);
   }
 } catch (err) {
   console.warn('Gmail poll scheduler not started:', err.message);

@@ -9,6 +9,7 @@
 import { google } from 'googleapis';
 import { insertActivity } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
+import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -61,6 +62,28 @@ function extractEmailBody(payload) {
     }
   }
   return '';
+}
+
+async function extractAttachments(gmail, messageId, payload) {
+  const attachments = [];
+  const parts = payload?.parts || [];
+  for (const part of parts) {
+    if (part.body?.attachmentId && part.filename) {
+      try {
+        const attRes = await gmail.users.messages.attachments.get({
+          userId: 'me', messageId, id: part.body.attachmentId,
+        });
+        attachments.push({
+          filename: part.filename,
+          mimeType: part.mimeType,
+          content: Buffer.from(attRes.data.data, 'base64').toString('utf-8'),
+        });
+      } catch (err) {
+        console.warn(`[GmailPoll] Attachment fetch failed (${part.filename}):`, err.message);
+      }
+    }
+  }
+  return attachments;
 }
 
 async function pollInbox() {
@@ -129,7 +152,40 @@ async function pollInbox() {
         continue;
       }
 
-      // Not an RFQ — check if it's from a known contact
+      // Check if this is an IPP inquiry → route to mine spec pipeline
+      if (isIppEmail(subject, body)) {
+        try {
+          const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
+          const result = await processIppEmail({
+            messageId: msg.id,
+            threadId: full.data.threadId,
+            from: senderEmail,
+            fromName: senderName,
+            subject,
+            body,
+            attachments,
+          });
+          if (result) {
+            console.log(`[GmailPoll] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
+          }
+        } catch (err) {
+          console.error(`[GmailPoll] IPP pipeline error:`, err.message);
+        }
+
+        try {
+          await gmail.users.messages.modify({
+            userId: 'me',
+            id: msg.id,
+            requestBody: { removeLabelIds: ['UNREAD'] },
+          });
+        } catch {}
+
+        processedIds.add(msg.id);
+        newReplies++;
+        continue;
+      }
+
+      // Not an RFQ or IPP — check if it's from a known contact
       const contact = matchContactToTenant(senderEmail);
 
       // Skip emails from unknown senders (Google Docs notifications, spam, etc.)
