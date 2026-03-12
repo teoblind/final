@@ -90,6 +90,10 @@ const DEFAULT_ECON = {
 
 const MINE_SIZES = [10, 15, 20, 30, 45, 60, 75, 90, 105, 120, 135, 150];
 
+// Format helpers (used in Excel + email reply)
+const fmt = (n) => `$${Math.round(n).toLocaleString()}`;
+const fmtD = (n) => `$${(n || 0).toFixed(2)}`;
+
 const HASHPRICE_SCENARIOS = {
   Best:  150,
   Base:  100,
@@ -672,9 +676,6 @@ export async function generateMineSpecExcel(analysis, ippData) {
     ws.getCell(r, 2).font = { size: 11 };
     r++;
   }
-
-  const fmt = (n) => `$${Math.round(n).toLocaleString()}`;
-  const fmtD = (n) => `$${(n || 0).toFixed(2)}`;
 
   // ── Header ──
   ws.mergeCells(r, 1, r, 6);
