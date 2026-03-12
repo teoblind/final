@@ -378,7 +378,7 @@ export default function CommandDashboard({ onNavigate }) {
   useEffect(() => {
     async function fetchLeadStats() {
       try {
-        const token = localStorage.getItem('accessToken');
+        const token = localStorage.getItem('auth_token');
         const res = await fetch(`${API_BASE}/v1/lead-engine/stats`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
