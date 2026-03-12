@@ -901,9 +901,9 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   const replyBody = [
     `Hey ${firstName},`,
     '',
-    `Ran the numbers on your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} site — the short version is a ${baseAnalysis.bestMineSize}MW behind-the-meter mine looks like it adds about $${fmtD(baseAnalysis.bestDealValuePerMwh)}/MWh in deal value, which comes out to roughly $${fmt(baseAnalysis.bestDealValue)} annually on a VI structure. That's at ${w.uptime_pct}% uptime with an all-in electricity cost to the miner of $${fmtD(w.all_in_electricity_cost_miner)}/MWh.`,
+    `Ran the numbers on your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} site — the short version is a ${baseAnalysis.bestMineSize}MW behind-the-meter mine looks like it adds about ${fmtD(baseAnalysis.bestDealValuePerMwh)}/MWh in deal value, which comes out to roughly ${fmt(baseAnalysis.bestDealValue)} annually on a VI structure. That's at ${w.uptime_pct}% uptime with an all-in electricity cost to the miner of ${fmtD(w.all_in_electricity_cost_miner)}/MWh.`,
     '',
-    `Attached the full report with the sensitivity across mine sizes (${baseAnalysis.mineSizes[0]}MW to ${baseAnalysis.mineSizes[baseAnalysis.mineSizes.length - 1]}MW), grid vs offtake vs VI comparisons, and the economic assumptions we used. It's based on ${baseAnalysis.totalHoursProcessed.toLocaleString()} hours of actual ERCOT nodal data so the numbers should be pretty tight.`,
+    `Attached the full report with the sensitivity across mine sizes (${baseAnalysis.allResults[0]?.mineSize || 10}MW to ${baseAnalysis.allResults[baseAnalysis.allResults.length - 1]?.mineSize || 150}MW), grid vs offtake vs VI comparisons, and the economic assumptions we used. It's based on ${baseAnalysis.totalHoursProcessed.toLocaleString()} hours of actual ERCOT nodal data so the numbers should be pretty tight.`,
     '',
     `Curious — are you currently curtailing much, or is most of your generation hitting the grid today? That context would help us dial in the offtake structure.`,
     '',
