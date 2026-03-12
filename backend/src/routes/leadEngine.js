@@ -27,6 +27,7 @@ import {
   getLeadDetail,
 } from '../services/leadEngine.js';
 import { getSheetLeads, getSheetLeadStats } from '../services/sheetsLeadReader.js';
+import { getMeetingCount } from '../services/calendarReader.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -91,6 +92,12 @@ router.get('/stats', async (req, res) => {
     const files = getTenantFiles(req.user.tenantId, { category: 'Leads' });
     const sheet = files.find(f => f.file_type === 'google_sheet');
     if (sheet) stats.sheetUrl = sheet.drive_url;
+    // Fetch real meeting count from Google Calendar
+    const meetings = await getMeetingCount(req.user.tenantId).catch(() => null);
+    if (meetings) {
+      stats.meetingLeads = meetings.total;
+      stats.meetingsThisWeek = meetings.thisWeek;
+    }
     res.json(stats);
   } catch (error) {
     console.error('Get lead stats error:', error);

@@ -640,7 +640,7 @@ export default function CommandDashboard({ onNavigate }) {
     { label: 'Leads', value: String(leadStats.totalLeads || 0), delta: leadStats.withEmail ? `${leadStats.withEmail} with email` : '', type: 'up', bar: Math.min(100, (leadStats.totalLeads || 0) / 2) },
     { label: 'Outreach', value: String(leadStats.totalEmailsSent || 0), delta: leadStats.sentToday ? `+${leadStats.sentToday} today` : '', type: leadStats.totalEmailsSent > 0 ? 'up' : 'flat', bar: leadStats.totalLeads > 0 ? Math.round((leadStats.totalEmailsSent / leadStats.totalLeads) * 100) : 0 },
     { label: 'Replies', value: String(leadStats.totalResponded || 0), delta: leadStats.responseRate ? `${leadStats.responseRate}% rate` : '', type: leadStats.totalResponded > 0 ? 'up' : 'flat', bar: leadStats.responseRate || 0 },
-    { label: 'Meetings', value: String(leadStats.meetingLeads || 0), delta: '', type: 'flat', bar: leadStats.totalLeads > 0 ? Math.round((leadStats.meetingLeads || 0) / leadStats.totalLeads * 100) : 0 },
+    { label: 'Meetings', value: String(leadStats.meetingLeads || 0), delta: leadStats.meetingsThisWeek ? `${leadStats.meetingsThisWeek} this week` : '', type: leadStats.meetingLeads > 0 ? 'up' : 'flat', bar: Math.min(100, (leadStats.meetingLeads || 0) * 5) },
   ] : DEFAULT_METRICS;
 
   const AGENTS = AGENTS_TEMPLATE.map(a => ({
