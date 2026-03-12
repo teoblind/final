@@ -3,11 +3,15 @@
  *
  * Detects IPP (Independent Power Producer) inquiry emails,
  * parses generation data from body text or CSV attachments,
- * runs the exact PricingToolUSA Lambda logic (process_row) against
+ * runs the exact PricingToolUSA Lambda logic against
  * real ERCOT nodal + load LMP data, generates branded Excel report,
  * and replies with the attachment.
  *
  * Ported from: AWS Lambda PricingToolUSA (Python 3.14)
+ *   - lambda_function.py  (lambda_handler, process_row, summarize, annualize, calculate_strike_price)
+ *   - calculations.py     (process_row, safe_json_number)
+ *   - winner.py           (summarize, annualize)
+ *
  * Data: nodal_8760.json — 8,760 hourly nodal + load LMP values
  * Zero LLM cost — all math + ExcelJS.
  */
@@ -28,7 +32,7 @@ if (!existsSync(SPECS_DIR)) mkdirSync(SPECS_DIR, { recursive: true });
 
 const TENANT_ID = 'default'; // Sangha tenant
 
-// ─── Load ERCOT Nodal + Load LMP Data (8,760 hours) ────────────────────────
+// ─── Load ERCOT Nodal + Load LMP Data ────────────────────────────────────────
 
 let NODAL_DATA = [];
 try {
@@ -38,22 +42,53 @@ try {
   console.warn(`[IPP Pipeline] Could not load nodal data: ${err.message}`);
 }
 
-// ─── Economic Assumptions (exact match to PricingToolUSA Lambda) ────────────
+// ─── Utility Functions (exact match to Lambda) ───────────────────────────────
 
-const ECONOMIC_ASSUMPTIONS = {
+/**
+ * safe_json_number — safely convert any value to float, 0.0 for invalid.
+ * Matches Lambda: safe_json_number()
+ */
+function safeJsonNumber(x, def = 0) {
+  if (x === null || x === undefined) return def;
+  const f = Number(x);
+  if (!Number.isFinite(f)) return def;
+  return f;
+}
+
+/**
+ * annualize — convert multi-period sum to annual equivalent.
+ * KEY FIX from Lambda: uses actual hour count, not hardcoded 8760.
+ * Matches Excel: COUNT(tblHourly[Hour]) dynamically.
+ */
+function annualize(total, actualHours) {
+  if (actualHours === 0) return 0;
+  return (total / actualHours) * 8760;
+}
+
+/**
+ * calculate_strike_price — breakeven electricity price from mining economics.
+ * Formula: (hashprice / TH_per_PH / hr_per_day) / (efficiency / W_per_MW)
+ * Matches Excel: =(Hashprice / 1000 / 24) / (Efficiency / 1000000)
+ */
+function calculateStrikePrice(hashprice, efficiencyWTh) {
+  const TH_PER_PH = 1000;
+  const HR_PER_DAY = 24;
+  const W_PER_MW = 1_000_000;
+  if (efficiencyWTh === 0) return 0;
+  return (hashprice / TH_PER_PH / HR_PER_DAY) / (efficiencyWTh / W_PER_MW);
+}
+
+// ─── Default Economic Parameters ─────────────────────────────────────────────
+
+const DEFAULT_ECON = {
   miner_floor_price: 5.00,       // $/MWh — minimum the miner pays
-  import_burden: 11.00,          // $/MWh
+  import_burden: 11.00,          // $/MWh — burden on imported power
   offtake_index: 'Node',         // 'Node' or 'Hub'
-  import_hub: null,
-  ipp_gen_price_floor: -27.50,   // $/MWh
-  hashprice_usd_ph_day: 100.00,  // $/PH/day (Base scenario)
-  miner_fleet_efficiency: 29.5,  // J/TH
-  calc_strike_price: 141.24,     // $/MWh — VI break-even threshold
+  hashprice: 100.00,             // $/PH/day (Base scenario)
+  efficiency: 29.5,              // W/TH (miner fleet)
 };
 
 const MINE_SIZES = [10, 15, 20, 30, 45, 60, 75, 90, 105, 120, 135, 150];
-
-// ─── Hashprice Scenarios ───────────────────────────────────────────────────
 
 const HASHPRICE_SCENARIOS = {
   Best:  150,
@@ -61,7 +96,7 @@ const HASHPRICE_SCENARIOS = {
   Worst:  60,
 };
 
-// ─── 1. IPP Email Detection ────────────────────────────────────────────────
+// ─── 1. IPP Email Detection ──────────────────────────────────────────────────
 
 const IPP_SUBJECT_KW = [
   'generation', 'ipp', 'solar', 'wind', 'renewable', 'ppa', 'offtake',
@@ -86,7 +121,7 @@ export function isIppEmail(subject, body) {
   return (subjectHit && bodyHits.length >= 2) || bodyHits.length >= 4;
 }
 
-// ─── 2. Parse IPP Data ─────────────────────────────────────────────────────
+// ─── 2. Parse IPP Data ───────────────────────────────────────────────────────
 
 export function parseIppData(body, attachments = []) {
   const data = {
@@ -99,26 +134,21 @@ export function parseIppData(body, attachments = []) {
     location: null,
     facilityType: null,
     facilityName: null,
-    hourlyGeneration: null, // 8760-element array if provided via CSV
+    hourlyGeneration: null,
   };
 
-  // Try CSV attachment first
   const csv = attachments.find(a =>
     a.filename?.toLowerCase().endsWith('.csv') || a.mimeType === 'text/csv'
   );
   if (csv?.content) parseCSV(csv.content, data);
-
-  // Then parse email body (fills missing fields)
   parseEmailBody(body, data);
 
-  // Derive missing
   if (data.capacityMW && data.annualGenerationMWh && !data.generationHours) {
     data.generationHours = Math.round(data.annualGenerationMWh / data.capacityMW);
   }
   if (!data.operatingHours) data.operatingHours = 8760;
   if (!data.curtailmentPct) data.curtailmentPct = 0;
 
-  // Infer facility type
   if (!data.facilityType) {
     const b = (body || '').toLowerCase();
     if (b.includes('solar')) data.facilityType = 'Solar';
@@ -152,14 +182,13 @@ function parseCSV(content, data) {
     return;
   }
 
-  // Hourly generation format — 8760 rows with generation column
+  // Hourly generation format
   const genCol = headers.findIndex(h =>
     h.includes('generation') || h.includes('gen') || h.includes('mwh') || h.includes('energy')
   );
   const priceCol = headers.findIndex(h => h.includes('price') || h.includes('nodal') || h.includes('$/mwh'));
 
   if (genCol >= 0 && lines.length > 100) {
-    // Likely hourly data — extract generation array
     const hourlyGen = [];
     let totalMWh = 0;
     let weightedPrice = 0;
@@ -174,18 +203,14 @@ function parseCSV(content, data) {
         if (!isNaN(price)) weightedPrice += price * gen;
       }
     }
-    // If we got ~8760 rows, use as hourly generation
     if (hourlyGen.length >= 8000) {
-      data.hourlyGeneration = hourlyGen.slice(0, 8760);
-      // Pad to 8760 if needed
-      while (data.hourlyGeneration.length < 8760) data.hourlyGeneration.push(0);
+      data.hourlyGeneration = hourlyGen;
     }
     if (totalMWh > 0) data.annualGenerationMWh = totalMWh;
     if (weightedPrice > 0 && totalMWh > 0) data.avgNodalPrice = weightedPrice / totalMWh;
     return;
   }
 
-  // Summary time-series (monthly/daily) — aggregate
   if (genCol >= 0) {
     let totalMWh = 0, weightedPrice = 0;
     for (let i = 1; i < lines.length; i++) {
@@ -236,76 +261,194 @@ function parseEmailBody(body, data) {
   if (name && !data.facilityName) data.facilityName = name[1].trim();
 }
 
-// ─── 3. PricingToolUSA Logic (exact port from Lambda) ──────────────────────
+// ─── 3. PricingToolUSA Logic (exact port from Lambda) ────────────────────────
 
 /**
- * process_row — exact port of PricingToolUSA/process_row
- * Runs for each hour, given a mine size and economic assumptions.
+ * processRow — exact port of calculations.py process_row
+ *
+ * Excel formulas from tblHourly:
+ *   Offtake Price: IF(Index="Node", MAX(Nodal, Floor), MAX(Load, Floor))
+ *   Offtake:       IF(Price>Strike, 0, IF(Gen<=0, 0, MIN(Gen, MineSize)))
+ *   Import:        IF(Load>Strike, 0, IF(Offtake<MineSize, MineSize-Offtake, 0))
+ *   Base Rev:      MIN(Gen, Offtake) * Nodal
+ *   VI Rev:        Offtake * MAX(Strike, Nodal)
  */
-function processRow(row, mineSize, assumptions) {
-  const gen = row.gen || 0;
-  const nodal = row.nodal || 0;
-  const load = row.load || 0;
+function processRow(row, mineSize, econ) {
+  const gen = safeJsonNumber(row.gen);
+  const nodal = safeJsonNumber(row.nodal);
+  const load = safeJsonNumber(row.load);
+
+  const strike = econ.calc_strike_price;
+  const floor = econ.miner_floor_price;
+  const idx = econ.offtake_index;
+
   const basis = nodal - load;
 
-  // Offtake price
-  const idx = assumptions.offtake_index;
+  // Offtake price: max of (index price, floor price)
   let offtakePrice;
   if (idx === 'Node') {
-    offtakePrice = Math.max(assumptions.miner_floor_price, nodal);
+    offtakePrice = Math.max(nodal, floor);
+  } else if (idx === 'Hub') {
+    offtakePrice = Math.max(load, floor);
   } else {
-    offtakePrice = Math.max(assumptions.miner_floor_price, load);
+    offtakePrice = floor;
   }
 
-  // Offtake (MW)
-  let offtake = 0;
-  if (offtakePrice <= assumptions.calc_strike_price && gen > 0) {
-    offtake = gen >= mineSize ? mineSize : gen;
+  // Offtake: curtail if price > strike, otherwise min(gen, mine_size)
+  let offtake;
+  if (offtakePrice > strike) {
+    offtake = 0;
+  } else if (gen <= 0) {
+    offtake = 0;
+  } else {
+    offtake = Math.min(gen, mineSize);
   }
 
-  // Import (MW) — power bought from grid when gen < mine size
-  let imp = 0;
-  if (load <= assumptions.calc_strike_price && offtake < mineSize) {
+  // Import: grid power when BTM generation insufficient
+  let imp;
+  if (load > strike) {
+    imp = 0;
+  } else if (offtake < mineSize) {
     imp = mineSize - offtake;
+  } else {
+    imp = 0;
   }
 
   const mineConsumption = offtake + imp;
   const btmLmpCosts = offtake * offtakePrice;
   const importLmpCosts = imp * load;
   const mineLmpCosts = btmLmpCosts + importLmpCosts;
-  const baseRev = Math.min(gen, offtake) * nodal;
-  const offtakeRevenue = Math.max(offtake * offtakePrice, baseRev);
-  const viRevenue = offtake * Math.max(assumptions.calc_strike_price, nodal);
+  const baseRevenue = Math.min(gen, offtake) * nodal;
+  const offtakeRevenue = Math.max(offtake * offtakePrice, baseRevenue);
+  const viRevenue = offtake * Math.max(strike, nodal);
+  const importCost = imp * econ.import_burden;
   const blendedLmp = mineSize > 0
     ? (offtake / mineSize) * offtakePrice + (imp / mineSize) * load
     : 0;
 
   return {
-    hour: row.hour,
     gen, nodal, load, basis,
     offtakePrice, offtake, import: imp,
     mineConsumption, btmLmpCosts, importLmpCosts, mineLmpCosts,
-    baseRev, offtakeRevenue, viRevenue, blendedLmp,
+    baseRevenue, offtakeRevenue, viRevenue, importCost, blendedLmp,
   };
 }
 
 /**
- * buildHourlyData — merge IPP generation data with ERCOT nodal/load data
- * If IPP provides hourly gen, use it. Otherwise, synthesize from capacity + generation hours.
+ * summarize — exact port of winner.py summarize
+ * Generates full winner summary for the optimal mine size.
+ */
+function summarize(rows, mineSize, econ) {
+  if (!rows || !rows.length || !mineSize) return null;
+
+  const totalHourCount = rows.length;
+  const importBurden = econ.import_burden;
+
+  const results = rows.map(r => processRow(r, mineSize, econ));
+
+  // Aggregate totals
+  const totalOfftake = results.reduce((s, r) => s + r.offtake, 0);
+  const totalImport = results.reduce((s, r) => s + r.import, 0);
+  const totalBaseRev = results.reduce((s, r) => s + r.baseRevenue, 0);
+  const totalOfftakeRev = results.reduce((s, r) => s + r.offtakeRevenue, 0);
+  const totalViRev = results.reduce((s, r) => s + r.viRevenue, 0);
+  const totalBtmLmpCosts = results.reduce((s, r) => s + r.btmLmpCosts, 0);
+  const totalImportLmpCosts = results.reduce((s, r) => s + r.importLmpCosts, 0);
+  const totalMineLmpCosts = results.reduce((s, r) => s + r.mineLmpCosts, 0);
+  const totalMineConsumption = results.reduce((s, r) => s + r.mineConsumption, 0);
+  const totalImportCost = results.reduce((s, r) => s + r.importCost, 0);
+  const totalPriceWeighted = results.reduce((s, r) => s + r.offtake * r.offtakePrice, 0);
+
+  // Annualize values
+  const annualBtmOfftake = annualize(totalOfftake, totalHourCount);
+  const annualImport = annualize(totalImport, totalHourCount);
+  const annualElecConsumption = annualize(totalOfftake + totalImport, totalHourCount);
+
+  // Base case
+  const ippRevBaseDollar = annualize(totalBaseRev, totalHourCount);
+  const ippRevBaseMwh = annualBtmOfftake > 0 ? ippRevBaseDollar / annualBtmOfftake : 0;
+
+  // Miner offtake case
+  const ippRevOfftakeDollar = annualize(totalOfftakeRev, totalHourCount);
+  const ippRevOfftakeMwh = annualBtmOfftake > 0 ? ippRevOfftakeDollar / annualBtmOfftake : 0;
+
+  // Vertical integration case
+  const ippRevViDollar = annualize(totalViRev, totalHourCount);
+  const ippRevViMwh = annualBtmOfftake > 0 ? ippRevViDollar / annualBtmOfftake : 0;
+
+  // Deal values
+  const dealValueDollarVi = ippRevViDollar - ippRevBaseDollar;
+  const dealValueMwhVi = ippRevViMwh - ippRevBaseMwh;
+  const dealValueDollarOfftake = ippRevOfftakeDollar - ippRevBaseDollar;
+  const dealValueMwhOfftake = ippRevOfftakeMwh - ippRevBaseMwh;
+
+  // Uptime: annual consumption / (mine_size * 8760) — capacity factor
+  const maxTheoreticalConsumption = mineSize * 8760;
+  const uptimePct = maxTheoreticalConsumption > 0 ? (annualElecConsumption / maxTheoreticalConsumption) * 100 : 0;
+
+  // Avg blended LMP: total costs / total consumption (already a ratio, not annualized)
+  const avgBlendedLmp = totalMineConsumption > 0 ? totalMineLmpCosts / totalMineConsumption : 0;
+
+  // Avg blended price (weighted average offtake price)
+  const avgBlendedPrice = totalOfftake > 0 ? totalPriceWeighted / totalOfftake : 0;
+
+  // All-in electricity cost
+  const allInElectricityCost = avgBlendedLmp + importBurden;
+
+  // BTM and import cost per MWh
+  const btmLmpCostsPerMwh = annualBtmOfftake > 0 ? annualize(totalBtmLmpCosts, totalHourCount) / annualBtmOfftake : 0;
+  const importLmpCostsPerMwh = annualImport > 0 ? annualize(totalImportLmpCosts, totalHourCount) / annualImport : 0;
+
+  // Curtailment hours
+  const curtailmentHours = results.filter(r => r.offtake === 0 && r.gen > 0).length;
+
+  return {
+    mine_size_MW: mineSize,
+    total_hours_processed: totalHourCount,
+    annual_btm_offtake_MWh: Math.round(annualBtmOfftake * 100) / 100,
+    annual_import_MWh: Math.round(annualImport * 100) / 100,
+    annual_electricity_consumption_MWh: Math.round(annualElecConsumption * 100) / 100,
+    uptime_pct: Math.round(uptimePct * 100) / 100,
+    avg_blended_lmp: Math.round(avgBlendedLmp * 100) / 100,
+    avg_blended_price: Math.round(avgBlendedPrice * 100) / 100,
+    all_in_electricity_cost_miner: Math.round(allInElectricityCost * 100) / 100,
+    btm_lmp_costs_per_mwh: Math.round(btmLmpCostsPerMwh * 100) / 100,
+    import_lmp_costs_per_mwh: Math.round(importLmpCostsPerMwh * 100) / 100,
+    curtailment_hours: curtailmentHours,
+
+    ipp_revenue_base_dollar: Math.round(ippRevBaseDollar * 100) / 100,
+    ipp_revenue_base_mwh: Math.round(ippRevBaseMwh * 100) / 100,
+    ipp_revenue_offtake_dollar: Math.round(ippRevOfftakeDollar * 100) / 100,
+    ipp_revenue_offtake_mwh: Math.round(ippRevOfftakeMwh * 100) / 100,
+    ipp_revenue_vi_dollar: Math.round(ippRevViDollar * 100) / 100,
+    ipp_revenue_vi_mwh: Math.round(ippRevViMwh * 100) / 100,
+
+    deal_value_offtake_dollar: Math.round(dealValueDollarOfftake * 100) / 100,
+    deal_value_offtake_mwh: Math.round(dealValueMwhOfftake * 100) / 100,
+    deal_value_vi_dollar: Math.round(dealValueDollarVi * 100) / 100,
+    deal_value_vi_mwh: Math.round(dealValueMwhVi * 100) / 100,
+
+    annual_import_cost_dollar: Math.round(annualize(totalImportCost, totalHourCount) * 100) / 100,
+  };
+}
+
+/**
+ * buildHourlyData — merge IPP generation data with ERCOT nodal/load data.
+ * If IPP provides hourly gen, use it. Otherwise, synthesize from capacity.
  */
 function buildHourlyData(ippData) {
-  const hours = [];
+  const nodalLen = NODAL_DATA.length || 8760;
 
-  if (ippData.hourlyGeneration && ippData.hourlyGeneration.length === 8760) {
-    // IPP provided exact hourly generation
-    for (let i = 0; i < 8760; i++) {
-      const nodal = NODAL_DATA[i]?.nodal || 0;
-      const load = NODAL_DATA[i]?.load || 0;
+  if (ippData.hourlyGeneration && ippData.hourlyGeneration.length >= 8000) {
+    // IPP provided hourly generation — use it, match length to nodal data
+    const len = Math.min(ippData.hourlyGeneration.length, nodalLen);
+    const hours = [];
+    for (let i = 0; i < len; i++) {
       hours.push({
         hour: i + 1,
-        gen: ippData.hourlyGeneration[i],
-        nodal,
-        load,
+        gen: safeJsonNumber(ippData.hourlyGeneration[i]),
+        nodal: safeJsonNumber(NODAL_DATA[i]?.nodal),
+        load: safeJsonNumber(NODAL_DATA[i]?.load),
       });
     }
     return hours;
@@ -314,28 +457,25 @@ function buildHourlyData(ippData) {
   // Synthesize hourly generation from summary data
   const capacity = ippData.capacityMW || 0;
   const annualGen = ippData.annualGenerationMWh || 0;
-  const genHours = ippData.generationHours || (capacity > 0 ? annualGen / capacity : 2200);
   const type = (ippData.facilityType || '').toLowerCase();
+  const hours = [];
 
-  for (let i = 0; i < 8760; i++) {
+  for (let i = 0; i < nodalLen; i++) {
     const hourOfDay = i % 24;
-    const nodal = NODAL_DATA[i]?.nodal || 0;
-    const load = NODAL_DATA[i]?.load || 0;
+    const nodal = safeJsonNumber(NODAL_DATA[i]?.nodal);
+    const load = safeJsonNumber(NODAL_DATA[i]?.load);
 
     let gen = 0;
     if (type === 'solar') {
-      // Solar: generate during daylight hours (6am-7pm), peak at noon
       if (hourOfDay >= 6 && hourOfDay <= 19) {
         const peakFactor = 1 - Math.abs(hourOfDay - 12.5) / 7;
         gen = capacity * peakFactor * 0.85;
       }
     } else if (type === 'wind') {
-      // Wind: somewhat random but higher at night, use simple pattern
       const windFactor = 0.25 + 0.15 * Math.sin((i / 8760) * Math.PI * 2 * 365)
         + (hourOfDay >= 18 || hourOfDay <= 6 ? 0.15 : 0);
       gen = capacity * Math.max(0, Math.min(1, windFactor));
     } else {
-      // Gas/other: flat capacity factor
       const cf = annualGen / (capacity * 8760) || 0.5;
       gen = capacity * cf;
     }
@@ -343,10 +483,12 @@ function buildHourlyData(ippData) {
     hours.push({ hour: i + 1, gen, nodal, load });
   }
 
-  // Scale to match annual total
+  // Scale to match annual total (annualized)
   const rawTotal = hours.reduce((s, h) => s + h.gen, 0);
   if (rawTotal > 0 && annualGen > 0) {
-    const scale = annualGen / rawTotal;
+    // Scale so annualized generation matches target
+    const targetTotal = annualGen * (nodalLen / 8760);
+    const scale = targetTotal / rawTotal;
     for (const h of hours) h.gen = h.gen * scale;
   }
 
@@ -354,94 +496,132 @@ function buildHourlyData(ippData) {
 }
 
 /**
- * runPricingAnalysis — exact replica of PricingToolUSA lambda_handler
+ * runPricingAnalysis — exact replica of PricingToolUSA lambda_handler.
  * Runs mine size sensitivity analysis across all MINE_SIZES.
+ * Optimizes by deal_value_per_mwh (not total), matching Lambda logic.
  */
 export function runPricingAnalysis(ippData, scenario = 'Base') {
   const hourlyData = buildHourlyData(ippData);
   const hashprice = HASHPRICE_SCENARIOS[scenario] || 100;
+  const efficiency = DEFAULT_ECON.efficiency;
 
-  // Update assumptions with selected hashprice
-  const assumptions = {
-    ...ECONOMIC_ASSUMPTIONS,
-    hashprice_usd_ph_day: hashprice,
+  // Dynamic strike price from hashprice + efficiency
+  const strikePrice = calculateStrikePrice(hashprice, efficiency);
+
+  const econ = {
+    miner_floor_price: DEFAULT_ECON.miner_floor_price,
+    offtake_index: DEFAULT_ECON.offtake_index,
+    calc_strike_price: strikePrice,
+    import_burden: DEFAULT_ECON.import_burden,
   };
 
+  const totalHourCount = hourlyData.length;
+
+  // Check all generation isn't zero
+  if (hourlyData.every(r => safeJsonNumber(r.gen) === 0)) {
+    return { error: 'All generation values are zero', scenario, hashprice };
+  }
+
   let bestMineSize = null;
-  let bestDealValue = -Infinity;
-  let bestMetrics = {};
+  let bestDealValuePerMwh = -Infinity;
+  let bestQuickMetrics = {};
   const allResults = [];
 
   for (const mineSize of MINE_SIZES) {
-    // Skip mine sizes larger than capacity
     if (ippData.capacityMW && mineSize > ippData.capacityMW * 1.5) continue;
 
-    const results = hourlyData.map(row => processRow(row, mineSize, assumptions));
-    const n = results.length;
+    const results = hourlyData.map(row => processRow(row, mineSize, econ));
 
-    const ippRevenue = results.reduce((s, r) => s + r.baseRev, 0);
-    const viRevenue = results.reduce((s, r) => s + r.viRevenue, 0);
-    const offtakeRevenue = results.reduce((s, r) => s + r.offtakeRevenue, 0);
     const totalOfftake = results.reduce((s, r) => s + r.offtake, 0);
-    const totalImport = results.reduce((s, r) => s + r.import, 0);
+    const totalBaseRev = results.reduce((s, r) => s + r.baseRevenue, 0);
+    const totalViRev = results.reduce((s, r) => s + r.viRevenue, 0);
+    const totalOfftakeRev = results.reduce((s, r) => s + r.offtakeRevenue, 0);
     const totalMineConsumption = results.reduce((s, r) => s + r.mineConsumption, 0);
-    const totalBtmLmpCosts = results.reduce((s, r) => s + r.btmLmpCosts, 0);
     const totalMineLmpCosts = results.reduce((s, r) => s + r.mineLmpCosts, 0);
-    const totalGen = hourlyData.reduce((s, r) => s + r.gen, 0);
 
-    const dealValueVI = viRevenue - ippRevenue;
-    const dealValueOfftake = offtakeRevenue - ippRevenue;
+    // Annualize
+    const annualBtmOfftake = annualize(totalOfftake, totalHourCount);
+    const ippRevBaseDollar = annualize(totalBaseRev, totalHourCount);
+    const ippRevViDollar = annualize(totalViRev, totalHourCount);
+    const ippRevOfftakeDollar = annualize(totalOfftakeRev, totalHourCount);
 
-    // Avg blended LMP for the miner
-    const avgBlendedLmp = totalMineConsumption > 0
-      ? totalMineLmpCosts / totalMineConsumption
-      : 0;
+    const ippRevBaseMwh = annualBtmOfftake > 0 ? ippRevBaseDollar / annualBtmOfftake : 0;
+    const ippRevViMwh = annualBtmOfftake > 0 ? ippRevViDollar / annualBtmOfftake : 0;
+    const ippRevOfftakeMwh = annualBtmOfftake > 0 ? ippRevOfftakeDollar / annualBtmOfftake : 0;
 
-    // Mine uptime percentage
-    const hoursRunning = results.filter(r => r.mineConsumption > 0).length;
-    const mineUptimePct = (hoursRunning / 8760) * 100;
+    const dealValueDollar = ippRevViDollar - ippRevBaseDollar;
+    const dealValueMwh = ippRevViMwh - ippRevBaseMwh;
+
+    const dealValueOfftakeDollar = ippRevOfftakeDollar - ippRevBaseDollar;
+    const dealValueOfftakeMwh = ippRevOfftakeMwh - ippRevBaseMwh;
+
+    // Uptime: capacity factor
+    const annualConsumption = annualize(totalMineConsumption, totalHourCount);
+    const uptimePct = mineSize > 0 ? (annualConsumption / (mineSize * 8760)) * 100 : 0;
+
+    // Blended LMP
+    const avgBlendedLmp = totalMineConsumption > 0 ? totalMineLmpCosts / totalMineConsumption : 0;
+    const allInCost = avgBlendedLmp + econ.import_burden;
 
     const entry = {
       mine_size: mineSize,
-      annual_btm_offtake_MWh: Math.round(totalOfftake),
-      annual_import_MWh: Math.round(totalImport),
-      mine_consumption_MWh: Math.round(totalMineConsumption),
-      mine_uptime_pct: Math.round(mineUptimePct * 100) / 100,
-      ipp_revenue_base: Math.round(ippRevenue),
-      ipp_revenue_offtake: Math.round(offtakeRevenue),
-      ipp_revenue_vi: Math.round(viRevenue),
-      deal_value_offtake: Math.round(dealValueOfftake),
-      deal_value_vi: Math.round(dealValueVI),
-      deal_value_per_mwh_offtake: totalOfftake > 0 ? Math.round(dealValueOfftake / totalOfftake * 100) / 100 : 0,
-      deal_value_per_mwh_vi: totalOfftake > 0 ? Math.round(dealValueVI / totalOfftake * 100) / 100 : 0,
-      ipp_revenue_base_per_mwh: totalGen > 0 ? Math.round(ippRevenue / totalGen * 100) / 100 : 0,
-      ipp_revenue_offtake_per_mwh: totalGen > 0 ? Math.round(offtakeRevenue / totalGen * 100) / 100 : 0,
-      ipp_revenue_vi_per_mwh: totalGen > 0 ? Math.round(viRevenue / totalGen * 100) / 100 : 0,
+      annual_btm_offtake_MWh: Math.round(annualBtmOfftake),
+      mine_uptime_pct: Math.round(uptimePct * 100) / 100,
       avg_blended_lmp: Math.round(avgBlendedLmp * 100) / 100,
-      all_in_electricity_cost_miner: Math.round(avgBlendedLmp * 100) / 100,
+      all_in_electricity_cost: Math.round(allInCost * 100) / 100,
+
+      ipp_revenue_base: Math.round(ippRevBaseDollar),
+      ipp_revenue_base_per_mwh: Math.round(ippRevBaseMwh * 100) / 100,
+      ipp_revenue_offtake: Math.round(ippRevOfftakeDollar),
+      ipp_revenue_offtake_per_mwh: Math.round(ippRevOfftakeMwh * 100) / 100,
+      ipp_revenue_vi: Math.round(ippRevViDollar),
+      ipp_revenue_vi_per_mwh: Math.round(ippRevViMwh * 100) / 100,
+
+      deal_value_offtake: Math.round(dealValueOfftakeDollar),
+      deal_value_offtake_per_mwh: Math.round(dealValueOfftakeMwh * 100) / 100,
+      deal_value_vi: Math.round(dealValueDollar),
+      deal_value_vi_per_mwh: Math.round(dealValueMwh * 100) / 100,
     };
     allResults.push(entry);
 
-    if (dealValueVI > bestDealValue) {
-      bestDealValue = dealValueVI;
+    // Optimize by deal_value_per_mwh (matches Lambda)
+    if (dealValueMwh > bestDealValuePerMwh) {
+      bestDealValuePerMwh = dealValueMwh;
       bestMineSize = mineSize;
-      bestMetrics = entry;
+      bestQuickMetrics = entry;
     }
   }
+
+  // Generate full winner summary with summarize()
+  const winner = bestMineSize ? summarize(hourlyData, bestMineSize, econ) : null;
 
   return {
     scenario,
     hashprice,
+    strikePrice: Math.round(strikePrice * 100) / 100,
+    efficiency,
     bestMineSize,
-    bestDealValue: Math.round(bestDealValue),
-    bestMetrics,
+    bestDealValue: bestQuickMetrics.deal_value_vi || 0,
+    bestDealValuePerMwh: Math.round(bestDealValuePerMwh * 100) / 100,
+    bestMetrics: bestQuickMetrics,
+    winner,
     allResults,
-    totalGeneration: Math.round(hourlyData.reduce((s, r) => s + r.gen, 0)),
+    totalHoursProcessed: hourlyData.length,
+    totalGeneration: Math.round(annualize(hourlyData.reduce((s, r) => s + r.gen, 0), hourlyData.length)),
     capacityMW: ippData.capacityMW,
+    parameters: {
+      hashprice,
+      efficiency,
+      strikePrice: Math.round(strikePrice * 100) / 100,
+      floorPrice: DEFAULT_ECON.miner_floor_price,
+      importBurden: DEFAULT_ECON.import_burden,
+      offtakeIndex: DEFAULT_ECON.offtake_index,
+      totalHoursProcessed: hourlyData.length,
+    },
   };
 }
 
-// ─── 4. Generate Excel ─────────────────────────────────────────────────────
+// ─── 4. Generate Excel ───────────────────────────────────────────────────────
 
 export async function generateMineSpecExcel(analysis, ippData) {
   const wb = new ExcelJS.Workbook();
@@ -459,11 +639,10 @@ export async function generateMineSpecExcel(analysis, ippData) {
   const ws = wb.addWorksheet('Mine Specifications', {
     properties: { defaultColWidth: 18 },
   });
-  ws.columns = [{ width: 32 }, { width: 22 }, { width: 22 }, { width: 22 }, { width: 22 }, { width: 22 }];
+  ws.columns = [{ width: 36 }, { width: 22 }, { width: 22 }, { width: 22 }, { width: 22 }, { width: 22 }];
 
   let r = 1;
 
-  // ── Helpers ──
   function sectionHeader(text) {
     ws.mergeCells(r, 1, r, 6);
     const c = ws.getCell(r, 1);
@@ -495,7 +674,7 @@ export async function generateMineSpecExcel(analysis, ippData) {
   }
 
   const fmt = (n) => `$${Math.round(n).toLocaleString()}`;
-  const fmtD = (n) => `$${n.toFixed(2)}`;
+  const fmtD = (n) => `$${(n || 0).toFixed(2)}`;
 
   // ── Header ──
   ws.mergeCells(r, 1, r, 6);
@@ -526,32 +705,43 @@ export async function generateMineSpecExcel(analysis, ippData) {
   kvRow('Annual Generation', `${(ippData.annualGenerationMWh || analysis.totalGeneration).toLocaleString()} MWh`);
   kvRow('Generation Hours', `${(ippData.generationHours || 0).toLocaleString()} hrs/year`);
   kvRow('Curtailment Rate', `${ippData.curtailmentPct || 0}%`);
-  kvRow('Hashprice Scenario', `${analysis.scenario} — $${analysis.hashprice}/PH/day`);
+  kvRow('Hours Analyzed', `${analysis.totalHoursProcessed.toLocaleString()} hrs`);
   r++;
 
-  // ── Winner Summary (KPIs) ──
-  const w = analysis.bestMetrics;
+  // ── Winner Summary (from summarize()) ──
+  const w = analysis.winner;
   sectionHeader(`OPTIMAL CONFIGURATION — ${analysis.bestMineSize} MW MINE`);
   kvRow('Best Mine Size', `${analysis.bestMineSize} MW`);
   kvRow('Annual BTM Offtake', `${w.annual_btm_offtake_MWh?.toLocaleString()} MWh`);
-  kvRow('Mine Uptime', `${w.mine_uptime_pct}%`);
-  kvRow('IPP Revenue (Grid Only)', fmt(w.ipp_revenue_base));
-  kvRow('IPP Revenue (Miner Offtake)', fmt(w.ipp_revenue_offtake));
-  kvRow('IPP Revenue (Vertical Integration)', fmt(w.ipp_revenue_vi));
-  kvRow('Deal Value — Miner Offtake', fmt(w.deal_value_offtake));
-  kvRow('Deal Value — Vertical Integration', fmt(w.deal_value_vi));
-  kvRow('Deal Value $/MWh (VI)', fmtD(w.deal_value_per_mwh_vi));
-  kvRow('Avg Blended LMP (Miner)', fmtD(w.avg_blended_lmp));
+  kvRow('Annual Import', `${w.annual_import_MWh?.toLocaleString()} MWh`);
+  kvRow('Mine Uptime (Capacity Factor)', `${w.uptime_pct}%`);
+  kvRow('Avg Blended LMP', fmtD(w.avg_blended_lmp));
+  kvRow('All-In Electricity Cost (Miner)', fmtD(w.all_in_electricity_cost_miner));
+  kvRow('Curtailment Hours', `${w.curtailment_hours.toLocaleString()} hrs`);
+  r++;
+
+  kvRow('IPP Revenue — Grid Only ($/MWh)', fmtD(w.ipp_revenue_base_mwh));
+  kvRow('IPP Revenue — Miner Offtake ($/MWh)', fmtD(w.ipp_revenue_offtake_mwh));
+  kvRow('IPP Revenue — Vertical Integration ($/MWh)', fmtD(w.ipp_revenue_vi_mwh));
+  r++;
+  kvRow('IPP Revenue — Grid Only (Annual)', fmt(w.ipp_revenue_base_dollar));
+  kvRow('IPP Revenue — Miner Offtake (Annual)', fmt(w.ipp_revenue_offtake_dollar));
+  kvRow('IPP Revenue — Vertical Integration (Annual)', fmt(w.ipp_revenue_vi_dollar));
+  r++;
+  kvRow('Deal Value — Miner Offtake ($/MWh)', fmtD(w.deal_value_offtake_mwh));
+  kvRow('Deal Value — Miner Offtake (Annual)', fmt(w.deal_value_offtake_dollar));
+  kvRow('Deal Value — Vertical Integration ($/MWh)', fmtD(w.deal_value_vi_mwh));
+  kvRow('Deal Value — Vertical Integration (Annual)', fmt(w.deal_value_vi_dollar));
   r++;
 
   // ── Offer Type Comparison ──
   sectionHeader('OFFER TYPE COMPARISON');
-  tableHeaders(['Metric', 'Grid Only (Base)', 'Miner Offtake', 'Vertical Integration']);
+  tableHeaders(['Metric', 'Grid Only', 'Miner Offtake', 'Vertical Integration']);
   const compRows = [
-    ['IPP Revenue ($/MWh)', fmtD(w.ipp_revenue_base_per_mwh), fmtD(w.ipp_revenue_offtake_per_mwh), fmtD(w.ipp_revenue_vi_per_mwh)],
-    ['IPP Revenue (Total)', fmt(w.ipp_revenue_base), fmt(w.ipp_revenue_offtake), fmt(w.ipp_revenue_vi)],
-    ['Deal Value (Total)', '—', fmt(w.deal_value_offtake), fmt(w.deal_value_vi)],
-    ['Deal Value ($/MWh)', '—', fmtD(w.deal_value_per_mwh_offtake), fmtD(w.deal_value_per_mwh_vi)],
+    ['IPP Revenue ($/MWh)', fmtD(w.ipp_revenue_base_mwh), fmtD(w.ipp_revenue_offtake_mwh), fmtD(w.ipp_revenue_vi_mwh)],
+    ['IPP Revenue (Annual)', fmt(w.ipp_revenue_base_dollar), fmt(w.ipp_revenue_offtake_dollar), fmt(w.ipp_revenue_vi_dollar)],
+    ['Deal Value ($/MWh)', '—', fmtD(w.deal_value_offtake_mwh), fmtD(w.deal_value_vi_mwh)],
+    ['Deal Value (Annual)', '—', fmt(w.deal_value_offtake_dollar), fmt(w.deal_value_vi_dollar)],
   ];
   for (const row of compRows) {
     ws.getCell(r, 1).value = row[0];
@@ -560,7 +750,6 @@ export async function generateMineSpecExcel(analysis, ippData) {
       ws.getCell(r, i + 1).value = row[i];
       ws.getCell(r, i + 1).alignment = { horizontal: 'center' };
     }
-    // Highlight VI column
     ws.getCell(r, 4).font = { bold: true, color: { argb: '27AE60' } };
     r++;
   }
@@ -568,15 +757,15 @@ export async function generateMineSpecExcel(analysis, ippData) {
 
   // ── Mine Size Sensitivity ──
   sectionHeader('MINE SIZE SENSITIVITY ANALYSIS');
-  tableHeaders(['Mine Size (MW)', 'BTM Offtake (MWh)', 'Deal Value — Total', 'Deal Value $/MWh', 'VI Revenue $/MWh', 'Uptime %']);
+  tableHeaders(['Mine Size (MW)', 'BTM Offtake (MWh)', 'Deal Value $/MWh', 'Deal Value (Annual)', 'All-In Cost $/MWh', 'Uptime %']);
   for (const res of analysis.allResults) {
     const isBest = res.mine_size === analysis.bestMineSize;
     ws.getCell(r, 1).value = `${res.mine_size} MW${isBest ? '  ★ BEST' : ''}`;
     ws.getCell(r, 1).font = isBest ? { bold: true, color: { argb: '27AE60' } } : {};
     ws.getCell(r, 2).value = res.annual_btm_offtake_MWh.toLocaleString();
-    ws.getCell(r, 3).value = fmt(res.deal_value_vi);
-    ws.getCell(r, 4).value = fmtD(res.deal_value_per_mwh_vi);
-    ws.getCell(r, 5).value = fmtD(res.ipp_revenue_vi_per_mwh);
+    ws.getCell(r, 3).value = fmtD(res.deal_value_vi_per_mwh);
+    ws.getCell(r, 4).value = fmt(res.deal_value_vi);
+    ws.getCell(r, 5).value = fmtD(res.all_in_electricity_cost);
     ws.getCell(r, 6).value = `${res.mine_uptime_pct}%`;
     for (let i = 1; i <= 6; i++) ws.getCell(r, i).alignment = { horizontal: 'center' };
     if (isBest) {
@@ -588,12 +777,13 @@ export async function generateMineSpecExcel(analysis, ippData) {
 
   // ── Economic Assumptions ──
   sectionHeader('ECONOMIC ASSUMPTIONS');
-  kvRow('Miner Floor Price', `$${ECONOMIC_ASSUMPTIONS.miner_floor_price.toFixed(2)}/MWh`);
-  kvRow('Offtake Index', ECONOMIC_ASSUMPTIONS.offtake_index);
-  kvRow('Calc Strike Price', `$${ECONOMIC_ASSUMPTIONS.calc_strike_price.toFixed(2)}/MWh`);
   kvRow('Hashprice', `$${analysis.hashprice}/PH/day`);
-  kvRow('Fleet Efficiency', `${ECONOMIC_ASSUMPTIONS.miner_fleet_efficiency} J/TH`);
-  kvRow('IPP Gen Price Floor', `$${ECONOMIC_ASSUMPTIONS.ipp_gen_price_floor.toFixed(2)}/MWh`);
+  kvRow('Fleet Efficiency', `${analysis.efficiency} W/TH`);
+  kvRow('Calculated Strike Price', fmtD(analysis.strikePrice) + '/MWh');
+  kvRow('Miner Floor Price', fmtD(analysis.parameters.floorPrice) + '/MWh');
+  kvRow('Import Burden', fmtD(analysis.parameters.importBurden) + '/MWh');
+  kvRow('Offtake Index', analysis.parameters.offtakeIndex);
+  kvRow('Total Hours Analyzed', `${analysis.totalHoursProcessed.toLocaleString()}`);
   r += 2;
 
   // ── Disclaimer ──
@@ -613,7 +803,7 @@ export async function generateMineSpecExcel(analysis, ippData) {
   return { filepath, filename };
 }
 
-// ─── 5. Process IPP Email ──────────────────────────────────────────────────
+// ─── 5. Process IPP Email ────────────────────────────────────────────────────
 
 export async function processIppEmail({ messageId, threadId, from, fromName, subject, body, attachments }) {
   console.log(`[IPP Pipeline] Processing inquiry from ${fromName} <${from}>`);
@@ -631,10 +821,10 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         `Thank you for your interest in behind-the-meter mining. To generate a detailed mine specification report, we need at minimum:`,
         '',
         `- Facility capacity (MW)`,
-        `- Annual generation (MWh) — or attach a CSV with 8,760 hourly generation values`,
+        `- Annual generation (MWh) — or attach a CSV with hourly generation values`,
         `- Location / ERCOT zone`,
         '',
-        `For the most accurate analysis, provide hourly generation data (8,760 rows) as a CSV.`,
+        `For the most accurate analysis, provide hourly generation data as a CSV.`,
         '',
         `Best regards,`,
         `Coppice — Sangha Renewables`,
@@ -663,7 +853,6 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
     data.generationHours = Math.round(data.annualGenerationMWh / data.capacityMW);
   }
 
-  // Log inquiry received
   insertActivity({
     tenantId: TENANT_ID, type: 'in',
     title: `IPP Inquiry from ${fromName || from}`,
@@ -677,48 +866,48 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   const bestAnalysis = runPricingAnalysis(data, 'Best');
   const worstAnalysis = runPricingAnalysis(data, 'Worst');
 
-  const w = baseAnalysis.bestMetrics;
-  console.log(`[IPP Pipeline] Best mine size: ${baseAnalysis.bestMineSize}MW, Deal value (VI): $${baseAnalysis.bestDealValue.toLocaleString()}`);
+  const w = baseAnalysis.winner;
+  console.log(`[IPP Pipeline] Best mine size: ${baseAnalysis.bestMineSize}MW, Deal value (VI): $${baseAnalysis.bestDealValue.toLocaleString()}, $/MWh: $${baseAnalysis.bestDealValuePerMwh}`);
 
-  // Log agent activity
   insertActivity({
     tenantId: TENANT_ID, type: 'agent',
     title: 'Mine Specification Generated',
-    subtitle: `${baseAnalysis.bestMineSize}MW optimal — Deal value $${baseAnalysis.bestDealValue.toLocaleString()} (VI)`,
+    subtitle: `${baseAnalysis.bestMineSize}MW optimal — Deal value $${baseAnalysis.bestDealValue.toLocaleString()} ($${baseAnalysis.bestDealValuePerMwh}/MWh)`,
     detailJson: JSON.stringify({
       bestMineSize: baseAnalysis.bestMineSize,
       dealValueVI: baseAnalysis.bestDealValue,
+      dealValuePerMwh: baseAnalysis.bestDealValuePerMwh,
+      strikePrice: baseAnalysis.strikePrice,
       scenarioResults: {
-        best: { bestMineSize: bestAnalysis.bestMineSize, dealValue: bestAnalysis.bestDealValue },
-        base: { bestMineSize: baseAnalysis.bestMineSize, dealValue: baseAnalysis.bestDealValue },
-        worst: { bestMineSize: worstAnalysis.bestMineSize, dealValue: worstAnalysis.bestDealValue },
+        best: { bestMineSize: bestAnalysis.bestMineSize, dealValue: bestAnalysis.bestDealValue, strikePrice: bestAnalysis.strikePrice },
+        base: { bestMineSize: baseAnalysis.bestMineSize, dealValue: baseAnalysis.bestDealValue, strikePrice: baseAnalysis.strikePrice },
+        worst: { bestMineSize: worstAnalysis.bestMineSize, dealValue: worstAnalysis.bestDealValue, strikePrice: worstAnalysis.strikePrice },
       },
     }),
     sourceType: 'email', sourceId: `ipp-spec-${messageId}`, agentId: 'coppice',
   });
 
-  // Generate Excel (base scenario)
   const { filepath, filename } = await generateMineSpecExcel(baseAnalysis, data);
   console.log(`[IPP Pipeline] Excel: ${filename}`);
 
-  // Compose reply
   const firstName = (fromName || '').split(' ')[0] || 'there';
   const replyBody = [
     `Hi ${firstName},`,
     '',
-    `Thank you for sharing your generation data. We've run a full mine specification analysis for your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} facility using our pricing engine with actual ERCOT nodal data.`,
+    `Thank you for sharing your generation data. We've run a full mine specification analysis for your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} facility using our pricing engine with actual ERCOT nodal data (${baseAnalysis.totalHoursProcessed.toLocaleString()} hours analyzed).`,
     '',
-    `Key findings (Base Case — $100/PH/day):`,
+    `Key findings (Base Case — $${baseAnalysis.hashprice}/PH/day, strike price: ${fmtD(baseAnalysis.strikePrice)}/MWh):`,
     `  • Optimal mine size: ${baseAnalysis.bestMineSize} MW`,
     `  • Annual BTM offtake: ${w.annual_btm_offtake_MWh?.toLocaleString()} MWh`,
-    `  • IPP revenue (grid only): ${fmt(w.ipp_revenue_base)}`,
-    `  • IPP revenue (vertical integration): ${fmt(w.ipp_revenue_vi)}`,
-    `  • Deal value (VI): ${fmt(w.deal_value_vi)} (+${fmtD(w.deal_value_per_mwh_vi)}/MWh)`,
-    `  • Mine uptime: ${w.mine_uptime_pct}%`,
+    `  • Mine uptime: ${w.uptime_pct}%`,
+    `  • All-in electricity cost: ${fmtD(w.all_in_electricity_cost_miner)}/MWh`,
+    `  • IPP revenue (grid only): ${fmtD(w.ipp_revenue_base_mwh)}/MWh (${fmt(w.ipp_revenue_base_dollar)}/yr)`,
+    `  • IPP revenue (vertical integration): ${fmtD(w.ipp_revenue_vi_mwh)}/MWh (${fmt(w.ipp_revenue_vi_dollar)}/yr)`,
+    `  • Deal value: +${fmtD(w.deal_value_vi_mwh)}/MWh (${fmt(w.deal_value_vi_dollar)}/yr)`,
     '',
-    `The attached report includes the full mine size sensitivity analysis (${MINE_SIZES.filter(m => !data.capacityMW || m <= data.capacityMW * 1.5).join(', ')} MW), offer type comparison (Grid vs Offtake vs Vertical Integration), and economic assumptions.`,
+    `The attached report includes the full mine size sensitivity analysis, offer type comparison (Grid vs Offtake vs VI), and economic assumptions.`,
     '',
-    `We'd be happy to schedule a call to walk through the analysis. We can also run additional scenarios at different hashprice levels.`,
+    `We'd be happy to schedule a call to walk through the analysis. We can also run additional scenarios at different hashprice levels or with your exact hourly generation data.`,
     '',
     `Best regards,`,
     `Coppice — Sangha Renewables`,
@@ -736,17 +925,13 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   });
   console.log(`[IPP Pipeline] Reply sent to ${from}`);
 
-  // Log outbound
   insertActivity({
     tenantId: TENANT_ID, type: 'out',
     title: 'Mine Specification Sent',
-    subtitle: `Replied to ${fromName || from} — ${baseAnalysis.bestMineSize}MW optimal, $${baseAnalysis.bestDealValue.toLocaleString()} deal value`,
-    detailJson: JSON.stringify({ to: from, filename, bestMineSize: baseAnalysis.bestMineSize, dealValue: baseAnalysis.bestDealValue }),
+    subtitle: `Replied to ${fromName || from} — ${baseAnalysis.bestMineSize}MW optimal, $${baseAnalysis.bestDealValuePerMwh}/MWh deal value`,
+    detailJson: JSON.stringify({ to: from, filename, bestMineSize: baseAnalysis.bestMineSize, dealValuePerMwh: baseAnalysis.bestDealValuePerMwh }),
     sourceType: 'email', sourceId: `ipp-reply-${messageId}`, agentId: 'coppice',
   });
 
   return { status: 'sent', messageId, analysis: baseAnalysis, filename };
 }
-
-// ─── 6. Exported for chat tool ─────────────────────────────────────────────
-// runPricingAnalysis and generateMineSpecExcel are already exported above

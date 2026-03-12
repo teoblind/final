@@ -437,27 +437,33 @@ async function callMiningTool(toolName, toolInput, tenantId) {
 
     const analysis = runPricingAnalysis(data, 'Base');
     const { filepath, filename } = await generateMineSpecExcel(analysis, data);
-    const w = analysis.bestMetrics;
+    const w = analysis.winner;
 
     return {
       optimalMineSize: `${analysis.bestMineSize} MW`,
       scenario: `${analysis.scenario} ($${analysis.hashprice}/PH/day)`,
+      strikePrice: `$${analysis.strikePrice}/MWh`,
       facility: `${data.capacityMW}MW ${data.facilityType}`,
       annualGeneration: `${(data.annualGenerationMWh || analysis.totalGeneration).toLocaleString()} MWh`,
-      bestMetrics: {
+      hoursAnalyzed: analysis.totalHoursProcessed,
+      winner: {
         btmOfftake: `${w.annual_btm_offtake_MWh?.toLocaleString()} MWh`,
-        mineUptime: `${w.mine_uptime_pct}%`,
-        ippRevenueGrid: `$${w.ipp_revenue_base?.toLocaleString()}`,
-        ippRevenueOfftake: `$${w.ipp_revenue_offtake?.toLocaleString()}`,
-        ippRevenueVI: `$${w.ipp_revenue_vi?.toLocaleString()}`,
-        dealValueOfftake: `$${w.deal_value_offtake?.toLocaleString()}`,
-        dealValueVI: `$${w.deal_value_vi?.toLocaleString()}`,
-        dealValuePerMwhVI: `$${w.deal_value_per_mwh_vi}/MWh`,
+        annualImport: `${w.annual_import_MWh?.toLocaleString()} MWh`,
+        mineUptime: `${w.uptime_pct}%`,
         avgBlendedLmp: `$${w.avg_blended_lmp}/MWh`,
+        allInElectricityCost: `$${w.all_in_electricity_cost_miner}/MWh`,
+        curtailmentHours: w.curtailment_hours,
+        ippRevenueGrid: `$${w.ipp_revenue_base_mwh}/MWh ($${w.ipp_revenue_base_dollar?.toLocaleString()}/yr)`,
+        ippRevenueOfftake: `$${w.ipp_revenue_offtake_mwh}/MWh ($${w.ipp_revenue_offtake_dollar?.toLocaleString()}/yr)`,
+        ippRevenueVI: `$${w.ipp_revenue_vi_mwh}/MWh ($${w.ipp_revenue_vi_dollar?.toLocaleString()}/yr)`,
+        dealValueOfftake: `$${w.deal_value_offtake_mwh}/MWh ($${w.deal_value_offtake_dollar?.toLocaleString()}/yr)`,
+        dealValueVI: `$${w.deal_value_vi_mwh}/MWh ($${w.deal_value_vi_dollar?.toLocaleString()}/yr)`,
       },
       mineSizeSensitivity: analysis.allResults.map(r => ({
         size: `${r.mine_size}MW`,
-        dealValueVI: `$${r.deal_value_vi?.toLocaleString()}`,
+        dealValuePerMwh: `$${r.deal_value_vi_per_mwh}/MWh`,
+        dealValueAnnual: `$${r.deal_value_vi?.toLocaleString()}`,
+        allInCost: `$${r.all_in_electricity_cost}/MWh`,
         uptime: `${r.mine_uptime_pct}%`,
         best: r.mine_size === analysis.bestMineSize,
       })),
