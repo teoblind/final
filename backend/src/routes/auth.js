@@ -100,6 +100,11 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Account is not active' });
     }
 
+    // OAuth-only users have no password hash
+    if (!user.password_hash) {
+      return res.status(401).json({ error: 'This account uses Google sign-in. Please use the Google login button.' });
+    }
+
     const passwordValid = await verifyPassword(password, user.password_hash);
     if (!passwordValid) {
       return res.status(401).json({ error: 'Invalid email or password' });
