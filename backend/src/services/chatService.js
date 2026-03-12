@@ -414,14 +414,12 @@ const MINING_TOOLS = [
 
 async function callMiningTool(toolName, toolInput, tenantId) {
   if (toolName === 'generate_mine_specs') {
-    const { calculateMineSpecs, generateMineSpecExcel } = await import('./ippPipeline.js');
+    const { runPricingAnalysis, generateMineSpecExcel } = await import('./ippPipeline.js');
 
     const data = {
       capacityMW: toolInput.capacity_mw,
       annualGenerationMWh: toolInput.annual_generation_mwh || null,
-      avgNodalPrice: toolInput.avg_nodal_price || 25,
       generationHours: toolInput.generation_hours || null,
-      operatingHours: 8760,
       curtailmentPct: toolInput.curtailment_pct || 0,
       facilityType: toolInput.facility_type || 'Renewable',
       location: toolInput.location || null,
@@ -437,31 +435,32 @@ async function callMiningTool(toolName, toolInput, tenantId) {
       data.generationHours = Math.round(data.annualGenerationMWh / data.capacityMW);
     }
 
-    const specs = calculateMineSpecs(data);
-    const { filepath, filename } = await generateMineSpecExcel(specs);
+    const analysis = runPricingAnalysis(data, 'Base');
+    const { filepath, filename } = await generateMineSpecExcel(analysis, data);
+    const w = analysis.bestMetrics;
 
     return {
-      site: specs.site,
-      recommendedFleet: {
-        model: specs.fleetOptions[0].model,
-        count: specs.fleetOptions[0].count,
-        hashratePH: specs.fleetOptions[0].hashratePH,
-        powerMW: specs.fleetOptions[0].powerMW,
+      optimalMineSize: `${analysis.bestMineSize} MW`,
+      scenario: `${analysis.scenario} ($${analysis.hashprice}/PH/day)`,
+      facility: `${data.capacityMW}MW ${data.facilityType}`,
+      annualGeneration: `${(data.annualGenerationMWh || analysis.totalGeneration).toLocaleString()} MWh`,
+      bestMetrics: {
+        btmOfftake: `${w.annual_btm_offtake_MWh?.toLocaleString()} MWh`,
+        mineUptime: `${w.mine_uptime_pct}%`,
+        ippRevenueGrid: `$${w.ipp_revenue_base?.toLocaleString()}`,
+        ippRevenueOfftake: `$${w.ipp_revenue_offtake?.toLocaleString()}`,
+        ippRevenueVI: `$${w.ipp_revenue_vi?.toLocaleString()}`,
+        dealValueOfftake: `$${w.deal_value_offtake?.toLocaleString()}`,
+        dealValueVI: `$${w.deal_value_vi?.toLocaleString()}`,
+        dealValuePerMwhVI: `$${w.deal_value_per_mwh_vi}/MWh`,
+        avgBlendedLmp: `$${w.avg_blended_lmp}/MWh`,
       },
-      scenarios: specs.fleetOptions[0].scenarios.map(s => ({
-        scenario: s.label,
-        hashprice: s.hashprice,
-        annualMiningRevenue: Math.round(s.annualMiningRevenue),
-        gridRevenue: Math.round(s.gridRevenue),
-        premium: Math.round(s.premium),
-        premiumPct: Math.round(s.premiumPct),
+      mineSizeSensitivity: analysis.allResults.map(r => ({
+        size: `${r.mine_size}MW`,
+        dealValueVI: `$${r.deal_value_vi?.toLocaleString()}`,
+        uptime: `${r.mine_uptime_pct}%`,
+        best: r.mine_size === analysis.bestMineSize,
       })),
-      financialSummary: {
-        totalCapex: specs.infrastructure.totalCapex,
-        paybackYears: specs.financialSummary.paybackYears,
-        roi5Year: Math.round(specs.financialSummary.roi5Year),
-        miningRevenuePerMWh: Math.round(specs.financialSummary.revenuePerMWh * 100) / 100,
-      },
       excelFile: filename,
       excelPath: filepath,
     };
