@@ -1,14 +1,11 @@
 /**
- * Reads calendar events via Google service account.
- * Requires the user to share their calendar with the service account.
+ * Reads calendar events via coppice@zhan.capital OAuth token.
+ * Users share their calendar with coppice@zhan.capital — no weird service account emails.
  */
 
 import { google } from 'googleapis';
-import path from 'path';
 
-const KEY_FILE = path.join(process.env.HOME || '/root', 'google-service-account.json');
-
-// Map tenant → calendar email to read
+// Map tenant → calendar email to read (the user's calendar shared with coppice@)
 const TENANT_CALENDARS = {
   'default': 'teo@sanghasystems.com',
   'sangha': 'teo@sanghasystems.com',
@@ -17,19 +14,22 @@ const TENANT_CALENDARS = {
 
 let calClient = null;
 
-async function getCalendar() {
+function getCalendar() {
   if (calClient) return calClient;
-  try {
-    const auth = new google.auth.GoogleAuth({
-      keyFile: KEY_FILE,
-      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-    });
-    calClient = google.calendar({ version: 'v3', auth });
-    return calClient;
-  } catch (err) {
-    console.error('[CalendarReader] Auth failed:', err.message);
+
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    console.warn('[CalendarReader] Missing Gmail OAuth credentials');
     return null;
   }
+
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
+  oauth2.setCredentials({ refresh_token: refreshToken });
+  calClient = google.calendar({ version: 'v3', auth: oauth2 });
+  return calClient;
 }
 
 /**
@@ -39,7 +39,7 @@ export async function getMeetingCount(tenantId, days = 30) {
   const calendarId = TENANT_CALENDARS[tenantId];
   if (!calendarId) return null;
 
-  const cal = await getCalendar();
+  const cal = getCalendar();
   if (!cal) return null;
 
   try {
