@@ -87,10 +87,11 @@ export async function queryHivemindCli(userMessage, history, tenantId) {
   try {
     const { stdout } = await execFileAsync(CLAUDE_BIN, [
       '-p', userMessage,
-      '--dangerously-skip-permissions',
       '--output-format', 'text',
       '--max-turns', '10',
       '--system-prompt', systemPrompt,
+      '--allowedTools', 'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
+        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
     ], {
       timeout: TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024, // 10MB
