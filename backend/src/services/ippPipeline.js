@@ -26,7 +26,7 @@ import { sendEmailWithAttachments } from './emailService.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SPECS_DIR = join(__dirname, '../../data/mine-specs');
-const NODAL_PATH = join(__dirname, '../../data/nodal_8760.json');
+const NODAL_PATH = join(__dirname, '../../data/nodal_correct.json');
 
 if (!existsSync(SPECS_DIR)) mkdirSync(SPECS_DIR, { recursive: true });
 
