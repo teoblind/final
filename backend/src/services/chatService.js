@@ -665,6 +665,28 @@ export async function chat(tenantId, agentId, userId, userContent) {
     content: row.content,
   }));
 
+  // CLI route for Hivemind — bypass API, spawn claude -p instead
+  if (agentId === 'hivemind' && process.env.HIVEMIND_USE_CLI === 'true') {
+    try {
+      const { queryHivemindCli } = await import('./hivemindCli.js');
+      const historyForContext = messages.slice(0, -1);
+      const cliResult = await queryHivemindCli(userContent, historyForContext, tenantId);
+
+      saveMessage(tenantId, agentId, userId, 'assistant', cliResult.response, {
+        model: 'claude-code-cli',
+        duration_ms: cliResult.durationMs,
+        timed_out: cliResult.timedOut || false,
+      });
+
+      const audioUrl = await generateAudioIfEnabled(cliResult.response);
+      return { response: cliResult.response, audio_url: audioUrl };
+    } catch (error) {
+      console.error(`Hivemind CLI error (tenant=${tenantId}):`, error.message);
+      saveMessage(tenantId, agentId, userId, 'system', `CLI Error: ${error.message}`);
+      throw error;
+    }
+  }
+
   // 4. Get system prompt for this agent, enriched with knowledge context
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
   const knowledgeContext = buildKnowledgeContext(tenantId, userContent);

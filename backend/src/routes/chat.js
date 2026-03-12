@@ -72,6 +72,12 @@ router.post('/:agentId/messages', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
+    // Extend timeouts for Hivemind CLI requests (claude -p can take up to 90s)
+    if (agentId === 'hivemind' && process.env.HIVEMIND_USE_CLI === 'true') {
+      req.setTimeout(150_000);
+      res.setTimeout(150_000);
+    }
+
     const result = await chat(tenantId, agentId, userId, content.trim());
 
     // Map tool results to frontend format
