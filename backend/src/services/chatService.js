@@ -389,6 +389,86 @@ const KNOWLEDGE_TOOLS = [
   },
 ];
 
+// ─── Mining / IPP Tools (Sangha tenant) ─────────────────────────────────────
+
+const MINING_TOOLS = [
+  {
+    name: 'generate_mine_specs',
+    description: 'Generate a mine specification report for an IPP (Independent Power Producer). Takes generation data (capacity, MWh, nodal price, etc.) and returns fleet sizing, revenue projections across bull/base/bear hashprice scenarios, infrastructure requirements, and financial summary. Use when someone asks about mine specs, BTM mining analysis, or IPP evaluation.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        capacity_mw: { type: 'number', description: 'Nameplate capacity in MW' },
+        annual_generation_mwh: { type: 'number', description: 'Annual generation in MWh' },
+        avg_nodal_price: { type: 'number', description: 'Average nodal price in $/MWh (default: 25)' },
+        generation_hours: { type: 'number', description: 'Productive generation hours per year' },
+        curtailment_pct: { type: 'number', description: 'Curtailment rate as percentage (default: 0)' },
+        facility_type: { type: 'string', enum: ['Solar', 'Wind', 'Natural Gas', 'Renewable'], description: 'Type of generation facility' },
+        location: { type: 'string', description: 'Facility location (e.g. "West Texas, ERCOT West")' },
+        facility_name: { type: 'string', description: 'Name of the facility' },
+      },
+      required: ['capacity_mw'],
+    },
+  },
+];
+
+async function callMiningTool(toolName, toolInput, tenantId) {
+  if (toolName === 'generate_mine_specs') {
+    const { calculateMineSpecs, generateMineSpecExcel } = await import('./ippPipeline.js');
+
+    const data = {
+      capacityMW: toolInput.capacity_mw,
+      annualGenerationMWh: toolInput.annual_generation_mwh || null,
+      avgNodalPrice: toolInput.avg_nodal_price || 25,
+      generationHours: toolInput.generation_hours || null,
+      operatingHours: 8760,
+      curtailmentPct: toolInput.curtailment_pct || 0,
+      facilityType: toolInput.facility_type || 'Renewable',
+      location: toolInput.location || null,
+      facilityName: toolInput.facility_name || null,
+    };
+
+    // Derive missing fields
+    if (!data.annualGenerationMWh) {
+      const cfMap = { Solar: 0.25, Wind: 0.35, 'Natural Gas': 0.85, Renewable: 0.30 };
+      data.annualGenerationMWh = Math.round(data.capacityMW * 8760 * (cfMap[data.facilityType] || 0.30));
+    }
+    if (!data.generationHours) {
+      data.generationHours = Math.round(data.annualGenerationMWh / data.capacityMW);
+    }
+
+    const specs = calculateMineSpecs(data);
+    const { filepath, filename } = await generateMineSpecExcel(specs);
+
+    return {
+      site: specs.site,
+      recommendedFleet: {
+        model: specs.fleetOptions[0].model,
+        count: specs.fleetOptions[0].count,
+        hashratePH: specs.fleetOptions[0].hashratePH,
+        powerMW: specs.fleetOptions[0].powerMW,
+      },
+      scenarios: specs.fleetOptions[0].scenarios.map(s => ({
+        scenario: s.label,
+        hashprice: s.hashprice,
+        annualMiningRevenue: Math.round(s.annualMiningRevenue),
+        gridRevenue: Math.round(s.gridRevenue),
+        premium: Math.round(s.premium),
+        premiumPct: Math.round(s.premiumPct),
+      })),
+      financialSummary: {
+        totalCapex: specs.infrastructure.totalCapex,
+        paybackYears: specs.financialSummary.paybackYears,
+        roi5Year: Math.round(specs.financialSummary.roi5Year),
+        miningRevenuePerMWh: Math.round(specs.financialSummary.revenuePerMWh * 100) / 100,
+      },
+      excelFile: filename,
+      excelPath: filepath,
+    };
+  }
+  throw new Error(`Unknown mining tool: ${toolName}`);
+}
+
 async function callKnowledgeTool(toolName, toolInput, tenantId) {
   if (toolName === 'search_knowledge') {
     const results = { entries: [], entities: [], actionItems: [] };
@@ -625,6 +705,7 @@ You can help with:
 - Mining pool optimization and hashrate allocation
 - Financial modeling and LP reporting
 - Insurance and risk management (revenue floor swaps)
+- IPP mine specification analysis — use the generate_mine_specs tool when someone asks about behind-the-meter mining economics, IPP evaluation, or mine specs for a given facility. Provide capacity (MW) at minimum. The tool returns fleet sizing, revenue projections (bull/base/bear hashprice scenarios), infrastructure requirements, and an Excel report.
 - Answering questions about meetings, action items, people, companies, and deal status
 
 You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files. You can generate full branded presentations with custom styling — just provide the topic and context.
@@ -948,6 +1029,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   if (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) {
     tools.push(...HUBSPOT_TOOLS);
   }
+  // Mining/IPP tools for Sangha agents
+  const miningAgents = ['sangha', 'curtailment'];
+  if (miningAgents.includes(agentId)) {
+    tools.push(...MINING_TOOLS);
+  }
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -987,6 +1073,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const leadEngineToolNames = ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue'];
       const knowledgeToolNames = ['search_knowledge'];
       const hubspotToolNames = ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'];
+      const miningToolNames = ['generate_mine_specs'];
       try {
         if (leadEngineToolNames.includes(toolName)) {
           toolResult = await callLeadEngineTool(toolName, toolInput, tenantId);
@@ -994,6 +1081,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           toolResult = await callKnowledgeTool(toolName, toolInput, tenantId);
         } else if (hubspotToolNames.includes(toolName)) {
           toolResult = await callHubSpotTool(toolName, toolInput, tenantId);
+        } else if (miningToolNames.includes(toolName)) {
+          toolResult = await callMiningTool(toolName, toolInput, tenantId);
         } else {
           toolResult = await callWorkspaceTool(toolName, toolInput, tenantId);
         }
