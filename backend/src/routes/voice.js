@@ -287,33 +287,38 @@ router.post('/llm/chat/completions', async (req, res) => {
       return res.status(400).json({ error: 'messages required' });
     }
 
-    // Extend timeout for CLI
-    req.setTimeout(150_000);
-    res.setTimeout(150_000);
-
     // Extract the latest user message
     const userMsg = [...messages].reverse().find(m => m.role === 'user');
     if (!userMsg) {
       return res.status(400).json({ error: 'no user message found' });
     }
 
-    const tenantId = req.query.tenant || 'default';
+    // Voice uses direct Claude API for speed (CLI is too slow for conversation)
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    // Route through Hivemind CLI if enabled, otherwise direct chat
-    let responseText;
-    if (process.env.HIVEMIND_USE_CLI === 'true') {
-      const { queryHivemindCli } = await import('../services/hivemindCli.js');
-      const history = messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .slice(0, -1)
-        .map(m => ({ role: m.role, content: m.content }));
-      const result = await queryHivemindCli(userMsg.content, history, tenantId);
-      responseText = result.response;
-    } else {
-      const { chat } = await import('../services/chatService.js');
-      const result = await chat(tenantId, 'hivemind', 'voice-user', userMsg.content);
-      responseText = result.response;
-    }
+    const voiceSystemPrompt = `You are Coppice, the AI operations agent for Sangha Renewables — a Bitcoin mining and renewable energy company. You're in a live voice conversation, so keep responses to 1-2 short sentences. Be warm, natural, and conversational. No markdown, no bullet points, no emojis — just speak naturally like a person would.
+
+You know about: ERCOT energy markets, Bitcoin mining operations, mining pool routing, curtailment strategy, lead generation, IPP partnerships, LP relations, and insurance products. The company has 8 years of operational experience.
+
+If asked about Coppice the platform: it's an AI operations platform that gives businesses specialized agents — lead generation, email outreach, estimating, document management, data analysis. Each agent has real system access to databases, files, and APIs.`;
+
+    const apiMessages = messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-10)
+      .map(m => ({ role: m.role, content: m.content }));
+
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 150,
+      system: voiceSystemPrompt,
+      messages: apiMessages,
+    });
+
+    let responseText = completion.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join(' ');
 
     // Streaming response (ElevenLabs expects SSE for custom LLM)
     if (stream) {
