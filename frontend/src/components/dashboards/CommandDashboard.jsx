@@ -378,9 +378,15 @@ export default function CommandDashboard({ onNavigate }) {
   useEffect(() => {
     async function fetchLeadStats() {
       try {
-        const token = localStorage.getItem('auth_token');
+        // Token is in sessionStorage under sangha_auth
+        let token = null;
+        try {
+          const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+          token = session?.tokens?.accessToken;
+        } catch {}
+        if (!token) return;
         const res = await fetch(`${API_BASE}/v1/lead-engine/stats`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return;
         const data = await res.json();
