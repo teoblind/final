@@ -271,4 +271,93 @@ router.get('/conversation/config', (req, res) => {
   });
 });
 
+// ─── Custom LLM for ElevenLabs Conversational AI ────────────────────────────
+
+/**
+ * POST /llm/chat/completions — OpenAI-compatible endpoint for ElevenLabs
+ *
+ * ElevenLabs sends transcribed speech here, we route through our Coppice
+ * chat service (Hivemind w/ full DB access), and return the response.
+ * ElevenLabs then speaks it with Christina's voice.
+ */
+router.post('/llm/chat/completions', async (req, res) => {
+  try {
+    const { messages, stream } = req.body;
+    if (!messages || !messages.length) {
+      return res.status(400).json({ error: 'messages required' });
+    }
+
+    // Extend timeout for CLI
+    req.setTimeout(150_000);
+    res.setTimeout(150_000);
+
+    // Extract the latest user message
+    const userMsg = [...messages].reverse().find(m => m.role === 'user');
+    if (!userMsg) {
+      return res.status(400).json({ error: 'no user message found' });
+    }
+
+    const tenantId = req.query.tenant || 'default';
+
+    // Route through Hivemind CLI if enabled, otherwise direct chat
+    let responseText;
+    if (process.env.HIVEMIND_USE_CLI === 'true') {
+      const { queryHivemindCli } = await import('../services/hivemindCli.js');
+      const history = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(0, -1)
+        .map(m => ({ role: m.role, content: m.content }));
+      const result = await queryHivemindCli(userMsg.content, history, tenantId);
+      responseText = result.response;
+    } else {
+      const { chat } = await import('../services/chatService.js');
+      const result = await chat(tenantId, 'hivemind', 'voice-user', userMsg.content);
+      responseText = result.response;
+    }
+
+    // Streaming response (ElevenLabs expects SSE for custom LLM)
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      const chunk = {
+        id: `chatcmpl-${Date.now()}`,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model: 'coppice-hivemind',
+        choices: [{
+          index: 0,
+          delta: { role: 'assistant', content: responseText },
+          finish_reason: null,
+        }],
+      };
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+
+      const done = { ...chunk, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] };
+      res.write(`data: ${JSON.stringify(done)}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    // Non-streaming response
+    res.json({
+      id: `chatcmpl-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: 'coppice-hivemind',
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: responseText },
+        finish_reason: 'stop',
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    });
+  } catch (error) {
+    console.error('Voice LLM error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
