@@ -811,24 +811,31 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
 
   const data = parseIppData(body, attachments);
 
+  // Extract first name from sender — try body signature, then From header, then email prefix
+  let firstName = null;
+  const sigMatch = body.match(/(?:Thanks|Regards|Best|Cheers|Sincerely)[,\s]*\n+([A-Z][a-z]+)/);
+  if (sigMatch) firstName = sigMatch[1];
+  if (!firstName && fromName && !fromName.includes('@')) firstName = fromName.split(' ')[0];
+  if (!firstName) firstName = from.split('@')[0].replace(/[^a-zA-Z]/g, ' ').split(' ')[0];
+  if (firstName) firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+
   if (!data.capacityMW && !data.annualGenerationMWh) {
     console.log(`[IPP Pipeline] Insufficient data — requesting more info`);
     await sendEmailWithAttachments({
       to: from,
       subject: `RE: ${subject}`,
       body: [
-        `Hi ${(fromName || '').split(' ')[0] || 'there'},`,
+        `Hey ${firstName},`,
         '',
-        `Thank you for your interest in behind-the-meter mining. To generate a detailed mine specification report, we need at minimum:`,
+        `Appreciate you reaching out - we work with a number of IPPs on BTM mining economics and would be happy to run an analysis for your site.`,
         '',
-        `- Facility capacity (MW)`,
-        `- Annual generation (MWh) — or attach a CSV with hourly generation values`,
-        `- Location / ERCOT zone`,
+        `To put together something meaningful, we'd need a few data points: facility capacity (MW), annual generation (MWh), and location or ERCOT zone. If you have hourly generation data as a CSV, even better - that gives us the most accurate picture.`,
         '',
-        `For the most accurate analysis, provide hourly generation data as a CSV.`,
+        `What does your generation profile look like? Are you seeing curtailment or mostly selling everything to grid today?`,
         '',
-        `Best regards,`,
-        `Coppice — Sangha Renewables`,
+        `Best,`,
+        `Coppice`,
+        `Sangha Renewables`,
       ].join('\n'),
       attachments: [],
     });
@@ -891,27 +898,18 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   const { filepath, filename } = await generateMineSpecExcel(baseAnalysis, data);
   console.log(`[IPP Pipeline] Excel: ${filename}`);
 
-  const firstName = (fromName || '').split(' ')[0] || 'there';
   const replyBody = [
-    `Hi ${firstName},`,
+    `Hey ${firstName},`,
     '',
-    `Thank you for sharing your generation data. We've run a full mine specification analysis for your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} facility using our pricing engine with actual ERCOT nodal data (${baseAnalysis.totalHoursProcessed.toLocaleString()} hours analyzed).`,
+    `Ran the numbers on your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} site — the short version is a ${baseAnalysis.bestMineSize}MW behind-the-meter mine looks like it adds about $${fmtD(baseAnalysis.bestDealValuePerMwh)}/MWh in deal value, which comes out to roughly $${fmt(baseAnalysis.bestDealValue)} annually on a VI structure. That's at ${w.uptime_pct}% uptime with an all-in electricity cost to the miner of $${fmtD(w.all_in_electricity_cost_miner)}/MWh.`,
     '',
-    `Key findings (Base Case — $${baseAnalysis.hashprice}/PH/day, strike price: ${fmtD(baseAnalysis.strikePrice)}/MWh):`,
-    `  • Optimal mine size: ${baseAnalysis.bestMineSize} MW`,
-    `  • Annual BTM offtake: ${w.annual_btm_offtake_MWh?.toLocaleString()} MWh`,
-    `  • Mine uptime: ${w.uptime_pct}%`,
-    `  • All-in electricity cost: ${fmtD(w.all_in_electricity_cost_miner)}/MWh`,
-    `  • IPP revenue (grid only): ${fmtD(w.ipp_revenue_base_mwh)}/MWh (${fmt(w.ipp_revenue_base_dollar)}/yr)`,
-    `  • IPP revenue (vertical integration): ${fmtD(w.ipp_revenue_vi_mwh)}/MWh (${fmt(w.ipp_revenue_vi_dollar)}/yr)`,
-    `  • Deal value: +${fmtD(w.deal_value_vi_mwh)}/MWh (${fmt(w.deal_value_vi_dollar)}/yr)`,
+    `Attached the full report with the sensitivity across mine sizes (${baseAnalysis.mineSizes[0]}MW to ${baseAnalysis.mineSizes[baseAnalysis.mineSizes.length - 1]}MW), grid vs offtake vs VI comparisons, and the economic assumptions we used. It's based on ${baseAnalysis.totalHoursProcessed.toLocaleString()} hours of actual ERCOT nodal data so the numbers should be pretty tight.`,
     '',
-    `The attached report includes the full mine size sensitivity analysis, offer type comparison (Grid vs Offtake vs VI), and economic assumptions.`,
+    `Curious — are you currently curtailing much, or is most of your generation hitting the grid today? That context would help us dial in the offtake structure.`,
     '',
-    `We'd be happy to schedule a call to walk through the analysis. We can also run additional scenarios at different hashprice levels or with your exact hourly generation data.`,
-    '',
-    `Best regards,`,
-    `Coppice — Sangha Renewables`,
+    `Best,`,
+    `Coppice`,
+    `Sangha Renewables`,
   ].join('\n');
 
   await sendEmailWithAttachments({
