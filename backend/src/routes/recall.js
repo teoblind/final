@@ -232,4 +232,25 @@ router.post('/chat/:botId', async (req, res) => {
   }
 });
 
+/**
+ * POST /transcript-event — Real-time transcript webhook from Recall.ai
+ * Receives transcript.data events and feeds them to the voice loop.
+ */
+router.post('/transcript-event', async (req, res) => {
+  try {
+    const event = req.body;
+    console.log(`[Recall] Transcript event: ${JSON.stringify(event).slice(0, 300)}`);
+    const botId = event.data?.bot?.id || event.bot?.id || event.data?.bot_id;
+    if (botId) {
+      const { handleTranscriptEvent } = await import('../services/meetingVoiceLoop.js');
+      const transcriptPayload = event.data?.data || event.data;
+      handleTranscriptEvent(botId, { data: transcriptPayload });
+    }
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('[Recall] Transcript event error:', error.message);
+    res.sendStatus(200);
+  }
+});
+
 export default router;
