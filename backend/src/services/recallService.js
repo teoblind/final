@@ -66,13 +66,20 @@ export async function createBot(meetingUrl, opts = {}) {
     recording_config: {
       transcript: {
         provider: {
-          recallai_streaming: {},
+          recallai_streaming: {
+            mode: 'prioritize_low_latency',
+          },
         },
       },
+      realtime_endpoints: [{
+        type: 'webhook',
+        url: `${APP_BASE_URL}/api/v1/recall/transcript-event`,
+        events: ['transcript.data'],
+      }],
     },
     automatic_leave: {
       waiting_room_timeout: 600,
-      noone_joined_timeout: 60, // leave after 1 min if nobody joins
+      noone_joined_timeout: 60,
       everyone_left_timeout: 5,
     },
   };
