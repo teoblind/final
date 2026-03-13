@@ -55,32 +55,14 @@ async function recallFetch(path, opts = {}) {
  */
 export async function createBot(meetingUrl, opts = {}) {
   const {
-    botName = 'Coppice',
-    transcriptionProvider = 'meeting_captions',
+    botName = 'Coppice Agent',
     joinMessage = null,
   } = opts;
 
-  // Output Media approach: bot renders a webpage that captures meeting audio
-  // via getUserMedia, sends to relay server, relay forwards to OpenAI Realtime API
-  const VOICE_AGENT_URL = process.env.VOICE_AGENT_URL || 'https://coppice.ai/voice-agent';
-  const VOICE_RELAY_URL = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/';
-
+  // Silent bot — joins meeting for transcription/note-taking only, no audio output
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
-    output_media: {
-      camera: {
-        kind: 'webpage',
-        config: {
-          url: `${VOICE_AGENT_URL}?wss=${VOICE_RELAY_URL}`,
-        },
-      },
-    },
-    variant: {
-      google_meet: 'web_4_core',
-      zoom: 'web_4_core',
-      microsoft_teams: 'web_4_core',
-    },
     automatic_leave: {
       waiting_room_timeout: 600,
       noone_joined_timeout: 60,
