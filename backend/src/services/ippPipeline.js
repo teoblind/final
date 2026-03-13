@@ -21,7 +21,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync, existsSync, readFileSync } from 'fs';
 import { insertActivity } from '../cache/database.js';
-import { sendEmailWithAttachments } from './emailService.js';
+import { sendEmailWithAttachments, textToHtml } from './emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -821,10 +821,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
 
   if (!data.capacityMW && !data.annualGenerationMWh) {
     console.log(`[IPP Pipeline] Insufficient data — requesting more info`);
-    await sendEmailWithAttachments({
-      to: from,
-      subject: `RE: ${subject}`,
-      body: [
+    const needsDataText = [
         `Hey ${firstName},`,
         '',
         `Appreciate you reaching out - we work with a number of IPPs on BTM mining economics and would be happy to run an analysis for your site.`,
@@ -836,7 +833,11 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         `Best,`,
         `Coppice`,
         `Sangha Renewables`,
-      ].join('\n'),
+      ].join('\n');
+    await sendEmailWithAttachments({
+      to: from,
+      subject: `RE: ${subject}`,
+      html: textToHtml(needsDataText),
       attachments: [],
       tenantId: TENANT_ID,
     });
@@ -916,7 +917,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   await sendEmailWithAttachments({
     to: from,
     subject: `RE: ${subject} — Mine Specification Report`,
-    body: replyBody,
+    html: textToHtml(replyBody),
     attachments: [{
       filename,
       path: filepath,

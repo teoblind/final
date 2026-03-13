@@ -49,6 +49,16 @@ function getGmailClient(tenantId) {
 }
 
 /**
+ * Convert a plain-text email body to styled HTML paragraphs.
+ * Splits on double newlines into <p> tags, single newlines become <br>.
+ */
+export function textToHtml(text) {
+  const style = 'font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.5;margin:0 0 12px 0;';
+  const paras = text.trim().split(/\n\n+/);
+  return paras.map(p => `<p style="${style}">${p.replace(/\n/g, '<br>')}</p>`).join('\n');
+}
+
+/**
  * RFC 2047 encode a header value if it contains non-ASCII characters.
  */
 function encodeSubject(subject) {
@@ -111,9 +121,9 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
  * @param {Array<{filename: string, path: string, contentType: string}>} opts.attachments
  * @param {string} [opts.tenantId] - Tenant ID for sender resolution
  */
-export async function sendEmailWithAttachments({ to, subject, body, cc, bcc, attachments = [], tenantId }) {
+export async function sendEmailWithAttachments({ to, subject, body, html, cc, bcc, attachments = [], tenantId }) {
   if (attachments.length === 0) {
-    return sendEmail({ to, subject, body, cc, bcc, tenantId });
+    return sendEmail({ to, subject, body: html || body, cc, bcc, tenantId });
   }
 
   const { gmail, sender } = getGmailClient(tenantId);
@@ -130,15 +140,17 @@ export async function sendEmailWithAttachments({ to, subject, body, cc, bcc, att
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
   ].filter(Boolean);
 
-  const bodyBase64 = Buffer.from(body, 'utf-8').toString('base64');
+  const content = html || body;
+  const contentType = html ? 'text/html' : 'text/plain';
+  const contentBase64 = Buffer.from(content, 'utf-8').toString('base64');
   let messageParts = [
     ...headers,
     '',
     `--${boundary}`,
-    'Content-Type: text/plain; charset=utf-8',
+    `Content-Type: ${contentType}; charset=utf-8`,
     'Content-Transfer-Encoding: base64',
     '',
-    bodyBase64,
+    contentBase64,
   ];
 
   for (const att of attachments) {
