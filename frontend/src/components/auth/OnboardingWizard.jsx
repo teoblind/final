@@ -30,10 +30,10 @@ const MINING_DATA_SOURCES = [
 ];
 
 const MINING_AGENTS = [
-  { id: 'lead-engine', name: 'Lead Engine', desc: 'Discovers prospects, enriches contacts, and manages your sales pipeline', color: '#1a6b3c' },
-  { id: 'outreach', name: 'Outreach Agent', desc: 'Generates personalized emails, manages follow-ups, and tracks engagement', color: '#3b82f6' },
+  { id: 'sangha', name: 'Sangha Agent', desc: 'Your main AI command center — answers questions, runs tasks, and coordinates other agents', color: '#1a6b3c' },
+  { id: 'lead-engine', name: 'Lead Engine', desc: 'Discovers prospects, enriches contacts, manages your pipeline, and handles outreach', color: '#2dd478' },
   { id: 'meetings', name: 'Meeting Agent', desc: 'Joins calls, transcribes conversations, and extracts action items', color: '#a855f7' },
-  { id: 'reporting', name: 'Reporting Engine', desc: 'Generates weekly briefings, pipeline reports, and market analysis', color: '#f59e0b' },
+  { id: 'reporting-engine', name: 'Reporting Engine', desc: 'Generates weekly briefings, pipeline reports, and market analysis', color: '#f59e0b' },
 ];
 
 const MINING_WELCOME = {
@@ -115,7 +115,7 @@ export default function OnboardingWizard({ onComplete }) {
           calendar: { connected: false },
         }
       : {
-          energy: { connected: false, iso: 'ERCOT', node: '', rate: '' },
+          energy: { connected: false, iso: 'ERCOT', node: '' },
           calendar: { connected: false },
           gmail: { connected: false },
           docs: { connected: false },
@@ -132,7 +132,7 @@ export default function OnboardingWizard({ onComplete }) {
   // Agents step state
   const defaultModes = isConstruction
     ? { estimating: 'copilot', documents: 'copilot', meetings: 'autonomous', email: 'copilot' }
-    : { 'lead-engine': 'autonomous', outreach: 'copilot', meetings: 'autonomous', reporting: 'autonomous' };
+    : { sangha: 'autonomous', 'lead-engine': 'autonomous', meetings: 'autonomous', 'reporting-engine': 'autonomous' };
   const [agentModes, setAgentModes] = useState(defaultModes);
 
   // Team step state
@@ -208,6 +208,29 @@ export default function OnboardingWizard({ onComplete }) {
     checkConnections();
   }, []);
 
+  // Map frontend mode names to backend mode names
+  const MODE_MAP = { autonomous: 'autonomous', copilot: 'recommend', off: 'observe' };
+
+  const setAgentMode = async (agentId, mode) => {
+    setAgentModes(prev => ({ ...prev, [agentId]: mode }));
+    // Persist to backend
+    try {
+      let token = null;
+      try {
+        const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+        token = session?.tokens?.accessToken;
+      } catch {}
+      if (!token) return;
+      await fetch(`${window.location.origin}/api/v1/agents/${agentId}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mode: MODE_MAP[mode] || mode }),
+      });
+    } catch (err) {
+      console.error('Failed to save agent mode:', err);
+    }
+  };
+
   // Team helpers
   const addInvite = () => {
     if (!inviteEmail || !inviteEmail.includes('@')) return;
@@ -244,7 +267,6 @@ export default function OnboardingWizard({ onComplete }) {
           energy: {
             iso: sources.energy?.iso,
             settlementNode: sources.energy?.node,
-            electricityRate: parseFloat(sources.energy?.rate) || 0,
           },
           agents: agentModes,
           team: invitedMembers,
@@ -477,17 +499,6 @@ export default function OnboardingWizard({ onComplete }) {
                       className="w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text placeholder:text-terminal-muted/50 focus:outline-none focus:border-[#1a6b3c]"
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] text-terminal-muted uppercase tracking-[0.8px] mb-1.5 block font-semibold">Electricity Rate ($/kWh)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={sourceState.rate}
-                      onChange={e => updateSource('energy', { rate: e.target.value })}
-                      placeholder="0.045"
-                      className="w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text placeholder:text-terminal-muted/50 focus:outline-none focus:border-[#1a6b3c]"
-                    />
-                  </div>
                   <button
                     onClick={() => { updateSource('energy', { connected: true }); setExpandedSource(null); }}
                     className={`w-full py-2.5 text-[13px] font-semibold rounded-lg transition-colors ${
@@ -580,7 +591,7 @@ export default function OnboardingWizard({ onComplete }) {
               {['autonomous', 'copilot', 'off'].map(mode => (
                 <button
                   key={mode}
-                  onClick={() => setAgentModes(prev => ({ ...prev, [agent.id]: mode }))}
+                  onClick={() => setAgentMode(agent.id, mode)}
                   className={`px-3.5 py-[6px] text-[11px] font-semibold rounded-lg transition-all ${
                     agentModes[agent.id] === mode
                       ? mode === 'off'
