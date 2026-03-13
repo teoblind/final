@@ -277,12 +277,12 @@ export default function OnboardingWizard({ onComplete }) {
 
     try {
       await api.put('/v1/tenant', { settings: config });
-      if (onComplete) onComplete(config);
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Failed to save configuration');
-    } finally {
-      setSubmitting(false);
+      // Non-blocking — member users may not have manageSettings permission
+      console.warn('Could not save tenant settings:', err.message);
     }
+    setSubmitting(false);
+    if (onComplete) onComplete(config);
   };
 
   const handleSkip = () => { if (onComplete) onComplete(null); };
