@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Search, Mail, Mic, Bot, Zap, Calendar, FileText, BarChart3, Users } from 'lucide-react';
 import api from '../../lib/hooks/useApi';
 import { useTenant } from '../../contexts/TenantContext';
+import CoppiceLogo from '../ui/CoppiceLogo';
 
 const STEPS = [
   { id: 'welcome', label: 'Welcome' },
@@ -21,10 +23,10 @@ const ISO_OPTIONS = [
 ];
 
 const MINING_DATA_SOURCES = [
-  { id: 'energy', icon: '⚡', name: 'Energy Market (ERCOT)', desc: 'Real-time LMP pricing and settlement data', oauth: false },
-  { id: 'calendar', icon: '📅', name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
-  { id: 'gmail', icon: '✉', name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
-  { id: 'docs', icon: '📄', name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
+  { id: 'energy', Icon: Zap, name: 'Energy Market (ERCOT)', desc: 'Real-time LMP pricing and settlement data', oauth: false },
+  { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
+  { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
+  { id: 'docs', Icon: FileText, name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
 ];
 
 const MINING_AGENTS = [
@@ -38,21 +40,21 @@ const MINING_WELCOME = {
   title: 'Welcome to Coppice',
   subtitle: 'An AI operations platform that connects your pipeline, meetings, documents, and email into a single command center — with autonomous agents that work for you.',
   features: [
-    { icon: '🔍', title: 'Lead Intelligence', desc: 'AI-powered prospect discovery and pipeline management' },
-    { icon: '✉', title: 'Smart Outreach', desc: 'Personalized email campaigns with engagement tracking' },
-    { icon: '🎙', title: 'Meeting Capture', desc: 'Auto-transcription, action items, and follow-up generation' },
-    { icon: '🤖', title: 'AI Agents', desc: 'Autonomous agents that optimize your operations 24/7' },
+    { Icon: Search, title: 'Lead Intelligence', desc: 'AI-powered prospect discovery and pipeline management' },
+    { Icon: Mail, title: 'Smart Outreach', desc: 'Personalized email campaigns with engagement tracking' },
+    { Icon: Mic, title: 'Meeting Capture', desc: 'Auto-transcription, action items, and follow-up generation' },
+    { Icon: Bot, title: 'AI Agents', desc: 'Autonomous agents that optimize your operations 24/7' },
   ],
 };
 
 // ─── Construction (DACP) Config ──────────────────────────────────────────────
 
 const DACP_DATA_SOURCES = [
-  { id: 'pricing', icon: '📊', name: 'Pricing Table', desc: 'Material, labor, and equipment unit costs for concrete work' },
-  { id: 'email', icon: '✉', name: 'Email Inbox', desc: 'Bid request intake, GC correspondence, and follow-ups' },
-  { id: 'jobs', icon: '🏗', name: 'Job History', desc: 'Past projects, actual costs, and margin tracking' },
-  { id: 'docs', icon: '📄', name: 'Google Docs', desc: 'Meeting notes, submittals, and document sync' },
-  { id: 'calendar', icon: '📅', name: 'Google Calendar', desc: 'Meeting scheduling and deadline tracking' },
+  { id: 'pricing', Icon: BarChart3, name: 'Pricing Table', desc: 'Material, labor, and equipment unit costs for concrete work' },
+  { id: 'email', Icon: Mail, name: 'Email Inbox', desc: 'Bid request intake, GC correspondence, and follow-ups' },
+  { id: 'jobs', Icon: FileText, name: 'Job History', desc: 'Past projects, actual costs, and margin tracking' },
+  { id: 'docs', Icon: FileText, name: 'Google Docs', desc: 'Meeting notes, submittals, and document sync' },
+  { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling and deadline tracking' },
 ];
 
 const DACP_AGENTS = [
@@ -66,10 +68,10 @@ const DACP_WELCOME = {
   title: 'Welcome to DACP',
   subtitle: 'An AI-powered platform that connects your estimating, job tracking, field operations, and documents into a single command center.',
   features: [
-    { icon: '📋', title: 'Estimating Engine', desc: 'AI-generated estimates from your pricing table with line-item accuracy' },
-    { icon: '🏗', title: 'Job Tracking', desc: 'Active projects, field reports, cost tracking, and margin analysis' },
-    { icon: '📄', title: 'Document Intelligence', desc: 'Plan reading, scope extraction, and searchable file library' },
-    { icon: '🤖', title: 'AI Agents', desc: 'Autonomous agents that handle bids, emails, and meetings 24/7' },
+    { Icon: BarChart3, title: 'Estimating Engine', desc: 'AI-generated estimates from your pricing table with line-item accuracy' },
+    { Icon: FileText, title: 'Job Tracking', desc: 'Active projects, field reports, cost tracking, and margin analysis' },
+    { Icon: Search, title: 'Document Intelligence', desc: 'Plan reading, scope extraction, and searchable file library' },
+    { Icon: Bot, title: 'AI Agents', desc: 'Autonomous agents that handle bids, emails, and meetings 24/7' },
   ],
 };
 
@@ -320,10 +322,8 @@ export default function OnboardingWizard({ onComplete }) {
     <div className="max-w-2xl mx-auto">
       {/* Hero */}
       <div className={`text-center mb-8 px-8 py-10 rounded-[18px] ${heroBg} text-white`}>
-        <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center mx-auto mb-5">
-          <span style={{ color: accentDot }} className="text-2xl font-bold">
-            {isConstruction ? '◆' : '▲'}
-          </span>
+        <div className="mx-auto mb-5 flex justify-center">
+          <CoppiceLogo color={isConstruction ? '#1e3a5f' : '#1a2e1a'} size={56} />
         </div>
         <h2 className="text-[26px] font-bold mb-2.5 tracking-[-0.3px]">{WELCOME.title}</h2>
         <p className="text-white/55 text-[13px] leading-relaxed max-w-md mx-auto">
@@ -335,7 +335,9 @@ export default function OnboardingWizard({ onComplete }) {
       <div className="grid grid-cols-2 gap-3 mb-6">
         {WELCOME.features.map(f => (
           <div key={f.title} className="p-5 bg-terminal-panel border border-terminal-border rounded-[14px] hover:border-[#c5c5bc] transition-colors">
-            <div className="text-2xl mb-3">{f.icon}</div>
+            <div className="mb-3">
+              <f.Icon size={20} className="text-terminal-muted" />
+            </div>
             <h3 className="text-[13px] font-semibold text-terminal-text mb-1">{f.title}</h3>
             <p className="text-[11px] text-terminal-muted leading-[1.5]">{f.desc}</p>
           </div>
@@ -431,7 +433,9 @@ export default function OnboardingWizard({ onComplete }) {
                 className="flex items-center gap-3.5 px-4 py-3.5 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
                 onClick={() => setExpandedSource(isExpanded ? null : src.id)}
               >
-                <span className="text-xl w-8 text-center shrink-0">{src.icon}</span>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}10` }}>
+                  <src.Icon size={16} style={{ color: accent }} />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-semibold text-terminal-text">{src.name}</div>
                   <div className="text-[11px] text-terminal-muted">{src.desc}</div>
@@ -602,7 +606,9 @@ export default function OnboardingWizard({ onComplete }) {
 
       <div className="mt-5 p-3.5 bg-[#f5f4f0] rounded-[12px]">
         <div className="flex items-start gap-2.5">
-          <span className="text-[13px] mt-px">💡</span>
+          <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-px" style={{ backgroundColor: `${accent}15` }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />
+          </div>
           <div>
             <p className="text-[12px] text-terminal-text font-medium mb-0.5">{activeAgents} of {AGENTS.length} agents active</p>
             <p className="text-[11px] text-terminal-muted leading-[1.4]">
@@ -687,7 +693,7 @@ export default function OnboardingWizard({ onComplete }) {
       ) : (
         <div className="text-center py-10">
           <div className="w-12 h-12 rounded-full bg-[#f5f4f0] flex items-center justify-center mx-auto mb-3">
-            <span className="text-xl text-terminal-muted">👥</span>
+            <Users size={20} className="text-terminal-muted" />
           </div>
           <p className="text-[13px] text-terminal-muted">No team members invited yet</p>
           <p className="text-[11px] text-terminal-muted mt-1">You can always invite people later from Settings.</p>
@@ -765,13 +771,8 @@ export default function OnboardingWizard({ onComplete }) {
         {/* Top bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-terminal-border bg-terminal-panel">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-[7px] flex items-center justify-center"
-              style={{ backgroundColor: isConstruction ? '#1e3a5f' : '#1a2e1a' }}>
-              <span style={{ color: accentDot }} className="text-sm font-bold">
-                {isConstruction ? '◆' : '▲'}
-              </span>
-            </div>
-            <span className="text-[13px] font-semibold text-terminal-text tracking-[0.2px]">Setup Wizard</span>
+            <CoppiceLogo color={isConstruction ? '#1e3a5f' : '#1a2e1a'} size={28} />
+            <span className="text-[13px] font-semibold text-terminal-text tracking-[0.2px]">Setup</span>
           </div>
           <button onClick={handleSkip} className="text-[12px] text-terminal-muted hover:text-terminal-text transition-colors">
             Skip Setup →
