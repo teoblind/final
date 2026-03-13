@@ -63,6 +63,7 @@ function encodeSubject(subject) {
 export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
+  const bodyBase64 = Buffer.from(body, 'utf-8').toString('base64');
   const headers = [
     `From: ${sender}`,
     `To: ${to}`,
@@ -71,9 +72,10 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
     `Subject: ${encodeSubject(subject)}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
   ].filter(Boolean);
 
-  const rawMessage = [...headers, '', body].join('\r\n');
+  const rawMessage = [...headers, '', bodyBase64].join('\r\n');
   const encodedMessage = Buffer.from(rawMessage)
     .toString('base64')
     .replace(/\+/g, '-')
@@ -128,13 +130,15 @@ export async function sendEmailWithAttachments({ to, subject, body, cc, bcc, att
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
   ].filter(Boolean);
 
+  const bodyBase64 = Buffer.from(body, 'utf-8').toString('base64');
   let messageParts = [
     ...headers,
     '',
     `--${boundary}`,
     'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
     '',
-    body,
+    bodyBase64,
   ];
 
   for (const att of attachments) {
@@ -198,15 +202,17 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename, t
 export async function sendHtmlEmail({ to, subject, html, tenantId }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
+  const htmlBase64 = Buffer.from(html, 'utf-8').toString('base64');
   const headers = [
     `From: ${sender}`,
     `To: ${to}`,
     `Subject: ${encodeSubject(subject)}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
   ];
 
-  const rawMessage = [...headers, '', html].join('\r\n');
+  const rawMessage = [...headers, '', htmlBase64].join('\r\n');
   const encodedMessage = Buffer.from(rawMessage)
     .toString('base64')
     .replace(/\+/g, '-')
