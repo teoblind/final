@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { sendEmail } from '../services/emailService.js';
+import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -103,10 +104,10 @@ router.post('/auth/lookup-tenant', (req, res) => {
     `).all(email);
 
     if (users.length > 1) {
-      return res.json({ tenants: users.map(u => ({ slug: u.tenant_slug, name: u.tenant_name, id: u.tenant_id })) });
+      return res.json({ tenants: users.map(u => ({ slug: getSubdomainForSlug(u.tenant_slug), name: u.tenant_name, id: u.tenant_id })) });
     }
     if (users.length === 1) {
-      return res.json({ tenant_slug: users[0].tenant_slug, tenant_name: users[0].tenant_name });
+      return res.json({ tenant_slug: getSubdomainForSlug(users[0].tenant_slug), tenant_name: users[0].tenant_name });
     }
 
     // Fallback: match by email domain
