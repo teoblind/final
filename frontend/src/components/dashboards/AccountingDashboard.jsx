@@ -289,73 +289,118 @@ function SettingsTab({ qbConnected, billcomConnected, onConnectQB, onDisconnectQ
     }
   };
 
+  const [showGuide, setShowGuide] = useState(false);
+
   return (
     <div className="p-6 space-y-5">
-      <Card title="QuickBooks Online" meta="OAuth 2.0">
-        <div className="px-[18px] py-4">
-          {qbConnected ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle size={16} className="text-[#1a6b3c]" />
-                <span className="text-[13px] font-medium text-terminal-text">Connected to QuickBooks</span>
-              </div>
-              <button
-                onClick={onDisconnectQB}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold text-[#dc2626] bg-[#fee2e2] hover:bg-[#fecaca] transition-colors"
-              >
-                <Unlink size={12} /> Disconnect
-              </button>
+      <Card title="Bill.com Integration" meta={billcomConnected ? 'Connected' : 'Not connected'}>
+        <div className="px-[18px] py-4 space-y-4">
+          {billcomConnected ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-[#dcfce7] rounded-lg">
+              <CheckCircle size={14} className="text-[#166534]" />
+              <span className="text-[13px] font-medium text-[#166534]">Bill.com connected — syncing every 15 minutes</span>
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] text-terminal-muted">Connect your QuickBooks account to sync invoices, bills, and payments.</span>
-              <button
-                onClick={onConnectQB}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white bg-[#2CA01C] hover:bg-[#249016] transition-colors"
-              >
-                <Link2 size={12} /> Connect QuickBooks
-              </button>
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-[#fef3c7] rounded-lg">
+              <AlertCircle size={14} className="text-[#92400e]" />
+              <span className="text-[13px] font-medium text-[#92400e]">Not connected — enter your Bill.com credentials below to start syncing</span>
             </div>
           )}
-        </div>
-      </Card>
 
-      <Card title="Bill.com" meta="API Credentials">
-        <div className="px-[18px] py-4 space-y-3">
-          <p className="text-[12px] text-terminal-muted">Enter your Bill.com API credentials. These are stored securely in the key vault.</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-terminal-muted mb-1">Username</label>
+              <label className="block text-[11px] font-semibold text-terminal-muted mb-1">Email (Bill.com login)</label>
               <input type="text" value={bcCreds.username} onChange={e => setBcCreds(p => ({ ...p, username: e.target.value }))}
-                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none" />
+                placeholder="mihir@sanghasystems.com"
+                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none placeholder:text-[#c5c5bc]" />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-terminal-muted mb-1">Password</label>
               <input type="password" value={bcCreds.password} onChange={e => setBcCreds(p => ({ ...p, password: e.target.value }))}
-                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none" />
+                placeholder="Your Bill.com password"
+                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none placeholder:text-[#c5c5bc]" />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-terminal-muted mb-1">Organization ID</label>
               <input type="text" value={bcCreds.orgId} onChange={e => setBcCreds(p => ({ ...p, orgId: e.target.value }))}
-                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none" />
+                placeholder="e.g. 00e1234ABC"
+                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none placeholder:text-[#c5c5bc] font-mono" />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-terminal-muted mb-1">Developer Key</label>
               <input type="text" value={bcCreds.devKey} onChange={e => setBcCreds(p => ({ ...p, devKey: e.target.value }))}
-                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none" />
+                placeholder="Generated from Bill.com settings"
+                className="w-full px-3 py-2 text-[13px] border border-terminal-border rounded-lg bg-[#f5f4f0] focus:bg-terminal-panel outline-none placeholder:text-[#c5c5bc] font-mono" />
             </div>
           </div>
-          <div className="flex justify-end">
+
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setShowGuide(v => !v)}
+              className="text-[12px] font-semibold text-[#3b82f6] hover:text-[#2563eb] transition-colors"
+            >
+              {showGuide ? 'Hide setup guide' : 'Where do I find these?'}
+            </button>
             <button
               onClick={handleSaveBillcom}
-              disabled={saving || (!bcCreds.username && !bcCreds.orgId)}
+              disabled={saving || !bcCreds.username || !bcCreds.password || !bcCreds.orgId || !bcCreds.devKey}
               className="px-4 py-2 rounded-lg text-[12px] font-semibold text-white bg-terminal-text hover:opacity-90 transition-opacity disabled:opacity-40"
             >
-              {saving ? 'Saving...' : 'Save Credentials'}
+              {saving ? 'Saving...' : 'Save & Connect'}
             </button>
           </div>
         </div>
       </Card>
+
+      {showGuide && (
+        <Card title="Setup Guide" meta="4 steps">
+          <div className="px-[18px] py-4 space-y-4">
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">1</div>
+              <div>
+                <p className="text-[13px] font-semibold text-terminal-text">Email & Password</p>
+                <p className="text-[12px] text-terminal-muted mt-0.5">Use the same email and password you log into Bill.com with. This account must have Administrator access.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">2</div>
+              <div>
+                <p className="text-[13px] font-semibold text-terminal-text">Find your Organization ID</p>
+                <p className="text-[12px] text-terminal-muted mt-0.5">
+                  Log into Bill.com. Go to <strong>Settings</strong> (gear icon) → <strong>Organization</strong>. Your Org ID starts with <code className="px-1 py-0.5 bg-[#f5f4f0] rounded text-[11px] font-mono">00e</code> and appears near the top of the page.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">3</div>
+              <div>
+                <p className="text-[13px] font-semibold text-terminal-text">Generate a Developer Key</p>
+                <p className="text-[12px] text-terminal-muted mt-0.5">
+                  In Bill.com, go to <strong>Settings</strong> → <strong>Sync & Integrations</strong> → <strong>Manage Developer Keys</strong>. Click <strong>Generate Key</strong>. Copy the key and paste it here. You can generate up to 4 keys per organization.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">4</div>
+              <div>
+                <p className="text-[13px] font-semibold text-terminal-text">Save & Connect</p>
+                <p className="text-[12px] text-terminal-muted mt-0.5">
+                  Fill in all 4 fields above and click <strong>Save & Connect</strong>. Coppice will immediately sync your invoices, bills, and payments. Data refreshes automatically every 15 minutes.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-3 py-2.5 bg-[#f5f4f0] rounded-lg">
+              <p className="text-[11px] text-terminal-muted">
+                <strong>Security:</strong> Credentials are encrypted and stored in Coppice's secure key vault. They are only used to authenticate with Bill.com's API and are never shared or exposed.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
