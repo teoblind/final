@@ -177,9 +177,71 @@ async function pollSingleInbox(gmail, tenantId, label) {
       const contact = matchContactToTenant(senderEmail);
       const resolvedTenant = tenantId || contact?.tenant_id || 'default';
 
-      // NOTE: RFQ and IPP auto-reply pipelines DISABLED — they were sending
-      // unsolicited emails from teo@sanghasystems.com to known contacts.
-      // These should only be triggered manually through the agent chat, never auto-fired.
+      // Check if this is an RFQ/bid request email → route to estimate pipeline
+      if (isRfqEmail(subject, body)) {
+        const rfqTenant = tenantId || contact?.tenant_id || 'dacp-construction-001';
+        try {
+          const result = await processRfqEmail({
+            messageId: msg.id,
+            threadId: msgThreadId,
+            from: senderEmail,
+            fromName: senderName,
+            subject,
+            body,
+            tenantId: rfqTenant,
+          });
+          if (result) {
+            console.log(`[GmailPoll] [${label}] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
+          }
+        } catch (err) {
+          console.error(`[GmailPoll] [${label}] RFQ pipeline error:`, err.message);
+        }
+
+        try {
+          await gmail.users.messages.modify({
+            userId: 'me', id: msg.id,
+            requestBody: { removeLabelIds: ['UNREAD'] },
+          });
+        } catch {}
+
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'rfq', tenantId: rfqTenant });
+        newReplies++;
+        continue;
+      }
+
+      // Check if this is an IPP inquiry → route to mine spec pipeline
+      if (isIppEmail(subject, body)) {
+        const ippTenant = tenantId || contact?.tenant_id || 'default';
+        try {
+          const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
+          const result = await processIppEmail({
+            messageId: msg.id,
+            threadId: msgThreadId,
+            from: senderEmail,
+            fromName: senderName,
+            subject,
+            body,
+            attachments,
+            tenantId: ippTenant,
+          });
+          if (result) {
+            console.log(`[GmailPoll] [${label}] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
+          }
+        } catch (err) {
+          console.error(`[GmailPoll] [${label}] IPP pipeline error:`, err.message);
+        }
+
+        try {
+          await gmail.users.messages.modify({
+            userId: 'me', id: msg.id,
+            requestBody: { removeLabelIds: ['UNREAD'] },
+          });
+        } catch {}
+
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'ipp', tenantId: ippTenant });
+        newReplies++;
+        continue;
+      }
 
       // Not an RFQ or IPP — check if it's from a known contact
       if (!contact) {

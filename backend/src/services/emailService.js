@@ -128,7 +128,10 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId
  */
 export async function sendEmailWithAttachments({ to, subject, body, html, cc, bcc, attachments = [], tenantId, threadId, inReplyTo, references }) {
   if (attachments.length === 0) {
-    return sendEmail({ to, subject, body: html || body, cc, bcc, tenantId, threadId, inReplyTo, references });
+    if (html) {
+      return sendHtmlEmail({ to, subject, html, tenantId, threadId, inReplyTo, references });
+    }
+    return sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references });
   }
 
   const { gmail, sender } = getGmailClient(tenantId);
