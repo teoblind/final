@@ -8,6 +8,10 @@
 
 import express from 'express';
 import Anthropic from '@anthropic-ai/sdk';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { unlinkSync } from 'fs';
 import { getMessages, getThreadMessages, chat, saveMessage } from '../services/chatService.js';
 import { sendEmail, sendEstimateEmail } from '../services/emailService.js';
 import { getOpusModel } from '../services/modelRouter.js';
@@ -17,6 +21,14 @@ import {
   deleteThread, listThreads, getPinnedThreads,
   getOrphanMessageCount, backfillOrphanMessages,
 } from '../cache/database.js';
+
+const __filename_chat = fileURLToPath(import.meta.url);
+const __dirname_chat = dirname(__filename_chat);
+
+const upload = multer({
+  dest: join(__dirname_chat, '../../data/uploads/'),
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+});
 
 const router = express.Router();
 
@@ -230,6 +242,83 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
   } catch (error) {
     console.error('Thread message POST error:', error);
     res.status(500).json({ error: 'Failed to generate response', details: error.message });
+  }
+});
+
+/**
+ * POST /:agentId/threads/:threadId/messages/upload — Send message with file attachment
+ */
+router.post('/:agentId/threads/:threadId/messages/upload', upload.single('file'), async (req, res) => {
+  try {
+    const { tenantId, userId, agentId } = resolveIds(req);
+    const { threadId } = req.params;
+    const isAdmin = ['owner', 'admin'].includes(req.user?.role);
+
+    if (!VALID_AGENTS.has(agentId)) {
+      return res.status(400).json({ error: `Unknown agent: ${agentId}` });
+    }
+
+    const thread = getThread(threadId);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    if (thread.tenant_id !== tenantId) return res.status(404).json({ error: 'Thread not found' });
+    if (thread.visibility === 'private' && thread.user_id !== userId && !isAdmin) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const userText = req.body.content || '';
+
+    // Parse the uploaded file
+    const { parseFile } = await import('../services/fileParserService.js');
+    const parsed = await parseFile(req.file.path, req.file.mimetype, req.file.originalname);
+
+    let content;
+    if (parsed.isImage) {
+      // For images, prefix with metadata and let the user message be the prompt
+      content = userText
+        ? `[Uploaded image: ${req.file.originalname}]\n\n${userText}`
+        : `[Uploaded image: ${req.file.originalname}]\nPlease describe and analyze this image.`;
+    } else {
+      // For documents, inject extracted text as context
+      const fileContext = `[Uploaded file: ${req.file.originalname} (${parsed.type}${parsed.pageCount ? `, ${parsed.pageCount} pages` : ''})]\n\n--- FILE CONTENT ---\n${parsed.text}\n--- END FILE CONTENT ---`;
+      content = userText
+        ? `${fileContext}\n\n${userText}`
+        : `${fileContext}\n\nPlease summarize this document.`;
+    }
+
+    // Auto-title with filename if first message
+    if (!thread.title) {
+      updateThreadTitle(threadId, `${req.file.originalname} — ${(userText || 'File upload').slice(0, 40)}`);
+    }
+
+    const result = await chat(tenantId, agentId, userId, content, threadId);
+
+    const response = { response: result.response, audio_url: result.audio_url || null, file: { name: req.file.originalname, type: parsed.type, pageCount: parsed.pageCount } };
+    if (result.tool_used && result.tool_result) {
+      const toolName = result.tool_used;
+      const toolResult = result.tool_result;
+      if (toolName.startsWith('workspace_create_')) {
+        const typeMap = { workspace_create_doc: 'doc', workspace_create_sheet: 'sheet', workspace_create_slides: 'slides' };
+        response.workspace = {
+          action: 'created', type: typeMap[toolName] || 'doc',
+          fileId: toolResult.file_id, url: toolResult.url,
+          title: result.tool_input?.title || 'Untitled', folder: result.tool_input?.folder || '',
+        };
+      }
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('File upload POST error:', error);
+    res.status(500).json({ error: 'Failed to process uploaded file', details: error.message });
+  } finally {
+    // Clean up uploaded file
+    if (req.file?.path) {
+      try { unlinkSync(req.file.path); } catch { /* ignore */ }
+    }
   }
 });
 

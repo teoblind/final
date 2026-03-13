@@ -391,6 +391,78 @@ const KNOWLEDGE_TOOLS = [
 
 // ─── Mining / IPP Tools (Sangha tenant) ─────────────────────────────────────
 
+// ─── Web Browsing Tools ──────────────────────────────────────────────────────
+
+const WEB_TOOLS = [
+  {
+    name: 'browse_url',
+    description: 'Fetch a webpage and extract its text content, title, and links. Use when the user asks to look at a URL, research a website, or check something online.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Full URL to fetch (https://...)' },
+        extract: { type: 'string', enum: ['text', 'links', 'all'], description: 'What to extract (default: all)' },
+      },
+      required: ['url'],
+    },
+  },
+];
+
+async function callWebTool(toolName, toolInput) {
+  if (toolName === 'browse_url') {
+    const { browseUrl } = await import('./webBrowseService.js');
+    return await browseUrl(toolInput.url, { extract: toolInput.extract || 'all' });
+  }
+  throw new Error(`Unknown web tool: ${toolName}`);
+}
+
+// ─── Legal Document Tools ────────────────────────────────────────────────────
+
+const LEGAL_TOOLS = [
+  {
+    name: 'generate_legal_doc',
+    description: 'Generate a legal document (NDA or Service Agreement) from a template. Fills in parties, terms, dates, and governing law. Returns document content that can be saved to Google Docs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        template: { type: 'string', enum: ['nda_mutual', 'nda_one_way', 'msa'], description: 'Document template type' },
+        party_a: { type: 'string', description: 'First party (your company name and state)' },
+        party_b: { type: 'string', description: 'Second party (counterparty name and state)' },
+        effective_date: { type: 'string', description: 'Effective date (default: today)' },
+        duration_months: { type: 'integer', description: 'Duration in months (default: 24)' },
+        governing_state: { type: 'string', description: 'Governing law state (default: Texas)' },
+        additional_terms: { type: 'string', description: 'Any custom terms or modifications' },
+        services_description: { type: 'string', description: 'MSA only: description of services' },
+        payment_terms: { type: 'string', description: 'MSA only: payment terms (e.g. Net 30)' },
+      },
+      required: ['template', 'party_a', 'party_b'],
+    },
+  },
+];
+
+async function callLegalTool(toolName, toolInput, tenantId) {
+  if (toolName === 'generate_legal_doc') {
+    const { generateLegalDoc } = await import('./legalDocService.js');
+    const doc = generateLegalDoc(toolInput);
+
+    // Create the doc in Google Drive via workspace tools
+    try {
+      const wsResult = await callWorkspaceTool('workspace_create_doc', {
+        title: doc.title,
+        content: doc.content,
+        folder: 'Legal Documents',
+      }, tenantId);
+      return { ...doc, google_doc: wsResult };
+    } catch (wsErr) {
+      // If workspace agent is unavailable, still return the content
+      return { ...doc, google_doc_error: wsErr.message };
+    }
+  }
+  throw new Error(`Unknown legal tool: ${toolName}`);
+}
+
+// ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
+
 const MINING_TOOLS = [
   {
     name: 'generate_mine_specs',
@@ -900,6 +972,18 @@ You also have access to HubSpot CRM integration:
 
 When the user asks about CRM data, contacts, companies, deals, pipeline status, or wants to add someone to the CRM, use these tools. Always search HubSpot before saying you don't have information about a contact or company.`;
 
+const WEB_TOOLS_PROMPT_ADDON = `
+
+You also have web browsing capability:
+- browse_url: Fetch any webpage and extract its text, title, description, and links
+Use this when the user asks you to look at a URL, research a website, check a page, or gather information from the web.`;
+
+const LEGAL_TOOLS_PROMPT_ADDON = `
+
+You can generate legal documents from templates:
+- generate_legal_doc: Create NDAs (mutual or one-way) and Master Service Agreements
+The document is automatically saved to Google Drive in a "Legal Documents" folder. Customize parties, dates, duration, governing state, and additional terms.`;
+
 // ─── Database Operations ─────────────────────────────────────────────────────
 
 const stmts = {
@@ -1018,7 +1102,12 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // HubSpot tools for Sangha agents only (when API key is configured)
   const hsAgents = ['sangha', 'hivemind'];
   const hubspotAddon = (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) ? HUBSPOT_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + knowledgeContext;
+  // Web browsing — available to all agents
+  const webAddon = WEB_TOOLS_PROMPT_ADDON;
+  // Legal tools for relevant agents
+  const legalAgents = ['sangha', 'hivemind', 'documents'];
+  const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -1038,6 +1127,12 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const miningAgents = ['sangha', 'curtailment'];
   if (miningAgents.includes(agentId)) {
     tools.push(...MINING_TOOLS);
+  }
+  // Web browsing — available to all agents
+  tools.push(...WEB_TOOLS);
+  // Legal document tools
+  if (legalAgents.includes(agentId)) {
+    tools.push(...LEGAL_TOOLS);
   }
 
   // 5. Call Claude API
@@ -1079,6 +1174,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const knowledgeToolNames = ['search_knowledge'];
       const hubspotToolNames = ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'];
       const miningToolNames = ['generate_mine_specs'];
+      const webToolNames = ['browse_url'];
+      const legalToolNames = ['generate_legal_doc'];
       try {
         if (leadEngineToolNames.includes(toolName)) {
           toolResult = await callLeadEngineTool(toolName, toolInput, tenantId);
@@ -1088,6 +1185,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           toolResult = await callHubSpotTool(toolName, toolInput, tenantId);
         } else if (miningToolNames.includes(toolName)) {
           toolResult = await callMiningTool(toolName, toolInput, tenantId);
+        } else if (webToolNames.includes(toolName)) {
+          toolResult = await callWebTool(toolName, toolInput);
+        } else if (legalToolNames.includes(toolName)) {
+          toolResult = await callLegalTool(toolName, toolInput, tenantId);
         } else {
           toolResult = await callWorkspaceTool(toolName, toolInput, tenantId);
         }
