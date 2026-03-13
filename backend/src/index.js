@@ -72,6 +72,9 @@ import jobsRoutes from './routes/jobs.js';
 import activityRoutes from './routes/activity.js';
 import reportCommentRoutes from './routes/reportComments.js';
 import recallRoutes from './routes/recall.js';
+import intuitRoutes from './routes/intuit.js';
+import accountingRoutes from './routes/accounting.js';
+import priceMonitorRoutes from './routes/priceMonitor.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -126,6 +129,22 @@ try {
   }
 } catch (err) {
   console.warn('Gmail poll scheduler not started:', err.message);
+}
+
+// Start accounting poll scheduler (every 15 minutes)
+try {
+  const { startAccountingPollScheduler } = await import('./jobs/accountingPoll.js');
+  startAccountingPollScheduler(15);
+} catch (err) {
+  console.warn('Accounting poll scheduler not started:', err.message);
+}
+
+// Start price monitor scheduler (every 5 minutes)
+try {
+  const { startPriceMonitorScheduler } = await import('./jobs/priceMonitorJob.js');
+  startPriceMonitorScheduler(5);
+} catch (err) {
+  console.warn('Price monitor scheduler not started:', err.message);
 }
 
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
@@ -287,6 +306,9 @@ app.use('/api/v1/activity', activityRoutes);
 app.use('/api/v1/report-comments', reportCommentRoutes);
 app.use('/api/v1/voice', voiceRoutes);
 app.use('/api/v1/recall', recallRoutes);
+app.use('/api/v1/auth/intuit', intuitRoutes);
+app.use('/api/v1/accounting', accountingRoutes);
+app.use('/api/v1/price-monitor', priceMonitorRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/

@@ -60,23 +60,26 @@ export async function createBot(meetingUrl, opts = {}) {
     joinMessage = null,
   } = opts;
 
-  // Match exact config of bot c6756654 which successfully received transcript data
-  const wsBase = APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
+  // Output Media approach: bot renders a webpage that captures meeting audio
+  // via getUserMedia, sends to relay server, relay forwards to OpenAI Realtime API
+  const VOICE_AGENT_URL = process.env.VOICE_AGENT_URL || 'https://coppice.ai/voice-agent';
+  const VOICE_RELAY_URL = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/';
 
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
-    recording_config: {
-      transcript: {
-        provider: {
-          recallai_streaming: {},
+    output_media: {
+      camera: {
+        kind: 'webpage',
+        config: {
+          url: `${VOICE_AGENT_URL}?wss=${VOICE_RELAY_URL}`,
         },
       },
-      realtime_endpoints: [{
-        type: 'websocket',
-        url: `${wsBase}/ws/recall-audio/`,
-        events: ['transcript.data'],
-      }],
+    },
+    variant: {
+      google_meet: 'web_4_core',
+      zoom: 'web_4_core',
+      microsoft_teams: 'web_4_core',
     },
     automatic_leave: {
       waiting_room_timeout: 600,

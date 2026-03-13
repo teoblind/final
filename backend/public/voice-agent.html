@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coppice</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;color:#fff;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden}
+.container{text-align:center;opacity:0.15}
+.logo{font-size:18px;font-weight:300;letter-spacing:4px;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="container"><div class="logo">coppice</div></div>
+<script>
+// ============================================================
+// Coppice Voice Agent — Self-contained page for Recall.ai output_media
+// Captures meeting audio (piped to mic by Recall), sends to relay server,
+// relay forwards to OpenAI Realtime API, response audio plays back into meeting.
+// ============================================================
+
+const SAMPLE_RATE = 24000;
+
+// --- AudioWorklet: Mic Recorder ---
+const recorderWorkletCode = `
+class RecorderProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.recording = false;
+    this.port.onmessage = (e) => {
+      if (e.data.event === 'start') this.recording = true;
+      if (e.data.event === 'stop') this.recording = false;
+    };
+  }
+  process(inputs) {
+    if (!this.recording || !inputs[0] || !inputs[0][0]) return true;
+    const mono = inputs[0][0];
+    // Convert float32 to int16
+    const pcm16 = new Int16Array(mono.length);
+    for (let i = 0; i < mono.length; i++) {
+      const s = Math.max(-1, Math.min(1, mono[i]));
+      pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    this.port.postMessage({ pcm16 }, [pcm16.buffer]);
+    return true;
+  }
+}
+registerProcessor('recorder-processor', RecorderProcessor);
+`;
+
+// --- AudioWorklet: Stream Player ---
+const playerWorkletCode = `
+class PlayerProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffers = [];
+    this.currentBuffer = null;
+    this.currentOffset = 0;
+    this.port.onmessage = (e) => {
+      if (e.data.event === 'write') {
+        this.buffers.push(e.data.buffer);
+      } else if (e.data.event === 'clear') {
+        this.buffers = [];
+        this.currentBuffer = null;
+        this.currentOffset = 0;
+      }
+    };
+  }
+  process(inputs, outputs) {
+    const output = outputs[0][0];
+    if (!output) return true;
+    let written = 0;
+    while (written < output.length) {
+      if (!this.currentBuffer) {
+        if (this.buffers.length === 0) {
+          // Fill remaining with silence
+          for (let i = written; i < output.length; i++) output[i] = 0;
+          return true;
+        }
+        this.currentBuffer = this.buffers.shift();
+        this.currentOffset = 0;
+      }
+      const remaining = this.currentBuffer.length - this.currentOffset;
+      const toWrite = Math.min(remaining, output.length - written);
+      for (let i = 0; i < toWrite; i++) {
+        output[written + i] = this.currentBuffer[this.currentOffset + i];
+      }
+      written += toWrite;
+      this.currentOffset += toWrite;
+      if (this.currentOffset >= this.currentBuffer.length) {
+        this.currentBuffer = null;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('player-processor', PlayerProcessor);
+`;
+
+// --- Utility: ArrayBuffer to base64 ---
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+// --- Utility: base64 to Int16Array ---
+function base64ToInt16Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Int16Array(bytes.buffer);
+}
+
+// --- Main ---
+(async function main() {
+  const params = new URLSearchParams(location.search);
+  const wssUrl = params.get('wss');
+  if (!wssUrl) {
+    console.error('Missing ?wss= parameter');
+    return;
+  }
+  console.log('[Coppice] Connecting to relay:', wssUrl);
+
+  // 1. Set up mic capture
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    console.error('[Coppice] Mic access denied:', e);
+    return;
+  }
+
+  const recCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const recSrc = recCtx.createMediaStreamSource(stream);
+  const recBlob = new Blob([recorderWorkletCode], { type: 'application/javascript' });
+  const recUrl = URL.createObjectURL(recBlob);
+  await recCtx.audioWorklet.addModule(recUrl);
+  const recNode = new AudioWorkletNode(recCtx, 'recorder-processor');
+  recSrc.connect(recNode);
+  recNode.connect(recCtx.destination); // needed to keep worklet alive
+
+  // 2. Set up audio playback
+  const playCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const playBlob = new Blob([playerWorkletCode], { type: 'application/javascript' });
+  const playUrl = URL.createObjectURL(playBlob);
+  await playCtx.audioWorklet.addModule(playUrl);
+  const playNode = new AudioWorkletNode(playCtx, 'player-processor');
+  playNode.connect(playCtx.destination);
+
+  // 3. Connect to relay WebSocket
+  const ws = new WebSocket(wssUrl);
+
+  ws.onopen = () => {
+    console.log('[Coppice] WebSocket connected to relay');
+
+    // Configure session with Coppice instructions + server VAD
+    ws.send(JSON.stringify({
+      type: 'session.update',
+      session: {
+        modalities: ['text', 'audio'],
+        instructions: `You are Coppice, an AI assistant that has joined this meeting to help. You are professional, concise, and helpful. Listen to what people say and respond naturally when addressed. Keep responses brief — this is a real-time conversation, not a lecture. If someone greets you, greet them back warmly but briefly.`,
+        voice: 'alloy',
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: { model: 'whisper-1' },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500,
+        },
+      },
+    }));
+
+    // Send initial greeting
+    ws.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: 'Hello! You just joined a meeting. Please introduce yourself briefly as Coppice, the AI assistant.',
+        }],
+      },
+    }));
+    ws.send(JSON.stringify({ type: 'response.create' }));
+
+    // Start recording mic audio
+    recNode.port.postMessage({ event: 'start' });
+    console.log('[Coppice] Recording started');
+  };
+
+  // Send mic audio to relay
+  recNode.port.onmessage = (e) => {
+    if (e.data.pcm16 && ws.readyState === WebSocket.OPEN) {
+      const base64 = arrayBufferToBase64(e.data.pcm16.buffer);
+      ws.send(JSON.stringify({
+        type: 'input_audio_buffer.append',
+        audio: base64,
+      }));
+    }
+  };
+
+  // Receive events from relay (OpenAI)
+  ws.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch { return; }
+
+    if (msg.type === 'response.audio.delta' && msg.delta) {
+      // Play audio response
+      const int16 = base64ToInt16Array(msg.delta);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 0x8000;
+      }
+      playNode.port.postMessage({ event: 'write', buffer: float32 }, [float32.buffer]);
+    } else if (msg.type === 'input_audio_buffer.speech_started') {
+      // User started speaking — interrupt any current playback
+      playNode.port.postMessage({ event: 'clear' });
+      console.log('[Coppice] Speech detected — clearing playback');
+    } else if (msg.type === 'error') {
+      console.error('[Coppice] Error from OpenAI:', msg.error);
+    } else if (msg.type === 'response.audio_transcript.done') {
+      console.log('[Coppice] Said:', msg.transcript);
+    } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+      console.log('[Coppice] Heard:', msg.transcript);
+    } else if (msg.type === 'session.created' || msg.type === 'session.updated') {
+      console.log('[Coppice]', msg.type);
+    }
+  };
+
+  ws.onerror = (e) => console.error('[Coppice] WS error:', e);
+  ws.onclose = (e) => {
+    console.log('[Coppice] WS closed:', e.code, e.reason);
+    recNode.port.postMessage({ event: 'stop' });
+  };
+})();
+</script>
+</body>
+</html>

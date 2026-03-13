@@ -84,6 +84,7 @@ const DacpFieldReportsDashboard = lazy(() => import('./components/dashboards/Dac
 const DacpSettingsPanel = lazy(() => import('./components/DacpSettingsPanel'));
 const AuditTrailDashboard = lazy(() => import('./components/dashboards/AuditTrailDashboard'));
 const FilesDashboard = lazy(() => import('./components/dashboards/FilesDashboard'));
+const AccountingDashboard = lazy(() => import('./components/dashboards/AccountingDashboard'));
 const AgentChat = lazy(() => import('./components/chat/AgentChat'));
 const FieldReporterChat = lazy(() => import('./components/chat/FieldReporterChat'));
 const ScopeAnalyzerChat = lazy(() => import('./components/chat/ScopeAnalyzerChat'));
@@ -285,6 +286,7 @@ function AppContent() {
       { id: 'agent-tasks', label: 'Agent Tasks', icon: ListChecks },
       { id: 'audit-trail', label: 'Audit Trail', icon: FileText },
       { id: 'files', label: 'Files', icon: FolderOpen },
+      { id: 'accounting', label: 'Accounting', icon: DollarSign },
     ];
     agentItems = [
       { id: 'hivemind-chat', label: 'DACP Agent', icon: Bot, hivemind: true },
@@ -311,6 +313,7 @@ function AppContent() {
       infraItems.push({ id: 'operations', label: 'Sites', icon: Hammer });
     }
     infraItems.push({ id: 'insurance', label: 'Insurance & Coverage', icon: Umbrella });
+    infraItems.push({ id: 'accounting', label: 'Accounting', icon: DollarSign });
     if (!user || hasPermission('viewOperations')) {
       infraItems.push({ id: 'reporting', label: 'Operations', icon: BarChart3 });
     }
@@ -354,6 +357,7 @@ function AppContent() {
     'field-reports': 'Field Reports',
     'audit-trail': 'Audit Trail',
     'files': 'Files',
+    'accounting': 'Accounting',
   };
 
   const isChatView = activeTab.endsWith('-chat') || activeTab === 'bots';
@@ -557,6 +561,8 @@ function AppContent() {
         return <AuditTrailDashboard />;
       case 'files':
         return <FilesDashboard />;
+      case 'accounting':
+        return <AccountingDashboard />;
       case 'admin':
         return <AdminConsoleDashboard />;
       case 'hivemind-chat':

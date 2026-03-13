@@ -27,6 +27,7 @@ const MINING_DATA_SOURCES = [
   { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
   { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
   { id: 'docs', Icon: FileText, name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
+  { id: 'quickbooks', Icon: BarChart3, name: 'QuickBooks', desc: 'Invoice, bill, and payment sync — automates accounting workflows', oauth: 'intuit' },
 ];
 
 const MINING_AGENTS = [
@@ -148,8 +149,8 @@ export default function OnboardingWizard({ onComplete }) {
     setSources(prev => ({ ...prev, [id]: { ...prev[id], ...updates } }));
   };
 
-  // OAuth popup handler for Google integrations
-  const handleOAuthConnect = (sourceId, scopes) => {
+  // OAuth popup handler for Google and Intuit integrations
+  const handleOAuthConnect = (sourceId, scopes, oauthType = 'google') => {
     let token = null;
     try {
       const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
@@ -157,12 +158,17 @@ export default function OnboardingWizard({ onComplete }) {
     } catch {}
     if (!token) return;
 
-    const url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=google-${sourceId}&token=${encodeURIComponent(token)}`;
-    const popup = window.open(url, 'oauth-popup', 'width=500,height=700,scrollbars=yes');
+    let url;
+    if (oauthType === 'intuit') {
+      url = `${window.location.origin}/api/v1/auth/intuit/integrate?token=${encodeURIComponent(token)}`;
+    } else {
+      url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=google-${sourceId}&token=${encodeURIComponent(token)}`;
+    }
+    const popup = window.open(url, 'oauth-popup', 'width=600,height=700,scrollbars=yes');
 
     const handleMessage = (event) => {
       if (event.data?.type === 'oauth-integration-success') {
-        const connectedSource = event.data.source?.replace('google-', '');
+        const connectedSource = oauthType === 'intuit' ? 'quickbooks' : event.data.source?.replace('google-', '');
         if (connectedSource) {
           updateSource(connectedSource, { connected: true });
         }
@@ -178,7 +184,7 @@ export default function OnboardingWizard({ onComplete }) {
     }
   };
 
-  // Check existing Google integrations on mount
+  // Check existing integrations on mount (Google + Intuit)
   useEffect(() => {
     async function checkConnections() {
       try {
@@ -188,21 +194,37 @@ export default function OnboardingWizard({ onComplete }) {
           token = session?.tokens?.accessToken;
         } catch {}
         if (!token) return;
+
+        // Check Google integrations
         const res = await fetch(`${window.location.origin}/api/v1/auth/google/integrations`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.connected) {
-          const updates = {};
-          for (const svc of data.connected) {
-            const key = svc.replace('google-', '');
-            if (sources[key]) updates[key] = { ...sources[key], connected: true };
-          }
-          if (Object.keys(updates).length > 0) {
-            setSources(prev => ({ ...prev, ...updates }));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            const updates = {};
+            for (const svc of data.connected) {
+              const key = svc.replace('google-', '');
+              if (sources[key]) updates[key] = { ...sources[key], connected: true };
+            }
+            if (Object.keys(updates).length > 0) {
+              setSources(prev => ({ ...prev, ...updates }));
+            }
           }
         }
+
+        // Check Intuit (QuickBooks) integration
+        try {
+          const qbRes = await fetch(`${window.location.origin}/api/v1/auth/intuit/status`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (qbRes.ok) {
+            const qbData = await qbRes.json();
+            if (qbData.connected) {
+              setSources(prev => ({ ...prev, quickbooks: { ...prev.quickbooks, connected: true } }));
+            }
+          }
+        } catch {}
       } catch {}
     }
     checkConnections();
@@ -535,7 +557,9 @@ export default function OnboardingWizard({ onComplete }) {
                   <button
                     onClick={() => {
                       if (src.oauth === 'google') {
-                        handleOAuthConnect(src.id, src.scopes);
+                        handleOAuthConnect(src.id, src.scopes, 'google');
+                      } else if (src.oauth === 'intuit') {
+                        handleOAuthConnect(src.id, '', 'intuit');
                       } else {
                         updateSource(src.id, { connected: !sourceState.connected });
                         setExpandedSource(null);

@@ -750,6 +750,12 @@ export function initDatabase() {
   // Initialize report comments table
   initReportComments();
 
+  // Initialize accounting tables (QuickBooks / Bill.com)
+  initAccountingTables();
+
+  // Initialize price alert rules table
+  initPriceAlertRulesTable();
+
   // Password reset tokens
   db.exec(`
     CREATE TABLE IF NOT EXISTS password_resets (
@@ -4734,15 +4740,14 @@ export function insertActivity({ tenantId, type, title, subtitle, detailJson, so
   return result.lastInsertRowid;
 }
 
-export function getActivities(tenantId, { limit = 20, offset = 0, type } = {}) {
-  if (type) {
-    return db.prepare(
-      'SELECT id, type, title, subtitle, source_type, agent_id, created_at, CASE WHEN detail_json IS NOT NULL THEN 1 ELSE 0 END as has_detail FROM activity_log WHERE tenant_id = ? AND type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    ).all(tenantId, type, limit, offset);
-  }
-  return db.prepare(
-    'SELECT id, type, title, subtitle, source_type, agent_id, created_at, CASE WHEN detail_json IS NOT NULL THEN 1 ELSE 0 END as has_detail FROM activity_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-  ).all(tenantId, limit, offset);
+export function getActivities(tenantId, { limit = 20, offset = 0, type, sourceType } = {}) {
+  let sql = 'SELECT id, type, title, subtitle, source_type, agent_id, created_at, CASE WHEN detail_json IS NOT NULL THEN 1 ELSE 0 END as has_detail FROM activity_log WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (type) { sql += ' AND type = ?'; params.push(type); }
+  if (sourceType) { sql += ' AND source_type = ?'; params.push(sourceType); }
+  sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+  return db.prepare(sql).all(...params);
 }
 
 export function getActivityDetail(id) {
@@ -4810,6 +4815,244 @@ export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailR
       gmail_refresh_token = excluded.gmail_refresh_token,
       updated_at = datetime('now')
   `).run(tenantId, senderEmail, senderName, gmailRefreshToken);
+}
+
+// ─── Accounting Tables ──────────────────────────────────────────────────────
+
+export function initAccountingTables() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS accounting_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      customer_name TEXT,
+      invoice_number TEXT,
+      amount REAL DEFAULT 0,
+      balance_due REAL DEFAULT 0,
+      status TEXT DEFAULT 'open',
+      due_date TEXT,
+      detail_json TEXT,
+      estimate_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, source, external_id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_acct_inv_tenant ON accounting_invoices(tenant_id, status)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS accounting_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      vendor_name TEXT,
+      bill_number TEXT,
+      amount REAL DEFAULT 0,
+      balance_due REAL DEFAULT 0,
+      status TEXT DEFAULT 'open',
+      due_date TEXT,
+      detail_json TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, source, external_id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_acct_bill_tenant ON accounting_bills(tenant_id, status)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS accounting_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      type TEXT DEFAULT 'received',
+      amount REAL DEFAULT 0,
+      payment_date TEXT,
+      customer_or_vendor TEXT,
+      detail_json TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, source, external_id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_acct_pmt_tenant ON accounting_payments(tenant_id, type)'); } catch (e) {}
+}
+
+// Accounting CRUD
+
+export function upsertAccountingInvoice(tenantId, inv) {
+  db.prepare(`
+    INSERT INTO accounting_invoices (tenant_id, external_id, source, customer_name, invoice_number, amount, balance_due, status, due_date, detail_json, estimate_id, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id, source, external_id) DO UPDATE SET
+      customer_name = excluded.customer_name,
+      invoice_number = excluded.invoice_number,
+      amount = excluded.amount,
+      balance_due = excluded.balance_due,
+      status = excluded.status,
+      due_date = excluded.due_date,
+      detail_json = excluded.detail_json,
+      estimate_id = excluded.estimate_id,
+      updated_at = datetime('now')
+  `).run(tenantId, inv.externalId, inv.source, inv.customerName, inv.invoiceNumber,
+    inv.amount, inv.balanceDue, inv.status, inv.dueDate, inv.detailJson, inv.estimateId || null);
+}
+
+export function getAccountingInvoices(tenantId, { status, source, limit = 100, offset = 0 } = {}) {
+  let sql = 'SELECT * FROM accounting_invoices WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (status) { sql += ' AND status = ?'; params.push(status); }
+  if (source) { sql += ' AND source = ?'; params.push(source); }
+  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+  return db.prepare(sql).all(...params);
+}
+
+export function upsertAccountingBill(tenantId, bill) {
+  db.prepare(`
+    INSERT INTO accounting_bills (tenant_id, external_id, source, vendor_name, bill_number, amount, balance_due, status, due_date, detail_json, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id, source, external_id) DO UPDATE SET
+      vendor_name = excluded.vendor_name,
+      bill_number = excluded.bill_number,
+      amount = excluded.amount,
+      balance_due = excluded.balance_due,
+      status = excluded.status,
+      due_date = excluded.due_date,
+      detail_json = excluded.detail_json,
+      updated_at = datetime('now')
+  `).run(tenantId, bill.externalId, bill.source, bill.vendorName, bill.billNumber,
+    bill.amount, bill.balanceDue, bill.status, bill.dueDate, bill.detailJson);
+}
+
+export function getAccountingBills(tenantId, { status, source, limit = 100, offset = 0 } = {}) {
+  let sql = 'SELECT * FROM accounting_bills WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (status) { sql += ' AND status = ?'; params.push(status); }
+  if (source) { sql += ' AND source = ?'; params.push(source); }
+  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+  return db.prepare(sql).all(...params);
+}
+
+export function upsertAccountingPayment(tenantId, pmt) {
+  db.prepare(`
+    INSERT INTO accounting_payments (tenant_id, external_id, source, type, amount, payment_date, customer_or_vendor, detail_json, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id, source, external_id) DO UPDATE SET
+      type = excluded.type,
+      amount = excluded.amount,
+      payment_date = excluded.payment_date,
+      customer_or_vendor = excluded.customer_or_vendor,
+      detail_json = excluded.detail_json,
+      updated_at = datetime('now')
+  `).run(tenantId, pmt.externalId, pmt.source, pmt.type, pmt.amount,
+    pmt.paymentDate, pmt.customerOrVendor, pmt.detailJson);
+}
+
+export function getAccountingPayments(tenantId, { type, source, limit = 100, offset = 0 } = {}) {
+  let sql = 'SELECT * FROM accounting_payments WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (type) { sql += ' AND type = ?'; params.push(type); }
+  if (source) { sql += ' AND source = ?'; params.push(source); }
+  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+  return db.prepare(sql).all(...params);
+}
+
+export function getAccountingStats(tenantId) {
+  const invoices = db.prepare('SELECT COUNT(*) as total, SUM(amount) as totalAmount, SUM(balance_due) as totalDue FROM accounting_invoices WHERE tenant_id = ?').get(tenantId);
+  const overdue = db.prepare("SELECT COUNT(*) as count, SUM(balance_due) as amount FROM accounting_invoices WHERE tenant_id = ? AND status = 'overdue'").get(tenantId);
+  const bills = db.prepare('SELECT COUNT(*) as total, SUM(amount) as totalAmount, SUM(balance_due) as totalDue FROM accounting_bills WHERE tenant_id = ?').get(tenantId);
+  const billsOverdue = db.prepare("SELECT COUNT(*) as count, SUM(balance_due) as amount FROM accounting_bills WHERE tenant_id = ? AND status = 'overdue'").get(tenantId);
+  const pmtsReceived = db.prepare("SELECT COUNT(*) as count, SUM(amount) as amount FROM accounting_payments WHERE tenant_id = ? AND type = 'received'").get(tenantId);
+  const pmtsSent = db.prepare("SELECT COUNT(*) as count, SUM(amount) as amount FROM accounting_payments WHERE tenant_id = ? AND type = 'sent'").get(tenantId);
+
+  return {
+    invoices: {
+      total: invoices?.total || 0,
+      totalAmount: invoices?.totalAmount || 0,
+      totalDue: invoices?.totalDue || 0,
+      overdue: overdue?.count || 0,
+      overdueAmount: overdue?.amount || 0,
+    },
+    bills: {
+      total: bills?.total || 0,
+      totalAmount: bills?.totalAmount || 0,
+      totalDue: bills?.totalDue || 0,
+      overdue: billsOverdue?.count || 0,
+      overdueAmount: billsOverdue?.amount || 0,
+    },
+    payments: {
+      received: { count: pmtsReceived?.count || 0, amount: pmtsReceived?.amount || 0 },
+      sent: { count: pmtsSent?.count || 0, amount: pmtsSent?.amount || 0 },
+    },
+  };
+}
+
+// ─── Price Alert Rules ──────────────────────────────────────────────────────
+
+export function initPriceAlertRulesTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS price_alert_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      iso TEXT NOT NULL,
+      node TEXT NOT NULL,
+      direction TEXT NOT NULL DEFAULT 'above',
+      threshold REAL NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      cooldown_minutes INTEGER DEFAULT 30,
+      last_triggered_at TEXT,
+      notify_websocket INTEGER DEFAULT 1,
+      notify_email INTEGER DEFAULT 0,
+      trigger_curtailment INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_price_alerts_tenant ON price_alert_rules(tenant_id)'); } catch (e) {}
+}
+
+export function getPriceAlertRules() {
+  return db.prepare('SELECT * FROM price_alert_rules WHERE enabled = 1').all();
+}
+
+export function getPriceAlertRulesForTenant(tenantId) {
+  return db.prepare('SELECT * FROM price_alert_rules WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function createPriceAlertRule(rule) {
+  const result = db.prepare(`
+    INSERT INTO price_alert_rules (tenant_id, iso, node, direction, threshold, cooldown_minutes, notify_websocket, notify_email, trigger_curtailment)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(rule.tenantId, rule.iso, rule.node, rule.direction, rule.threshold,
+    rule.cooldownMinutes || 30, rule.notifyWebsocket ?? 1, rule.notifyEmail ?? 0, rule.triggerCurtailment ?? 0);
+  return result.lastInsertRowid;
+}
+
+export function updatePriceAlertRule(id, tenantId, updates) {
+  const sets = [];
+  const params = [];
+  if (updates.enabled !== undefined) { sets.push('enabled = ?'); params.push(updates.enabled ? 1 : 0); }
+  if (updates.threshold !== undefined) { sets.push('threshold = ?'); params.push(updates.threshold); }
+  if (updates.direction !== undefined) { sets.push('direction = ?'); params.push(updates.direction); }
+  if (updates.cooldownMinutes !== undefined) { sets.push('cooldown_minutes = ?'); params.push(updates.cooldownMinutes); }
+  if (updates.notifyWebsocket !== undefined) { sets.push('notify_websocket = ?'); params.push(updates.notifyWebsocket ? 1 : 0); }
+  if (updates.notifyEmail !== undefined) { sets.push('notify_email = ?'); params.push(updates.notifyEmail ? 1 : 0); }
+  if (updates.triggerCurtailment !== undefined) { sets.push('trigger_curtailment = ?'); params.push(updates.triggerCurtailment ? 1 : 0); }
+  if (sets.length === 0) return;
+  params.push(id, tenantId);
+  db.prepare(`UPDATE price_alert_rules SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params);
+}
+
+export function deletePriceAlertRule(id, tenantId) {
+  db.prepare('DELETE FROM price_alert_rules WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+}
+
+export function updateAlertRuleLastTriggered(id) {
+  db.prepare("UPDATE price_alert_rules SET last_triggered_at = datetime('now') WHERE id = ?").run(id);
 }
 
 export default db;
