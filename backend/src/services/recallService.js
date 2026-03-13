@@ -69,7 +69,7 @@ export async function createBot(meetingUrl, opts = {}) {
     recording_config: {
       transcript: {
         provider: {
-          recallai_streaming: {},
+          meeting_captions: {},
         },
       },
       // Real-time transcript stream to our WebSocket for the voice loop
