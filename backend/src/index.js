@@ -163,16 +163,17 @@ wss.on('recall-audio', async (ws, req) => {
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
-      // Extract botId from message payload — Recall puts it in msg.bot.id
-      const msgBotId = msg.bot?.id || msg.data?.bot_id || msg.bot_id;
+      // Recall payload: { event: "transcript.data", data: { bot: { id }, data: { words, ... }, ... } }
+      const msgBotId = msg.data?.bot?.id || msg.bot?.id || msg.data?.bot_id;
       if (msgBotId && !botId) {
         botId = msgBotId;
         console.log(`[WS] Recall transcript identified bot: ${botId}`);
       }
       const effectiveBotId = msgBotId || botId;
-      console.log(`[WS] Recall event received: ${JSON.stringify(msg).slice(0, 200)}`);
-      if (effectiveBotId) {
-        handleTranscriptEvent(effectiveBotId, msg);
+      if (effectiveBotId && (msg.event === 'transcript.data' || msg.type === 'transcript.data')) {
+        // Unwrap double-nested data: msg.data.data contains the actual transcript
+        const transcriptPayload = msg.data?.data || msg.data;
+        handleTranscriptEvent(effectiveBotId, { data: transcriptPayload });
       }
     } catch {
       // Not JSON — ignore
