@@ -60,21 +60,21 @@ export async function createBot(meetingUrl, opts = {}) {
     joinMessage = null,
   } = opts;
 
+  // Match exact config of bot c6756654 which successfully received transcript data
+  const wsBase = APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
+
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
     recording_config: {
       transcript: {
         provider: {
-          recallai_streaming: {
-            mode: 'prioritize_low_latency',
-            language_code: 'en',
-          },
+          recallai_streaming: {},
         },
       },
       realtime_endpoints: [{
-        type: 'webhook',
-        url: `${APP_BASE_URL}/api/v1/recall/transcript-event`,
+        type: 'websocket',
+        url: `${wsBase}/ws/recall-audio/`,
         events: ['transcript.data'],
       }],
     },
