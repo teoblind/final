@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../../lib/hooks/useApi';
 import { useTenant } from '../../contexts/TenantContext';
 
@@ -12,16 +12,6 @@ const STEPS = [
 
 // ─── Mining Industry Config ──────────────────────────────────────────────────
 
-const ASIC_MODELS = [
-  { model: 'S21 Pro', hashrate: 234, unit: 'TH/s' },
-  { model: 'S21', hashrate: 200, unit: 'TH/s' },
-  { model: 'S19 XP', hashrate: 140, unit: 'TH/s' },
-  { model: 'S19j Pro', hashrate: 104, unit: 'TH/s' },
-  { model: 'T21', hashrate: 190, unit: 'TH/s' },
-];
-
-const POOL_OPTIONS = ['Foundry', 'Antpool', 'F2Pool', 'ViaBTC', 'Braiins'];
-
 const ISO_OPTIONS = [
   { id: 'ERCOT', label: 'ERCOT (Texas)', available: true },
   { id: 'PJM', label: 'PJM (Mid-Atlantic)', available: false },
@@ -31,27 +21,26 @@ const ISO_OPTIONS = [
 ];
 
 const MINING_DATA_SOURCES = [
-  { id: 'energy', icon: '⚡', name: 'Energy Market (ERCOT)', desc: 'Real-time LMP pricing and settlement data' },
-  { id: 'pool', icon: '⛏', name: 'Mining Pool', desc: 'Hashrate, earnings, and worker monitoring' },
-  { id: 'fleet', icon: '🖥', name: 'Fleet Hardware', desc: 'ASIC models, quantities, and hashrate tracking' },
-  { id: 'docs', icon: '📄', name: 'Google Docs', desc: 'Automated meeting notes and document sync' },
-  { id: 'gmail', icon: '✉', name: 'Gmail', desc: 'Alert notifications and report delivery' },
+  { id: 'energy', icon: '⚡', name: 'Energy Market (ERCOT)', desc: 'Real-time LMP pricing and settlement data', oauth: false },
+  { id: 'calendar', icon: '📅', name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
+  { id: 'gmail', icon: '✉', name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
+  { id: 'docs', icon: '📄', name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
 ];
 
 const MINING_AGENTS = [
-  { id: 'curtailment', name: 'Curtailment Agent', desc: 'Monitors energy prices and automates curtailment decisions to minimize costs', color: '#2dd478' },
-  { id: 'fleet', name: 'Fleet Optimizer', desc: 'Tracks hashprice breakeven and recommends fleet adjustments in real-time', color: '#3b82f6' },
-  { id: 'pool', name: 'Pool Router', desc: 'Analyzes pool fees and luck to route hashrate for maximum earnings', color: '#a855f7' },
-  { id: 'market', name: 'Market Analyst', desc: 'Monitors macro signals, correlations, and generates thesis-driven alerts', color: '#f59e0b' },
+  { id: 'lead-engine', name: 'Lead Engine', desc: 'Discovers prospects, enriches contacts, and manages your sales pipeline', color: '#1a6b3c' },
+  { id: 'outreach', name: 'Outreach Agent', desc: 'Generates personalized emails, manages follow-ups, and tracks engagement', color: '#3b82f6' },
+  { id: 'meetings', name: 'Meeting Agent', desc: 'Joins calls, transcribes conversations, and extracts action items', color: '#a855f7' },
+  { id: 'reporting', name: 'Reporting Engine', desc: 'Generates weekly briefings, pipeline reports, and market analysis', color: '#f59e0b' },
 ];
 
 const MINING_WELCOME = {
   title: 'Welcome to Coppice',
-  subtitle: 'A unified intelligence platform that connects your energy markets, fleet analytics, mining pools, and AI agents into a single command center.',
+  subtitle: 'An AI operations platform that connects your pipeline, meetings, documents, and email into a single command center — with autonomous agents that work for you.',
   features: [
-    { icon: '⚡', title: 'Energy Intelligence', desc: 'Live ERCOT pricing, curtailment optimization, and settlement analytics' },
-    { icon: '⛏', title: 'Fleet Analytics', desc: 'Hashprice tracking, breakeven analysis, and scenario modeling' },
-    { icon: '🔄', title: 'Pool Routing', desc: 'Multi-pool hashrate routing with fee and luck optimization' },
+    { icon: '🔍', title: 'Lead Intelligence', desc: 'AI-powered prospect discovery and pipeline management' },
+    { icon: '✉', title: 'Smart Outreach', desc: 'Personalized email campaigns with engagement tracking' },
+    { icon: '🎙', title: 'Meeting Capture', desc: 'Auto-transcription, action items, and follow-up generation' },
     { icon: '🤖', title: 'AI Agents', desc: 'Autonomous agents that optimize your operations 24/7' },
   ],
 };
@@ -125,10 +114,9 @@ export default function OnboardingWizard({ onComplete }) {
         }
       : {
           energy: { connected: false, iso: 'ERCOT', node: '', rate: '' },
-          pool: { connected: false, provider: '', apiKey: '' },
-          fleet: { connected: false, entries: [{ model: 'S21 Pro', quantity: 0 }] },
-          docs: { connected: false },
+          calendar: { connected: false },
           gmail: { connected: false },
+          docs: { connected: false },
         }
   );
   const [expandedSource, setExpandedSource] = useState(null);
@@ -142,7 +130,7 @@ export default function OnboardingWizard({ onComplete }) {
   // Agents step state
   const defaultModes = isConstruction
     ? { estimating: 'copilot', documents: 'copilot', meetings: 'autonomous', email: 'copilot' }
-    : { curtailment: 'copilot', fleet: 'copilot', pool: 'off', market: 'autonomous' };
+    : { 'lead-engine': 'autonomous', outreach: 'copilot', meetings: 'autonomous', reporting: 'autonomous' };
   const [agentModes, setAgentModes] = useState(defaultModes);
 
   // Team step state
@@ -158,33 +146,65 @@ export default function OnboardingWizard({ onComplete }) {
     setSources(prev => ({ ...prev, [id]: { ...prev[id], ...updates } }));
   };
 
-  // Mining-only fleet helpers
-  const addFleetEntry = () => {
-    const entries = [...(sources.fleet?.entries || []), { model: 'S21', quantity: 0 }];
-    updateSource('fleet', { entries });
+  // OAuth popup handler for Google integrations
+  const handleOAuthConnect = (sourceId, scopes) => {
+    let token = null;
+    try {
+      const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+      token = session?.tokens?.accessToken;
+    } catch {}
+    if (!token) return;
+
+    const url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=google-${sourceId}&token=${encodeURIComponent(token)}`;
+    const popup = window.open(url, 'oauth-popup', 'width=500,height=700,scrollbars=yes');
+
+    const handleMessage = (event) => {
+      if (event.data?.type === 'oauth-integration-success') {
+        const connectedSource = event.data.source?.replace('google-', '');
+        if (connectedSource) {
+          updateSource(connectedSource, { connected: true });
+        }
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
+    // Fallback: check if popup was blocked
+    if (!popup || popup.closed) {
+      window.removeEventListener('message', handleMessage);
+      setError('Popup was blocked. Please allow popups for this site.');
+    }
   };
 
-  const updateFleetEntry = (index, field, value) => {
-    const entries = [...(sources.fleet?.entries || [])];
-    entries[index] = { ...entries[index], [field]: value };
-    updateSource('fleet', { entries });
-  };
-
-  const removeFleetEntry = (index) => {
-    if ((sources.fleet?.entries || []).length <= 1) return;
-    updateSource('fleet', { entries: sources.fleet.entries.filter((_, i) => i !== index) });
-  };
-
-  const getTotalHashrate = useCallback(() => {
-    return (sources.fleet?.entries || []).reduce((sum, entry) => {
-      const model = ASIC_MODELS.find(m => m.model === entry.model);
-      return sum + (model ? model.hashrate * (parseInt(entry.quantity, 10) || 0) : 0);
-    }, 0);
-  }, [sources.fleet?.entries]);
-
-  const getTotalMachines = useCallback(() => {
-    return (sources.fleet?.entries || []).reduce((sum, e) => sum + (parseInt(e.quantity, 10) || 0), 0);
-  }, [sources.fleet?.entries]);
+  // Check existing Google integrations on mount
+  useEffect(() => {
+    async function checkConnections() {
+      try {
+        let token = null;
+        try {
+          const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+          token = session?.tokens?.accessToken;
+        } catch {}
+        if (!token) return;
+        const res = await fetch(`${window.location.origin}/api/v1/auth/google/integrations`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.connected) {
+          const updates = {};
+          for (const svc of data.connected) {
+            const key = svc.replace('google-', '');
+            if (sources[key]) updates[key] = { ...sources[key], connected: true };
+          }
+          if (Object.keys(updates).length > 0) {
+            setSources(prev => ({ ...prev, ...updates }));
+          }
+        }
+      } catch {}
+    }
+    checkConnections();
+  }, []);
 
   // Team helpers
   const addInvite = () => {
@@ -219,22 +239,16 @@ export default function OnboardingWizard({ onComplete }) {
           ),
         }
       : {
-          workloadTypes: { btc: sources.fleet?.connected, aiHpc: false },
-          fleet: sources.fleet?.connected
-            ? sources.fleet.entries
-                .filter(e => parseInt(e.quantity, 10) > 0)
-                .map(e => ({ model: e.model, quantity: parseInt(e.quantity, 10) }))
-            : [],
           energy: {
             iso: sources.energy?.iso,
             settlementNode: sources.energy?.node,
             electricityRate: parseFloat(sources.energy?.rate) || 0,
           },
-          pool: sources.pool?.connected
-            ? { provider: sources.pool.provider, apiKey: sources.pool.apiKey }
-            : null,
           agents: agentModes,
           team: invitedMembers,
+          sources: Object.fromEntries(
+            Object.entries(sources).map(([k, v]) => [k, v.connected])
+          ),
         };
 
     try {
@@ -426,7 +440,7 @@ export default function OnboardingWizard({ onComplete }) {
                   <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 shrink-0">Connected</span>
                 ) : (
                   <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-[#f5f4f0] text-terminal-muted border border-terminal-border shrink-0">
-                    {isConstruction ? 'Connect' : (src.id === 'energy' || src.id === 'fleet') ? 'Configure' : 'Optional'}
+                    {isConstruction ? 'Connect' : src.id === 'energy' ? 'Configure' : 'Connect'}
                   </span>
                 )}
                 <span className={`text-[#c5c5bc] text-base transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>›</span>
@@ -483,96 +497,9 @@ export default function OnboardingWizard({ onComplete }) {
                 </div>
               )}
 
-              {/* Mining: Pool config */}
-              {!isConstruction && isExpanded && src.id === 'pool' && (
-                <div className="px-4 pb-4 pt-2 border-t border-terminal-border space-y-3">
-                  <div>
-                    <label className="text-[10px] text-terminal-muted uppercase tracking-[0.8px] mb-1.5 block font-semibold">Mining Pool</label>
-                    <select
-                      value={sourceState.provider}
-                      onChange={e => updateSource('pool', { provider: e.target.value })}
-                      className="w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text focus:outline-none focus:border-[#1a6b3c]"
-                    >
-                      <option value="">Select a pool...</option>
-                      {POOL_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
-                  {sourceState.provider && (
-                    <div>
-                      <label className="text-[10px] text-terminal-muted uppercase tracking-[0.8px] mb-1.5 block font-semibold">API Key</label>
-                      <input
-                        type="text"
-                        value={sourceState.apiKey}
-                        onChange={e => updateSource('pool', { apiKey: e.target.value })}
-                        placeholder="Enter your pool API key"
-                        className="w-full px-3 py-2 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text placeholder:text-terminal-muted/50 focus:outline-none focus:border-[#1a6b3c]"
-                      />
-                    </div>
-                  )}
-                  <button
-                    onClick={() => { updateSource('pool', { connected: !!sourceState.provider }); if (sourceState.provider) setExpandedSource(null); }}
-                    disabled={!sourceState.provider}
-                    className="w-full py-2.5 bg-[#1a6b3c] text-white text-[13px] font-semibold rounded-lg hover:bg-[#155a32] transition-colors disabled:opacity-40"
-                  >
-                    {sourceState.connected ? '✓ Connected' : 'Connect Pool'}
-                  </button>
-                </div>
-              )}
-
-              {/* Mining: Fleet config */}
-              {!isConstruction && isExpanded && src.id === 'fleet' && (
-                <div className="px-4 pb-4 pt-2 border-t border-terminal-border space-y-3">
-                  {(sources.fleet?.entries || []).map((entry, i) => {
-                    const modelInfo = ASIC_MODELS.find(m => m.model === entry.model);
-                    return (
-                      <div key={i} className="flex items-center gap-2">
-                        <select
-                          value={entry.model}
-                          onChange={e => updateFleetEntry(i, 'model', e.target.value)}
-                          className="flex-1 px-3 py-2 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text focus:outline-none focus:border-[#1a6b3c]"
-                        >
-                          {ASIC_MODELS.map(m => <option key={m.model} value={m.model}>{m.model} ({m.hashrate} TH/s)</option>)}
-                        </select>
-                        <input
-                          type="number"
-                          min="0"
-                          value={entry.quantity}
-                          onChange={e => updateFleetEntry(i, 'quantity', e.target.value)}
-                          placeholder="Qty"
-                          className="w-20 px-3 py-2 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text text-center focus:outline-none focus:border-[#1a6b3c]"
-                        />
-                        <span className="text-[11px] text-terminal-muted w-16 text-right tabular-nums shrink-0">
-                          {modelInfo ? `${(modelInfo.hashrate * (parseInt(entry.quantity, 10) || 0)).toLocaleString()}` : '0'} TH/s
-                        </span>
-                        {(sources.fleet?.entries || []).length > 1 && (
-                          <button onClick={() => removeFleetEntry(i)} className="text-terminal-muted hover:text-terminal-red text-sm px-1 shrink-0">✕</button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  <button onClick={addFleetEntry} className="text-[12px] text-[#1a6b3c] font-medium hover:underline">+ Add another model</button>
-                  {getTotalMachines() > 0 && (
-                    <div className="p-3 bg-[#1a6b3c]/5 border border-[#1a6b3c]/15 rounded-lg flex justify-between items-center">
-                      <span className="text-[11px] text-terminal-muted">{getTotalMachines().toLocaleString()} machines</span>
-                      <span className="text-[14px] font-bold text-[#1a6b3c] tabular-nums">{getTotalHashrate().toLocaleString()} TH/s</span>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => { updateSource('fleet', { connected: getTotalMachines() > 0 }); if (getTotalMachines() > 0) setExpandedSource(null); }}
-                    disabled={getTotalMachines() === 0}
-                    className="w-full py-2.5 bg-[#1a6b3c] text-white text-[13px] font-semibold rounded-lg hover:bg-[#155a32] transition-colors disabled:opacity-40"
-                  >
-                    {sourceState.connected ? '✓ Connected' : 'Save Fleet Config'}
-                  </button>
-                </div>
-              )}
-
-              {/* Generic connect (docs/gmail/calendar/pricing/jobs/email for DACP) */}
-              {isExpanded && (
-                (isConstruction && ['pricing', 'email', 'jobs', 'docs', 'calendar'].includes(src.id)) ||
-                (!isConstruction && (src.id === 'docs' || src.id === 'gmail'))
-              ) && !(
-                !isConstruction && (src.id === 'energy' || src.id === 'pool' || src.id === 'fleet')
+              {/* Generic connect (OAuth and non-OAuth sources) */}
+              {isExpanded && !['energy'].includes(src.id) && !(
+                !isConstruction && ['energy'].includes(src.id)
               ) && (
                 <div className="px-4 pb-4 pt-2 border-t border-terminal-border">
                   <p className="text-[12px] text-terminal-muted mb-3">
@@ -584,12 +511,21 @@ export default function OnboardingWizard({ onComplete }) {
                           docs: 'Connect Google Docs to sync meeting notes, submittals, and reports.',
                           calendar: 'Connect Google Calendar to track bid deadlines and meeting schedules.',
                         }[src.id]
-                      : src.id === 'docs'
-                        ? 'Connect Google Docs to sync meeting notes and reports automatically.'
-                        : 'Connect Gmail to receive alert notifications and scheduled report emails.'}
+                      : {
+                          calendar: 'Grant your agent read access to your Google Calendar for meeting tracking and scheduling.',
+                          gmail: 'Connect Gmail so your agent can read incoming messages and draft responses.',
+                          docs: 'Connect Google Docs & Drive for document sync, meeting notes, and file access.',
+                        }[src.id]}
                   </p>
                   <button
-                    onClick={() => { updateSource(src.id, { connected: !sourceState.connected }); setExpandedSource(null); }}
+                    onClick={() => {
+                      if (src.oauth === 'google') {
+                        handleOAuthConnect(src.id, src.scopes);
+                      } else {
+                        updateSource(src.id, { connected: !sourceState.connected });
+                        setExpandedSource(null);
+                      }
+                    }}
                     className={`w-full py-2.5 text-[13px] font-semibold rounded-lg transition-colors ${
                       sourceState.connected
                         ? 'bg-green-50 text-green-700 border border-green-200'
@@ -686,7 +622,7 @@ export default function OnboardingWizard({ onComplete }) {
         <p className="text-[13px] text-terminal-muted">
           {isConstruction
             ? 'Add project managers, estimators, and field crew to collaborate.'
-            : 'Add team members to collaborate on your mining operations.'}
+            : 'Add team members to collaborate on your operations.'}
         </p>
       </div>
 

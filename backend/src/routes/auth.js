@@ -12,6 +12,7 @@ import {
   hashPassword,
   verifyPassword,
   generateTokens,
+  verifyAccessToken,
   verifyRefreshToken,
   hashToken,
 } from '../services/authService.js';
@@ -36,6 +37,8 @@ import {
   createPasswordReset,
   getPasswordResetByHash,
   markPasswordResetUsed,
+  upsertKeyVaultEntry,
+  getKeyVaultEntries,
 } from '../cache/database.js';
 import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
@@ -734,6 +737,201 @@ router.get('/google/callback', async (req, res) => {
   } catch (error) {
     console.error('Google OAuth callback error:', error);
     res.redirect('/?error=oauth_failed');
+  }
+});
+
+// ─── Google Integration OAuth Config ────────────────────────────────────────
+const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+const INTEGRATE_REDIRECT_URI = '/api/v1/auth/google/integrate/callback';
+
+function getIntegrationOAuth2Client(req) {
+  let redirectUri = INTEGRATE_REDIRECT_URI;
+  if (redirectUri.startsWith('/')) {
+    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    redirectUri = `${proto}://${host}${redirectUri}`;
+  }
+  return new google.auth.OAuth2(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, redirectUri);
+}
+
+// ─── GET /google/integrate — Start integration OAuth flow ────────────────────
+
+router.get('/google/integrate', (req, res) => {
+  try {
+    if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
+      return res.status(501).json({ error: 'Google integration OAuth not configured' });
+    }
+
+    const { scopes, source, token } = req.query;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication token is required' });
+    }
+
+    if (!scopes || !source) {
+      return res.status(400).json({ error: 'scopes and source query parameters are required' });
+    }
+
+    // Verify JWT from query param (popup flow — no Authorization header)
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (err) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const tenantId = decoded.tenantId;
+    const userId = decoded.userId;
+
+    // Build state payload
+    const state = Buffer.from(JSON.stringify({ tenantId, userId, source })).toString('base64url');
+
+    // Build full scope URLs
+    const scopeList = scopes.split(',').map(s => `https://www.googleapis.com/auth/${s.trim()}`);
+
+    const oauth2Client = getIntegrationOAuth2Client(req);
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: true,
+      scope: scopeList,
+      state,
+    });
+
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('Google integrate start error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /google/integrate/callback — Handle integration OAuth callback ──────
+
+router.get('/google/integrate/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError || !code || !state) {
+      return res.status(400).send(renderIntegrationErrorPage(
+        'OAuth flow was cancelled or failed.',
+        oauthError || 'missing_code_or_state'
+      ));
+    }
+
+    // Decode state
+    let stateData;
+    try {
+      stateData = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+    } catch (err) {
+      return res.status(400).send(renderIntegrationErrorPage(
+        'Invalid state parameter.',
+        'invalid_state'
+      ));
+    }
+
+    const { tenantId, userId, source } = stateData;
+
+    if (!tenantId || !userId || !source) {
+      return res.status(400).send(renderIntegrationErrorPage(
+        'Missing required state fields.',
+        'incomplete_state'
+      ));
+    }
+
+    // Exchange code for tokens
+    const oauth2Client = getIntegrationOAuth2Client(req);
+    const { tokens } = await oauth2Client.getToken(code);
+
+    // Store refresh_token in key_vault
+    if (tokens.refresh_token) {
+      upsertKeyVaultEntry({
+        tenantId,
+        service: source,
+        keyName: 'refresh_token',
+        keyValue: tokens.refresh_token,
+        addedBy: userId,
+      });
+    }
+
+    // Store access_token with expiry if available
+    if (tokens.access_token) {
+      upsertKeyVaultEntry({
+        tenantId,
+        service: source,
+        keyName: 'access_token',
+        keyValue: tokens.access_token,
+        addedBy: userId,
+        expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+      });
+    }
+
+    // Audit log
+    insertAuditLog({
+      tenantId,
+      userId,
+      action: 'integration.connected',
+      resourceType: 'integration',
+      resourceId: source,
+      details: { source, hasRefreshToken: !!tokens.refresh_token },
+      ipAddress: req.ip,
+    });
+
+    // Send success message to opener and close popup
+    res.send(`<!DOCTYPE html>
+<html>
+<head><title>Integration Connected</title></head>
+<body>
+  <p style="font-family: -apple-system, sans-serif; text-align: center; margin-top: 40px; color: #1a6b3c;">
+    Integration connected successfully. This window will close automatically.
+  </p>
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'oauth-integration-success', source: ${JSON.stringify(source)} }, '*');
+    }
+    window.close();
+  </script>
+</body>
+</html>`);
+  } catch (error) {
+    console.error('Google integrate callback error:', error);
+    res.status(500).send(renderIntegrationErrorPage(
+      'Something went wrong connecting your account. Please try again.',
+      error.message
+    ));
+  }
+});
+
+function renderIntegrationErrorPage(message, detail) {
+  return `<!DOCTYPE html>
+<html>
+<head><title>Integration Error</title></head>
+<body>
+  <div style="font-family: -apple-system, sans-serif; text-align: center; margin-top: 40px; max-width: 480px; margin-left: auto; margin-right: auto;">
+    <h2 style="color: #c0392b;">Connection Failed</h2>
+    <p style="color: #333;">${message}</p>
+    <p style="color: #999; font-size: 12px;">Error: ${detail}</p>
+    <button onclick="window.close()" style="margin-top: 16px; padding: 8px 24px; background: #333; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+      Close Window
+    </button>
+  </div>
+</body>
+</html>`;
+}
+
+// ─── GET /google/integrations — Check connected integrations ─────────────────
+
+router.get('/google/integrations', authenticate, (req, res) => {
+  try {
+    const entries = getKeyVaultEntries(req.user.tenantId);
+    const connected = entries
+      .filter(e => e.service.startsWith('google-') && e.key_name === 'refresh_token')
+      .map(e => e.service);
+
+    res.json({ connected });
+  } catch (error) {
+    console.error('Get integrations error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

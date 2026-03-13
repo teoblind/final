@@ -220,6 +220,13 @@ function AppContent() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
 
+  // Debug: force onboarding for teo@sanghasystems.com
+  useEffect(() => {
+    if (user?.email === 'teo@sanghasystems.com') {
+      setShowOnboarding(true);
+    }
+  }, [user]);
+
   const industry = tenant?.settings?.industry;
   const isConstruction = industry === 'construction';
 
