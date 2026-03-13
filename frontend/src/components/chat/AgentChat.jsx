@@ -5,6 +5,15 @@ import { useAuth } from '../auth/AuthContext';
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const FILE_BASE = window.location.hostname.includes('localhost') ? 'http://localhost:3002' : '';
 
+function getAuthToken() {
+  // Try sessionStorage (current auth system) first, fall back to localStorage (legacy)
+  try {
+    const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+    if (session?.tokens?.accessToken) return session.tokens.accessToken;
+  } catch {}
+  return getAuthToken();
+}
+
 // ─── Agent Definitions ──────────────────────────────────────────────────────────
 const AGENTS = {
   // DACP Construction agents
@@ -652,7 +661,7 @@ function CallPanel({ agentDef, onClose }) {
 
       // Try to get a signed URL from our backend first (keeps API key server-side)
       let sessionConfig;
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       try {
         const res = await fetch(`${API_BASE}/v1/voice/conversation/signed-url`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -741,7 +750,7 @@ function CallPanel({ agentDef, onClose }) {
     if (!phoneNumber.trim()) return;
     setCallState('connecting');
     setDuration(0);
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     try {
       const res = await fetch(`${API_BASE}/v1/voice/call/outbound`, {
         method: 'POST',
@@ -1636,7 +1645,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
     setActiveThreadId(null);
     setMessages([]);
 
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
 
     // Check if Command Dashboard wants to open a specific thread
     const pendingThreadId = localStorage.getItem('open_thread_id');
@@ -1674,7 +1683,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   // Load messages when activeThreadId changes
   useEffect(() => {
     if (!activeThreadId) return;
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     fetch(`${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -1696,7 +1705,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
   // Create new thread
   const handleNewThread = useCallback(async () => {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     try {
       const res = await fetch(`${API_BASE}/v1/chat/${agentId}/threads`, {
         method: 'POST',
@@ -1717,7 +1726,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
   // Update thread visibility
   const handleUpdateVisibility = useCallback(async (threadId, newVisibility) => {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     try {
       await fetch(`${API_BASE}/v1/chat/${agentId}/threads/${threadId}`, {
         method: 'PATCH',
@@ -1745,7 +1754,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
       setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDone: true } : m));
 
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = getAuthToken();
         const res = await fetch(`${FILE_BASE}/api/v1/chat/send-estimate`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -1800,7 +1809,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
     setSending(true);
 
     // Store message via API — use thread endpoint if active, otherwise legacy
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     const postUrl = activeThreadId
       ? `${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`
       : `${API_BASE}/v1/chat/${agentId}/messages`;
