@@ -1,8 +1,8 @@
 /**
- * Email Service — sends emails via Gmail API (claude@zhan.capital)
+ * Email Service — Multi-tenant Gmail API sender
  *
- * Uses OAuth2 refresh token from TJR-Alerts Gmail token.
- * For DACP demo: sends estimate emails with Excel attachments.
+ * Each tenant can have its own Gmail account (sender email + refresh token).
+ * Falls back to the default coppice@zhan.capital account from env vars.
  */
 
 import { google } from 'googleapis';
@@ -10,20 +10,43 @@ import { readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { insertActivity } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig } from '../cache/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Gmail OAuth2 credentials (coppice@zhan.capital with gmail.send scope)
+// Shared OAuth app credentials (all tenants use the same OAuth app)
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+const FALLBACK_SENDER = 'Coppice <coppice@zhan.capital>';
 
-const oAuth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
-oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+/**
+ * Get a Gmail client + sender identity for a tenant.
+ * Looks up tenant_email_config in DB; falls back to env var defaults.
+ */
+function getGmailClient(tenantId) {
+  let refreshToken = FALLBACK_REFRESH_TOKEN;
+  let sender = FALLBACK_SENDER;
 
-const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+  if (tenantId) {
+    try {
+      const config = getTenantEmailConfig(tenantId);
+      if (config) {
+        refreshToken = config.gmailRefreshToken;
+        sender = `${config.senderName} <${config.senderEmail}>`;
+      }
+    } catch (e) {
+      // DB not initialized yet (startup) — use fallback
+    }
+  }
+
+  const oAuth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
+  oAuth2Client.setCredentials({ refresh_token: refreshToken });
+
+  const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+  return { gmail, sender };
+}
 
 /**
  * RFC 2047 encode a header value if it contains non-ASCII characters.
@@ -38,8 +61,10 @@ function encodeSubject(subject) {
  * Send a plain-text email (no attachments).
  */
 export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
+  const { gmail, sender } = getGmailClient(tenantId);
+
   const headers = [
-    `From: Coppice <coppice@zhan.capital>`,
+    `From: ${sender}`,
     `To: ${to}`,
     cc ? `Cc: ${cc}` : null,
     bcc ? `Bcc: ${bcc}` : null,
@@ -82,16 +107,19 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
  * @param {string} opts.subject - Subject line
  * @param {string} opts.body - Plain text body
  * @param {Array<{filename: string, path: string, contentType: string}>} opts.attachments
+ * @param {string} [opts.tenantId] - Tenant ID for sender resolution
  */
-export async function sendEmailWithAttachments({ to, subject, body, cc, bcc, attachments = [] }) {
+export async function sendEmailWithAttachments({ to, subject, body, cc, bcc, attachments = [], tenantId }) {
   if (attachments.length === 0) {
-    return sendEmail({ to, subject, body, cc, bcc });
+    return sendEmail({ to, subject, body, cc, bcc, tenantId });
   }
+
+  const { gmail, sender } = getGmailClient(tenantId);
 
   const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   const headers = [
-    `From: Coppice <coppice@zhan.capital>`,
+    `From: ${sender}`,
     `To: ${to}`,
     cc ? `Cc: ${cc}` : null,
     bcc ? `Bcc: ${bcc}` : null,
@@ -147,7 +175,7 @@ export async function sendEmailWithAttachments({ to, subject, body, cc, bcc, att
  * Send a DACP estimate email with the Excel file attached.
  * Used when an email_draft approval is approved.
  */
-export async function sendEstimateEmail({ to, subject, body, estimateFilename }) {
+export async function sendEstimateEmail({ to, subject, body, estimateFilename, tenantId }) {
   const demoFilesDir = join(__dirname, '../../demo-files');
   const estimatePath = join(demoFilesDir, 'estimates', estimateFilename);
 
@@ -155,6 +183,7 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename })
     to,
     subject,
     body,
+    tenantId,
     attachments: [{
       filename: estimateFilename,
       path: estimatePath,
@@ -167,8 +196,10 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename })
  * Send an HTML email.
  */
 export async function sendHtmlEmail({ to, subject, html, tenantId }) {
+  const { gmail, sender } = getGmailClient(tenantId);
+
   const headers = [
-    `From: Coppice <coppice@zhan.capital>`,
+    `From: ${sender}`,
     `To: ${to}`,
     `Subject: ${encodeSubject(subject)}`,
     'MIME-Version: 1.0',

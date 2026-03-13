@@ -361,6 +361,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
       path: filepath,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }],
+    tenantId: TENANT_ID,
   });
 
   console.log(`[EstimatePipeline] Reply sent to ${from} with estimate ${estimate.id}`);

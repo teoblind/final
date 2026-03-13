@@ -175,6 +175,7 @@ These tasks have been added to your Coppice dashboard. Let me know if anything n
         to: email,
         subject: `Meeting Summary: ${meetingTitle} — Your Action Items`,
         body,
+        tenantId: 'default',
       });
       sent.push(email);
     } catch (err) {

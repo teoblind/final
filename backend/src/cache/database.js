@@ -4675,6 +4675,17 @@ export function getOpusDailyCount(tenantId) {
 
 function initActivityLogTable() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_email_config (
+      tenant_id TEXT PRIMARY KEY,
+      sender_email TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      gmail_refresh_token TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -4740,6 +4751,30 @@ export function getActivityCount(tenantId, type) {
     return db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE tenant_id = ? AND type = ?').get(tenantId, type).c;
   }
   return db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE tenant_id = ?').get(tenantId).c;
+}
+
+// ─── Tenant Email Config ─────────────────────────────────────────────────────
+
+export function getTenantEmailConfig(tenantId) {
+  const row = db.prepare('SELECT * FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+  if (!row) return null;
+  return {
+    senderEmail: row.sender_email,
+    senderName: row.sender_name,
+    gmailRefreshToken: row.gmail_refresh_token,
+  };
+}
+
+export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailRefreshToken }) {
+  db.prepare(`
+    INSERT INTO tenant_email_config (tenant_id, sender_email, sender_name, gmail_refresh_token, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id) DO UPDATE SET
+      sender_email = excluded.sender_email,
+      sender_name = excluded.sender_name,
+      gmail_refresh_token = excluded.gmail_refresh_token,
+      updated_at = datetime('now')
+  `).run(tenantId, senderEmail, senderName, gmailRefreshToken);
 }
 
 export default db;

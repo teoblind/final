@@ -551,7 +551,8 @@ router.post('/send-reminder', async (req, res) => {
   }
 
   try {
-    const result = await sendEmail(reminder);
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const result = await sendEmail({ ...reminder, tenantId });
     res.json({ sent: true, messageId: result.messageId });
   } catch (err) {
     console.error('Send reminder error:', err.message);
@@ -574,6 +575,7 @@ router.post('/send-estimate', async (req, res) => {
   const demoRecipient = 'teo@zhan.capital';
 
   try {
+    const tenantId = req.resolvedTenant?.id || 'default';
     let result;
     if (attachment) {
       result = await sendEstimateEmail({
@@ -581,12 +583,14 @@ router.post('/send-estimate', async (req, res) => {
         subject,
         body,
         estimateFilename: attachment,
+        tenantId,
       });
     } else {
       result = await sendEmail({
         to: demoRecipient,
         subject,
         body,
+        tenantId,
       });
     }
     console.log(`Chat send-estimate: email sent to ${demoRecipient}, messageId=${result.messageId}`);

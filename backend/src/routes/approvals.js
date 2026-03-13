@@ -204,12 +204,14 @@ router.post('/:id/approve', async (req, res) => {
             subject: payload.subject,
             body: payload.body,
             estimateFilename: payload.attachment,
+            tenantId,
           });
         } else {
           await sendEmail({
             to: recipient,
             subject: payload.subject,
             body: payload.body,
+            tenantId,
           });
         }
         console.log(`Approval ${item.id}: email sent to ${recipient}`);

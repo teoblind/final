@@ -838,6 +838,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         `Sangha Renewables`,
       ].join('\n'),
       attachments: [],
+      tenantId: TENANT_ID,
     });
     insertActivity({
       tenantId: TENANT_ID, type: 'in',
@@ -921,6 +922,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       path: filepath,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }],
+    tenantId: TENANT_ID,
   });
   console.log(`[IPP Pipeline] Reply sent to ${from}`);
 
