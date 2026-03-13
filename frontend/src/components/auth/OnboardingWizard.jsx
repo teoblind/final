@@ -276,7 +276,7 @@ export default function OnboardingWizard({ onComplete }) {
         };
 
     try {
-      await api.post('/v1/tenant', { settings: config });
+      await api.put('/v1/tenant', { settings: config });
       if (onComplete) onComplete(config);
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to save configuration');
