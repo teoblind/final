@@ -439,7 +439,7 @@ export default function AccountingDashboard() {
   };
 
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden">
+    <div className="flex flex-col h-full">
       {/* Tab bar */}
       <div className="flex items-center gap-1 px-5 py-2 border-b border-terminal-border bg-terminal-panel shrink-0">
         <div className="flex items-center gap-1.5 mr-4">
