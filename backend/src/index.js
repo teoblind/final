@@ -71,13 +71,14 @@ import hubspotRoutes from './routes/hubspot.js';
 import jobsRoutes from './routes/jobs.js';
 import activityRoutes from './routes/activity.js';
 import reportCommentRoutes from './routes/reportComments.js';
+import recallRoutes from './routes/recall.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
 
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true });
 
 const PORT = process.env.PORT || 3002;
 
@@ -133,6 +134,53 @@ try {
 
 // Store connected clients
 const clients = new Set();
+
+// Handle WebSocket upgrade to route Recall audio vs regular clients
+server.on('upgrade', (request, socket, head) => {
+  const url = request.url || '';
+
+  if (url.startsWith('/ws/recall-audio/')) {
+    // Recall.ai real-time audio WebSocket — handle separately
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('recall-audio', ws, request);
+    });
+  } else {
+    // Regular dashboard WebSocket
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  }
+});
+
+// Recall.ai audio WebSocket handler
+wss.on('recall-audio', async (ws, req) => {
+  const url = req.url || '';
+  // Extract botId from URL: /ws/recall-audio/{botId} or just /ws/recall-audio/
+  const parts = url.split('/').filter(Boolean);
+  const botId = parts.length > 2 ? parts[parts.length - 1] : null;
+  console.log(`[WS] Recall audio connection for bot: ${botId || 'unknown'}`);
+
+  // Dynamically import the bridge (avoid circular deps)
+  const { getBridge } = await import('./services/recallAudioBridge.js');
+
+  ws.on('message', (data) => {
+    // Recall sends binary PCM audio chunks
+    if (botId) {
+      const bridge = getBridge(botId);
+      if (bridge) {
+        bridge.handleAudioChunk(Buffer.isBuffer(data) ? data : Buffer.from(data));
+      }
+    }
+  });
+
+  ws.on('close', () => {
+    console.log(`[WS] Recall audio disconnected for bot: ${botId || 'unknown'}`);
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[WS] Recall audio error for bot ${botId}:`, err.message);
+  });
+});
 
 wss.on('connection', (ws) => {
   clients.add(ws);
@@ -227,6 +275,7 @@ app.use('/api/v1/jobs', jobsRoutes);
 app.use('/api/v1/activity', activityRoutes);
 app.use('/api/v1/report-comments', reportCommentRoutes);
 app.use('/api/v1/voice', voiceRoutes);
+app.use('/api/v1/recall', recallRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/
