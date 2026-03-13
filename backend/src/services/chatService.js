@@ -546,6 +546,173 @@ async function callMiningTool(toolName, toolInput, tenantId) {
   throw new Error(`Unknown mining tool: ${toolName}`);
 }
 
+// ─── Email Tools ──────────────────────────────────────────────────────────────
+
+const EMAIL_TOOLS = [
+  {
+    name: 'send_email',
+    description: 'Send an email on behalf of the team. Use this when the user asks you to email someone, draft and send a message, or reply to a thread.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address' },
+        subject: { type: 'string', description: 'Email subject line' },
+        body: { type: 'string', description: 'Email body (plain text)' },
+        cc: { type: 'string', description: 'CC recipients (comma-separated)' },
+        bcc: { type: 'string', description: 'BCC recipients (comma-separated)' },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
+    name: 'list_emails',
+    description: 'List recent emails from the inbox. Use this when the user asks to check email, see what came in, or look at recent messages.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Gmail search query (e.g. "from:john@example.com", "subject:proposal", "is:unread"). Defaults to recent emails.' },
+        max_results: { type: 'number', description: 'Number of emails to return (default 10, max 20)' },
+      },
+    },
+  },
+  {
+    name: 'read_email',
+    description: 'Read the full content of a specific email by its message ID. Use after list_emails to read a specific message.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'Gmail message ID' },
+      },
+      required: ['message_id'],
+    },
+  },
+];
+
+const EMAIL_PROMPT_ADDON = `
+
+You have full email access via agent@sangha.coppice.ai. You can:
+- Send emails on behalf of the team (send_email)
+- Check the inbox and search for emails (list_emails)
+- Read the full content of any email (read_email)
+
+When sending emails, use a professional tone. Always confirm with the user before sending unless they explicitly told you to send it.`;
+
+async function callEmailTool(toolName, toolInput, tenantId) {
+  const { google } = await import('googleapis');
+
+  // Build Gmail client for this tenant
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  let refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+
+  // Check for tenant-specific email config
+  try {
+    const { getTenantEmailConfig } = await import('../cache/database.js');
+    const config = getTenantEmailConfig(tenantId);
+    if (config?.gmailRefreshToken) {
+      refreshToken = config.gmailRefreshToken;
+    }
+  } catch {}
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    return { error: 'Email not configured — missing Gmail API credentials' };
+  }
+
+  const oAuth2Client = new google.auth.OAuth2(clientId, clientSecret, 'http://localhost:8099');
+  oAuth2Client.setCredentials({ refresh_token: refreshToken });
+  const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+
+  if (toolName === 'send_email') {
+    const { sendEmail } = await import('./emailService.js');
+    const result = await sendEmail({
+      to: toolInput.to,
+      subject: toolInput.subject,
+      body: toolInput.body,
+      cc: toolInput.cc || undefined,
+      bcc: toolInput.bcc || undefined,
+      tenantId,
+    });
+    return { success: true, messageId: result.messageId, message: `Email sent to ${toolInput.to}` };
+  }
+
+  if (toolName === 'list_emails') {
+    const maxResults = Math.min(toolInput.max_results || 10, 20);
+    const query = toolInput.query || 'newer_than:7d';
+
+    const listRes = await gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults,
+    });
+
+    const messages = listRes.data.messages || [];
+    if (messages.length === 0) return { emails: [], message: 'No emails found matching your query.' };
+
+    const emails = [];
+    for (const msg of messages) {
+      const full = await gmail.users.messages.get({
+        userId: 'me',
+        id: msg.id,
+        format: 'metadata',
+        metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+      });
+      const headers = full.data.payload?.headers || [];
+      emails.push({
+        id: msg.id,
+        threadId: full.data.threadId,
+        from: headers.find(h => h.name === 'From')?.value || '',
+        to: headers.find(h => h.name === 'To')?.value || '',
+        subject: headers.find(h => h.name === 'Subject')?.value || '',
+        date: headers.find(h => h.name === 'Date')?.value || '',
+        snippet: full.data.snippet || '',
+        unread: (full.data.labelIds || []).includes('UNREAD'),
+      });
+    }
+    return { emails, count: emails.length };
+  }
+
+  if (toolName === 'read_email') {
+    const full = await gmail.users.messages.get({
+      userId: 'me',
+      id: toolInput.message_id,
+      format: 'full',
+    });
+    const headers = full.data.payload?.headers || [];
+
+    // Extract body
+    function extractBody(payload) {
+      if (!payload) return '';
+      if (payload.body?.data) return Buffer.from(payload.body.data, 'base64url').toString('utf-8');
+      if (payload.parts) {
+        for (const part of payload.parts) {
+          if (part.mimeType === 'text/plain' && part.body?.data) {
+            return Buffer.from(part.body.data, 'base64url').toString('utf-8');
+          }
+        }
+        for (const part of payload.parts) {
+          const nested = extractBody(part);
+          if (nested) return nested;
+        }
+      }
+      return '';
+    }
+
+    return {
+      id: toolInput.message_id,
+      threadId: full.data.threadId,
+      from: headers.find(h => h.name.toLowerCase() === 'from')?.value || '',
+      to: headers.find(h => h.name.toLowerCase() === 'to')?.value || '',
+      cc: headers.find(h => h.name.toLowerCase() === 'cc')?.value || '',
+      subject: headers.find(h => h.name.toLowerCase() === 'subject')?.value || '',
+      date: headers.find(h => h.name.toLowerCase() === 'date')?.value || '',
+      body: extractBody(full.data.payload),
+      labels: full.data.labelIds || [],
+    };
+  }
+
+  throw new Error(`Unknown email tool: ${toolName}`);
+}
+
 async function callKnowledgeTool(toolName, toolInput, tenantId) {
   if (toolName === 'search_knowledge') {
     const results = { entries: [], entities: [], actionItems: [] };
@@ -784,7 +951,7 @@ You can help with:
 - IPP mine specification analysis — use the generate_mine_specs tool when someone asks about behind-the-meter mining economics, IPP evaluation, or mine specs for a given facility. Provide capacity (MW) at minimum. The tool returns fleet sizing, revenue projections (bull/base/bear hashprice scenarios), infrastructure requirements, and an Excel report.
 - Answering questions about meetings, action items, people, companies, and deal status
 
-You can manage email outreach through the Lead Engine — drafting personalized emails, tracking outreach campaigns, monitoring reply rates, and managing follow-ups. Emails are sent from agent@sangha.coppice.ai on behalf of the team.
+You have full email access via agent@sangha.coppice.ai — you can send emails, check the inbox, read messages, and manage correspondence on behalf of the team.
 
 You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files. You can generate full branded presentations with custom styling — just provide the topic and context.
 
@@ -1108,7 +1275,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Legal tools for relevant agents
   const legalAgents = ['sangha', 'hivemind', 'documents'];
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + knowledgeContext;
+  // Email tools for agents with email access
+  const emailAgents = ['sangha', 'hivemind', 'email'];
+  const emailAddon = emailAgents.includes(agentId) ? EMAIL_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -1128,6 +1298,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const miningAgents = ['sangha', 'curtailment'];
   if (miningAgents.includes(agentId)) {
     tools.push(...MINING_TOOLS);
+  }
+  // Email tools for agents with inbox access
+  if (emailAgents.includes(agentId)) {
+    tools.push(...EMAIL_TOOLS);
   }
   // Web browsing — available to all agents
   tools.push(...WEB_TOOLS);
@@ -1177,8 +1351,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const miningToolNames = ['generate_mine_specs'];
       const webToolNames = ['browse_url'];
       const legalToolNames = ['generate_legal_doc'];
+      const emailToolNames = ['send_email', 'list_emails', 'read_email'];
       try {
-        if (leadEngineToolNames.includes(toolName)) {
+        if (emailToolNames.includes(toolName)) {
+          toolResult = await callEmailTool(toolName, toolInput, tenantId);
+        } else if (leadEngineToolNames.includes(toolName)) {
           toolResult = await callLeadEngineTool(toolName, toolInput, tenantId);
         } else if (knowledgeToolNames.includes(toolName)) {
           toolResult = await callKnowledgeTool(toolName, toolInput, tenantId);
