@@ -229,13 +229,9 @@ function AppContent() {
     } else if (user?.mustChangePassword) {
       setShowChangePassword(true);
     }
-    // Show onboarding for brand-new users (created < 2 min ago AND not yet completed)
-    if (user?.id && user?.created_at && !localStorage.getItem(`onboarding_done_${user.id}`)) {
-      const createdAt = new Date(user.created_at).getTime();
-      const twoMinAgo = Date.now() - 2 * 60 * 1000;
-      if (createdAt > twoMinAgo) {
-        setShowOnboarding(true);
-      }
+    // Show onboarding once per user (localStorage flag persists after completion)
+    if (user?.id && !localStorage.getItem(`onboarding_done_${user.id}`)) {
+      setShowOnboarding(true);
     }
   }, [user]);
 
