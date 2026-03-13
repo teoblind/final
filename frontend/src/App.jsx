@@ -55,6 +55,7 @@ class ErrorBoundary extends Component {
 // Lazy-load tab content for performance
 const LoginPage = lazy(() => import('./components/auth/LoginPage'));
 const ChangePasswordModal = lazy(() => import('./components/auth/ChangePasswordModal'));
+const SetPasswordModal = lazy(() => import('./components/auth/SetPasswordModal'));
 const OnboardingWizard = lazy(() => import('./components/auth/OnboardingWizard'));
 const OperationsDashboard = lazy(() => import('./components/dashboards/OperationsDashboard'));
 const MacroDashboard = lazy(() => import('./components/dashboards/MacroDashboard'));
@@ -219,10 +220,17 @@ function AppContent() {
   const [wsConnected, setWsConnected] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showSetPassword, setShowSetPassword] = useState(false);
 
-  // Debug: force onboarding for teo@sanghasystems.com
+  // Prompt OAuth-only users to set a password, or force password change if flagged
   useEffect(() => {
-    if (user?.email === 'teo@sanghasystems.com') {
+    if (user?.mustSetPassword) {
+      setShowSetPassword(true);
+    } else if (user?.mustChangePassword) {
+      setShowChangePassword(true);
+    }
+    // Show onboarding once for new users (check localStorage flag)
+    if (user?.id && !localStorage.getItem(`onboarding_done_${user.id}`)) {
       setShowOnboarding(true);
     }
   }, [user]);
@@ -423,7 +431,7 @@ function AppContent() {
   if (showOnboarding) {
     return (
       <Suspense fallback={<LoadingSpinner />}>
-        <OnboardingWizard onComplete={() => setShowOnboarding(false)} />
+        <OnboardingWizard onComplete={() => { localStorage.setItem(`onboarding_done_${user?.id}`, '1'); setShowOnboarding(false); }} />
       </Suspense>
     );
   }
@@ -654,7 +662,15 @@ function AppContent() {
         <ManualEntryModal onClose={() => setManualEntryOpen(false)} />
       )}
 
-      {/* Force password change overlay */}
+      {/* Force set/change password overlays */}
+      {showSetPassword && (
+        <Suspense fallback={null}>
+          <SetPasswordModal
+            onSuccess={() => setShowSetPassword(false)}
+            onSkip={() => setShowSetPassword(false)}
+          />
+        </Suspense>
+      )}
       {changePasswordOverlay}
     </div>
   );
