@@ -103,6 +103,23 @@ export default function LoginPage({ onLogin }) {
         return;
       }
 
+      // Redirect to correct tenant subdomain if needed
+      const slug = data.user?.tenantSlug;
+      if (slug && !isAdmin) {
+        const baseDomain = 'coppice.ai';
+        const expectedHost = `${slug}.${baseDomain}`;
+        const currentHost = window.location.hostname;
+        if (currentHost !== expectedHost && currentHost !== 'localhost') {
+          const params = new URLSearchParams({
+            access_token: data.tokens.accessToken,
+            refresh_token: data.tokens.refreshToken,
+            expires_at: data.tokens.expiresAt,
+          });
+          window.location.href = `https://${expectedHost}/?oauth=success&${params.toString()}`;
+          return;
+        }
+      }
+
       if (onLogin) {
         onLogin({ user: data.user, tokens: data.tokens, adminConsole: isAdmin });
       }

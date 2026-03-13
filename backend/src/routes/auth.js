@@ -141,6 +141,11 @@ router.post('/login', async (req, res) => {
       ipAddress: req.ip,
     });
 
+    // Include tenant slug for subdomain redirect
+    const tenantRow = getTenant(user.tenant_id);
+    const tenantSlug = tenantRow?.slug || user.tenant_id;
+    const subdomain = getSubdomainForSlug(tenantSlug);
+
     res.json({
       user: {
         id: user.id,
@@ -148,6 +153,7 @@ router.post('/login', async (req, res) => {
         name: user.name,
         role: user.role,
         tenantId: user.tenant_id,
+        tenantSlug: subdomain,
         permissions: ROLE_PERMISSIONS[user.role] || {},
         mustChangePassword: !!user.must_change_password,
       },
