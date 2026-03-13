@@ -110,7 +110,7 @@ export async function createBot(meetingUrl, opts = {}) {
  * Remove a bot from its meeting.
  */
 export async function removeBot(botId) {
-  await recallFetch(`/bot/${botId}/leave/`, { method: 'POST' });
+  await recallFetch(`/bot/${botId}/leave_call/`, { method: 'POST' });
   const local = activeBots.get(botId);
   if (local) local.status = 'leaving';
   console.log(`[Recall] Bot ${botId} leaving meeting`);

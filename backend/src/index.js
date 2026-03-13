@@ -163,14 +163,15 @@ wss.on('recall-audio', async (ws, req) => {
   ws.on('message', (data) => {
     try {
       const msg = JSON.parse(data.toString());
-      // Extract botId from message payload (Recall includes it in every event)
-      const msgBotId = msg.data?.bot_id || msg.bot_id;
+      // Extract botId from message payload — Recall puts it in msg.bot.id
+      const msgBotId = msg.bot?.id || msg.data?.bot_id || msg.bot_id;
       if (msgBotId && !botId) {
         botId = msgBotId;
         console.log(`[WS] Recall transcript identified bot: ${botId}`);
       }
       const effectiveBotId = msgBotId || botId;
-      if (effectiveBotId && (msg.type === 'transcript.data' || msg.data?.transcript)) {
+      console.log(`[WS] Recall event received: ${JSON.stringify(msg).slice(0, 200)}`);
+      if (effectiveBotId) {
         handleTranscriptEvent(effectiveBotId, msg);
       }
     } catch {
