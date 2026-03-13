@@ -70,7 +70,7 @@ function encodeSubject(subject) {
 /**
  * Send a plain-text email (no attachments).
  */
-export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
+export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
   const bodyBase64 = Buffer.from(body, 'utf-8').toString('base64');
@@ -80,6 +80,8 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
     cc ? `Cc: ${cc}` : null,
     bcc ? `Bcc: ${bcc}` : null,
     `Subject: ${encodeSubject(subject)}`,
+    inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
+    references ? `References: ${references}` : null,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     'Content-Transfer-Encoding: base64',
@@ -92,9 +94,12 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
+  const requestBody = { raw: encodedMessage };
+  if (threadId) requestBody.threadId = threadId;
+
   const result = await gmail.users.messages.send({
     userId: 'me',
-    requestBody: { raw: encodedMessage },
+    requestBody,
   });
 
   console.log(`Email sent to ${to}: ${result.data.id}`);
@@ -121,9 +126,9 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId }) {
  * @param {Array<{filename: string, path: string, contentType: string}>} opts.attachments
  * @param {string} [opts.tenantId] - Tenant ID for sender resolution
  */
-export async function sendEmailWithAttachments({ to, subject, body, html, cc, bcc, attachments = [], tenantId }) {
+export async function sendEmailWithAttachments({ to, subject, body, html, cc, bcc, attachments = [], tenantId, threadId, inReplyTo, references }) {
   if (attachments.length === 0) {
-    return sendEmail({ to, subject, body: html || body, cc, bcc, tenantId });
+    return sendEmail({ to, subject, body: html || body, cc, bcc, tenantId, threadId, inReplyTo, references });
   }
 
   const { gmail, sender } = getGmailClient(tenantId);
@@ -136,6 +141,8 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
     cc ? `Cc: ${cc}` : null,
     bcc ? `Bcc: ${bcc}` : null,
     `Subject: ${encodeSubject(subject)}`,
+    inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
+    references ? `References: ${references}` : null,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
   ].filter(Boolean);
@@ -178,9 +185,12 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
+  const requestBody2 = { raw: encodedMessage };
+  if (threadId) requestBody2.threadId = threadId;
+
   const result = await gmail.users.messages.send({
     userId: 'me',
-    requestBody: { raw: encodedMessage },
+    requestBody: requestBody2,
   });
 
   console.log(`Email with ${attachments.length} attachment(s) sent to ${to}: ${result.data.id}`);
@@ -191,7 +201,7 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
  * Send a DACP estimate email with the Excel file attached.
  * Used when an email_draft approval is approved.
  */
-export async function sendEstimateEmail({ to, subject, body, estimateFilename, tenantId }) {
+export async function sendEstimateEmail({ to, subject, body, estimateFilename, tenantId, threadId, inReplyTo, references }) {
   const demoFilesDir = join(__dirname, '../../demo-files');
   const estimatePath = join(demoFilesDir, 'estimates', estimateFilename);
 
@@ -200,6 +210,9 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename, t
     subject,
     body,
     tenantId,
+    threadId,
+    inReplyTo,
+    references,
     attachments: [{
       filename: estimateFilename,
       path: estimatePath,
@@ -211,7 +224,7 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename, t
 /**
  * Send an HTML email.
  */
-export async function sendHtmlEmail({ to, subject, html, tenantId }) {
+export async function sendHtmlEmail({ to, subject, html, tenantId, threadId, inReplyTo, references }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
   const htmlBase64 = Buffer.from(html, 'utf-8').toString('base64');
@@ -219,10 +232,12 @@ export async function sendHtmlEmail({ to, subject, html, tenantId }) {
     `From: ${sender}`,
     `To: ${to}`,
     `Subject: ${encodeSubject(subject)}`,
+    inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
+    references ? `References: ${references}` : null,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
     'Content-Transfer-Encoding: base64',
-  ];
+  ].filter(Boolean);
 
   const rawMessage = [...headers, '', htmlBase64].join('\r\n');
   const encodedMessage = Buffer.from(rawMessage)
@@ -231,9 +246,12 @@ export async function sendHtmlEmail({ to, subject, html, tenantId }) {
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
+  const requestBody = { raw: encodedMessage };
+  if (threadId) requestBody.threadId = threadId;
+
   const result = await gmail.users.messages.send({
     userId: 'me',
-    requestBody: { raw: encodedMessage },
+    requestBody,
   });
 
   console.log(`HTML email sent to ${to}: ${result.data.id}`);

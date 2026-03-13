@@ -744,6 +744,9 @@ export function initDatabase() {
   // Initialize activity log table
   initActivityLogTable();
 
+  // Initialize processed emails dedup table
+  initProcessedEmailsTable();
+
   // Initialize report comments table
   initReportComments();
 
@@ -4751,6 +4754,38 @@ export function getActivityCount(tenantId, type) {
     return db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE tenant_id = ? AND type = ?').get(tenantId, type).c;
   }
   return db.prepare('SELECT COUNT(*) as c FROM activity_log WHERE tenant_id = ?').get(tenantId).c;
+}
+
+// ─── Processed Emails (Persistent Dedup) ─────────────────────────────────────
+
+function initProcessedEmailsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS processed_emails (
+      message_id TEXT PRIMARY KEY,
+      thread_id TEXT,
+      pipeline TEXT,
+      tenant_id TEXT,
+      processed_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_processed_thread ON processed_emails(thread_id)'); } catch (e) {}
+}
+
+export function isEmailProcessed(messageId) {
+  const row = db.prepare('SELECT 1 FROM processed_emails WHERE message_id = ? LIMIT 1').get(messageId);
+  return !!row;
+}
+
+export function isThreadProcessed(threadId) {
+  if (!threadId) return false;
+  const row = db.prepare('SELECT message_id, pipeline, tenant_id FROM processed_emails WHERE thread_id = ? LIMIT 1').get(threadId);
+  return row || null;
+}
+
+export function markEmailProcessed({ messageId, threadId, pipeline, tenantId }) {
+  db.prepare(
+    'INSERT OR IGNORE INTO processed_emails (message_id, thread_id, pipeline, tenant_id) VALUES (?, ?, ?, ?)'
+  ).run(messageId, threadId || null, pipeline || null, tenantId || null);
 }
 
 // ─── Tenant Email Config ─────────────────────────────────────────────────────

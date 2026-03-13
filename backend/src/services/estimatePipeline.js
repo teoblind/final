@@ -24,7 +24,7 @@ const ESTIMATES_DIR = join(__dirname, '../../data/estimates');
 // Ensure output directory exists
 if (!existsSync(ESTIMATES_DIR)) mkdirSync(ESTIMATES_DIR, { recursive: true });
 
-const TENANT_ID = 'dacp-construction-001';
+const DEFAULT_TENANT_ID = 'dacp-construction-001';
 
 // ─── RFQ Detection ──────────────────────────────────────────────────────────
 
@@ -272,7 +272,7 @@ async function generateEstimateExcel(estimate) {
 
 // ─── Full Pipeline ──────────────────────────────────────────────────────────
 
-export async function processRfqEmail({ messageId, threadId, from, fromName, subject, body }) {
+export async function processRfqEmail({ messageId, threadId, from, fromName, subject, body, tenantId = DEFAULT_TENANT_ID }) {
   console.log(`[EstimatePipeline] Processing RFQ: "${subject}" from ${fromName}`);
 
   // 1. Parse scope items from email body
@@ -291,7 +291,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
   const bidId = `BID-${uuidv4().slice(0, 8).toUpperCase()}`;
   const bidRequest = {
     id: bidId,
-    tenant_id: TENANT_ID,
+    tenant_id: tenantId,
     from_email: from,
     from_name: fromName,
     gc_name: gcName,
@@ -311,7 +311,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
 
   // Log activity for incoming RFQ
   insertActivity({
-    tenantId: TENANT_ID,
+    tenantId,
     type: 'in',
     title: `New RFQ from ${gcName}`,
     subtitle: `${subject} — ${scopeItems.length} scope items`,
@@ -329,12 +329,12 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
     missing_info: [],
   };
 
-  const { estimate, comparables } = generateEstimate(bidForEstimate, TENANT_ID);
+  const { estimate, comparables } = generateEstimate(bidForEstimate, tenantId);
   console.log(`[EstimatePipeline] Generated estimate ${estimate.id}: $${estimate.totalBid.toLocaleString()} (${estimate.confidence} confidence)`);
 
   // Log activity for estimate
   insertActivity({
-    tenantId: TENANT_ID,
+    tenantId,
     type: 'agent',
     title: `Estimate generated: $${estimate.totalBid.toLocaleString()}`,
     subtitle: `${estimate.projectName} — ${(estimate.lineItems || []).length} line items, ${estimate.confidence} confidence`,
@@ -352,6 +352,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
   const emailDraft = draftQuoteEmail(estimate);
   emailDraft.to = from;
 
+  const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
   await sendEmailWithAttachments({
     to: from,
     subject: `RE: ${subject} — DACP Construction Bid Proposal`,
@@ -361,14 +362,17 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
       path: filepath,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }],
-    tenantId: TENANT_ID,
+    tenantId,
+    threadId,
+    inReplyTo: gmailMessageId,
+    references: gmailMessageId,
   });
 
   console.log(`[EstimatePipeline] Reply sent to ${from} with estimate ${estimate.id}`);
 
   // Log activity for sent email
   insertActivity({
-    tenantId: TENANT_ID,
+    tenantId,
     type: 'out',
     title: `Bid proposal sent to ${gcName}`,
     subtitle: `$${estimate.totalBid.toLocaleString()} — ${estimate.projectName}`,

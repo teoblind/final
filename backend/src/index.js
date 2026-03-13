@@ -152,33 +152,38 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-// Recall.ai audio WebSocket handler
+// Recall.ai real-time transcript WebSocket handler
 wss.on('recall-audio', async (ws, req) => {
-  const url = req.url || '';
-  // Extract botId from URL: /ws/recall-audio/{botId} or just /ws/recall-audio/
-  const parts = url.split('/').filter(Boolean);
-  const botId = parts.length > 2 ? parts[parts.length - 1] : null;
-  console.log(`[WS] Recall audio connection for bot: ${botId || 'unknown'}`);
+  let botId = null;
+  console.log(`[WS] Recall transcript connection opened`);
 
-  // Dynamically import the bridge (avoid circular deps)
-  const { getBridge } = await import('./services/recallAudioBridge.js');
+  // Import voice loop to feed transcript events
+  const { handleTranscriptEvent } = await import('./services/meetingVoiceLoop.js');
 
   ws.on('message', (data) => {
-    // Recall sends binary PCM audio chunks
-    if (botId) {
-      const bridge = getBridge(botId);
-      if (bridge) {
-        bridge.handleAudioChunk(Buffer.isBuffer(data) ? data : Buffer.from(data));
+    try {
+      const msg = JSON.parse(data.toString());
+      // Extract botId from message payload (Recall includes it in every event)
+      const msgBotId = msg.data?.bot_id || msg.bot_id;
+      if (msgBotId && !botId) {
+        botId = msgBotId;
+        console.log(`[WS] Recall transcript identified bot: ${botId}`);
       }
+      const effectiveBotId = msgBotId || botId;
+      if (effectiveBotId && (msg.type === 'transcript.data' || msg.data?.transcript)) {
+        handleTranscriptEvent(effectiveBotId, msg);
+      }
+    } catch {
+      // Not JSON — ignore
     }
   });
 
   ws.on('close', () => {
-    console.log(`[WS] Recall audio disconnected for bot: ${botId || 'unknown'}`);
+    console.log(`[WS] Recall transcript disconnected for bot: ${botId || 'unknown'}`);
   });
 
   ws.on('error', (err) => {
-    console.error(`[WS] Recall audio error for bot ${botId}:`, err.message);
+    console.error(`[WS] Recall transcript error for bot ${botId}:`, err.message);
   });
 });
 

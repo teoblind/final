@@ -56,30 +56,33 @@ async function recallFetch(path, opts = {}) {
 export async function createBot(meetingUrl, opts = {}) {
   const {
     botName = 'Coppice',
-    transcriptionProvider = 'assembly_ai',
+    transcriptionProvider = 'meeting_captions',
     joinMessage = null,
   } = opts;
+
+  const hasVoice = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID);
+  const wsBase = APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
 
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
-    transcription_options: {
-      provider: transcriptionProvider,
-    },
-    real_time_transcription: {
-      destination_url: `${APP_BASE_URL}/api/v1/recall/webhook`,
-      partial_results: false,
-    },
-    // Real-time audio streaming via WebSocket
-    real_time_media: {
-      websocket_audio_destination_url: `${APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')}/ws/recall-audio/`,
-      audio_encoding: 'pcm_s16le',
-      audio_sample_rate: 16000,
+    recording_config: {
+      transcript: {
+        provider: {
+          meeting_captions: {},
+        },
+      },
+      // Real-time transcript stream to our WebSocket for the voice loop
+      realtime_endpoints: [{
+        type: 'websocket',
+        url: `${wsBase}/ws/recall-audio/`,
+        events: ['transcript.data'],
+      }],
     },
     automatic_leave: {
-      waiting_room_timeout: 600, // 10 min in waiting room → leave
-      noone_joined_timeout: 300, // 5 min alone → leave
-      everyone_left_timeout: 5,  // everyone else left → leave after 5s
+      waiting_room_timeout: 600,
+      noone_joined_timeout: 300,
+      everyone_left_timeout: 5,
     },
   };
 
@@ -124,8 +127,8 @@ export async function sendAudio(botId, mp3Buffer) {
   await recallFetch(`/bot/${botId}/output_audio/`, {
     method: 'POST',
     body: JSON.stringify({
-      data: base64,
-      encoding: 'mp3',
+      kind: 'mp3',
+      b64_data: base64,
     }),
   });
 }

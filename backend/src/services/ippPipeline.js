@@ -30,7 +30,7 @@ const NODAL_PATH = join(__dirname, '../../data/nodal_correct.json');
 
 if (!existsSync(SPECS_DIR)) mkdirSync(SPECS_DIR, { recursive: true });
 
-const TENANT_ID = 'default'; // Sangha tenant
+const DEFAULT_TENANT_ID = 'default'; // Sangha tenant
 
 // ─── Load ERCOT Nodal + Load LMP Data ────────────────────────────────────────
 
@@ -806,7 +806,7 @@ export async function generateMineSpecExcel(analysis, ippData) {
 
 // ─── 5. Process IPP Email ────────────────────────────────────────────────────
 
-export async function processIppEmail({ messageId, threadId, from, fromName, subject, body, attachments }) {
+export async function processIppEmail({ messageId, threadId, from, fromName, subject, body, attachments, tenantId = DEFAULT_TENANT_ID }) {
   console.log(`[IPP Pipeline] Processing inquiry from ${fromName} <${from}>`);
 
   const data = parseIppData(body, attachments);
@@ -834,15 +834,19 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         `Coppice`,
         `Sangha Renewables`,
       ].join('\n');
+    const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
     await sendEmailWithAttachments({
       to: from,
       subject: `RE: ${subject}`,
       html: textToHtml(needsDataText),
       attachments: [],
-      tenantId: TENANT_ID,
+      tenantId,
+      threadId,
+      inReplyTo: gmailMessageId,
+      references: gmailMessageId,
     });
     insertActivity({
-      tenantId: TENANT_ID, type: 'in',
+      tenantId, type: 'in',
       title: `IPP Inquiry from ${fromName || from}`,
       subtitle: `${subject} — Requested additional data`,
       detailJson: JSON.stringify({ from, fromName, subject, dataParsed: data }),
@@ -864,7 +868,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   }
 
   insertActivity({
-    tenantId: TENANT_ID, type: 'in',
+    tenantId, type: 'in',
     title: `IPP Inquiry from ${fromName || from}`,
     subtitle: `${data.capacityMW}MW ${data.facilityType} — ${data.annualGenerationMWh?.toLocaleString()} MWh/yr`,
     detailJson: JSON.stringify({ from, fromName, subject, data }),
@@ -880,7 +884,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   console.log(`[IPP Pipeline] Best mine size: ${baseAnalysis.bestMineSize}MW, Deal value (VI): $${baseAnalysis.bestDealValue.toLocaleString()}, $/MWh: $${baseAnalysis.bestDealValuePerMwh}`);
 
   insertActivity({
-    tenantId: TENANT_ID, type: 'agent',
+    tenantId, type: 'agent',
     title: 'Mine Specification Generated',
     subtitle: `${baseAnalysis.bestMineSize}MW optimal — Deal value $${baseAnalysis.bestDealValue.toLocaleString()} ($${baseAnalysis.bestDealValuePerMwh}/MWh)`,
     detailJson: JSON.stringify({
@@ -914,6 +918,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
     `Sangha Renewables`,
   ].join('\n');
 
+  const gmailMessageId2 = '<' + messageId + '@mail.gmail.com>';
   await sendEmailWithAttachments({
     to: from,
     subject: `RE: ${subject} — Mine Specification Report`,
@@ -923,12 +928,15 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       path: filepath,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }],
-    tenantId: TENANT_ID,
+    tenantId,
+    threadId,
+    inReplyTo: gmailMessageId2,
+    references: gmailMessageId2,
   });
   console.log(`[IPP Pipeline] Reply sent to ${from}`);
 
   insertActivity({
-    tenantId: TENANT_ID, type: 'out',
+    tenantId, type: 'out',
     title: 'Mine Specification Sent',
     subtitle: `Replied to ${fromName || from} — ${baseAnalysis.bestMineSize}MW optimal, $${baseAnalysis.bestDealValuePerMwh}/MWh deal value`,
     detailJson: JSON.stringify({ to: from, filename, bestMineSize: baseAnalysis.bestMineSize, dealValuePerMwh: baseAnalysis.bestDealValuePerMwh }),

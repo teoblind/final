@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import Database from 'better-sqlite3';
@@ -21,7 +21,6 @@ const db = new Database(join(__dirname, '../../data/cache.db'));
 let pollInterval = null;
 let lastPoll = null;
 let repliesFound = 0;
-let processedIds = new Set();
 
 // Shared OAuth app credentials
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
@@ -126,7 +125,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
     let newReplies = 0;
 
     for (const msg of messages) {
-      if (processedIds.has(msg.id)) continue;
+      if (isEmailProcessed(msg.id)) continue;
 
       const full = await gmail.users.messages.get({
         userId: 'me',
@@ -142,20 +141,54 @@ async function pollSingleInbox(gmail, tenantId, label) {
       const senderName = from.replace(/<[^>]+>/, '').trim().replace(/^"(.*)"$/, '$1');
 
       const body = extractEmailBody(full.data.payload);
+      const msgThreadId = full.data.threadId;
 
-      // Resolve which tenant this email belongs to
-      const effectiveTenant = tenantId || 'default';
+      // Check if this thread was already processed by a pipeline — follow-up reply
+      const priorThread = isThreadProcessed(msgThreadId);
+      if (priorThread) {
+        console.log(`[GmailPoll] [${label}] Follow-up in already-processed thread (pipeline: ${priorThread.pipeline}), logging and skipping`);
+        const followupTenant = priorThread.tenant_id || tenantId || 'default';
+        insertActivity({
+          tenantId: followupTenant,
+          type: 'in',
+          title: `Follow-up from ${senderName || senderEmail}`,
+          subtitle: `${subject} (thread already processed by ${priorThread.pipeline})`,
+          detailJson: JSON.stringify({
+            from: senderEmail, fromName: senderName, subject,
+            body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id,
+            originalPipeline: priorThread.pipeline,
+          }),
+          sourceType: 'email',
+          sourceId: msg.id,
+          agentId: 'coppice',
+        });
+        try {
+          await gmail.users.messages.modify({
+            userId: 'me', id: msg.id,
+            requestBody: { removeLabelIds: ['UNREAD'] },
+          });
+        } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up', tenantId: followupTenant });
+        newReplies++;
+        continue;
+      }
+
+      // Resolve tenant: inbox tenantId > contact match > pipeline default
+      const contact = matchContactToTenant(senderEmail);
+      const resolvedTenant = tenantId || contact?.tenant_id || 'default';
 
       // Check if this is an RFQ/bid request email → route to estimate pipeline
       if (isRfqEmail(subject, body)) {
+        const rfqTenant = tenantId || contact?.tenant_id || 'dacp-construction-001';
         try {
           const result = await processRfqEmail({
             messageId: msg.id,
-            threadId: full.data.threadId,
+            threadId: msgThreadId,
             from: senderEmail,
             fromName: senderName,
             subject,
             body,
+            tenantId: rfqTenant,
           });
           if (result) {
             console.log(`[GmailPoll] [${label}] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
@@ -171,23 +204,25 @@ async function pollSingleInbox(gmail, tenantId, label) {
           });
         } catch {}
 
-        processedIds.add(msg.id);
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'rfq', tenantId: rfqTenant });
         newReplies++;
         continue;
       }
 
       // Check if this is an IPP inquiry → route to mine spec pipeline
       if (isIppEmail(subject, body)) {
+        const ippTenant = tenantId || contact?.tenant_id || 'default';
         try {
           const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
           const result = await processIppEmail({
             messageId: msg.id,
-            threadId: full.data.threadId,
+            threadId: msgThreadId,
             from: senderEmail,
             fromName: senderName,
             subject,
             body,
             attachments,
+            tenantId: ippTenant,
           });
           if (result) {
             console.log(`[GmailPoll] [${label}] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
@@ -203,16 +238,14 @@ async function pollSingleInbox(gmail, tenantId, label) {
           });
         } catch {}
 
-        processedIds.add(msg.id);
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'ipp', tenantId: ippTenant });
         newReplies++;
         continue;
       }
 
       // Not an RFQ or IPP — check if it's from a known contact
-      const contact = matchContactToTenant(senderEmail);
-
       if (!contact) {
-        processedIds.add(msg.id);
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: resolvedTenant });
         continue;
       }
 
@@ -230,7 +263,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
           fromName: displayName,
           subject,
           body: body.slice(0, 5000),
-          threadId: full.data.threadId,
+          threadId: msgThreadId,
           messageId: msg.id,
         }),
         sourceType: 'email',
@@ -245,7 +278,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
         });
       } catch {}
 
-      processedIds.add(msg.id);
+      markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: contactTenant });
       newReplies++;
     }
 
@@ -268,12 +301,6 @@ async function pollInbox() {
 
   repliesFound += totalNew;
   lastPoll = new Date().toISOString();
-
-  // Trim processedIds to prevent memory growth
-  if (processedIds.size > 500) {
-    const arr = [...processedIds];
-    processedIds = new Set(arr.slice(-200));
-  }
 
   if (totalNew > 0) {
     console.log(`[GmailPoll] ${totalNew} new replies detected across ${inboxes.length} inbox(es)`);
