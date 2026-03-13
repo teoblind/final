@@ -1,13 +1,13 @@
 /**
  * Gmail Inbox Polling Job
  *
- * Polls for unread emails, matches senders to known contacts,
- * and creates activity_log entries for inbound replies.
- * Detects RFQ/bid request emails and routes them through the estimate pipeline.
+ * Polls for unread emails across all configured tenant inboxes + the default
+ * coppice@zhan.capital inbox. Matches senders to known contacts, detects
+ * RFQ/bid requests and IPP inquiries, and routes them through pipelines.
  */
 
 import { google } from 'googleapis';
-import { insertActivity } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import Database from 'better-sqlite3';
@@ -23,15 +23,43 @@ let lastPoll = null;
 let repliesFound = 0;
 let processedIds = new Set();
 
-function getOAuth2Client() {
-  const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-  const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
-  const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-  if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) return null;
+// Shared OAuth app credentials
+const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 
+function makeGmailClient(refreshToken) {
+  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
   const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
-  client.setCredentials({ refresh_token: REFRESH_TOKEN });
-  return client;
+  client.setCredentials({ refresh_token: refreshToken });
+  return google.gmail({ version: 'v1', auth: client });
+}
+
+/**
+ * Build a list of inboxes to poll: default + all tenant email configs.
+ */
+function getInboxes() {
+  const inboxes = [];
+
+  // Default inbox (coppice@zhan.capital from env vars)
+  const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
+  if (defaultToken) {
+    inboxes.push({ tenantId: null, label: 'coppice@zhan.capital', gmail: makeGmailClient(defaultToken) });
+  }
+
+  // Tenant inboxes from DB
+  try {
+    const rows = db.prepare('SELECT * FROM tenant_email_config').all();
+    for (const row of rows) {
+      const gmail = makeGmailClient(row.gmail_refresh_token);
+      if (gmail) {
+        inboxes.push({ tenantId: row.tenant_id, label: `${row.sender_email} (${row.tenant_id})`, gmail });
+      }
+    }
+  } catch (e) {
+    // Table may not exist yet
+  }
+
+  return inboxes;
 }
 
 function matchContactToTenant(email) {
@@ -86,12 +114,7 @@ async function extractAttachments(gmail, messageId, payload) {
   return attachments;
 }
 
-async function pollInbox() {
-  const auth = getOAuth2Client();
-  if (!auth) return;
-
-  const gmail = google.gmail({ version: 'v1', auth });
-
+async function pollSingleInbox(gmail, tenantId, label) {
   try {
     const listRes = await gmail.users.messages.list({
       userId: 'me',
@@ -120,6 +143,9 @@ async function pollInbox() {
 
       const body = extractEmailBody(full.data.payload);
 
+      // Resolve which tenant this email belongs to
+      const effectiveTenant = tenantId || 'default';
+
       // Check if this is an RFQ/bid request email → route to estimate pipeline
       if (isRfqEmail(subject, body)) {
         try {
@@ -132,17 +158,15 @@ async function pollInbox() {
             body,
           });
           if (result) {
-            console.log(`[GmailPoll] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
+            console.log(`[GmailPoll] [${label}] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
           }
         } catch (err) {
-          console.error(`[GmailPoll] RFQ pipeline error:`, err.message);
+          console.error(`[GmailPoll] [${label}] RFQ pipeline error:`, err.message);
         }
 
-        // Mark as read
         try {
           await gmail.users.messages.modify({
-            userId: 'me',
-            id: msg.id,
+            userId: 'me', id: msg.id,
             requestBody: { removeLabelIds: ['UNREAD'] },
           });
         } catch {}
@@ -166,16 +190,15 @@ async function pollInbox() {
             attachments,
           });
           if (result) {
-            console.log(`[GmailPoll] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
+            console.log(`[GmailPoll] [${label}] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
           }
         } catch (err) {
-          console.error(`[GmailPoll] IPP pipeline error:`, err.message);
+          console.error(`[GmailPoll] [${label}] IPP pipeline error:`, err.message);
         }
 
         try {
           await gmail.users.messages.modify({
-            userId: 'me',
-            id: msg.id,
+            userId: 'me', id: msg.id,
             requestBody: { removeLabelIds: ['UNREAD'] },
           });
         } catch {}
@@ -188,18 +211,17 @@ async function pollInbox() {
       // Not an RFQ or IPP — check if it's from a known contact
       const contact = matchContactToTenant(senderEmail);
 
-      // Skip emails from unknown senders (Google Docs notifications, spam, etc.)
       if (!contact) {
         processedIds.add(msg.id);
         continue;
       }
 
-      const tenantId = contact.tenant_id;
+      const contactTenant = contact.tenant_id;
       const displayName = contact.name || senderName || senderEmail;
       const company = contact.company || '';
 
       insertActivity({
-        tenantId,
+        tenantId: contactTenant,
         type: 'in',
         title: company ? `Reply from ${displayName} at ${company}` : `Reply from ${displayName}`,
         subtitle: subject,
@@ -216,11 +238,9 @@ async function pollInbox() {
         agentId: 'coppice',
       });
 
-      // Mark as read
       try {
         await gmail.users.messages.modify({
-          userId: 'me',
-          id: msg.id,
+          userId: 'me', id: msg.id,
           requestBody: { removeLabelIds: ['UNREAD'] },
         });
       } catch {}
@@ -229,20 +249,34 @@ async function pollInbox() {
       newReplies++;
     }
 
-    repliesFound += newReplies;
-    lastPoll = new Date().toISOString();
-
-    // Trim processedIds to prevent memory growth
-    if (processedIds.size > 500) {
-      const arr = [...processedIds];
-      processedIds = new Set(arr.slice(-200));
-    }
-
-    if (newReplies > 0) {
-      console.log(`[GmailPoll] ${newReplies} new replies detected`);
-    }
+    return newReplies;
   } catch (err) {
-    console.error('[GmailPoll] Poll error:', err.message);
+    console.error(`[GmailPoll] [${label}] Poll error:`, err.message);
+    return 0;
+  }
+}
+
+async function pollInbox() {
+  const inboxes = getInboxes();
+  if (inboxes.length === 0) return;
+
+  let totalNew = 0;
+  for (const inbox of inboxes) {
+    const count = await pollSingleInbox(inbox.gmail, inbox.tenantId, inbox.label);
+    totalNew += count;
+  }
+
+  repliesFound += totalNew;
+  lastPoll = new Date().toISOString();
+
+  // Trim processedIds to prevent memory growth
+  if (processedIds.size > 500) {
+    const arr = [...processedIds];
+    processedIds = new Set(arr.slice(-200));
+  }
+
+  if (totalNew > 0) {
+    console.log(`[GmailPoll] ${totalNew} new replies detected across ${inboxes.length} inbox(es)`);
   }
 }
 
