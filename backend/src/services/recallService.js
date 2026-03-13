@@ -60,28 +60,19 @@ export async function createBot(meetingUrl, opts = {}) {
     joinMessage = null,
   } = opts;
 
-  const hasVoice = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID);
-  const wsBase = APP_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
-
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
     recording_config: {
       transcript: {
         provider: {
-          meeting_captions: {},
+          recallai_streaming: {},
         },
       },
-      // Real-time transcript stream to our WebSocket for the voice loop
-      realtime_endpoints: [{
-        type: 'websocket',
-        url: `${wsBase}/ws/recall-audio/`,
-        events: ['transcript.data'],
-      }],
     },
     automatic_leave: {
       waiting_room_timeout: 600,
-      noone_joined_timeout: 300,
+      noone_joined_timeout: 60, // leave after 1 min if nobody joins
       everyone_left_timeout: 5,
     },
   };
