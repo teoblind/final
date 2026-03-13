@@ -46,22 +46,8 @@ router.post('/join', async (req, res) => {
 
     const bot = await createBot(meetingUrl, { botName, transcriptionProvider, joinMessage });
 
-    // Start the audio bridge only if ElevenLabs is configured
-    if (process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_AGENT_ID) {
-      try {
-        const bridge = new RecallAudioBridge(bot.id);
-        await bridge.start();
-        registerBridge(bot.id, bridge);
-        console.log(`[Recall] Audio bridge started for bot ${bot.id}`);
-      } catch (err) {
-        // Non-fatal — bot still joins, just no voice interaction
-        console.warn(`[Recall] Audio bridge failed to start for bot ${bot.id}:`, err.message);
-      }
-    } else {
-      console.log(`[Recall] Audio bridge skipped — ElevenLabs not configured`);
-    }
-
-    // Start the transcript-based voice loop (polls transcript → Claude → TTS → output_audio)
+    // Voice loop handles everything: transcript → Claude → TTS → output_audio
+    // AudioBridge (raw PCM approach) is disabled — transcript-based loop is more reliable
     startVoiceLoop(bot.id);
 
     res.json({
