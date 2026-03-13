@@ -8,7 +8,16 @@
 import { insertEnergyPrices, getPriceAlertRules, updateAlertRuleLastTriggered, insertActivity } from '../cache/database.js';
 import { fetchErcotData } from '../services/ercotService.js';
 import { fetchRealtimeLmp as fetchCaisoLmp, CAISO_NODES } from '../services/caisoService.js';
-import { broadcast } from '../index.js';
+
+// Lazy import to avoid circular dependency with index.js
+let _broadcast = null;
+async function getBroadcast() {
+  if (!_broadcast) {
+    const mod = await import('../index.js');
+    _broadcast = mod.broadcast;
+  }
+  return _broadcast;
+}
 
 // ERCOT nodes to monitor
 const ERCOT_NODES = ['HB_NORTH', 'HB_SOUTH', 'HB_WEST', 'HB_HOUSTON'];
@@ -89,7 +98,7 @@ async function fetchAndStorePrices() {
 /**
  * Check alert rules against current prices.
  */
-function checkAlertRules(records) {
+async function checkAlertRules(records) {
   // Group records by iso+node for quick lookup
   const priceMap = {};
   for (const r of records) {
@@ -145,7 +154,8 @@ function checkAlertRules(records) {
     });
 
     // WebSocket broadcast
-    if (rule.notify_websocket) {
+    const broadcast = await getBroadcast();
+    if (rule.notify_websocket && broadcast) {
       broadcast('price-alert', {
         tenantId: rule.tenant_id,
         iso: rule.iso,
@@ -158,7 +168,7 @@ function checkAlertRules(records) {
     }
 
     // Trigger curtailment agent if configured
-    if (rule.trigger_curtailment) {
+    if (rule.trigger_curtailment && broadcast) {
       broadcast('curtailment-trigger', {
         tenantId: rule.tenant_id,
         reason: 'price-alert',
@@ -178,13 +188,16 @@ async function poll() {
 
   if (records.length > 0) {
     // Broadcast latest prices to all clients
-    broadcast('price-update', {
-      prices: Object.values(latestPrices),
-      timestamp: new Date().toISOString(),
-    });
+    const broadcast = await getBroadcast();
+    if (broadcast) {
+      broadcast('price-update', {
+        prices: Object.values(latestPrices),
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // Check alert rules
-    checkAlertRules(records);
+    await checkAlertRules(records);
   }
 }
 
