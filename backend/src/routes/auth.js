@@ -398,6 +398,7 @@ router.get('/me', authenticate, (req, res) => {
     const { password_hash, mfa_secret, ...safeUser } = user;
     safeUser.permissions = ROLE_PERMISSIONS[user.role] || {};
     safeUser.mustChangePassword = !!user.must_change_password;
+    safeUser.mustSetPassword = !password_hash;
 
     res.json({ user: safeUser });
   } catch (error) {
@@ -480,6 +481,49 @@ router.post('/change-password', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Change password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /set-password ─────────────────────────────────────────────────────
+
+router.post('/set-password', authenticate, async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({ error: 'New password is required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    const user = getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only allow if user has no password set (OAuth-only users)
+    if (user.password_hash) {
+      return res.status(400).json({ error: 'Password already set. Use change-password instead.' });
+    }
+
+    const newHash = await hashPassword(newPassword);
+    updateUser(user.id, { passwordHash: newHash, mustChangePassword: false });
+
+    insertAuditLog({
+      tenantId: user.tenant_id,
+      userId: user.id,
+      action: 'user.setPassword',
+      resourceType: 'user',
+      resourceId: user.id,
+      ipAddress: req.ip,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Set password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -747,8 +791,7 @@ router.get('/google/callback', async (req, res) => {
 });
 
 // ─── Google Integration OAuth Config ────────────────────────────────────────
-const GMAIL_CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const GMAIL_CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+// Reuse the same "Coppice Web" OAuth client for integrations
 const INTEGRATE_REDIRECT_URI = '/api/v1/auth/google/integrate/callback';
 
 function getIntegrationOAuth2Client(req) {
@@ -758,14 +801,14 @@ function getIntegrationOAuth2Client(req) {
     const host = req.headers['x-forwarded-host'] || req.get('host');
     redirectUri = `${proto}://${host}${redirectUri}`;
   }
-  return new google.auth.OAuth2(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, redirectUri);
+  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
 }
 
 // ─── GET /google/integrate — Start integration OAuth flow ────────────────────
 
 router.get('/google/integrate', (req, res) => {
   try {
-    if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
       return res.status(501).json({ error: 'Google integration OAuth not configured' });
     }
 
