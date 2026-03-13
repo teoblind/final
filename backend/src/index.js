@@ -164,16 +164,20 @@ wss.on('recall-audio', async (ws, req) => {
     try {
       const msg = JSON.parse(data.toString());
       // Recall payload: { event: "transcript.data", data: { bot: { id }, data: { words, ... }, ... } }
+      console.log(`[WS] Recall msg: ${JSON.stringify(msg).slice(0, 300)}`);
       const msgBotId = msg.data?.bot?.id || msg.bot?.id || msg.data?.bot_id;
       if (msgBotId && !botId) {
         botId = msgBotId;
-        console.log(`[WS] Recall transcript identified bot: ${botId}`);
+        console.log(`[WS] Identified bot: ${botId}`);
       }
       const effectiveBotId = msgBotId || botId;
-      if (effectiveBotId && (msg.event === 'transcript.data' || msg.type === 'transcript.data')) {
-        // Unwrap double-nested data: msg.data.data contains the actual transcript
+      if (!effectiveBotId) {
+        console.log(`[WS] No botId found, skipping`);
+      } else if (msg.event === 'transcript.data' || msg.type === 'transcript.data') {
         const transcriptPayload = msg.data?.data || msg.data;
         handleTranscriptEvent(effectiveBotId, { data: transcriptPayload });
+      } else {
+        console.log(`[WS] Unknown event type: ${msg.event || msg.type || 'none'}`);
       }
     } catch {
       // Not JSON — ignore
