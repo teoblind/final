@@ -17,6 +17,7 @@
  */
 
 import ExcelJS from 'exceljs';
+import Anthropic from '@anthropic-ai/sdk';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync, existsSync, readFileSync } from 'fs';
@@ -804,14 +805,184 @@ export async function generateMineSpecExcel(analysis, ippData) {
   return { filepath, filename };
 }
 
-// ─── 5. Process IPP Email ────────────────────────────────────────────────────
+// ─── 5. Claude-Powered Data Extraction ──────────────────────────────────────
+
+async function extractWithClaude(body, attachments = []) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const attachmentText = attachments
+    .filter(a => a.content)
+    .map(a => `\n--- Attachment: ${a.filename} ---\n${a.content}`)
+    .join('\n');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2048,
+    system: `You are a data extraction specialist for Sangha Renewables' IPP (Independent Power Producer) analysis pipeline. Extract energy asset data from emails and format it as structured JSON.
+
+You must return ONLY valid JSON with these fields (use null for missing data):
+{
+  "capacityMW": number or null,
+  "annualGenerationMWh": number or null,
+  "avgNodalPrice": number or null,
+  "generationHours": number or null,
+  "curtailmentPct": number or null,
+  "location": string or null,
+  "facilityType": "Solar" | "Wind" | "Natural Gas" | "Renewable" | null,
+  "facilityName": string or null,
+  "marketZone": string or null,
+  "historicalPricing": { "median": number, "mean": number, "max": number, "min": number } or null,
+  "forwardPricing": { "median": number, "mean": number, "max": number, "min": number } or null,
+  "productionStats": { "median": number, "mean": number, "max": number, "min": number } or null,
+  "impliedEbitda": number or null,
+  "miningMW": number or null,
+  "floorPrice": number or null,
+  "currency": "USD" | "EUR" | string,
+  "exchangeRate": number or null,
+  "dataSource": string or null,
+  "dataPeriod": string or null,
+  "notes": string or null,
+  "summary": string
+}
+
+Extract ALL numerical data you can find — pricing tables, production stats, EBITDA calculations, etc. The "summary" field should be a 1-2 sentence plain-English description of what the sender is sharing/asking. Be aggressive about extracting data — if you see numbers, capture them.`,
+    messages: [{
+      role: 'user',
+      content: `Extract all IPP/energy data from this email:\n\n${body}${attachmentText}`,
+    }],
+  });
+
+  try {
+    const text = response.content[0]?.text || '';
+    // Extract JSON from response (may be wrapped in markdown code block)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch (e) {
+    console.error('[IPP Pipeline] Claude extraction parse error:', e.message);
+  }
+  return null;
+}
+
+async function generateTailoredExcel(claudeData, rigidData, emailContext) {
+  const wb = new ExcelJS.Workbook();
+
+  // If we have enough data for the standard mine spec analysis, run it
+  const capacity = claudeData?.capacityMW || claudeData?.miningMW || rigidData?.capacityMW;
+  const generation = claudeData?.annualGenerationMWh || rigidData?.annualGenerationMWh;
+
+  let analysisData = null;
+  let analysis = null;
+
+  if (capacity) {
+    analysisData = {
+      capacityMW: capacity,
+      annualGenerationMWh: generation || Math.round(capacity * 8760 * 0.30),
+      generationHours: rigidData?.generationHours || (generation ? Math.round(generation / capacity) : 2628),
+      curtailmentPct: claudeData?.curtailmentPct || rigidData?.curtailmentPct || 0,
+      facilityType: claudeData?.facilityType || rigidData?.facilityType || 'Renewable',
+      location: claudeData?.location || claudeData?.marketZone || rigidData?.location,
+      facilityName: claudeData?.facilityName || rigidData?.facilityName,
+    };
+    try {
+      analysis = runPricingAnalysis(analysisData, 'Base');
+    } catch (e) {
+      console.warn('[IPP Pipeline] Analysis failed, generating data-only report:', e.message);
+    }
+  }
+
+  // Sheet 1: Data Summary (always present — from Claude extraction)
+  const summary = wb.addWorksheet('Data Summary');
+  summary.columns = [
+    { header: 'Field', key: 'field', width: 30 },
+    { header: 'Value', key: 'value', width: 25 },
+    { header: 'Source', key: 'source', width: 20 },
+  ];
+
+  const headerStyle = { font: { bold: true, size: 12 }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A472A' } }, font: { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 } };
+  summary.getRow(1).eachCell(c => { c.style = headerStyle; });
+
+  const addRow = (field, value, source = 'Email') => {
+    if (value !== null && value !== undefined) {
+      summary.addRow({ field, value: typeof value === 'number' ? value : String(value), source });
+    }
+  };
+
+  addRow('Summary', claudeData?.summary || 'IPP Inquiry');
+  addRow('Capacity (MW)', claudeData?.capacityMW || claudeData?.miningMW);
+  addRow('Annual Generation (MWh)', claudeData?.annualGenerationMWh);
+  addRow('Facility Type', claudeData?.facilityType);
+  addRow('Location / Zone', claudeData?.location || claudeData?.marketZone);
+  addRow('Currency', claudeData?.currency);
+  addRow('Exchange Rate', claudeData?.exchangeRate);
+  addRow('Data Period', claudeData?.dataPeriod);
+  addRow('Data Source', claudeData?.dataSource);
+  addRow('Curtailment %', claudeData?.curtailmentPct);
+  addRow('Floor Price ($/MWh)', claudeData?.floorPrice);
+  addRow('Implied EBITDA Uplift', claudeData?.impliedEbitda);
+  if (claudeData?.notes) addRow('Notes', claudeData.notes);
+
+  // Sheet 2: Pricing Data (if available)
+  if (claudeData?.historicalPricing || claudeData?.forwardPricing) {
+    const pricing = wb.addWorksheet('Pricing Analysis');
+    pricing.columns = [
+      { header: 'Metric', key: 'metric', width: 20 },
+      { header: 'Historical', key: 'historical', width: 18 },
+      { header: 'Forward Curve', key: 'forward', width: 18 },
+    ];
+    pricing.getRow(1).eachCell(c => { c.style = headerStyle; });
+
+    const hp = claudeData.historicalPricing || {};
+    const fp = claudeData.forwardPricing || {};
+    pricing.addRow({ metric: 'Median ($/MWh)', historical: hp.median, forward: fp.median });
+    pricing.addRow({ metric: 'Mean ($/MWh)', historical: hp.mean, forward: fp.mean });
+    pricing.addRow({ metric: 'Max ($/MWh)', historical: hp.max, forward: fp.max });
+    pricing.addRow({ metric: 'Min ($/MWh)', historical: hp.min, forward: fp.min });
+
+    // Format as currency
+    ['B', 'C'].forEach(col => {
+      for (let r = 2; r <= 5; r++) {
+        const cell = pricing.getCell(`${col}${r}`);
+        if (cell.value) cell.numFmt = '$#,##0.00';
+      }
+    });
+  }
+
+  // Sheet 3: Production Stats (if available)
+  if (claudeData?.productionStats) {
+    const prod = wb.addWorksheet('Production');
+    prod.columns = [
+      { header: 'Metric', key: 'metric', width: 20 },
+      { header: 'Value (MWh)', key: 'value', width: 18 },
+    ];
+    prod.getRow(1).eachCell(c => { c.style = headerStyle; });
+    const ps = claudeData.productionStats;
+    prod.addRow({ metric: 'Median', value: ps.median });
+    prod.addRow({ metric: 'Mean', value: ps.mean });
+    prod.addRow({ metric: 'Max', value: ps.max });
+    prod.addRow({ metric: 'Min', value: ps.min });
+  }
+
+  // Save
+  const safeName = (claudeData?.facilityName || claudeData?.marketZone || emailContext?.fromName || 'inquiry').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filename = `Sangha_IPP_Analysis_${safeName}_${Date.now()}.xlsx`;
+  const filepath = join(SPECS_DIR, filename);
+  await wb.xlsx.writeFile(filepath);
+
+  return { filepath, filename, analysis, analysisData };
+}
+
+// ─── 6. Process IPP Email ────────────────────────────────────────────────────
 
 export async function processIppEmail({ messageId, threadId, from, fromName, subject, body, attachments, tenantId = DEFAULT_TENANT_ID }) {
   console.log(`[IPP Pipeline] Processing inquiry from ${fromName} <${from}>`);
 
-  const data = parseIppData(body, attachments);
+  const rigidData = parseIppData(body, attachments);
 
-  // Extract first name from sender — try body signature, then From header, then email prefix
+  // Extract first name from sender
   let firstName = null;
   const sigMatch = body.match(/(?:Thanks|Regards|Best|Cheers|Sincerely)[,\s]*\n+([A-Z][a-z]+)/);
   if (sigMatch) firstName = sigMatch[1];
@@ -819,9 +990,18 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
   if (!firstName) firstName = from.split('@')[0].replace(/[^a-zA-Z]/g, ' ').split(' ')[0];
   if (firstName) firstName = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
 
-  if (!data.capacityMW && !data.annualGenerationMWh) {
-    console.log(`[IPP Pipeline] Insufficient data — requesting more info`);
-    const needsDataText = [
+  // If rigid parser found clean data, use the standard pipeline
+  if (rigidData.capacityMW && rigidData.annualGenerationMWh) {
+    // Standard pipeline — unchanged (fall through to existing logic below)
+  } else {
+    // Route through Claude to extract + analyze messy/non-standard data
+    console.log(`[IPP Pipeline] Rigid parser insufficient — routing through Claude`);
+    const claudeData = await extractWithClaude(body, attachments);
+
+    if (!claudeData) {
+      // Claude extraction failed too — ask for more data
+      console.log(`[IPP Pipeline] Claude extraction also failed — requesting more info`);
+      const needsDataText = [
         `Hey ${firstName},`,
         '',
         `Appreciate you reaching out - we work with a number of IPPs on BTM mining economics and would be happy to run an analysis for your site.`,
@@ -834,25 +1014,94 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         `Coppice`,
         `Sangha Renewables`,
       ].join('\n');
+      const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
+      await sendEmailWithAttachments({
+        to: from,
+        subject: `RE: ${subject}`,
+        html: textToHtml(needsDataText),
+        attachments: [],
+        tenantId,
+        threadId,
+        inReplyTo: gmailMessageId,
+        references: gmailMessageId,
+      });
+      insertActivity({
+        tenantId, type: 'in',
+        title: `IPP Inquiry from ${fromName || from}`,
+        subtitle: `${subject} — Requested additional data`,
+        detailJson: JSON.stringify({ from, fromName, subject, dataParsed: rigidData }),
+        sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
+      });
+      return { status: 'need-data', messageId };
+    }
+
+    // Claude found data — generate tailored spreadsheet
+    console.log(`[IPP Pipeline] Claude extracted: ${claudeData.summary}`);
+    const { filepath, filename, analysis } = await generateTailoredExcel(claudeData, rigidData, { fromName, from });
+
+    insertActivity({
+      tenantId, type: 'in',
+      title: `IPP Inquiry from ${fromName || from}`,
+      subtitle: `${claudeData.summary || subject}`,
+      detailJson: JSON.stringify({ from, fromName, subject, claudeExtracted: claudeData }),
+      sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
+    });
+
+    // Generate reply using Claude for a tailored response
+    let replyBody;
+    try {
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const replyResp = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: `You are Coppice, an AI agent at Sangha Renewables. Write a brief, professional email reply to an IPP inquiry. Sign off as "Best,\\nCoppice\\nSangha Renewables". Keep it under 150 words. Be specific about the data you analyzed. Don't use markdown formatting — write plain text.`,
+        messages: [{
+          role: 'user',
+          content: `Write a reply to ${firstName} about their IPP data. Here's what we extracted and analyzed:\n\n${JSON.stringify(claudeData, null, 2)}\n\nWe generated a tailored Excel report (${filename}) with their data organized into sheets. ${analysis ? `Our mine spec analysis suggests an optimal mine size of ${analysis.bestMineSize}MW.` : 'We included all the pricing, production, and market data they shared.'}\n\nThe original email subject was: ${subject}`,
+        }],
+      });
+      replyBody = replyResp.content[0]?.text || '';
+    } catch (e) {
+      // Fallback reply if Claude fails
+      replyBody = [
+        `Hey ${firstName},`,
+        '',
+        `Thanks for sharing the data — we've put together an analysis report based on what you sent over. The attached spreadsheet includes the pricing, production, and market data organized for review.`,
+        '',
+        analysis ? `Our initial analysis suggests an optimal mine size of ${analysis.bestMineSize}MW. Take a look at the sensitivity analysis in the report and let us know what questions come up.` : `Take a look and let us know what questions come up — happy to dig deeper into any of the numbers.`,
+        '',
+        `Best,`,
+        `Coppice`,
+        `Sangha Renewables`,
+      ].join('\n');
+    }
+
     const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
     await sendEmailWithAttachments({
       to: from,
-      subject: `RE: ${subject}`,
-      html: textToHtml(needsDataText),
-      attachments: [],
+      subject: `RE: ${subject} — Analysis Report`,
+      html: textToHtml(replyBody),
+      attachments: [{
+        filename,
+        path: filepath,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }],
       tenantId,
       threadId,
       inReplyTo: gmailMessageId,
       references: gmailMessageId,
     });
+
     insertActivity({
-      tenantId, type: 'in',
-      title: `IPP Inquiry from ${fromName || from}`,
-      subtitle: `${subject} — Requested additional data`,
-      detailJson: JSON.stringify({ from, fromName, subject, dataParsed: data }),
-      sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
+      tenantId, type: 'agent',
+      title: 'IPP Analysis Generated (Claude-powered)',
+      subtitle: claudeData.summary || `Analysis for ${fromName || from}`,
+      detailJson: JSON.stringify({ claudeExtracted: claudeData, filename }),
+      sourceType: 'email', sourceId: `ipp-spec-${messageId}`, agentId: 'coppice',
     });
-    return { status: 'need-data', messageId };
+
+    console.log(`[IPP Pipeline] Claude-powered reply sent to ${from} with ${filename}`);
+    return { status: 'claude-analyzed', messageId, filename, claudeData };
   }
 
   // Fill defaults
