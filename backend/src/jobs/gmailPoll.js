@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
@@ -118,10 +118,12 @@ async function extractAttachments(gmail, messageId, payload) {
         const attRes = await gmail.users.messages.attachments.get({
           userId: 'me', messageId, id: part.body.attachmentId,
         });
+        const buffer = Buffer.from(attRes.data.data, 'base64');
         attachments.push({
           filename: part.filename,
           mimeType: part.mimeType,
-          content: Buffer.from(attRes.data.data, 'base64').toString('utf-8'),
+          buffer,
+          content: buffer.toString('utf-8'), // text fallback
         });
       } catch (err) {
         console.warn(`[GmailPoll] Attachment fetch failed (${part.filename}):`, err.message);
@@ -129,6 +131,38 @@ async function extractAttachments(gmail, messageId, payload) {
     }
   }
   return attachments;
+}
+
+/**
+ * Extract readable text from email attachments (PDF, DOCX, XLSX, TXT).
+ * Saves attachment buffer to temp file, parses, then cleans up.
+ */
+async function extractAttachmentText(attachments) {
+  if (!attachments || attachments.length === 0) return '';
+  const { parseFile } = await import('../services/fileParserService.js');
+  const fs = await import('fs');
+  const path = await import('path');
+  const os = await import('os');
+
+  const parseable = /\.(pdf|docx|xlsx|csv|txt|md|json)$/i;
+  let allText = '';
+
+  for (const att of attachments) {
+    if (!parseable.test(att.filename)) continue;
+    const tmpPath = path.join(os.tmpdir(), `coppice_att_${Date.now()}_${att.filename}`);
+    try {
+      fs.writeFileSync(tmpPath, att.buffer);
+      const result = await parseFile(tmpPath, att.mimeType, att.filename);
+      if (result?.text) {
+        allText += `\n\n--- Attachment: ${att.filename} ---\n${result.text.slice(0, 8000)}\n`;
+      }
+    } catch (err) {
+      console.warn(`[GmailPoll] Attachment parse failed (${att.filename}): ${err.message}`);
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch {}
+    }
+  }
+  return allText;
 }
 
 function isAutoReplyEnabled(tenantId) {
@@ -315,6 +349,21 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     agentId: 'coppice',
   });
 
+  // Auto-save sender as trusted contact after successful conversation
+  try {
+    const existingSender = getTrustedSenderByEmail(resolvedTenant, from);
+    if (!existingSender) {
+      addTrustedSender({
+        tenantId: resolvedTenant,
+        email: from,
+        displayName: fromName || from,
+        trustLevel: 'trusted',
+        notes: `Auto-saved after email conversation: ${subject}`,
+      });
+      console.log(`[GmailPoll] Auto-saved sender ${from} as trusted for ${resolvedTenant}`);
+    }
+  } catch {}
+
   markEmailProcessed({ messageId, threadId, pipeline: 'general-auto-reply', tenantId: resolvedTenant });
 }
 
@@ -347,6 +396,60 @@ async function pollSingleInbox(gmail, tenantId, label) {
 
       const body = extractEmailBody(full.data.payload);
       const msgThreadId = full.data.threadId;
+
+      // ─── OOO / Bounce / Auto-Reply Detection ───────────────────────────
+      const autoReplyHeader = headers.find(h => h.name.toLowerCase() === 'auto-submitted')?.value || '';
+      const xAutoResponse = headers.find(h => h.name.toLowerCase() === 'x-autoreply')?.value || '';
+      const precedence = headers.find(h => h.name.toLowerCase() === 'precedence')?.value || '';
+      const oooPatterns = /\b(out of office|out-of-office|on vacation|auto-?reply|automatic reply|away from|will be out|currently unavailable|limited access to email|returning on)\b/i;
+      const bouncePatterns = /\b(delivery.*fail|undeliverable|mailer-daemon|postmaster@|mail delivery|returned mail|delivery status notification)\b/i;
+      const isAutoReply = autoReplyHeader === 'auto-replied' || autoReplyHeader === 'auto-generated' || !!xAutoResponse || precedence === 'bulk' || precedence === 'auto_reply';
+      const isOOO = oooPatterns.test(subject) || oooPatterns.test(body.slice(0, 500));
+      const isBounce = bouncePatterns.test(subject) || bouncePatterns.test(from) || senderEmail?.toLowerCase()?.includes('mailer-daemon');
+
+      if (isAutoReply || isOOO || isBounce) {
+        const skipReason = isBounce ? 'bounce' : isOOO ? 'out-of-office' : 'auto-reply';
+        console.log(`[GmailPoll] [${label}] Skipping ${skipReason}: ${senderEmail} — "${subject}"`);
+        insertActivity({
+          tenantId: tenantId || 'default',
+          type: 'in',
+          title: `${skipReason === 'bounce' ? 'Bounce' : skipReason === 'out-of-office' ? 'OOO' : 'Auto-reply'}: ${senderName || senderEmail}`,
+          subtitle: subject,
+          detailJson: JSON.stringify({ from: senderEmail, subject, reason: skipReason }),
+          sourceType: 'email',
+          sourceId: msg.id,
+          agentId: 'email-guard',
+        });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: `skip-${skipReason}`, tenantId: tenantId || 'default' });
+        newReplies++;
+        continue;
+      }
+
+      // ─── Opt-Out / Unsubscribe Detection ───────────────────────────────
+      const optOutPatterns = /\b(stop email|unsubscribe|opt.?out|remove me|stop contacting|do not (contact|email|reply)|take me off|no more emails)\b/i;
+      const isOptOut = optOutPatterns.test(body.slice(0, 1000)) && body.length < 500; // short email with opt-out language
+      if (isOptOut) {
+        const optOutTenant = tenantId || 'default';
+        console.log(`[GmailPoll] [${label}] Opt-out request from ${senderEmail}, auto-blocking`);
+        try {
+          addTrustedSender({ tenantId: optOutTenant, email: senderEmail, displayName: senderName, trustLevel: 'blocked', notes: 'Opted out via email reply' });
+        } catch {}
+        insertActivity({
+          tenantId: optOutTenant,
+          type: 'in',
+          title: `Opt-out: ${senderName || senderEmail}`,
+          subtitle: `Sender requested to stop receiving emails — auto-blocked`,
+          detailJson: JSON.stringify({ from: senderEmail, subject, body: body.slice(0, 500) }),
+          sourceType: 'email',
+          sourceId: msg.id,
+          agentId: 'email-guard',
+        });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'opt-out', tenantId: optOutTenant });
+        newReplies++;
+        continue;
+      }
 
       // Check if this thread was already processed — handle multi-turn conversation
       const priorThread = isThreadProcessed(msgThreadId);
@@ -604,6 +707,20 @@ async function pollSingleInbox(gmail, tenantId, label) {
       // Unmatched email → general handler (auto-reply ONLY if trusted/known AND auto-reply enabled)
       const rfc822MessageId = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
 
+      // Extract text from inbound attachments (PDF, DOCX, XLSX, etc.)
+      let attachmentText = '';
+      try {
+        const inboundAttachments = await extractAttachments(gmail, msg.id, full.data.payload);
+        if (inboundAttachments.length > 0) {
+          attachmentText = await extractAttachmentText(inboundAttachments);
+          if (attachmentText) {
+            console.log(`[GmailPoll] [${label}] Extracted text from ${inboundAttachments.length} attachment(s)`);
+          }
+        }
+      } catch (attErr) {
+        console.warn(`[GmailPoll] [${label}] Attachment extraction failed: ${attErr.message}`);
+      }
+
       try {
         await generalEmailHandler({
           messageId: rfc822MessageId,
@@ -611,7 +728,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
           from: from,
           fromName: senderName,
           subject,
-          body,
+          body: body + attachmentText,
           tenantId: resolvedTenant,
           gmail,
           classification,

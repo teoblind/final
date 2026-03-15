@@ -135,6 +135,16 @@ try {
   console.warn('Gmail poll scheduler not started:', err.message);
 }
 
+// Start calendar poll scheduler — multi-tenant meeting auto-join (every 30s)
+try {
+  const { startCalendarPollScheduler } = await import('./jobs/calendarPoll.js');
+  if (process.env.GMAIL_REFRESH_TOKEN || process.env.RECALL_API_KEY) {
+    startCalendarPollScheduler(30);
+  }
+} catch (err) {
+  console.warn('Calendar poll scheduler not started:', err.message);
+}
+
 // Start accounting poll scheduler (every 15 minutes)
 try {
   const { startAccountingPollScheduler } = await import('./jobs/accountingPoll.js');
@@ -250,6 +260,36 @@ export function broadcast(type, data) {
 
 // Auth routes (no auth middleware — public)
 app.use('/api/v1/auth', authRoutes);
+
+// Email open tracking pixel (public — no auth)
+app.get('/api/v1/track/open/:trackingId', (req, res) => {
+  const { trackingId } = req.params;
+  try {
+    // trackingId format: tenantId__messageId (base64url encoded)
+    const decoded = Buffer.from(trackingId, 'base64url').toString('utf-8');
+    const [tenantId, messageId] = decoded.split('__');
+    if (tenantId && messageId) {
+      const { insertActivity, runWithTenant } = require('./cache/database.js');
+      runWithTenant(tenantId, () => {
+        insertActivity({
+          tenantId,
+          type: 'in',
+          title: 'Email opened',
+          subtitle: `Message ${messageId} was opened`,
+          detailJson: JSON.stringify({ messageId, openedAt: new Date().toISOString(), ip: req.ip, userAgent: req.headers['user-agent'] }),
+          sourceType: 'email-tracking',
+          sourceId: messageId,
+          agentId: 'email-guard',
+        });
+      });
+      console.log(`[EmailTrack] Open tracked: ${tenantId} / ${messageId}`);
+    }
+  } catch {}
+  // Return 1x1 transparent GIF
+  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.set({ 'Content-Type': 'image/gif', 'Content-Length': pixel.length, 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+  res.send(pixel);
+});
 
 // Tenant & user management
 app.use('/api/v1/tenant', tenantRoutes);

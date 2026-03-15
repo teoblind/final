@@ -123,6 +123,52 @@ export function markdownToEmailHtml(text) {
   return blocks.join('\n');
 }
 
+// ─── Email Signatures ────────────────────────────────────────────────────────
+
+const SIGNATURES = {
+  'zhan-capital': {
+    html: `
+<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif;">
+  <p style="margin:0 0 2px;font-size:13px;color:#333;font-weight:600;">Coppice</p>
+  <p style="margin:0 0 6px;font-size:12px;color:#666;font-style:italic;">AI Agent, Zhan Capital</p>
+  <p style="margin:0;font-size:12px;color:#999;">
+    <a href="https://www.zhan.capital" style="color:#1a73e8;text-decoration:none;">zhan.capital</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.zhan.capital/portal" style="color:#1a73e8;text-decoration:none;">Investor Portal</a>
+  </p>
+</div>`,
+    text: '\n\n—\nCoppice\nAI Agent, Zhan Capital\nzhan.capital | zhan.capital/portal',
+  },
+  default: {
+    html: `
+<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif;">
+  <p style="margin:0 0 2px;font-size:13px;color:#333;font-weight:600;">Coppice</p>
+  <p style="margin:0 0 6px;font-size:12px;color:#666;font-style:italic;">AI Agent</p>
+  <p style="margin:0;font-size:12px;color:#999;">
+    <a href="https://coppice.ai" style="color:#1a73e8;text-decoration:none;">coppice.ai</a>
+  </p>
+</div>`,
+    text: '\n\n—\nCoppice\nAI Agent\ncoppice.ai',
+  },
+};
+
+function getSignature(tenantId, isHtml = true) {
+  const sig = SIGNATURES[tenantId] || SIGNATURES.default;
+  return isHtml ? sig.html : sig.text;
+}
+
+/**
+ * Generate a tracking pixel URL for email open tracking.
+ * @param {string} tenantId
+ * @param {string} messageId - RFC 822 Message-ID or internal ID
+ * @returns {string} HTML img tag with 1x1 transparent pixel
+ */
+function getTrackingPixel(tenantId, messageId) {
+  const baseUrl = process.env.APP_BASE_URL || 'https://coppice.ai';
+  const trackingId = Buffer.from(`${tenantId || 'default'}__${messageId || 'unknown'}`).toString('base64url');
+  return `<img src="${baseUrl}/api/v1/track/open/${trackingId}" width="1" height="1" style="display:none;" alt="" />`;
+}
+
 /**
  * RFC 2047 encode a header value if it contains non-ASCII characters.
  */
@@ -138,7 +184,8 @@ function encodeSubject(subject) {
 export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
-  const bodyBase64 = Buffer.from(body, 'utf-8').toString('base64');
+  const bodyWithSig = body + getSignature(tenantId, false);
+  const bodyBase64 = Buffer.from(bodyWithSig, 'utf-8').toString('base64');
   const headers = [
     `From: ${sender}`,
     `To: ${to}`,
@@ -215,8 +262,11 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
   ].filter(Boolean);
 
-  const content = html || body;
-  const contentType = html ? 'text/html' : 'text/plain';
+  const isHtml = !!html;
+  const rawContent = html || body;
+  const withSig = rawContent + getSignature(tenantId, isHtml);
+  const content = isHtml ? withSig + getTrackingPixel(tenantId, inReplyTo || threadId) : withSig;
+  const contentType = isHtml ? 'text/html' : 'text/plain';
   const contentBase64 = Buffer.from(content, 'utf-8').toString('base64');
   let messageParts = [
     ...headers,
@@ -292,10 +342,12 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename, t
 /**
  * Send an HTML email.
  */
-export async function sendHtmlEmail({ to, subject, html, cc, tenantId, threadId, inReplyTo, references }) {
+export async function sendHtmlEmail({ to, subject, html, cc, tenantId, threadId, inReplyTo, references, skipSignature }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
-  const htmlBase64 = Buffer.from(html, 'utf-8').toString('base64');
+  const htmlWithSig = skipSignature ? html : html + getSignature(tenantId, true);
+  const htmlWithTracking = htmlWithSig + getTrackingPixel(tenantId, inReplyTo || threadId);
+  const htmlBase64 = Buffer.from(htmlWithTracking, 'utf-8').toString('base64');
   const headers = [
     `From: ${sender}`,
     `To: ${to}`,
