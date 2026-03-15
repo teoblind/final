@@ -533,12 +533,8 @@ router.delete('/:agentId/messages', async (req, res) => {
     }
 
     // We don't expose a delete function from the service, so do it inline
-    const Database = (await import('better-sqlite3')).default;
-    const { fileURLToPath } = await import('url');
-    const { dirname, join } = await import('path');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const db = new Database(join(__dirname, '../../data/cache.db'));
+    const { getTenantDb: getDb } = await import('../cache/database.js');
+    const db = getDb(tenantId);
 
     const result = db.prepare(
       'DELETE FROM chat_messages WHERE tenant_id = ? AND agent_id = ? AND user_id = ?'
@@ -591,12 +587,8 @@ router.post('/generate-report', async (req, res) => {
     incrementOpusUsage(tenantId);
 
     // Save to chat_messages for audit trail
-    const Database = (await import('better-sqlite3')).default;
-    const { fileURLToPath } = await import('url');
-    const { dirname, join } = await import('path');
-    const __fn = fileURLToPath(import.meta.url);
-    const __dn = dirname(__fn);
-    const db = new Database(join(__dn, '../../data/cache.db'));
+    const { getTenantDb: getDb2 } = await import('../cache/database.js');
+    const db = getDb2(tenantId);
 
     db.prepare(`
       INSERT INTO chat_messages (tenant_id, agent_id, user_id, role, content, metadata_json, created_at)
@@ -686,13 +678,8 @@ router.post('/send-estimate', async (req, res) => {
 
     // Log to audit trail
     try {
-      const Database = (await import('better-sqlite3')).default;
-      const { join } = await import('path');
-      const { fileURLToPath } = await import('url');
-      const { dirname } = await import('path');
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const db = new Database(join(__dirname, '../../data/cache.db'));
+      const { getTenantDb: getDb3 } = await import('../cache/database.js');
+      const db = getDb3('dacp-construction-001');
       db.prepare(`
         INSERT INTO knowledge_entries (tenant_id, category, title, content, source, created_at)
         VALUES (?, 'audit', ?, ?, 'email-agent', datetime('now'))

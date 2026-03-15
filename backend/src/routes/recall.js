@@ -27,7 +27,7 @@ import {
   registerBridge,
   removeBridge,
 } from '../services/recallAudioBridge.js';
-import { startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
+import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
 
 const router = express.Router();
 
@@ -46,9 +46,8 @@ router.post('/join', async (req, res) => {
 
     const bot = await createBot(meetingUrl, { botName, transcriptionProvider, joinMessage });
 
-    // Voice loop handles everything: transcript → Claude → TTS → output_audio
-    // AudioBridge (raw PCM approach) is disabled — transcript-based loop is more reliable
-    startVoiceLoop(bot.id);
+    // Silent mode: transcribe only, respond via meeting chat (not voice)
+    startChatLoop(bot.id);
 
     res.json({
       botId: bot.id,
@@ -69,7 +68,7 @@ router.delete('/leave/:botId', async (req, res) => {
     const { botId } = req.params;
     await removeBot(botId);
     removeBridge(botId);
-    stopVoiceLoop(botId);
+    stopChatLoop(botId);
     removeLocalBot(botId);
 
     res.json({ botId, status: 'leaving' });
@@ -234,7 +233,7 @@ router.post('/chat/:botId', async (req, res) => {
 
 /**
  * POST /transcript-event — Real-time transcript webhook from Recall.ai
- * Receives transcript.data events and feeds them to the voice loop.
+ * Receives transcript.data events, stores locally, and feeds to chat loop.
  */
 router.post('/transcript-event', async (req, res) => {
   try {
@@ -242,9 +241,21 @@ router.post('/transcript-event', async (req, res) => {
     console.log(`[Recall] Transcript event: ${JSON.stringify(event).slice(0, 300)}`);
     const botId = event.data?.bot?.id || event.bot?.id || event.data?.bot_id;
     if (botId) {
-      const { handleTranscriptEvent } = await import('../services/meetingVoiceLoop.js');
       const transcriptPayload = event.data?.data || event.data;
-      handleTranscriptEvent(botId, { data: transcriptPayload });
+
+      // Append to local transcript store
+      const words = transcriptPayload.words || [];
+      const text = words.map(w => w.text || w).join(' ').trim() || transcriptPayload.text || '';
+      if (text) {
+        appendTranscript(botId, {
+          speaker: transcriptPayload.speaker || transcriptPayload.participant?.name || 'Unknown',
+          text,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Chat loop: respond via meeting chat if addressed
+      handleChatTranscriptEvent(botId, { data: transcriptPayload });
     }
     res.sendStatus(200);
   } catch (error) {

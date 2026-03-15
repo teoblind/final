@@ -5,7 +5,7 @@
  * check alert rules, and broadcast via WebSocket.
  */
 
-import { insertEnergyPrices, getPriceAlertRules, updateAlertRuleLastTriggered, insertActivity } from '../cache/database.js';
+import { insertEnergyPrices, getPriceAlertRules, updateAlertRuleLastTriggered, insertActivity, runWithTenant, getAllTenants, getTenantDb } from '../cache/database.js';
 import { fetchErcotData } from '../services/ercotService.js';
 import { fetchRealtimeLmp as fetchCaisoLmp, CAISO_NODES } from '../services/caisoService.js';
 
@@ -184,7 +184,8 @@ async function checkAlertRules(records) {
  * Main poll cycle.
  */
 async function poll() {
-  const records = await fetchAndStorePrices();
+  // Store prices in default tenant context (energy prices are Sangha-owned)
+  const records = await runWithTenant('default', () => fetchAndStorePrices());
 
   if (records.length > 0) {
     // Broadcast latest prices to all clients
@@ -196,8 +197,11 @@ async function poll() {
       });
     }
 
-    // Check alert rules
-    await checkAlertRules(records);
+    // Check alert rules across all tenants
+    const allTenants = getAllTenants();
+    for (const tenant of allTenants) {
+      await runWithTenant(tenant.id, () => checkAlertRules(records));
+    }
   }
 }
 

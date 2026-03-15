@@ -660,7 +660,8 @@ router.get('/usage/spend', (req, res) => {
 
 const __admin_filename = fileURLToPath(import.meta.url);
 const __admin_dirname = dirname(__admin_filename);
-const DB_PATH = join(__admin_dirname, '../../data/cache.db');
+const DATA_DIR = join(__admin_dirname, '../../data');
+const DB_PATH = join(DATA_DIR, 'system.db'); // Primary DB for health checks
 
 function safeExec(cmd, timeout = 5000) {
   try {

@@ -1,4 +1,4 @@
-import { getTenantBySlug, getTenantByDomain } from '../cache/database.js';
+import { getTenantBySlug, getTenantByDomain, setTenantContext } from '../cache/database.js';
 
 const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 
@@ -76,5 +76,7 @@ export default function tenantResolver(req, res, next) {
     req.resolvedTenant = null;
   }
 
-  next();
+  // Wrap downstream handlers in tenant context so the DB proxy routes correctly
+  const tenantId = req.resolvedTenant?.id || 'default';
+  setTenantContext(tenantId, () => next());
 }

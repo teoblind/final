@@ -11,6 +11,9 @@ import {
   upsertAccountingBill,
   upsertAccountingPayment,
   insertActivity,
+  getAllTenants,
+  getTenantDb,
+  runWithTenant,
 } from '../cache/database.js';
 import * as qbService from '../services/quickbooksService.js';
 import * as billcomService from '../services/billcomService.js';
@@ -117,33 +120,38 @@ export async function syncAccountingData(tenantId) {
  * Poll all tenants that have accounting integrations.
  */
 async function pollAllTenants() {
-  // Get tenants with QB or Bill.com connected via key_vault
-  // Simple approach: check all known services
+  // Get tenants with QB or Bill.com connected via key_vault in their tenant DBs
   try {
-    const { default: Database } = await import('better-sqlite3');
-    const { fileURLToPath } = await import('url');
-    const { dirname, join } = await import('path');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const db = new Database(join(__dirname, '../../data/cache.db'), { readonly: true });
+    const allTenants = getAllTenants();
+    const tenantsToSync = [];
 
-    const tenants = db.prepare(`
-      SELECT DISTINCT tenant_id FROM key_vault
-      WHERE service IN ('intuit-quickbooks', 'billcom')
-      AND key_name = 'refresh_token'
-    `).all();
-    db.close();
-
-    for (const { tenant_id } of tenants) {
+    for (const tenant of allTenants) {
       try {
-        await syncAccountingData(tenant_id);
-      } catch (err) {
-        console.error(`[AccountingPoll] Error syncing tenant ${tenant_id}:`, err.message);
+        const tdb = getTenantDb(tenant.id);
+        const hasAccounting = tdb.prepare(`
+          SELECT 1 FROM key_vault
+          WHERE service IN ('intuit-quickbooks', 'billcom')
+          AND key_name = 'refresh_token'
+          LIMIT 1
+        `).get();
+        if (hasAccounting) {
+          tenantsToSync.push(tenant.id);
+        }
+      } catch (e) {
+        // key_vault table may not exist yet for this tenant
       }
     }
 
-    if (tenants.length > 0) {
-      console.log(`[AccountingPoll] Synced ${tenants.length} tenant(s)`);
+    for (const tenantId of tenantsToSync) {
+      try {
+        await runWithTenant(tenantId, () => syncAccountingData(tenantId));
+      } catch (err) {
+        console.error(`[AccountingPoll] Error syncing tenant ${tenantId}:`, err.message);
+      }
+    }
+
+    if (tenantsToSync.length > 0) {
+      console.log(`[AccountingPoll] Synced ${tenantsToSync.length} tenant(s)`);
     }
   } catch (err) {
     console.error('[AccountingPoll] Poll error:', err.message);

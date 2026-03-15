@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
 import bcryptPkg from 'bcryptjs';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,7 +13,121 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database(join(dataDir, 'cache.db'));
+// ─── Per-Tenant DB Infrastructure ──────────────────────────────────────────
+const tenantStore = new AsyncLocalStorage();
+
+// Map tenant_id → directory name for DB file paths
+// 'default' tenant maps to 'sangha' directory
+function tenantDirName(tenantId) {
+  if (tenantId === 'default') return 'sangha';
+  return tenantId;
+}
+
+// System DB — stores tenants table for routing, always available
+const systemDb = new Database(join(dataDir, 'system.db'));
+systemDb.pragma('journal_mode = WAL');
+systemDb.pragma('foreign_keys = ON');
+
+// Per-tenant DB cache: tenantId → Database instance
+const tenantDbCache = new Map();
+
+/**
+ * Get or create a Database instance for a specific tenant.
+ * DB files live at data/{tenantDir}/{tenantDir}.db
+ */
+function getTenantDb(tenantId) {
+  if (!tenantId) tenantId = 'default';
+  if (tenantDbCache.has(tenantId)) return tenantDbCache.get(tenantId);
+
+  const dirName = tenantDirName(tenantId);
+  const tenantDir = join(dataDir, dirName);
+  if (!fs.existsSync(tenantDir)) {
+    fs.mkdirSync(tenantDir, { recursive: true });
+  }
+  const dbPath = join(tenantDir, `${dirName}.db`);
+  const tdb = new Database(dbPath);
+  tdb.pragma('journal_mode = WAL');
+  tdb.pragma('foreign_keys = ON');
+
+  tenantDbCache.set(tenantId, tdb);
+  return tdb;
+}
+
+/**
+ * Resolve the correct DB for the current async context.
+ * Falls back to systemDb when no tenant context is set.
+ */
+function resolveDb() {
+  const store = tenantStore.getStore();
+  const tenantId = store?.tenantId;
+  if (tenantId) {
+    return getTenantDb(tenantId);
+  }
+  // Fallback: use systemDb (handles startup, migrations, etc.)
+  return systemDb;
+}
+
+/**
+ * Proxy that delegates all property access to the resolved tenant DB.
+ * This means all existing code using `db.prepare(...)`, `db.exec(...)`,
+ * `db.transaction(...)`, etc. will auto-route to the correct tenant DB.
+ */
+const db = new Proxy({}, {
+  get(target, prop, receiver) {
+    const realDb = resolveDb();
+    const val = realDb[prop];
+    if (typeof val === 'function') {
+      return val.bind(realDb);
+    }
+    return val;
+  },
+  set(target, prop, value) {
+    const realDb = resolveDb();
+    realDb[prop] = value;
+    return true;
+  },
+});
+
+// ─── Tenant Context Helpers ──────────────────────────────────────────────────
+
+/**
+ * Run a callback with a specific tenant context.
+ * Use in middleware: setTenantContext(tenantId, () => next())
+ */
+export function setTenantContext(tenantId, callback) {
+  return tenantStore.run({ tenantId }, callback);
+}
+
+/**
+ * Run an async function with a specific tenant context.
+ * Use in background jobs: await runWithTenant(tenantId, async () => { ... })
+ */
+export function runWithTenant(tenantId, fn) {
+  return new Promise((resolve, reject) => {
+    tenantStore.run({ tenantId }, () => {
+      Promise.resolve(fn()).then(resolve, reject);
+    });
+  });
+}
+
+/**
+ * Get the current tenant ID from async context.
+ */
+export function getCurrentTenantId() {
+  return tenantStore.getStore()?.tenantId || null;
+}
+
+/**
+ * Get the raw system DB (for tenant management queries).
+ */
+export function getSystemDb() {
+  return systemDb;
+}
+
+/**
+ * Get a raw tenant DB by ID (for migration scripts, etc.)
+ */
+export { getTenantDb };
 
 // ─── SQL Reserved Word Sanitizer ─────────────────────────────────────────────
 // Prevents tenant names or slugs from corrupting sqlite_master if they ever
@@ -61,41 +176,13 @@ export function isSqlReserved(value) {
   return SQL_RESERVED.has(value.toUpperCase().trim());
 }
 
-export function initDatabase() {
-  // ─── Startup Integrity Check ───────────────────────────────────────────────
-  try {
-    const integrityResult = db.pragma('integrity_check');
-    const isOk = integrityResult.length === 1 && integrityResult[0].integrity_check === 'ok';
-    if (!isOk) {
-      const errors = integrityResult.map(r => r.integrity_check).join('\n');
-      console.error(`\n╔══════════════════════════════════════════════════════════╗`);
-      console.error(`║  DATABASE INTEGRITY CHECK FAILED — REFUSING TO START    ║`);
-      console.error(`╠══════════════════════════════════════════════════════════╣`);
-      console.error(`║  Errors found:                                          ║`);
-      errors.split('\n').forEach(e => console.error(`║  ${e.padEnd(54)}║`));
-      console.error(`║                                                          ║`);
-      console.error(`║  To recover, restore from backup:                        ║`);
-      console.error(`║  cp data/backups/cache_XX.db data/cache.db               ║`);
-      console.error(`║  Or delete data/cache.db to rebuild from scratch.        ║`);
-      console.error(`╚══════════════════════════════════════════════════════════╝\n`);
-      process.exit(1);
-    }
-    console.log('[DB] Integrity check passed');
-  } catch (err) {
-    console.error(`\n╔══════════════════════════════════════════════════════════╗`);
-    console.error(`║  DATABASE CORRUPT — REFUSING TO START                   ║`);
-    console.error(`╠══════════════════════════════════════════════════════════╣`);
-    console.error(`║  ${(err.message || '').padEnd(54)}║`);
-    console.error(`║                                                          ║`);
-    console.error(`║  To recover, restore from backup:                        ║`);
-    console.error(`║  cp data/backups/cache_XX.db data/cache.db               ║`);
-    console.error(`║  Or delete data/cache.db to rebuild from scratch.        ║`);
-    console.error(`╚══════════════════════════════════════════════════════════╝\n`);
-    process.exit(1);
-  }
+// ─── Schema Initialization ───────────────────────────────────────────────────
+// Extracted into a reusable function that takes a db instance.
+// This allows us to init schema on each tenant DB independently.
 
+function initSchemaForDb(targetDb) {
   // Cache table for API responses
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS cache (
       key TEXT PRIMARY KEY,
       data TEXT NOT NULL,
@@ -105,7 +192,7 @@ export function initDatabase() {
   `);
 
   // Manual data entries
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS manual_data (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category TEXT NOT NULL,
@@ -118,7 +205,7 @@ export function initDatabase() {
   `);
 
   // Alerts configuration
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS alerts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       metric TEXT NOT NULL,
@@ -132,7 +219,7 @@ export function initDatabase() {
   `);
 
   // Alert history
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS alert_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       alert_id INTEGER,
@@ -143,7 +230,7 @@ export function initDatabase() {
   `);
 
   // Notes/Journal
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT,
@@ -156,7 +243,7 @@ export function initDatabase() {
   `);
 
   // IMEC milestones
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS imec_milestones (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -168,7 +255,7 @@ export function initDatabase() {
   `);
 
   // Data center projects
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS datacenter_projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       company TEXT NOT NULL,
@@ -183,7 +270,7 @@ export function initDatabase() {
   `);
 
   // Deal tracker for fiber/infrastructure deals
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS fiber_deals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL,
@@ -197,7 +284,7 @@ export function initDatabase() {
   `);
 
   // Bitcoin wallet addresses for reserve tracking
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS btc_wallets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       address TEXT UNIQUE NOT NULL,
@@ -208,7 +295,7 @@ export function initDatabase() {
   `);
 
   // Insert known US government BTC wallets if they don't exist
-  const insertWallet = db.prepare(`
+  const insertWallet = targetDb.prepare(`
     INSERT OR IGNORE INTO btc_wallets (address, label, description) VALUES (?, ?, ?)
   `);
 
@@ -228,7 +315,7 @@ export function initDatabase() {
   // =========================================================================
 
   // Historical energy prices (LMP data)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS energy_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       iso TEXT NOT NULL,
@@ -244,13 +331,13 @@ export function initDatabase() {
   `);
 
   // Create index for fast time-range queries
-  db.exec(`
+  targetDb.exec(`
     CREATE INDEX IF NOT EXISTS idx_energy_prices_lookup
     ON energy_prices(iso, node, market_type, timestamp)
   `);
 
   // System load data
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS system_load (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       iso TEXT NOT NULL,
@@ -262,7 +349,7 @@ export function initDatabase() {
   `);
 
   // Grid events / alerts
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS grid_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       iso TEXT NOT NULL,
@@ -274,7 +361,7 @@ export function initDatabase() {
   `);
 
   // Energy settings (user configuration)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS energy_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       data TEXT NOT NULL
@@ -286,7 +373,7 @@ export function initDatabase() {
   // =========================================================================
 
   // Fleet configuration (user's ASIC fleet)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS fleet_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       data TEXT NOT NULL
@@ -294,7 +381,7 @@ export function initDatabase() {
   `);
 
   // Fleet profitability snapshots (daily historical tracking)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS fleet_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL,
@@ -314,13 +401,13 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE INDEX IF NOT EXISTS idx_fleet_snapshots_timestamp
     ON fleet_snapshots(timestamp)
   `);
 
   // Per-model snapshots (linked to fleet snapshots)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS machine_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       fleet_snapshot_id INTEGER REFERENCES fleet_snapshots(id),
@@ -339,7 +426,7 @@ export function initDatabase() {
   // =========================================================================
 
   // Curtailment events log
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS curtailment_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       trigger_type TEXT NOT NULL,
@@ -355,13 +442,13 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE INDEX IF NOT EXISTS idx_curtailment_events_start
     ON curtailment_events(start_time)
   `);
 
   // Curtailment daily performance tracking
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS curtailment_performance (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL UNIQUE,
@@ -377,13 +464,13 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE INDEX IF NOT EXISTS idx_curtailment_performance_date
     ON curtailment_performance(date)
   `);
 
   // Curtailment settings (user constraints)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS curtailment_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       data TEXT NOT NULL
@@ -392,7 +479,7 @@ export function initDatabase() {
 
   // Add missing columns to curtailment_events (idempotent)
   const addColumn = (table, col, type) => {
-    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch (e) { /* already exists */ }
+    try { targetDb.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch (e) { /* already exists */ }
   };
   addColumn('curtailment_events', 'hashrate_online', 'REAL');
   addColumn('curtailment_events', 'hashrate_curtailed', 'REAL');
@@ -405,7 +492,7 @@ export function initDatabase() {
   // ─── Phase 5: Pool & On-Chain Tables ──────────────────────────────────────
 
   // Pool configuration (encrypted credentials)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS pool_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       data TEXT NOT NULL
@@ -413,7 +500,7 @@ export function initDatabase() {
   `);
 
   // Pool hashrate history
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS pool_hashrate (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pool TEXT NOT NULL,
@@ -428,10 +515,10 @@ export function initDatabase() {
       UNIQUE(pool, timestamp)
     )
   `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_pool_hashrate_pool_ts ON pool_hashrate(pool, timestamp)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_pool_hashrate_pool_ts ON pool_hashrate(pool, timestamp)`);
 
   // Pool earnings
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS pool_earnings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pool TEXT NOT NULL,
@@ -445,10 +532,10 @@ export function initDatabase() {
       UNIQUE(pool, date)
     )
   `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_pool_earnings_pool_date ON pool_earnings(pool, date)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_pool_earnings_pool_date ON pool_earnings(pool, date)`);
 
   // Pool payouts
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS pool_payouts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pool TEXT NOT NULL,
@@ -462,7 +549,7 @@ export function initDatabase() {
   `);
 
   // Worker snapshots (periodic)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS worker_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pool TEXT NOT NULL,
@@ -474,10 +561,10 @@ export function initDatabase() {
       last_share DATETIME
     )
   `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_worker_snapshots_pool_ts ON worker_snapshots(pool, timestamp)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_worker_snapshots_pool_ts ON worker_snapshots(pool, timestamp)`);
 
   // On-chain blocks
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS blocks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       height INTEGER NOT NULL UNIQUE,
@@ -495,7 +582,7 @@ export function initDatabase() {
   `);
 
   // Mempool snapshots
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS mempool_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp DATETIME NOT NULL,
@@ -510,7 +597,7 @@ export function initDatabase() {
   `);
 
   // Fleet diagnostics log
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS diagnostic_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp DATETIME NOT NULL,
@@ -524,7 +611,7 @@ export function initDatabase() {
 
   // ─── Phase 6: Agent Framework Tables ──────────────────────────────────────
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -536,7 +623,7 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       agent_id TEXT NOT NULL,
@@ -550,7 +637,7 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_approvals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       agent_id TEXT NOT NULL,
@@ -566,7 +653,7 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       agent_id TEXT NOT NULL,
@@ -583,7 +670,7 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       agent_id TEXT NOT NULL,
@@ -596,7 +683,7 @@ export function initDatabase() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp DATETIME NOT NULL,
@@ -611,15 +698,15 @@ export function initDatabase() {
   `);
 
   // Create indices for agent tables
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_events_agent_ts ON agent_events(agent_id, timestamp)'); } catch (e) { /* exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status)'); } catch (e) { /* exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)'); } catch (e) { /* exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, dismissed)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_events_agent_ts ON agent_events(agent_id, timestamp)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_approvals_status ON agent_approvals(status)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, dismissed)'); } catch (e) { /* exists */ }
 
   // ─── Phase 7: HPC / AI Compute Abstraction Layer ────────────────────────────
 
   // Workload configuration (BTC + HPC workloads)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS workloads (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -637,7 +724,7 @@ export function initDatabase() {
   `);
 
   // GPU fleet configuration
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS gpu_fleet_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       config_json TEXT NOT NULL,
@@ -646,7 +733,7 @@ export function initDatabase() {
   `);
 
   // HPC contracts
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS hpc_contracts (
       id TEXT PRIMARY KEY,
       customer TEXT NOT NULL,
@@ -670,7 +757,7 @@ export function initDatabase() {
   `);
 
   // HPC SLA tracking events
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS hpc_sla_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       contract_id TEXT REFERENCES hpc_contracts(id),
@@ -681,10 +768,10 @@ export function initDatabase() {
       penalty_amount REAL
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_hpc_sla_events_contract ON hpc_sla_events(contract_id, timestamp)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_hpc_sla_events_contract ON hpc_sla_events(contract_id, timestamp)'); } catch (e) { /* exists */ }
 
   // Workload daily snapshots (unified BTC + HPC tracking)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS workload_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date DATE NOT NULL,
@@ -703,10 +790,10 @@ export function initDatabase() {
       UNIQUE(date, workload_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_workload_snapshots_date ON workload_snapshots(date, workload_type)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_workload_snapshots_date ON workload_snapshots(date, workload_type)'); } catch (e) { /* exists */ }
 
   // GPU spot pricing history
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS gpu_spot_prices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp DATETIME NOT NULL,
@@ -716,51 +803,49 @@ export function initDatabase() {
       UNIQUE(timestamp, gpu_model, provider)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_gpu_spot_prices_model ON gpu_spot_prices(gpu_model, timestamp)'); } catch (e) { /* exists */ }
-
-  console.log('Database initialized');
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_gpu_spot_prices_model ON gpu_spot_prices(gpu_model, timestamp)'); } catch (e) { /* exists */ }
 
   // Initialize Phase 8 multi-tenant tables
-  initPhase8Tables();
+  initPhase8Tables(targetDb);
 
   // Initialize Phase 9 insurance tables
-  initPhase9Tables();
+  initPhase9Tables(targetDb);
 
   // Initialize Phase 10 bot tables
-  initBotTables();
+  initBotTables(targetDb);
 
-  // Initialize DACP Construction tables
-  initDacpTables();
+  // Initialize DACP Construction tables (schema only, not seed data)
+  initDacpTablesSchema(targetDb);
 
   // Initialize tenant files table
-  initFilesTable();
+  initFilesTable(targetDb);
 
   // Initialize Opus rate limiting table
-  initOpusLimitsTable();
+  initOpusLimitsTable(targetDb);
 
   // Initialize background jobs + key vault tables
-  initBackgroundJobsTables();
+  initBackgroundJobsTables(targetDb);
 
   // Initialize activity log table
-  initActivityLogTable();
+  initActivityLogTableSchema(targetDb);
 
   // Initialize processed emails dedup table
-  initProcessedEmailsTable();
+  initProcessedEmailsTable(targetDb);
 
   // Initialize auto-replies log table
-  initAutoRepliesTable();
+  initAutoRepliesTable(targetDb);
 
   // Initialize report comments table
-  initReportComments();
+  initReportComments(targetDb);
 
   // Initialize accounting tables (QuickBooks / Bill.com)
-  initAccountingTables();
+  initAccountingTables(targetDb);
 
   // Initialize price alert rules table
-  initPriceAlertRulesTable();
+  initPriceAlertRulesTable(targetDb);
 
   // Password reset tokens
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS password_resets (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -770,7 +855,225 @@ export function initDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_pw_reset_hash ON password_resets(token_hash)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_pw_reset_hash ON password_resets(token_hash)'); } catch (e) {}
+
+  // Add tenant_id to ALL existing tables (idempotent) — kept for defense-in-depth
+  const tablesToMigrate = [
+    'cache', 'manual_data', 'alerts', 'alert_history', 'notes', 'imec_milestones',
+    'datacenter_projects', 'fiber_deals', 'btc_wallets',
+    'energy_prices', 'system_load', 'grid_events', 'energy_settings',
+    'fleet_config', 'fleet_snapshots', 'machine_snapshots',
+    'curtailment_events', 'curtailment_performance', 'curtailment_settings',
+    'pool_config', 'pool_hashrate', 'pool_earnings', 'pool_payouts',
+    'worker_snapshots', 'blocks', 'mempool_snapshots', 'diagnostic_events',
+    'agents', 'agent_events', 'agent_approvals', 'agent_metrics', 'agent_reports',
+    'notifications',
+    'workloads', 'gpu_fleet_config', 'hpc_contracts', 'hpc_sla_events',
+    'workload_snapshots', 'gpu_spot_prices'
+  ];
+
+  for (const table of tablesToMigrate) {
+    try {
+      targetDb.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT DEFAULT 'default'`);
+    } catch (e) {
+      // Column already exists
+    }
+  }
+
+  console.log('[DB] Schema initialized for DB');
+}
+
+// ─── System DB Schema ─────────────────────────────────────────────────────────
+// The system DB only needs the tenants table for routing.
+function initSystemSchema() {
+  systemDb.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      plan TEXT NOT NULL DEFAULT 'trial',
+      status TEXT NOT NULL DEFAULT 'trial',
+      branding_json TEXT,
+      settings_json TEXT,
+      limits_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      trial_ends_at DATETIME,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      custom_domain TEXT
+    )
+  `);
+  systemDb.pragma('journal_mode = WAL');
+  console.log('[DB] System schema initialized');
+}
+
+// ─── Main Init Entry Point ──────────────────────────────────────────────────
+export function initDatabase() {
+  // 1. Initialize system DB schema (tenants table)
+  initSystemSchema();
+
+  // 2. Ensure default + DACP tenants exist in systemDb
+  seedTenantsInSystemDb();
+
+  // 3. Get all tenants from systemDb
+  const tenants = systemDb.prepare('SELECT * FROM tenants').all();
+  console.log(`[DB] Found ${tenants.length} tenant(s): ${tenants.map(t => t.id).join(', ')}`);
+
+  // 4. For each tenant, init schema + run integrity check
+  for (const tenant of tenants) {
+    const tdb = getTenantDb(tenant.id);
+
+    // Integrity check
+    try {
+      const integrityResult = tdb.pragma('integrity_check');
+      const isOk = integrityResult.length === 1 && integrityResult[0].integrity_check === 'ok';
+      if (!isOk) {
+        const errors = integrityResult.map(r => r.integrity_check).join('\n');
+        console.error(`[DB] Integrity check FAILED for tenant ${tenant.id}:`, errors);
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`[DB] Integrity check error for tenant ${tenant.id}:`, err.message);
+      process.exit(1);
+    }
+
+    // Init all tables
+    initSchemaForDb(tdb);
+
+    // Seed tenant-specific data (users, demo data, etc.)
+    seedTenantData(tdb, tenant.id);
+
+    console.log(`[DB] Tenant "${tenant.id}" initialized (${tenantDirName(tenant.id)}/${tenantDirName(tenant.id)}.db)`);
+  }
+
+  console.log('[DB] All databases initialized');
+}
+
+function seedTenantsInSystemDb() {
+  // Create default (Sangha) tenant if not exists
+  const defaultTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('default');
+  if (!defaultTenant) {
+    systemDb.prepare(`
+      INSERT INTO tenants (id, name, slug, plan, status, settings_json, limits_json)
+      VALUES ('default', 'Default Organization', 'default', 'professional', 'active', ?, ?)
+    `).run(
+      JSON.stringify({
+        industry: 'mining',
+        macro_intelligence: true,
+        correlations: true,
+        liquidity: true,
+        hpc_enabled: false,
+        thread_privacy: true,
+      }),
+      JSON.stringify({
+        maxUsers: 50,
+        maxSites: 10,
+        maxWorkloads: 100,
+        maxAgents: 20,
+        apiRateLimit: 120,
+        dataRetentionDays: 365,
+      })
+    );
+    console.log('[DB] Default tenant created in systemDb');
+  }
+
+  // Create DACP tenant if not exists
+  const dacpTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('dacp-construction-001');
+  if (!dacpTenant) {
+    systemDb.prepare(`
+      INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'dacp-construction-001', 'DACP Construction', 'dacp', 'professional', 'active',
+      JSON.stringify({ companyName: 'DACP', primaryColor: '#1e3a5f', secondaryColor: '#d4cdc5', hideSanghaBranding: true }),
+      JSON.stringify({ industry: 'construction', defaultOverheadPct: 10, defaultProfitPct: 15, region: 'Texas' }),
+      JSON.stringify({ maxUsers: 25, maxSites: 5, maxWorkloads: 50, maxAgents: 10, apiRateLimit: 120, dataRetentionDays: 365 })
+    );
+    console.log('[DB] DACP tenant created in systemDb');
+  }
+
+  // Backfill settings_json for existing default tenant if missing
+  const existingDefault = systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('default');
+  if (existingDefault && !existingDefault.settings_json) {
+    systemDb.prepare('UPDATE tenants SET settings_json = ? WHERE id = ?').run(
+      JSON.stringify({
+        industry: 'mining',
+        macro_intelligence: true,
+        correlations: true,
+        liquidity: true,
+        hpc_enabled: false,
+        thread_privacy: true,
+      }),
+      'default'
+    );
+  }
+}
+
+function seedTenantData(targetDb, tenantId) {
+  // Seed admin users, demo data, etc. into tenant DB
+  // This also creates a tenants table in each tenant DB (for joins that reference it)
+
+  // Create tenants table in tenant DB (defense-in-depth — some queries JOIN on it)
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      plan TEXT NOT NULL DEFAULT 'trial',
+      status TEXT NOT NULL DEFAULT 'trial',
+      branding_json TEXT,
+      settings_json TEXT,
+      limits_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      trial_ends_at DATETIME,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      custom_domain TEXT
+    )
+  `);
+
+  // Copy this tenant's row from systemDb into tenant DB
+  const tenantRow = systemDb.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId);
+  if (tenantRow) {
+    targetDb.prepare(`
+      INSERT OR REPLACE INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json, created_at, trial_ends_at, updated_at, custom_domain)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(tenantRow.id, tenantRow.name, tenantRow.slug, tenantRow.plan, tenantRow.status,
+      tenantRow.branding_json, tenantRow.settings_json, tenantRow.limits_json,
+      tenantRow.created_at, tenantRow.trial_ends_at, tenantRow.updated_at, tenantRow.custom_domain);
+  }
+
+  // Seed admin user for default tenant
+  if (tenantId === 'default') {
+    const adminUser = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
+    if (!adminUser) {
+      const salt = bcryptPkg.genSaltSync(12);
+      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
+      targetDb.prepare(`
+        INSERT OR IGNORE INTO users (id, email, name, password_hash, tenant_id, role, status)
+        VALUES ('seed-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'default', 'sangha_admin', 'active')
+      `).run(hash);
+      console.log('[DB] Seed admin user created: teo@zhan.capital');
+    }
+  }
+
+  // Seed DACP admin user
+  if (tenantId === 'dacp-construction-001') {
+    const dacpAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacp.localhost');
+    if (!dacpAdmin) {
+      const salt = bcryptPkg.genSaltSync(12);
+      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
+      targetDb.prepare(`
+        INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
+        VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
+      `).run(hash);
+      console.log('[DB] DACP admin user created: admin@dacp.localhost');
+    }
+  }
+
+  // Seed demo data via the existing initDacpTables seed logic (called per-tenant)
+  initDacpSeedData(targetDb, tenantId);
+
+  // Seed activity log demo data
+  initActivityLogSeedData(targetDb, tenantId);
 }
 
 // Auto-init on import so tables exist before other modules prepare statements
@@ -1510,8 +1813,8 @@ export function markPasswordResetUsed(id) {
 
 // ─── Report Comments ────────────────────────────────────────────────────────
 
-export function initReportComments() {
-  db.exec(`
+function initReportComments(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS report_comments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -1524,8 +1827,8 @@ export function initReportComments() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_report ON report_comments(tenant_id, report_id, created_at)'); } catch (e) { /* exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_created ON report_comments(created_at)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_report ON report_comments(tenant_id, report_id, created_at)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_report_comments_created ON report_comments(created_at)'); } catch (e) { /* exists */ }
 }
 
 export function getReportComments(tenantId, reportId) {
@@ -1782,8 +2085,11 @@ export function getLatestGpuSpotPrices() {
 
 // ─── Phase 8: Multi-Tenant, Auth, Webhook Tables ────────────────────────────
 
-export function initPhase8Tables() {
-  db.exec(`
+function initPhase8Tables(targetDb) {
+  // Note: tenants table is created in seedTenantData() for each tenant DB,
+  // and in initSystemSchema() for systemDb. We still create it here
+  // as part of schema init so existing queries that JOIN on it work.
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS tenants (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1795,11 +2101,12 @@ export function initPhase8Tables() {
       limits_json TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       trial_ends_at DATETIME,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      custom_domain TEXT
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL,
@@ -1819,7 +2126,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),
@@ -1832,7 +2139,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS invitations (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -1846,7 +2153,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS partner_access (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -1861,7 +2168,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS api_keys (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -1878,7 +2185,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -1892,7 +2199,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS webhooks (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -1907,7 +2214,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS webhook_deliveries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       webhook_id TEXT NOT NULL REFERENCES webhooks(id),
@@ -1922,7 +2229,7 @@ export function initPhase8Tables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS sites (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -1939,113 +2246,25 @@ export function initPhase8Tables() {
   `);
 
   // Phase 8 indices
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_refresh ON sessions(refresh_token_hash)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_partner_access_tenant ON partner_access(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_partner_access_partner ON partner_access(partner_tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id, timestamp)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_webhooks_tenant ON webhooks(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_sites_tenant ON sites(tenant_id)'); } catch (e) {}
-
-  // Add tenant_id to ALL existing tables (idempotent)
-  const tablesToMigrate = [
-    'cache', 'manual_data', 'alerts', 'alert_history', 'notes', 'imec_milestones',
-    'datacenter_projects', 'fiber_deals', 'btc_wallets',
-    'energy_prices', 'system_load', 'grid_events', 'energy_settings',
-    'fleet_config', 'fleet_snapshots', 'machine_snapshots',
-    'curtailment_events', 'curtailment_performance', 'curtailment_settings',
-    'pool_config', 'pool_hashrate', 'pool_earnings', 'pool_payouts',
-    'worker_snapshots', 'blocks', 'mempool_snapshots', 'diagnostic_events',
-    'agents', 'agent_events', 'agent_approvals', 'agent_metrics', 'agent_reports',
-    'notifications',
-    'workloads', 'gpu_fleet_config', 'hpc_contracts', 'hpc_sla_events',
-    'workload_snapshots', 'gpu_spot_prices'
-  ];
-
-  for (const table of tablesToMigrate) {
-    try {
-      db.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT DEFAULT 'default'`);
-    } catch (e) {
-      // Column already exists
-    }
-  }
-
-  // Create default tenant if not exists
-  const defaultTenant = db.prepare('SELECT id FROM tenants WHERE id = ?').get('default');
-  if (!defaultTenant) {
-    db.prepare(`
-      INSERT INTO tenants (id, name, slug, plan, status, settings_json, limits_json)
-      VALUES ('default', 'Default Organization', 'default', 'professional', 'active', ?, ?)
-    `).run(
-      JSON.stringify({
-        industry: 'mining',
-        macro_intelligence: true,
-        correlations: true,
-        liquidity: true,
-        hpc_enabled: false,
-        thread_privacy: true,
-      }),
-      JSON.stringify({
-        maxUsers: 50,
-        maxSites: 10,
-        maxWorkloads: 100,
-        maxAgents: 20,
-        apiRateLimit: 120,
-        dataRetentionDays: 365,
-      })
-    );
-  }
-
-  // Backfill settings_json for existing default tenant if missing
-  const existingDefault = db.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('default');
-  if (existingDefault && !existingDefault.settings_json) {
-    db.prepare('UPDATE tenants SET settings_json = ? WHERE id = ?').run(
-      JSON.stringify({
-        industry: 'mining',
-        macro_intelligence: true,
-        correlations: true,
-        liquidity: true,
-        hpc_enabled: false,
-        thread_privacy: true,
-      }),
-      'default'
-    );
-  }
-
-  // Seed default admin user if not exists
-  const adminUser = db.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
-  if (!adminUser) {
-    const salt = bcryptPkg.genSaltSync(12);
-    const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
-    db.prepare(`
-      INSERT OR IGNORE INTO users (id, email, name, password_hash, tenant_id, role, status)
-      VALUES ('seed-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'default', 'sangha_admin', 'active')
-    `).run(hash);
-    console.log('Seed admin user created: teo@zhan.capital / admin123');
-  }
-
-  // Add custom_domain column if not exists
-  try {
-    db.exec(`ALTER TABLE tenants ADD COLUMN custom_domain TEXT`);
-  } catch (e) {
-    // Column already exists — ignore
-  }
-
-  // Enable WAL mode for better concurrent access
-  db.pragma('journal_mode = WAL');
-
-  console.log('Phase 8 tables initialized');
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_sessions_refresh ON sessions(refresh_token_hash)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_partner_access_tenant ON partner_access(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_partner_access_partner ON partner_access(partner_tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON api_keys(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON api_keys(key_prefix)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id, timestamp)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_webhooks_tenant ON webhooks(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_sites_tenant ON sites(tenant_id)'); } catch (e) {}
 }
 
 // ─── Phase 8: Tenant Helpers ────────────────────────────────────────────────
 
 export function getTenant(id) {
-  const row = db.prepare('SELECT * FROM tenants WHERE id = ?').get(id);
+  // Always query systemDb for tenant routing data
+  const row = systemDb.prepare('SELECT * FROM tenants WHERE id = ?').get(id);
   if (row) {
     row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
     row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
@@ -2055,7 +2274,7 @@ export function getTenant(id) {
 }
 
 export function getTenantBySlug(slug) {
-  const row = db.prepare('SELECT * FROM tenants WHERE slug = ?').get(slug);
+  const row = systemDb.prepare('SELECT * FROM tenants WHERE slug = ?').get(slug);
   if (row) {
     row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
     row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
@@ -2065,7 +2284,7 @@ export function getTenantBySlug(slug) {
 }
 
 export function getTenantByDomain(domain) {
-  const row = db.prepare('SELECT * FROM tenants WHERE custom_domain = ?').get(domain);
+  const row = systemDb.prepare('SELECT * FROM tenants WHERE custom_domain = ?').get(domain);
   if (row) {
     row.branding = row.branding_json ? JSON.parse(row.branding_json) : null;
     row.settings = row.settings_json ? JSON.parse(row.settings_json) : null;
@@ -2075,7 +2294,7 @@ export function getTenantByDomain(domain) {
 }
 
 export function getAllTenants() {
-  return db.prepare('SELECT * FROM tenants ORDER BY created_at').all().map(row => ({
+  return systemDb.prepare('SELECT * FROM tenants ORDER BY created_at').all().map(row => ({
     ...row,
     branding: row.branding_json ? JSON.parse(row.branding_json) : null,
     settings: row.settings_json ? JSON.parse(row.settings_json) : null,
@@ -2093,7 +2312,8 @@ export function createTenant(tenant) {
     throw new Error(`Tenant slug "${safeSlug}" is a SQL reserved word and cannot be used`);
   }
 
-  return db.prepare(`
+  // Insert into systemDb
+  const result = systemDb.prepare(`
     INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json, trial_ends_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
@@ -2106,6 +2326,13 @@ export function createTenant(tenant) {
     }),
     tenant.trialEndsAt || new Date(Date.now() + 14 * 86400000).toISOString()
   );
+
+  // Also create the tenant's DB and init schema
+  const tdb = getTenantDb(safeId);
+  initSchemaForDb(tdb);
+  seedTenantData(tdb, safeId);
+
+  return result;
 }
 
 export function updateTenant(id, updates) {
@@ -2127,7 +2354,16 @@ export function updateTenant(id, updates) {
   if (updates.trialEndsAt !== undefined) { sets.push('trial_ends_at = ?'); params.push(updates.trialEndsAt); }
   sets.push("updated_at = datetime('now')");
   params.push(id);
-  return db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  // Update in systemDb
+  const result = systemDb.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  // Also update the copy in the tenant's own DB (defense-in-depth)
+  try {
+    const tdb = getTenantDb(id);
+    tdb.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  } catch (e) { /* tenant DB may not have this row yet */ }
+
+  return result;
 }
 
 // ─── Phase 8: User Helpers ──────────────────────────────────────────────────
@@ -2480,9 +2716,9 @@ export function deleteSite(id) {
 // Phase 9: Insurance Integration & Network Simulator Bridge
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function initPhase9Tables() {
+function initPhase9Tables(targetDb) {
   // Calibration exports — audit log of telemetry exports to SanghaModel
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS calibration_exports (
       id TEXT PRIMARY KEY,
       tenant_id TEXT DEFAULT 'sangha',
@@ -2498,7 +2734,7 @@ export function initPhase9Tables() {
   `);
 
   // Risk assessments — cached risk assessments from simulator
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS risk_assessments (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -2517,7 +2753,7 @@ export function initPhase9Tables() {
   `);
 
   // Quote requests — formal quote requests from miners
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS quote_requests (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -2542,7 +2778,7 @@ export function initPhase9Tables() {
   `);
 
   // Insurance policies — active insurance policies
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS insurance_policies (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -2563,7 +2799,7 @@ export function initPhase9Tables() {
   `);
 
   // Insurance claims — monthly claims with verification
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS insurance_claims (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -2587,7 +2823,7 @@ export function initPhase9Tables() {
   `);
 
   // Insurance upside sharing — upside revenue sharing calculations
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS insurance_upside_sharing (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -2606,20 +2842,20 @@ export function initPhase9Tables() {
   `);
 
   // Indices for Phase 9
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_calibration_exports_exported ON calibration_exports(exported_at)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_risk_assessments_tenant ON risk_assessments(tenant_id, status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_risk_assessments_expires ON risk_assessments(expires_at)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_quote_requests_tenant ON quote_requests(tenant_id, status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_quote_requests_status ON quote_requests(status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_policies_tenant ON insurance_policies(tenant_id, status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_policy ON insurance_claims(policy_id, claim_month)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_status ON insurance_claims(status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_upside_sharing_policy ON insurance_upside_sharing(policy_id, sharing_month)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_calibration_exports_exported ON calibration_exports(exported_at)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_risk_assessments_tenant ON risk_assessments(tenant_id, status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_risk_assessments_expires ON risk_assessments(expires_at)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_quote_requests_tenant ON quote_requests(tenant_id, status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_quote_requests_status ON quote_requests(status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_policies_tenant ON insurance_policies(tenant_id, status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_policy ON insurance_claims(policy_id, claim_month)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_insurance_claims_status ON insurance_claims(status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_upside_sharing_policy ON insurance_upside_sharing(policy_id, sharing_month)`);
 
   // ── Phase 9b: Three-Party Insurance Structure ──────────────────────────────
 
   // Balance sheet partners — LP / capital provider entities
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS balance_sheet_partners (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -2644,7 +2880,7 @@ export function initPhase9Tables() {
   `);
 
   // LP allocations — tracks which LP backs which quote/policy
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS lp_allocations (
       id TEXT PRIMARY KEY,
       lp_id TEXT NOT NULL REFERENCES balance_sheet_partners(id),
@@ -2666,55 +2902,55 @@ export function initPhase9Tables() {
 
   // Add LP columns to insurance_policies (safe IF NOT EXISTS via pragma)
   try {
-    db.exec(`ALTER TABLE insurance_policies ADD COLUMN lp_id TEXT REFERENCES balance_sheet_partners(id)`);
+    targetDb.exec(`ALTER TABLE insurance_policies ADD COLUMN lp_id TEXT REFERENCES balance_sheet_partners(id)`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_policies ADD COLUMN lp_allocation_id TEXT REFERENCES lp_allocations(id)`);
+    targetDb.exec(`ALTER TABLE insurance_policies ADD COLUMN lp_allocation_id TEXT REFERENCES lp_allocations(id)`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_policies ADD COLUMN instrument_type TEXT`);
+    targetDb.exec(`ALTER TABLE insurance_policies ADD COLUMN instrument_type TEXT`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_policies ADD COLUMN structuring_fee_monthly REAL`);
+    targetDb.exec(`ALTER TABLE insurance_policies ADD COLUMN structuring_fee_monthly REAL`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_policies ADD COLUMN management_fee_monthly REAL`);
+    targetDb.exec(`ALTER TABLE insurance_policies ADD COLUMN management_fee_monthly REAL`);
   } catch (e) { /* column may already exist */ }
 
   // Add LP/settlement columns to insurance_claims
   try {
-    db.exec(`ALTER TABLE insurance_claims ADD COLUMN lp_id TEXT REFERENCES balance_sheet_partners(id)`);
+    targetDb.exec(`ALTER TABLE insurance_claims ADD COLUMN lp_id TEXT REFERENCES balance_sheet_partners(id)`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_claims ADD COLUMN settlement_status TEXT DEFAULT 'pending'`);
+    targetDb.exec(`ALTER TABLE insurance_claims ADD COLUMN settlement_status TEXT DEFAULT 'pending'`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_claims ADD COLUMN settled_at DATETIME`);
+    targetDb.exec(`ALTER TABLE insurance_claims ADD COLUMN settled_at DATETIME`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE insurance_claims ADD COLUMN settlement_reference TEXT`);
+    targetDb.exec(`ALTER TABLE insurance_claims ADD COLUMN settlement_reference TEXT`);
   } catch (e) { /* column may already exist */ }
 
   // Add instrument_type and structured_terms to quote_requests
   try {
-    db.exec(`ALTER TABLE quote_requests ADD COLUMN instrument_type TEXT`);
+    targetDb.exec(`ALTER TABLE quote_requests ADD COLUMN instrument_type TEXT`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE quote_requests ADD COLUMN structured_terms_json TEXT`);
+    targetDb.exec(`ALTER TABLE quote_requests ADD COLUMN structured_terms_json TEXT`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE quote_requests ADD COLUMN structured_by TEXT`);
+    targetDb.exec(`ALTER TABLE quote_requests ADD COLUMN structured_by TEXT`);
   } catch (e) { /* column may already exist */ }
   try {
-    db.exec(`ALTER TABLE quote_requests ADD COLUMN structured_at DATETIME`);
+    targetDb.exec(`ALTER TABLE quote_requests ADD COLUMN structured_at DATETIME`);
   } catch (e) { /* column may already exist */ }
 
   // Indices for Phase 9b
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_lp_allocations_lp ON lp_allocations(lp_id, status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_lp_allocations_quote ON lp_allocations(quote_request_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_bsp_status ON balance_sheet_partners(status)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_policies_lp ON insurance_policies(lp_id)`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_claims_lp ON insurance_claims(lp_id)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_lp_allocations_lp ON lp_allocations(lp_id, status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_lp_allocations_quote ON lp_allocations(quote_request_id)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_bsp_status ON balance_sheet_partners(status)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_policies_lp ON insurance_policies(lp_id)`);
+  targetDb.exec(`CREATE INDEX IF NOT EXISTS idx_claims_lp ON insurance_claims(lp_id)`);
 }
 
 // ─── Phase 9: Calibration Export Helpers ────────────────────────────────────
@@ -3205,8 +3441,8 @@ export function getSanghaRevenueBreakdown() {
 
 // ─── Phase 10: Bot Registration & Team Collaboration Tables ─────────────────
 
-export function initBotTables() {
-  db.exec(`
+function initBotTables(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS bot_registrations (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3220,7 +3456,7 @@ export function initBotTables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS bot_comments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -3232,10 +3468,10 @@ export function initBotTables() {
     )
   `);
 
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_reg_tenant ON bot_registrations(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_reg_user ON bot_registrations(user_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_comments_event ON bot_comments(event_key)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bot_comments_tenant ON bot_comments(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_bot_reg_tenant ON bot_registrations(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_bot_reg_user ON bot_registrations(user_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_bot_comments_event ON bot_comments(event_key)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_bot_comments_tenant ON bot_comments(tenant_id)'); } catch (e) {}
 }
 
 // ─── Bot Registration Helpers ───────────────────────────────────────────────
@@ -3311,8 +3547,8 @@ export function getBotCommentCounts(eventKeys, tenantId) {
 
 // ─── DACP Construction Tables & Helpers ──────────────────────────────────────
 
-export function initDacpTables() {
-  db.exec(`
+function initDacpTablesSchema(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_pricing (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3327,7 +3563,7 @@ export function initDacpTables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_bid_requests (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3346,7 +3582,7 @@ export function initDacpTables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_estimates (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3366,7 +3602,7 @@ export function initDacpTables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_jobs (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3386,7 +3622,7 @@ export function initDacpTables() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_field_reports (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3404,7 +3640,7 @@ export function initDacpTables() {
   `);
 
   // Chat messages
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -3416,10 +3652,10 @@ export function initDacpTables() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_chat_tenant_agent_user ON chat_messages(tenant_id, agent_id, user_id, created_at)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_chat_tenant_agent_user ON chat_messages(tenant_id, agent_id, user_id, created_at)'); } catch (e) {}
 
   // Chat threads
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS chat_threads (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3432,14 +3668,14 @@ export function initDacpTables() {
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_threads_tenant_agent ON chat_threads(tenant_id, agent_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_threads_visibility ON chat_threads(tenant_id, visibility)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_threads_tenant_agent ON chat_threads(tenant_id, agent_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_threads_visibility ON chat_threads(tenant_id, visibility)'); } catch (e) {}
 
   // Add thread_id column to chat_messages (idempotent)
-  try { db.exec('ALTER TABLE chat_messages ADD COLUMN thread_id TEXT REFERENCES chat_threads(id)'); } catch (e) { /* already exists */ }
+  try { targetDb.exec('ALTER TABLE chat_messages ADD COLUMN thread_id TEXT REFERENCES chat_threads(id)'); } catch (e) { /* already exists */ }
 
   // Approval queue
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS approval_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -3455,10 +3691,10 @@ export function initDacpTables() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_approval_tenant_status ON approval_items(tenant_id, status, created_at)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_approval_tenant_status ON approval_items(tenant_id, status, created_at)'); } catch (e) {}
 
   // Platform notifications (multi-tenant)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS platform_notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -3472,17 +3708,17 @@ export function initDacpTables() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_notif_tenant_user ON platform_notifications(tenant_id, user_id, read, created_at)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_notif_tenant_user ON platform_notifications(tenant_id, user_id, read, created_at)'); } catch (e) {}
 
   // Indices
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_pricing_tenant ON dacp_pricing(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bids_tenant ON dacp_bid_requests(tenant_id, status)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_estimates_tenant ON dacp_estimates(tenant_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_jobs_tenant ON dacp_jobs(tenant_id, status)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_dacp_reports_tenant ON dacp_field_reports(tenant_id, job_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_pricing_tenant ON dacp_pricing(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bids_tenant ON dacp_bid_requests(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_estimates_tenant ON dacp_estimates(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_jobs_tenant ON dacp_jobs(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_reports_tenant ON dacp_field_reports(tenant_id, job_id)'); } catch (e) {}
 
   // ─── Knowledge Graph Tables ─────────────────────────────────────────────
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_entries (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3501,9 +3737,9 @@ export function initDacpTables() {
       drive_url TEXT
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_tenant ON knowledge_entries(tenant_id, type, created_at)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_knowledge_tenant ON knowledge_entries(tenant_id, type, created_at)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_entities (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3512,9 +3748,9 @@ export function initDacpTables() {
       metadata_json TEXT
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kn_entities_tenant ON knowledge_entities(tenant_id, entity_type)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_entities_tenant ON knowledge_entities(tenant_id, entity_type)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS knowledge_links (
       id TEXT PRIMARY KEY,
       entry_id TEXT NOT NULL,
@@ -3524,10 +3760,10 @@ export function initDacpTables() {
       FOREIGN KEY (entity_id) REFERENCES knowledge_entities(id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entry ON knowledge_links(entry_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entity ON knowledge_links(entity_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entry ON knowledge_links(entry_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entity ON knowledge_links(entity_id)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS action_items (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3539,14 +3775,14 @@ export function initDacpTables() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_action_items_tenant ON action_items(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_action_items_tenant ON action_items(tenant_id, status)'); } catch (e) {}
 
   // Add completed_at / completed_by columns to action_items (idempotent)
-  try { db.exec("ALTER TABLE action_items ADD COLUMN completed_at TEXT"); } catch (e) { /* already exists */ }
-  try { db.exec("ALTER TABLE action_items ADD COLUMN completed_by TEXT"); } catch (e) { /* already exists */ }
+  try { targetDb.exec("ALTER TABLE action_items ADD COLUMN completed_at TEXT"); } catch (e) { /* already exists */ }
+  try { targetDb.exec("ALTER TABLE action_items ADD COLUMN completed_by TEXT"); } catch (e) { /* already exists */ }
 
   // Agent insights table (for Command dashboard)
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_insights (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -3561,12 +3797,91 @@ export function initDacpTables() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_insights_tenant ON agent_insights(tenant_id, status, created_at)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_insights_tenant ON agent_insights(tenant_id, status, created_at)'); } catch (e) {}
 
+  // ─── Lead Engine Tables ──────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS le_leads (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      venue_name TEXT NOT NULL,
+      region TEXT, industry TEXT, trigger_news TEXT,
+      priority_score INTEGER DEFAULT 0,
+      website TEXT,
+      status TEXT DEFAULT 'new',
+      source TEXT DEFAULT 'discovery',
+      source_query TEXT,
+      discovered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      contacted_at TEXT, responded_at TEXT,
+      notes TEXT, agent_notes TEXT,
+      UNIQUE(tenant_id, venue_name)
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS le_contacts (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      lead_id TEXT NOT NULL REFERENCES le_leads(id),
+      name TEXT, email TEXT NOT NULL,
+      title TEXT, phone TEXT,
+      source TEXT DEFAULT 'discovery',
+      mx_valid INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(lead_id, email)
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS le_outreach_log (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      lead_id TEXT NOT NULL REFERENCES le_leads(id),
+      contact_id TEXT REFERENCES le_contacts(id),
+      email_type TEXT DEFAULT 'initial',
+      subject TEXT, body TEXT,
+      status TEXT DEFAULT 'draft',
+      sent_at TEXT, opened_at TEXT, responded_at TEXT,
+      bounce_reason TEXT,
+      gmail_message_id TEXT, gmail_thread_id TEXT,
+      approved_by TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS le_discovery_config (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL UNIQUE,
+      queries_json TEXT,
+      regions_json TEXT,
+      current_position INTEGER DEFAULT 0,
+      queries_per_cycle INTEGER DEFAULT 2,
+      max_emails_per_cycle INTEGER DEFAULT 10,
+      followup_delay_days INTEGER DEFAULT 5,
+      max_followups INTEGER DEFAULT 2,
+      min_send_interval_seconds INTEGER DEFAULT 300,
+      last_full_cycle TEXT, last_inbox_check TEXT,
+      enabled INTEGER DEFAULT 0,
+      mode TEXT DEFAULT 'copilot',
+      sender_name TEXT, sender_email TEXT,
+      email_signature TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_le_leads_tenant ON le_leads(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_le_contacts_lead ON le_contacts(lead_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_le_outreach_tenant ON le_outreach_log(tenant_id, status)'); } catch (e) {}
+
+  console.log('DACP tables schema initialized');
+}
+
+function initDacpSeedData(targetDb, tenantId) {
   // Seed knowledge entities
-  const knEntCount = db.prepare('SELECT COUNT(*) as c FROM knowledge_entities').get();
+  const knEntCount = targetDb.prepare('SELECT COUNT(*) as c FROM knowledge_entities').get();
   if (knEntCount.c === 0) {
-    const seedEntities = db.prepare('INSERT OR IGNORE INTO knowledge_entities (id, tenant_id, entity_type, name, metadata_json) VALUES (?, ?, ?, ?, ?)');
+    const seedEntities = targetDb.prepare('INSERT OR IGNORE INTO knowledge_entities (id, tenant_id, entity_type, name, metadata_json) VALUES (?, ?, ?, ?, ?)');
     const sanghaId = 'default';
     const dacpId = 'dacp-construction-001';
 
@@ -3628,54 +3943,27 @@ export function initDacpTables() {
     console.log('Knowledge entities seeded (Sangha + DACP)');
   }
 
-  // Seed DACP tenant
-  const dacpTenant = db.prepare('SELECT id FROM tenants WHERE id = ?').get('dacp-construction-001');
-  if (!dacpTenant) {
-    db.prepare(`
-      INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      'dacp-construction-001', 'DACP Construction', 'dacp', 'professional', 'active',
-      JSON.stringify({ companyName: 'DACP', primaryColor: '#1e3a5f', secondaryColor: '#d4cdc5', hideSanghaBranding: true }),
-      JSON.stringify({ industry: 'construction', defaultOverheadPct: 10, defaultProfitPct: 15, region: 'Texas' }),
-      JSON.stringify({ maxUsers: 25, maxSites: 5, maxWorkloads: 50, maxAgents: 10, apiRateLimit: 120, dataRetentionDays: 365 })
-    );
-    console.log('DACP tenant created');
-  }
-
-  // Seed DACP admin user
-  const dacpAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacp.localhost');
-  if (!dacpAdmin) {
-    const salt = bcryptPkg.genSaltSync(12);
-    const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
-    db.prepare(`
-      INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
-      VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
-    `).run(hash);
-    console.log('DACP admin user created: admin@dacp.localhost / admin123');
-  }
-
   // Seed data from JSON files
   const dacpDataDir = join(__dirname, '../data/dacp');
-  const existing = db.prepare('SELECT COUNT(*) as c FROM dacp_pricing WHERE tenant_id = ?').get('dacp-construction-001');
+  const existing = targetDb.prepare('SELECT COUNT(*) as c FROM dacp_pricing WHERE tenant_id = ?').get('dacp-construction-001');
   if (existing.c === 0 && fs.existsSync(join(dacpDataDir, 'pricing_master.json'))) {
     const TENANT_ID = 'dacp-construction-001';
     const loadJson = (f) => JSON.parse(fs.readFileSync(join(dacpDataDir, f), 'utf-8'));
 
     const pricing = loadJson('pricing_master.json');
-    const insertPricing = db.prepare(`INSERT OR IGNORE INTO dacp_pricing (id, tenant_id, category, item, unit, material_cost, labor_cost, equipment_cost, unit_price, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertPricing = targetDb.prepare(`INSERT OR IGNORE INTO dacp_pricing (id, tenant_id, category, item, unit, material_cost, labor_cost, equipment_cost, unit_price, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const p of pricing) insertPricing.run(p.id, TENANT_ID, p.category, p.item, p.unit, p.material_cost, p.labor_cost, p.equipment_cost, p.unit_price, p.notes);
 
     const jobs = loadJson('jobs_history.json');
-    const insertJob = db.prepare(`INSERT OR IGNORE INTO dacp_jobs (id, tenant_id, estimate_id, project_name, gc_name, project_type, location, status, estimated_cost, actual_cost, bid_amount, margin_pct, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertJob = targetDb.prepare(`INSERT OR IGNORE INTO dacp_jobs (id, tenant_id, estimate_id, project_name, gc_name, project_type, location, status, estimated_cost, actual_cost, bid_amount, margin_pct, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const j of jobs) insertJob.run(j.id, TENANT_ID, null, j.project_name, j.gc_name, j.project_type, j.location, j.status, j.estimated_cost, j.actual_cost, j.bid_amount, j.margin_pct, j.start_date, j.end_date, j.notes);
 
     const bidRequests = loadJson('bid_requests_inbox.json');
-    const insertBid = db.prepare(`INSERT OR IGNORE INTO dacp_bid_requests (id, tenant_id, from_email, from_name, gc_name, subject, body, attachments_json, scope_json, due_date, status, urgency, missing_info_json, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertBid = targetDb.prepare(`INSERT OR IGNORE INTO dacp_bid_requests (id, tenant_id, from_email, from_name, gc_name, subject, body, attachments_json, scope_json, due_date, status, urgency, missing_info_json, received_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const b of bidRequests) insertBid.run(b.id, TENANT_ID, b.from_email, b.from_name, b.gc_name, b.subject, b.body, JSON.stringify(b.attachments), JSON.stringify(b.scope), b.due_date, b.status, b.urgency, JSON.stringify(b.missing_info), b.received_at);
 
     const fieldLogs = loadJson('field_logs.json');
-    const insertReport = db.prepare(`INSERT OR IGNORE INTO dacp_field_reports (id, tenant_id, job_id, date, reported_by, work_json, materials_json, labor_json, equipment_json, weather, notes, issues_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertReport = targetDb.prepare(`INSERT OR IGNORE INTO dacp_field_reports (id, tenant_id, job_id, date, reported_by, work_json, materials_json, labor_json, equipment_json, weather, notes, issues_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const f of fieldLogs) insertReport.run(f.id, TENANT_ID, f.job_id, f.date, f.reported_by, JSON.stringify(f.work_performed), JSON.stringify(f.materials_used), JSON.stringify(f.labor), JSON.stringify(f.equipment), f.weather, f.notes, JSON.stringify(f.issues));
 
     console.log(`DACP: Seeded ${pricing.length} pricing, ${jobs.length} jobs, ${bidRequests.length} bids, ${fieldLogs.length} field reports`);
@@ -3732,98 +4020,23 @@ export function initDacpTables() {
       const estId = `EST-DEMO-${String(i + 1).padStart(3, '0')}`;
       const projectName = br.subject.replace(/^(RFQ|ITB|RFP|Pricing Request|Budget Pricing|Budget Request|Quick Turn|Bid|Pre-Qual \+ RFQ|FYI):?\s*/i, '').trim();
 
-      db.prepare(`INSERT OR IGNORE INTO dacp_estimates (id, tenant_id, bid_request_id, project_name, gc_name, status, line_items_json, subtotal, overhead_pct, profit_pct, mobilization, total_bid, confidence, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      targetDb.prepare(`INSERT OR IGNORE INTO dacp_estimates (id, tenant_id, bid_request_id, project_name, gc_name, status, line_items_json, subtotal, overhead_pct, profit_pct, mobilization, total_bid, confidence, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(estId, TENANT_ID, br.id, projectName, br.gc_name, 'draft', JSON.stringify(lineItems), subtotal, 10, 15, mobilization + testing, totalBid,
           lineItems.filter(li => !li.pricingId).length > 0 ? 'medium' : 'high',
           `Auto-generated demo estimate. ${lineItems.length} line items matched.`);
 
       // Mark bid request as estimated
-      db.prepare('UPDATE dacp_bid_requests SET status = ? WHERE id = ? AND tenant_id = ?').run('estimated', br.id, TENANT_ID);
+      targetDb.prepare('UPDATE dacp_bid_requests SET status = ? WHERE id = ? AND tenant_id = ?').run('estimated', br.id, TENANT_ID);
     }
     console.log('DACP: Generated 5 demo estimates');
   }
 
-  // ─── Lead Engine Tables ──────────────────────────────────────────────────
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS le_leads (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      venue_name TEXT NOT NULL,
-      region TEXT, industry TEXT, trigger_news TEXT,
-      priority_score INTEGER DEFAULT 0,
-      website TEXT,
-      status TEXT DEFAULT 'new',
-      source TEXT DEFAULT 'discovery',
-      source_query TEXT,
-      discovered_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      contacted_at TEXT, responded_at TEXT,
-      notes TEXT, agent_notes TEXT,
-      UNIQUE(tenant_id, venue_name)
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS le_contacts (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      lead_id TEXT NOT NULL REFERENCES le_leads(id),
-      name TEXT, email TEXT NOT NULL,
-      title TEXT, phone TEXT,
-      source TEXT DEFAULT 'discovery',
-      mx_valid INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(lead_id, email)
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS le_outreach_log (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      lead_id TEXT NOT NULL REFERENCES le_leads(id),
-      contact_id TEXT REFERENCES le_contacts(id),
-      email_type TEXT DEFAULT 'initial',
-      subject TEXT, body TEXT,
-      status TEXT DEFAULT 'draft',
-      sent_at TEXT, opened_at TEXT, responded_at TEXT,
-      bounce_reason TEXT,
-      gmail_message_id TEXT, gmail_thread_id TEXT,
-      approved_by TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS le_discovery_config (
-      id TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL UNIQUE,
-      queries_json TEXT,
-      regions_json TEXT,
-      current_position INTEGER DEFAULT 0,
-      queries_per_cycle INTEGER DEFAULT 2,
-      max_emails_per_cycle INTEGER DEFAULT 10,
-      followup_delay_days INTEGER DEFAULT 5,
-      max_followups INTEGER DEFAULT 2,
-      min_send_interval_seconds INTEGER DEFAULT 300,
-      last_full_cycle TEXT, last_inbox_check TEXT,
-      enabled INTEGER DEFAULT 0,
-      mode TEXT DEFAULT 'copilot',
-      sender_name TEXT, sender_email TEXT,
-      email_signature TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_le_leads_tenant ON le_leads(tenant_id, status)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_le_contacts_lead ON le_contacts(lead_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_le_outreach_tenant ON le_outreach_log(tenant_id, status)'); } catch (e) {}
-
   // ─── Lead Engine Seed Data ──────────────────────────────────────────────
-  const leCount = db.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get('default');
+  const leCount = targetDb.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get('default');
   if (leCount.c === 0) {
-    const insertLead = db.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const insertContact = db.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const insertOutreach = db.prepare(`INSERT OR IGNORE INTO le_outreach_log (id, tenant_id, lead_id, contact_id, email_type, subject, body, status, sent_at, responded_at, approved_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertLead = targetDb.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertContact = targetDb.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertOutreach = targetDb.prepare(`INSERT OR IGNORE INTO le_outreach_log (id, tenant_id, lead_id, contact_id, email_type, subject, body, status, sent_at, responded_at, approved_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     // Sangha leads
     const S = 'default';
@@ -3853,7 +4066,7 @@ export function initDacpTables() {
     insertOutreach.run('lo-s-004', S, 'le-s-001', 'lc-s-001', 'followup_1', 'Re: Behind-the-meter mining for Crane County', 'Hi Sarah,\n\nGreat to hear there\'s alignment. I\'ll put together a brief overview of our typical project structure for a site in your capacity range.\n\nWould Thursday or Friday afternoon work for a quick call?\n\nBest,\nSangha Renewables', 'draft', null, null, null, '2026-03-07');
 
     // Sangha discovery config
-    db.prepare(`INSERT OR IGNORE INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    targetDb.prepare(`INSERT OR IGNORE INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       'ldc-default', S,
       JSON.stringify(['solar IPP ERCOT negative LMP', 'wind energy developer PJM underperforming', 'renewable IPP curtailment MISO', 'solar farm operator SPP Oklahoma', 'wind portfolio ERCOT West Texas', 'IPP behind-the-meter colocation', 'renewable energy merchant risk', 'solar developer CAISO California', 'wind IPP Texas market', 'renewable energy asset optimization', 'curtailed wind farm operator', 'solar IPP revenue floor', 'wind energy hedge strategy', 'renewable portfolio optimization 2026', 'IPP alternative revenue stream']),
       JSON.stringify(['ERCOT', 'PJM', 'MISO', 'SPP', 'CAISO']),
@@ -3864,10 +4077,10 @@ export function initDacpTables() {
   }
 
   // DACP lead engine seed
-  const leDacpCount = db.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get('dacp-construction-001');
+  const leDacpCount = targetDb.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get('dacp-construction-001');
   if (leDacpCount.c === 0) {
-    const insertLead = db.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    const insertContact = db.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertLead = targetDb.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertContact = targetDb.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     const D = 'dacp-construction-001';
     insertLead.run('le-d-001', D, 'Turner Construction — Houston', 'Texas', 'General Contractor', 'Multiple active projects in Houston metro', 90, 'turnerconstruction.com', 'contacted', 'discovery', 'GC Houston concrete subcontractor needed', '2026-02-10', '2026-02-20', null, null, null);
@@ -3884,7 +4097,7 @@ export function initDacpTables() {
     insertContact.run('lc-d-005', D, 'le-d-005', 'Rachel Lee', 'rlee@henselphelps.com', 'Project Engineer', '713-555-0505', 'discovery', 1);
     insertContact.run('lc-d-006', D, 'le-d-006', 'Dan Thompson', 'dthompson@usa.skanska.com', 'Estimating Manager', '713-555-0606', 'discovery', 1);
 
-    db.prepare(`INSERT OR IGNORE INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    targetDb.prepare(`INSERT OR IGNORE INTO le_discovery_config (id, tenant_id, queries_json, regions_json, current_position, queries_per_cycle, max_emails_per_cycle, followup_delay_days, max_followups, min_send_interval_seconds, enabled, mode, sender_name, sender_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
       'ldc-dacp', D,
       JSON.stringify(['GC Houston concrete subcontractor RFQ', 'general contractor Texas concrete foundation', 'Houston healthcare construction concrete', 'Austin commercial construction concrete sub', 'San Antonio university campus concrete', 'DFW industrial construction concrete', 'Houston infrastructure concrete paving', 'Texas GC seeking concrete subcontractor', 'Houston medical center construction', 'Texas mixed use development concrete', 'GC pre-qualification concrete Houston', 'TxDOT concrete subcontractor Texas', 'commercial concrete pour Houston 2026', 'multifamily construction concrete Texas', 'Houston warehouse concrete slab contractor']),
       JSON.stringify(['Houston', 'Austin', 'San Antonio', 'Dallas-Fort Worth']),
@@ -3894,7 +4107,7 @@ export function initDacpTables() {
     console.log('Lead Engine: Seeded 6 DACP leads + contacts');
   }
 
-  console.log('DACP tables initialized');
+  console.log('DACP seed data initialized');
 }
 
 // ─── DACP CRUD Helpers ──────────────────────────────────────────────────────
@@ -4346,8 +4559,8 @@ export function getUsageByDayAllTenants(startDate, endDate) {
 
 // ─── Tenant Files ─────────────────────────────────────────────────────────
 
-function initFilesTable() {
-  db.exec(`
+function initFilesTable(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS tenant_files (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -4361,8 +4574,8 @@ function initFilesTable() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tenant_files_tenant ON tenant_files(tenant_id)'); } catch (e) { /* exists */ }
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tenant_files_category ON tenant_files(tenant_id, category)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_tenant_files_tenant ON tenant_files(tenant_id)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_tenant_files_category ON tenant_files(tenant_id, category)'); } catch (e) { /* exists */ }
 }
 
 export function getTenantFiles(tenantId, { category, search, limit = 100 } = {}) {
@@ -4474,8 +4687,8 @@ export function getUsageByDayByModel(startDate, endDate) {
 
 // ─── Background Jobs + Key Vault ────────────────────────────────────────────
 
-export function initBackgroundJobsTables() {
-  db.exec(`
+function initBackgroundJobsTables(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS background_jobs (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -4493,9 +4706,9 @@ export function initBackgroundJobsTables() {
       completed_at TEXT
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_bg_jobs_tenant ON background_jobs(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_bg_jobs_tenant ON background_jobs(tenant_id, status)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS job_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       job_id TEXT NOT NULL REFERENCES background_jobs(id),
@@ -4507,9 +4720,9 @@ export function initBackgroundJobsTables() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_job_messages_job ON job_messages(job_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_job_messages_job ON job_messages(job_id)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS key_vault (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -4521,7 +4734,7 @@ export function initBackgroundJobsTables() {
       expires_at TEXT
     )
   `);
-  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_key_vault_tenant_service ON key_vault(tenant_id, service, key_name)'); } catch (e) {}
+  try { targetDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_key_vault_tenant_service ON key_vault(tenant_id, service, key_name)'); } catch (e) {}
 }
 
 // Background Jobs CRUD
@@ -4615,8 +4828,8 @@ export function deleteKeyVaultEntry(id, tenantId) {
 
 // ─── Opus Rate Limiting ─────────────────────────────────────────────────────
 
-export function initOpusLimitsTable() {
-  db.exec(`
+function initOpusLimitsTable(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS api_limits (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -4626,7 +4839,7 @@ export function initOpusLimitsTable() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_api_limits_tenant_type_date ON api_limits(tenant_id, limit_type, date)`);
+  targetDb.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_api_limits_tenant_type_date ON api_limits(tenant_id, limit_type, date)`);
 }
 
 export function checkOpusLimit(tenantId) {
@@ -4685,8 +4898,8 @@ export function getOpusDailyCount(tenantId) {
 
 // ─── Activity Log ────────────────────────────────────────────────────────────
 
-function initActivityLogTable() {
-  db.exec(`
+function initActivityLogTableSchema(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS tenant_email_config (
       tenant_id TEXT PRIMARY KEY,
       sender_email TEXT NOT NULL,
@@ -4697,7 +4910,7 @@ function initActivityLogTable() {
     )
   `);
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -4711,12 +4924,15 @@ function initActivityLogTable() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_activity_tenant ON activity_log(tenant_id, created_at DESC)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_activity_tenant ON activity_log(tenant_id, created_at DESC)'); } catch (e) {}
+}
 
-  // Seed demo activity data if empty
-  const count = db.prepare('SELECT COUNT(*) as c FROM activity_log').get();
+function initActivityLogSeedData(targetDb, tenantId) {
+  if (tenantId !== 'default') return;
+
+  const count = targetDb.prepare('SELECT COUNT(*) as c FROM activity_log').get();
   if (count.c === 0) {
-    const insert = db.prepare('INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, agent_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const insert = targetDb.prepare('INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, agent_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const now = Date.now();
     const ts = (minAgo) => new Date(now - minAgo * 60000).toISOString().replace('T', ' ').slice(0, 19);
 
@@ -4766,8 +4982,8 @@ export function getActivityCount(tenantId, type) {
 
 // ─── Processed Emails (Persistent Dedup) ─────────────────────────────────────
 
-function initProcessedEmailsTable() {
-  db.exec(`
+function initProcessedEmailsTable(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS processed_emails (
       message_id TEXT PRIMARY KEY,
       thread_id TEXT,
@@ -4776,7 +4992,7 @@ function initProcessedEmailsTable() {
       processed_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_processed_thread ON processed_emails(thread_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_processed_thread ON processed_emails(thread_id)'); } catch (e) {}
 }
 
 export function isEmailProcessed(messageId) {
@@ -4798,8 +5014,8 @@ export function markEmailProcessed({ messageId, threadId, pipeline, tenantId }) 
 
 // ─── Auto Replies ────────────────────────────────────────────────────────────
 
-export function initAutoRepliesTable() {
-  db.exec(`
+function initAutoRepliesTable(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS auto_replies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       message_id TEXT NOT NULL,
@@ -4848,8 +5064,8 @@ export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailR
 
 // ─── Accounting Tables ──────────────────────────────────────────────────────
 
-export function initAccountingTables() {
-  db.exec(`
+function initAccountingTables(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS accounting_invoices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -4868,9 +5084,9 @@ export function initAccountingTables() {
       UNIQUE(tenant_id, source, external_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_acct_inv_tenant ON accounting_invoices(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_acct_inv_tenant ON accounting_invoices(tenant_id, status)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS accounting_bills (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -4888,9 +5104,9 @@ export function initAccountingTables() {
       UNIQUE(tenant_id, source, external_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_acct_bill_tenant ON accounting_bills(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_acct_bill_tenant ON accounting_bills(tenant_id, status)'); } catch (e) {}
 
-  db.exec(`
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS accounting_payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -4906,7 +5122,7 @@ export function initAccountingTables() {
       UNIQUE(tenant_id, source, external_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_acct_pmt_tenant ON accounting_payments(tenant_id, type)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_acct_pmt_tenant ON accounting_payments(tenant_id, type)'); } catch (e) {}
 }
 
 // Accounting CRUD
@@ -5023,8 +5239,8 @@ export function getAccountingStats(tenantId) {
 
 // ─── Price Alert Rules ──────────────────────────────────────────────────────
 
-export function initPriceAlertRulesTable() {
-  db.exec(`
+function initPriceAlertRulesTable(targetDb) {
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS price_alert_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id TEXT NOT NULL,
@@ -5041,7 +5257,7 @@ export function initPriceAlertRulesTable() {
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_price_alerts_tenant ON price_alert_rules(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_price_alerts_tenant ON price_alert_rules(tenant_id)'); } catch (e) {}
 }
 
 export function getPriceAlertRules() {

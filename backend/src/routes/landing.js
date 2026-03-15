@@ -6,19 +6,14 @@
  */
 
 import express from 'express';
-import Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { sendEmail } from '../services/emailService.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { getTenantDb } from '../cache/database.js';
 
 const router = express.Router();
 
 function getDb() {
-  const db = new Database(join(__dirname, '../../data/cache.db'));
+  const db = getTenantDb('default');
   db.exec(`
     CREATE TABLE IF NOT EXISTS demo_requests (
       id TEXT PRIMARY KEY,

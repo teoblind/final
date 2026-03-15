@@ -7,18 +7,11 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { chat } from '../services/chatService.js';
 import { sendEmail } from '../services/emailService.js';
-import Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const db = new Database(join(__dirname, '../../data/cache.db'));
 
 let pollInterval = null;
 let lastPoll = null;
@@ -47,31 +40,53 @@ function getInboxes() {
     inboxes.push({ tenantId: null, label: 'coppice@zhan.capital', gmail: makeGmailClient(defaultToken) });
   }
 
-  // Tenant inboxes from DB
+  // Tenant inboxes from each tenant DB
   try {
-    const rows = db.prepare('SELECT * FROM tenant_email_config').all();
-    for (const row of rows) {
-      const gmail = makeGmailClient(row.gmail_refresh_token);
-      if (gmail) {
-        inboxes.push({ tenantId: row.tenant_id, label: `${row.sender_email} (${row.tenant_id})`, gmail });
+    const tenants = getAllTenants();
+    for (const tenant of tenants) {
+      try {
+        const tdb = getTenantDb(tenant.id);
+        const rows = tdb.prepare('SELECT * FROM tenant_email_config').all();
+        for (const row of rows) {
+          const gmail = makeGmailClient(row.gmail_refresh_token);
+          if (gmail) {
+            inboxes.push({ tenantId: row.tenant_id, label: `${row.sender_email} (${row.tenant_id})`, gmail });
+          }
+        }
+      } catch (e) {
+        // Table may not exist yet for this tenant
       }
     }
   } catch (e) {
-    // Table may not exist yet
+    // getAllTenants may fail during startup
   }
 
   return inboxes;
 }
 
 function matchContactToTenant(email) {
-  const row = db.prepare(`
-    SELECT c.name, c.title, l.venue_name as company, l.tenant_id
-    FROM le_contacts c
-    JOIN le_leads l ON c.lead_id = l.id AND c.tenant_id = l.tenant_id
-    WHERE LOWER(c.email) = LOWER(?)
-    LIMIT 1
-  `).get(email);
-  return row || null;
+  // Search across all tenant DBs for the contact
+  try {
+    const tenants = getAllTenants();
+    for (const tenant of tenants) {
+      try {
+        const tdb = getTenantDb(tenant.id);
+        const row = tdb.prepare(`
+          SELECT c.name, c.title, l.venue_name as company, l.tenant_id
+          FROM le_contacts c
+          JOIN le_leads l ON c.lead_id = l.id AND c.tenant_id = l.tenant_id
+          WHERE LOWER(c.email) = LOWER(?)
+          LIMIT 1
+        `).get(email);
+        if (row) return row;
+      } catch (e) {
+        // Table may not exist in this tenant DB
+      }
+    }
+  } catch (e) {
+    // Fallback if tenants not available
+  }
+  return null;
 }
 
 function extractEmailBody(payload) {
@@ -418,7 +433,9 @@ async function pollInbox() {
 
   let totalNew = 0;
   for (const inbox of inboxes) {
-    const count = await pollSingleInbox(inbox.gmail, inbox.tenantId, inbox.label);
+    // Wrap each inbox poll in the appropriate tenant context
+    const resolvedId = inbox.tenantId || 'default';
+    const count = await runWithTenant(resolvedId, () => pollSingleInbox(inbox.gmail, inbox.tenantId, inbox.label));
     totalNew += count;
   }
 

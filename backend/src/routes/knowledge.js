@@ -9,9 +9,6 @@
  */
 
 import express from 'express';
-import Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import {
   processKnowledgeEntry,
   searchKnowledge,
@@ -19,11 +16,18 @@ import {
   getOpenActionItems,
 } from '../services/knowledgeProcessor.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
-import { insertActivity } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb } from '../cache/database.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const db = new Database(join(__dirname, '../../data/cache.db'));
+// Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
+const db = new Proxy({}, {
+  get(target, prop) {
+    const tenantId = getCurrentTenantId() || 'default';
+    const realDb = getTenantDb(tenantId);
+    const val = realDb[prop];
+    if (typeof val === 'function') return val.bind(realDb);
+    return val;
+  },
+});
 
 const router = express.Router();
 
