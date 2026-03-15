@@ -55,7 +55,8 @@ function getTenantDb(tenantId) {
 
 /**
  * Resolve the correct DB for the current async context.
- * Falls back to systemDb when no tenant context is set.
+ * Falls back to default tenant when no tenant context is set
+ * (startup, cron jobs, etc.).
  */
 function resolveDb() {
   const store = tenantStore.getStore();
@@ -63,8 +64,8 @@ function resolveDb() {
   if (tenantId) {
     return getTenantDb(tenantId);
   }
-  // Fallback: use systemDb (handles startup, migrations, etc.)
-  return systemDb;
+  // Fallback: default tenant (for startup, cron jobs, etc.)
+  return getTenantDb('default');
 }
 
 /**
