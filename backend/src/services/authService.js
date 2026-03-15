@@ -9,8 +9,23 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto, { randomUUID } from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ampera-dev-secret-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'ampera-refresh-secret-change-in-production';
+// JWT secrets MUST be set via environment variables — no hardcoded fallbacks.
+// In dev, auto-generate ephemeral secrets (tokens won't survive restarts).
+// In production, fail loud if not set.
+function requireJwtSecret(envVar, label) {
+  const val = process.env[envVar];
+  if (val) return val;
+  if (process.env.NODE_ENV === 'production') {
+    console.error(`FATAL: ${envVar} is not set. Refusing to start with insecure defaults in production.`);
+    process.exit(1);
+  }
+  const ephemeral = crypto.randomBytes(32).toString('hex');
+  console.warn(`[Auth] ${envVar} not set — using ephemeral secret (tokens will not survive restarts)`);
+  return ephemeral;
+}
+
+const JWT_SECRET = requireJwtSecret('JWT_SECRET', 'access token');
+const JWT_REFRESH_SECRET = requireJwtSecret('JWT_REFRESH_SECRET', 'refresh token');
 
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';

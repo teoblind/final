@@ -63,9 +63,44 @@ function getGoogleOAuth2Client(req) {
 
 const router = express.Router();
 
+// ─── Per-IP Rate Limiter for Auth Endpoints ─────────────────────────────────
+// Prevents brute-force password guessing and credential stuffing.
+const authRateLimitStore = new Map();
+
+function authRateLimiter(maxAttempts, windowMs = 60_000) {
+  return (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress || 'unknown';
+    const now = Date.now();
+    let entry = authRateLimitStore.get(ip);
+
+    if (!entry || now - entry.windowStart >= windowMs) {
+      entry = { count: 0, windowStart: now };
+      authRateLimitStore.set(ip, entry);
+    }
+
+    entry.count++;
+
+    if (entry.count > maxAttempts) {
+      const retryAfter = Math.ceil((entry.windowStart + windowMs - now) / 1000);
+      res.setHeader('Retry-After', retryAfter);
+      return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+    }
+
+    return next();
+  };
+}
+
+// Clean up expired entries every 5 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 300_000;
+  for (const [ip, entry] of authRateLimitStore) {
+    if (entry.windowStart < cutoff) authRateLimitStore.delete(ip);
+  }
+}, 300_000);
+
 // ─── POST /login ────────────────────────────────────────────────────────────
 
-router.post('/login', async (req, res) => {
+router.post('/login', authRateLimiter(10), async (req, res) => {
   try {
     const { email, password, tenant_id } = req.body;
 
@@ -171,7 +206,7 @@ router.post('/login', async (req, res) => {
 
 // ─── POST /register ─────────────────────────────────────────────────────────
 
-router.post('/register', async (req, res) => {
+router.post('/register', authRateLimiter(5), async (req, res) => {
   try {
     const { name, email, password, companyName, invitationToken } = req.body;
 
@@ -530,7 +565,7 @@ router.post('/set-password', authenticate, async (req, res) => {
 
 // ─── POST /forgot-password ───────────────────────────────────────────────────
 
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', authRateLimiter(5), async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -607,7 +642,7 @@ router.post('/forgot-password', async (req, res) => {
 
 // ─── POST /reset-password ───────────────────────────────────────────────────
 
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', authRateLimiter(5), async (req, res) => {
   try {
     const { token, newPassword } = req.body;
 

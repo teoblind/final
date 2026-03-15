@@ -8,6 +8,7 @@
 
 import express from 'express';
 import { execSync } from 'child_process';
+import { randomBytes } from 'crypto';
 import fs from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -158,6 +159,10 @@ router.delete('/users/:id', (req, res) => {
     if (user.id === req.user.id) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
+    // Prevent cross-tenant deletion
+    if (user.tenant_id !== req.user.tenantId) {
+      return res.status(403).json({ error: 'Cannot delete users from other tenants' });
+    }
     deleteUser(id);
     res.json({ success: true, message: `User ${user.email} deleted` });
   } catch (error) {
@@ -171,15 +176,20 @@ router.delete('/users/:id', (req, res) => {
 router.post('/users/:id/reset-password', (req, res) => {
   try {
     const { id } = req.params;
-    const { newPassword } = req.body;
     const user = getUserById(id);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const password = newPassword || 'coppice123';
-    const passwordHash = bcryptPkg.hashSync(password, 10);
-    updateUser(id, { passwordHash });
-    res.json({ success: true, message: `Password reset for ${user.email}`, temporaryPassword: password });
+    // Prevent cross-tenant password reset
+    if (user.tenant_id !== req.user.tenantId) {
+      return res.status(403).json({ error: 'Cannot reset passwords for users in other tenants' });
+    }
+    // Generate cryptographically strong temporary password
+    const tempPassword = randomBytes(12).toString('base64url'); // 16 chars, URL-safe
+    const passwordHash = bcryptPkg.hashSync(tempPassword, 12);
+    updateUser(id, { passwordHash, mustChangePassword: 1 });
+    // Return password only this once — admin must relay it securely
+    res.json({ success: true, message: `Password reset for ${user.email}`, temporaryPassword: tempPassword, mustChangePassword: true });
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -4,6 +4,7 @@ import { dirname, join } from 'path';
 import fs from 'fs';
 import bcryptPkg from 'bcryptjs';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -4837,7 +4838,40 @@ export function getPendingJobRequests(tenantId) {
   `).all(tenantId);
 }
 
-// Key Vault CRUD
+// Key Vault CRUD — values encrypted at rest with AES-256-GCM
+
+// Derive encryption key from env secret (or generate ephemeral for dev)
+const VAULT_MASTER_KEY = (() => {
+  const envKey = process.env.VAULT_ENCRYPTION_KEY;
+  if (envKey) return scryptSync(envKey, 'coppice-vault-salt', 32);
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: VAULT_ENCRYPTION_KEY not set in production. Key vault will be inaccessible.');
+  }
+  // Dev fallback: derive from a static seed (NOT secure for prod)
+  console.warn('[KeyVault] VAULT_ENCRYPTION_KEY not set — using dev-only fallback');
+  return scryptSync('dev-only-insecure-key', 'coppice-vault-salt', 32);
+})();
+
+function encryptValue(plaintext) {
+  const iv = randomBytes(16);
+  const cipher = createCipheriv('aes-256-gcm', VAULT_MASTER_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // Format: base64(iv:tag:ciphertext)
+  return `enc:${Buffer.concat([iv, tag, encrypted]).toString('base64')}`;
+}
+
+function decryptValue(stored) {
+  // Support plaintext values from before encryption was added
+  if (!stored.startsWith('enc:')) return stored;
+  const raw = Buffer.from(stored.slice(4), 'base64');
+  const iv = raw.subarray(0, 16);
+  const tag = raw.subarray(16, 32);
+  const ciphertext = raw.subarray(32);
+  const decipher = createDecipheriv('aes-256-gcm', VAULT_MASTER_KEY, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(ciphertext, null, 'utf8') + decipher.final('utf8');
+}
 
 export function getKeyVaultEntries(tenantId) {
   return db.prepare('SELECT id, tenant_id, service, key_name, added_by, created_at, expires_at FROM key_vault WHERE tenant_id = ? ORDER BY service').all(tenantId);
@@ -4845,17 +4879,24 @@ export function getKeyVaultEntries(tenantId) {
 
 export function getKeyVaultValue(tenantId, service, keyName = 'default') {
   const row = db.prepare('SELECT key_value FROM key_vault WHERE tenant_id = ? AND service = ? AND key_name = ?').get(tenantId, service, keyName);
-  return row?.key_value || null;
+  if (!row?.key_value) return null;
+  try {
+    return decryptValue(row.key_value);
+  } catch (e) {
+    console.error(`[KeyVault] Decryption failed for ${service}/${keyName}:`, e.message);
+    return null;
+  }
 }
 
 export function upsertKeyVaultEntry(entry) {
   const id = entry.id || `key-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const encrypted = encryptValue(entry.keyValue);
   db.prepare(`
     INSERT INTO key_vault (id, tenant_id, service, key_name, key_value, added_by, expires_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(tenant_id, service, key_name) DO UPDATE SET key_value = ?, added_by = ?, expires_at = ?
-  `).run(id, entry.tenantId, entry.service, entry.keyName || 'default', entry.keyValue, entry.addedBy || 'user', entry.expiresAt || null,
-    entry.keyValue, entry.addedBy || 'user', entry.expiresAt || null);
+  `).run(id, entry.tenantId, entry.service, entry.keyName || 'default', encrypted, entry.addedBy || 'user', entry.expiresAt || null,
+    encrypted, entry.addedBy || 'user', entry.expiresAt || null);
   return id;
 }
 
