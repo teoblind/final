@@ -7,9 +7,11 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
+import { chat } from '../services/chatService.js';
+import { sendEmail } from '../services/emailService.js';
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -111,6 +113,100 @@ async function extractAttachments(gmail, messageId, payload) {
     }
   }
   return attachments;
+}
+
+function isAutoReplyEnabled(tenantId) {
+  try {
+    const tenant = getTenant(tenantId || 'default');
+    if (!tenant?.settings) return false;
+    return tenant.settings.auto_reply_enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail }) {
+  const resolvedTenant = tenantId || 'default';
+
+  if (!isAutoReplyEnabled(resolvedTenant)) {
+    console.log(`[GmailPoll] Auto-reply disabled for tenant ${resolvedTenant}, logging only`);
+    insertActivity({
+      tenantId: resolvedTenant,
+      type: 'in',
+      title: `Unmatched email from ${fromName || from}`,
+      subtitle: subject,
+      detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId }),
+      sourceType: 'email',
+      sourceId: messageId,
+      agentId: 'coppice',
+    });
+    markEmailProcessed({ messageId, threadId, pipeline: 'general', tenantId: resolvedTenant });
+    return;
+  }
+
+  // Ask the Hivemind agent to draft a response
+  const prompt = `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`;
+
+  let agentResponse;
+  try {
+    const result = await chat(resolvedTenant, 'hivemind', 'system-auto-reply', prompt);
+    agentResponse = result.response;
+  } catch (err) {
+    console.error(`[GmailPoll] Agent draft failed for ${messageId}:`, err.message);
+    insertActivity({
+      tenantId: resolvedTenant,
+      type: 'in',
+      title: `Unmatched email from ${fromName || from} (auto-reply failed)`,
+      subtitle: subject,
+      detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, error: err.message }),
+      sourceType: 'email',
+      sourceId: messageId,
+      agentId: 'coppice',
+    });
+    markEmailProcessed({ messageId, threadId, pipeline: 'general-error', tenantId: resolvedTenant });
+    return;
+  }
+
+  // Send the reply with proper threading
+  const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+  try {
+    await sendEmail({
+      to: from,
+      subject: replySubject,
+      body: agentResponse,
+      tenantId: resolvedTenant,
+      threadId,
+      inReplyTo: messageId,
+      references: messageId,
+    });
+    console.log(`[GmailPoll] Auto-reply sent to ${from} for "${subject}"`);
+  } catch (err) {
+    console.error(`[GmailPoll] Auto-reply send failed:`, err.message);
+    markEmailProcessed({ messageId, threadId, pipeline: 'general-send-error', tenantId: resolvedTenant });
+    return;
+  }
+
+  // Log the auto-reply
+  logAutoReply({
+    messageId,
+    sender: from,
+    subject,
+    responsePreview: agentResponse.slice(0, 500),
+    tenantId: resolvedTenant,
+  });
+
+  insertActivity({
+    tenantId: resolvedTenant,
+    type: 'out',
+    title: `Auto-reply sent to ${fromName || from}`,
+    subtitle: replySubject,
+    detailJson: JSON.stringify({ to: from, subject: replySubject, response: agentResponse.slice(0, 2000) }),
+    sourceType: 'email',
+    sourceId: messageId,
+    agentId: 'coppice',
+  });
+
+  markEmailProcessed({ messageId, threadId, pipeline: 'general-auto-reply', tenantId: resolvedTenant });
 }
 
 async function pollSingleInbox(gmail, tenantId, label) {
@@ -244,32 +340,60 @@ async function pollSingleInbox(gmail, tenantId, label) {
       }
 
       // Not an RFQ or IPP — check if it's from a known contact
-      if (!contact) {
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: resolvedTenant });
+      if (contact) {
+        const contactTenant = contact.tenant_id;
+        const displayName = contact.name || senderName || senderEmail;
+        const company = contact.company || '';
+
+        insertActivity({
+          tenantId: contactTenant,
+          type: 'in',
+          title: company ? `Reply from ${displayName} at ${company}` : `Reply from ${displayName}`,
+          subtitle: subject,
+          detailJson: JSON.stringify({
+            from: senderEmail,
+            fromName: displayName,
+            subject,
+            body: body.slice(0, 5000),
+            threadId: msgThreadId,
+            messageId: msg.id,
+          }),
+          sourceType: 'email',
+          sourceId: msg.id,
+          agentId: 'coppice',
+        });
+
+        try {
+          await gmail.users.messages.modify({
+            userId: 'me', id: msg.id,
+            requestBody: { removeLabelIds: ['UNREAD'] },
+          });
+        } catch {}
+
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: contactTenant });
+        newReplies++;
         continue;
       }
 
-      const contactTenant = contact.tenant_id;
-      const displayName = contact.name || senderName || senderEmail;
-      const company = contact.company || '';
+      // Fallback: unmatched email → general handler (auto-reply if enabled)
+      const msgHeaders = full.data.payload?.headers || [];
+      const rfc822MessageId = msgHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
 
-      insertActivity({
-        tenantId: contactTenant,
-        type: 'in',
-        title: company ? `Reply from ${displayName} at ${company}` : `Reply from ${displayName}`,
-        subtitle: subject,
-        detailJson: JSON.stringify({
-          from: senderEmail,
-          fromName: displayName,
-          subject,
-          body: body.slice(0, 5000),
+      try {
+        await generalEmailHandler({
+          messageId: rfc822MessageId,
           threadId: msgThreadId,
-          messageId: msg.id,
-        }),
-        sourceType: 'email',
-        sourceId: msg.id,
-        agentId: 'coppice',
-      });
+          from: from,
+          fromName: senderName,
+          subject,
+          body,
+          tenantId: resolvedTenant,
+          gmail,
+        });
+      } catch (err) {
+        console.error(`[GmailPoll] [${label}] General handler error:`, err.message);
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'general-error', tenantId: resolvedTenant });
+      }
 
       try {
         await gmail.users.messages.modify({
@@ -278,7 +402,6 @@ async function pollSingleInbox(gmail, tenantId, label) {
         });
       } catch {}
 
-      markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: contactTenant });
       newReplies++;
     }
 

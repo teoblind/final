@@ -747,6 +747,9 @@ export function initDatabase() {
   // Initialize processed emails dedup table
   initProcessedEmailsTable();
 
+  // Initialize auto-replies log table
+  initAutoRepliesTable();
+
   // Initialize report comments table
   initReportComments();
 
@@ -4791,6 +4794,32 @@ export function markEmailProcessed({ messageId, threadId, pipeline, tenantId }) 
   db.prepare(
     'INSERT OR IGNORE INTO processed_emails (message_id, thread_id, pipeline, tenant_id) VALUES (?, ?, ?, ?)'
   ).run(messageId, threadId || null, pipeline || null, tenantId || null);
+}
+
+// ─── Auto Replies ────────────────────────────────────────────────────────────
+
+export function initAutoRepliesTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS auto_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id TEXT NOT NULL,
+      sender TEXT NOT NULL,
+      subject TEXT,
+      response_preview TEXT,
+      sent_at TEXT DEFAULT (datetime('now')),
+      tenant_id TEXT
+    )
+  `);
+}
+
+export function logAutoReply({ messageId, sender, subject, responsePreview, tenantId }) {
+  try {
+    db.prepare(
+      'INSERT INTO auto_replies (message_id, sender, subject, response_preview, tenant_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(messageId, sender, subject || '', (responsePreview || '').slice(0, 500), tenantId || null);
+  } catch (e) {
+    console.error('[DB] Failed to log auto-reply:', e.message);
+  }
 }
 
 // ─── Tenant Email Config ─────────────────────────────────────────────────────
