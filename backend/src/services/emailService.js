@@ -59,6 +59,71 @@ export function textToHtml(text) {
 }
 
 /**
+ * Convert markdown-ish agent response to clean HTML email.
+ * Handles: **bold**, *italic*, numbered/bulleted lists, paragraphs.
+ */
+export function markdownToEmailHtml(text) {
+  const pStyle = 'font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6;margin:0 0 10px 0;';
+  const liStyle = 'font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6;margin:0 0 4px 0;';
+
+  const lines = text.trim().split('\n');
+  const blocks = [];
+  let currentList = [];
+  let listType = null;
+
+  function flushList() {
+    if (currentList.length > 0) {
+      const tag = listType === 'ol' ? 'ol' : 'ul';
+      blocks.push(`<${tag} style="margin:0 0 10px 0;padding-left:24px;">${currentList.join('')}</${tag}>`);
+      currentList = [];
+      listType = null;
+    }
+  }
+
+  function inlineFormat(s) {
+    return s
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:13px;">$1</code>');
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Numbered list: "1. item" or "1) item"
+    const olMatch = trimmed.match(/^\d+[.)]\s+(.+)/);
+    if (olMatch) {
+      if (listType !== 'ol') flushList();
+      listType = 'ol';
+      currentList.push(`<li style="${liStyle}">${inlineFormat(olMatch[1])}</li>`);
+      continue;
+    }
+
+    // Bulleted list: "- item" or "* item" (but not bold like **text**)
+    const ulMatch = trimmed.match(/^[-•]\s+(.+)/);
+    if (ulMatch) {
+      if (listType !== 'ul') flushList();
+      listType = 'ul';
+      currentList.push(`<li style="${liStyle}">${inlineFormat(ulMatch[1])}</li>`);
+      continue;
+    }
+
+    // Empty line — flush list, add spacing
+    if (!trimmed) {
+      flushList();
+      continue;
+    }
+
+    // Regular paragraph
+    flushList();
+    blocks.push(`<p style="${pStyle}">${inlineFormat(trimmed)}</p>`);
+  }
+
+  flushList();
+  return blocks.join('\n');
+}
+
+/**
  * RFC 2047 encode a header value if it contains non-ASCII characters.
  */
 function encodeSubject(subject) {

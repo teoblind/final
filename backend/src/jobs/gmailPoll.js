@@ -12,7 +12,7 @@ import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
 import { chat } from '../services/chatService.js';
-import { sendEmail } from '../services/emailService.js';
+import { sendEmail, sendHtmlEmail, markdownToEmailHtml } from '../services/emailService.js';
 
 let pollInterval = null;
 let lastPoll = null;
@@ -203,13 +203,14 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     return;
   }
 
-  // Send the reply with proper threading
+  // Send the reply with proper threading (convert markdown to HTML)
   const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
   try {
-    await sendEmail({
+    const html = markdownToEmailHtml(agentResponse);
+    await sendHtmlEmail({
       to: from,
       subject: replySubject,
-      body: agentResponse,
+      html,
       tenantId: resolvedTenant,
       threadId,
       inReplyTo: messageId,
