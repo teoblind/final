@@ -10,6 +10,7 @@ import { google } from 'googleapis';
 import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
+import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
 import { chat } from '../services/chatService.js';
 import { sendEmail } from '../services/emailService.js';
 
@@ -140,15 +141,33 @@ function isAutoReplyEnabled(tenantId) {
   }
 }
 
-async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail }) {
+async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail, classification }) {
   const resolvedTenant = tenantId || 'default';
+  const verdict = classification?.verdict || 'unknown';
+
+  // Block auto-reply for unknown senders — only log
+  if (!canAutoRespond(verdict)) {
+    console.log(`[GmailPoll] Unknown sender ${from} (verdict: ${verdict}), logging only — no auto-reply`);
+    insertActivity({
+      tenantId: resolvedTenant,
+      type: 'in',
+      title: `Email from unverified sender: ${fromName || from}`,
+      subtitle: `${subject} (not auto-replied — sender not in trusted list)`,
+      detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, emailGuard: classification }),
+      sourceType: 'email',
+      sourceId: messageId,
+      agentId: 'email-guard',
+    });
+    markEmailProcessed({ messageId, threadId, pipeline: 'unknown-sender', tenantId: resolvedTenant });
+    return;
+  }
 
   if (!isAutoReplyEnabled(resolvedTenant)) {
     console.log(`[GmailPoll] Auto-reply disabled for tenant ${resolvedTenant}, logging only`);
     insertActivity({
       tenantId: resolvedTenant,
       type: 'in',
-      title: `Unmatched email from ${fromName || from}`,
+      title: `Email from ${fromName || from}`,
       subtitle: subject,
       detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId }),
       sourceType: 'email',
@@ -287,74 +306,148 @@ async function pollSingleInbox(gmail, tenantId, label) {
       // Resolve tenant: inbox tenantId > contact match > pipeline default
       const contact = matchContactToTenant(senderEmail);
       const resolvedTenant = tenantId || contact?.tenant_id || 'default';
+      const allHeaders = full.data.payload?.headers || [];
+
+      // ─── Email Guard: classify before any processing ───
+      const classification = classifyEmail({
+        tenantId: resolvedTenant,
+        senderEmail,
+        senderName,
+        subject,
+        body,
+        headers: allHeaders,
+        messageId: msg.id,
+        contact,
+      });
+
+      // SPOOFED → block completely, alert tenant
+      if (classification.verdict === 'spoofed') {
+        console.warn(`[GmailPoll] [${label}] ⚠ SPOOFED email blocked: "${senderName}" <${senderEmail}> — ${classification.reason}`);
+        insertActivity({
+          tenantId: resolvedTenant,
+          type: 'in',
+          title: `⚠ BLOCKED: Spoofed email from "${senderName}" <${senderEmail}>`,
+          subtitle: `${subject} — ${classification.reason}`,
+          detailJson: JSON.stringify({
+            from: senderEmail, fromName: senderName, subject,
+            body: body.slice(0, 1000),
+            verdict: classification.verdict,
+            reason: classification.reason,
+            authResults: classification.authResults,
+          }),
+          sourceType: 'email',
+          sourceId: msg.id,
+          agentId: 'email-guard',
+        });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'blocked-spoof', tenantId: resolvedTenant });
+        newReplies++;
+        continue;
+      }
+
+      // SPAM → skip entirely, mark processed
+      if (classification.verdict === 'spam') {
+        console.log(`[GmailPoll] [${label}] Spam filtered: ${senderEmail} — ${classification.reason}`);
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'spam-filtered', tenantId: resolvedTenant });
+        newReplies++;
+        continue;
+      }
+
+      const autoRespondAllowed = canAutoRespond(classification.verdict);
 
       // Check if this is an RFQ/bid request email → route to estimate pipeline
-      if (isRfqEmail(subject, body)) {
+      if (isRfqEmail(subject, body) && canProcess(classification.verdict)) {
         const rfqTenant = tenantId || contact?.tenant_id || 'dacp-construction-001';
-        try {
-          const result = await processRfqEmail({
-            messageId: msg.id,
-            threadId: msgThreadId,
-            from: senderEmail,
-            fromName: senderName,
-            subject,
-            body,
-            tenantId: rfqTenant,
-          });
-          if (result) {
-            console.log(`[GmailPoll] [${label}] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
+        if (autoRespondAllowed) {
+          try {
+            const result = await processRfqEmail({
+              messageId: msg.id,
+              threadId: msgThreadId,
+              from: senderEmail,
+              fromName: senderName,
+              subject,
+              body,
+              tenantId: rfqTenant,
+            });
+            if (result) {
+              console.log(`[GmailPoll] [${label}] RFQ processed: ${result.bidId} → Estimate $${result.estimate.totalBid.toLocaleString()}`);
+            }
+          } catch (err) {
+            console.error(`[GmailPoll] [${label}] RFQ pipeline error:`, err.message);
           }
-        } catch (err) {
-          console.error(`[GmailPoll] [${label}] RFQ pipeline error:`, err.message);
+        } else {
+          // Unknown sender sent an RFQ — log it but don't auto-respond
+          console.log(`[GmailPoll] [${label}] RFQ from unknown sender ${senderEmail} — logged, not auto-responded`);
+          insertActivity({
+            tenantId: rfqTenant,
+            type: 'in',
+            title: `RFQ received from unknown sender: ${senderName || senderEmail}`,
+            subtitle: `${subject} (awaiting manual review — sender not verified)`,
+            detailJson: JSON.stringify({
+              from: senderEmail, fromName: senderName, subject,
+              body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id,
+              emailGuard: classification,
+            }),
+            sourceType: 'email',
+            sourceId: msg.id,
+            agentId: 'email-guard',
+          });
         }
 
-        try {
-          await gmail.users.messages.modify({
-            userId: 'me', id: msg.id,
-            requestBody: { removeLabelIds: ['UNREAD'] },
-          });
-        } catch {}
-
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'rfq', tenantId: rfqTenant });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'rfq' : 'rfq-pending', tenantId: rfqTenant });
         newReplies++;
         continue;
       }
 
       // Check if this is an IPP inquiry → route to mine spec pipeline
-      if (isIppEmail(subject, body)) {
+      if (isIppEmail(subject, body) && canProcess(classification.verdict)) {
         const ippTenant = tenantId || contact?.tenant_id || 'default';
-        try {
-          const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
-          const result = await processIppEmail({
-            messageId: msg.id,
-            threadId: msgThreadId,
-            from: senderEmail,
-            fromName: senderName,
-            subject,
-            body,
-            attachments,
-            tenantId: ippTenant,
-          });
-          if (result) {
-            console.log(`[GmailPoll] [${label}] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
+        if (autoRespondAllowed) {
+          try {
+            const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
+            const result = await processIppEmail({
+              messageId: msg.id,
+              threadId: msgThreadId,
+              from: senderEmail,
+              fromName: senderName,
+              subject,
+              body,
+              attachments,
+              tenantId: ippTenant,
+            });
+            if (result) {
+              console.log(`[GmailPoll] [${label}] IPP processed: ${result.status} → ${result.filename || 'needs data'}`);
+            }
+          } catch (err) {
+            console.error(`[GmailPoll] [${label}] IPP pipeline error:`, err.message);
           }
-        } catch (err) {
-          console.error(`[GmailPoll] [${label}] IPP pipeline error:`, err.message);
+        } else {
+          console.log(`[GmailPoll] [${label}] IPP from unknown sender ${senderEmail} — logged, not auto-responded`);
+          insertActivity({
+            tenantId: ippTenant,
+            type: 'in',
+            title: `IPP inquiry from unknown sender: ${senderName || senderEmail}`,
+            subtitle: `${subject} (awaiting manual review — sender not verified)`,
+            detailJson: JSON.stringify({
+              from: senderEmail, fromName: senderName, subject,
+              body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id,
+              emailGuard: classification,
+            }),
+            sourceType: 'email',
+            sourceId: msg.id,
+            agentId: 'email-guard',
+          });
         }
 
-        try {
-          await gmail.users.messages.modify({
-            userId: 'me', id: msg.id,
-            requestBody: { removeLabelIds: ['UNREAD'] },
-          });
-        } catch {}
-
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'ipp', tenantId: ippTenant });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'ipp' : 'ipp-pending', tenantId: ippTenant });
         newReplies++;
         continue;
       }
 
-      // Not an RFQ or IPP — check if it's from a known contact
+      // Known contact reply (not RFQ/IPP)
       if (contact) {
         const contactTenant = contact.tenant_id;
         const displayName = contact.name || senderName || senderEmail;
@@ -378,21 +471,14 @@ async function pollSingleInbox(gmail, tenantId, label) {
           agentId: 'coppice',
         });
 
-        try {
-          await gmail.users.messages.modify({
-            userId: 'me', id: msg.id,
-            requestBody: { removeLabelIds: ['UNREAD'] },
-          });
-        } catch {}
-
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: contactTenant });
         newReplies++;
         continue;
       }
 
-      // Fallback: unmatched email → general handler (auto-reply if enabled)
-      const msgHeaders = full.data.payload?.headers || [];
-      const rfc822MessageId = msgHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
+      // Unmatched email → general handler (auto-reply ONLY if trusted/known AND auto-reply enabled)
+      const rfc822MessageId = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
 
       try {
         await generalEmailHandler({
@@ -404,19 +490,14 @@ async function pollSingleInbox(gmail, tenantId, label) {
           body,
           tenantId: resolvedTenant,
           gmail,
+          classification,
         });
       } catch (err) {
         console.error(`[GmailPoll] [${label}] General handler error:`, err.message);
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'general-error', tenantId: resolvedTenant });
       }
 
-      try {
-        await gmail.users.messages.modify({
-          userId: 'me', id: msg.id,
-          requestBody: { removeLabelIds: ['UNREAD'] },
-        });
-      } catch {}
-
+      try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
       newReplies++;
     }
 

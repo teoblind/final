@@ -28,6 +28,10 @@ import {
   deleteSite,
   insertAuditLog,
   getUserById,
+  getTrustedSenders,
+  addTrustedSender,
+  removeTrustedSender,
+  getEmailSecurityLog,
 } from '../cache/database.js';
 import { generateApiKey } from '../services/authService.js';
 import { sendHtmlEmail } from '../services/emailService.js';
@@ -504,6 +508,91 @@ router.delete('/sites/:id', requirePermission('manageSettings'), (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Delete site error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /email-security/trusted-senders — List Trusted Senders ─────────────
+
+router.get('/email-security/trusted-senders', requirePermission('manageSettings'), (req, res) => {
+  try {
+    const senders = getTrustedSenders(req.user.tenantId);
+    res.json({ trustedSenders: senders });
+  } catch (error) {
+    console.error('List trusted senders error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── POST /email-security/trusted-senders — Add Trusted Sender ──────────────
+
+router.post('/email-security/trusted-senders', requirePermission('manageSettings'), (req, res) => {
+  try {
+    const { email, domain, displayName, trustLevel, notes } = req.body;
+
+    if (!email && !domain) {
+      return res.status(400).json({ error: 'Either email or domain is required' });
+    }
+
+    const result = addTrustedSender({
+      tenantId: req.user.tenantId,
+      email: email || null,
+      domain: domain || null,
+      displayName: displayName || null,
+      trustLevel: trustLevel || 'trusted',
+      notes: notes || null,
+    });
+
+    insertAuditLog({
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      action: 'emailSecurity.addTrustedSender',
+      resourceType: 'email_trusted_sender',
+      resourceId: String(result.lastInsertRowid),
+      details: { email, domain, displayName, trustLevel },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    console.error('Add trusted sender error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── DELETE /email-security/trusted-senders/:id — Remove Trusted Sender ─────
+
+router.delete('/email-security/trusted-senders/:id', requirePermission('manageSettings'), (req, res) => {
+  try {
+    const { id } = req.params;
+    removeTrustedSender(parseInt(id, 10));
+
+    insertAuditLog({
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      action: 'emailSecurity.removeTrustedSender',
+      resourceType: 'email_trusted_sender',
+      resourceId: id,
+      ipAddress: req.ip,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Remove trusted sender error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /email-security/log — View Email Security Log ──────────────────────
+
+router.get('/email-security/log', requirePermission('viewAuditLog'), (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    const log = getEmailSecurityLog(req.user.tenantId, { limit, offset });
+    res.json({ securityLog: log, limit, offset });
+  } catch (error) {
+    console.error('Get email security log error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

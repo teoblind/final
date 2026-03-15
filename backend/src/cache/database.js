@@ -836,6 +836,9 @@ function initSchemaForDb(targetDb) {
   // Initialize auto-replies log table
   initAutoRepliesTable(targetDb);
 
+  // Initialize email trust / anti-spoof tables
+  initEmailTrustTables(targetDb);
+
   // Initialize report comments table
   initReportComments(targetDb);
 
@@ -1075,6 +1078,39 @@ function seedTenantData(targetDb, tenantId) {
 
   // Seed activity log demo data
   initActivityLogSeedData(targetDb, tenantId);
+
+  // Seed trusted senders for email guard
+  initEmailTrustSeedData(targetDb, tenantId);
+}
+
+function initEmailTrustSeedData(targetDb, tenantId) {
+  const count = targetDb.prepare('SELECT COUNT(*) as c FROM email_trusted_senders WHERE tenant_id = ?').get(tenantId);
+  if (count.c > 0) return;
+
+  const insert = targetDb.prepare(
+    'INSERT OR IGNORE INTO email_trusted_senders (tenant_id, email, domain, display_name, trust_level, notes) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+
+  if (tenantId === 'default') {
+    // Sangha internal team — trust by domain and key individuals
+    insert.run('default', null, 'sanghasystems.com', null, 'trusted', 'Sangha Systems internal domain');
+    insert.run('default', null, 'zhan.capital', null, 'trusted', 'Zhan Capital internal domain');
+    insert.run('default', 'teo@zhan.capital', null, 'Teo Blind', 'trusted', 'Founder');
+    insert.run('default', 'spencer@sanghasystems.com', null, 'Spencer Marr', 'trusted', 'CEO');
+    console.log('Email trust: Seeded Sangha trusted senders');
+  }
+
+  if (tenantId === 'dacp-construction-001') {
+    // DACP key GC contacts — trust by domain for known GCs
+    insert.run('dacp-construction-001', null, 'turnerconstruction.com', null, 'trusted', 'Turner Construction — active GC partner');
+    insert.run('dacp-construction-001', null, 'dpr.com', null, 'trusted', 'DPR Construction — active GC partner');
+    insert.run('dacp-construction-001', null, 'austin-ind.com', null, 'trusted', 'Austin Commercial — active GC partner');
+    insert.run('dacp-construction-001', null, 'mccarthy.com', null, 'trusted', 'McCarthy Building — prospective GC');
+    insert.run('dacp-construction-001', null, 'henselphelps.com', null, 'trusted', 'Hensel Phelps — prospective GC');
+    insert.run('dacp-construction-001', null, 'usa.skanska.com', null, 'trusted', 'Skanska USA — prospective GC');
+    insert.run('dacp-construction-001', 'admin@dacp.localhost', null, 'DACP Admin', 'trusted', 'Internal admin account');
+    console.log('Email trust: Seeded DACP trusted senders');
+  }
 }
 
 // Auto-init on import so tables exist before other modules prepare statements
@@ -5061,6 +5097,84 @@ export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailR
       gmail_refresh_token = excluded.gmail_refresh_token,
       updated_at = datetime('now')
   `).run(tenantId, senderEmail, senderName, gmailRefreshToken);
+}
+
+// ─── Email Trust & Anti-Spoofing ─────────────────────────────────────────────
+
+function initEmailTrustTables(targetDb) {
+  // Trusted senders: verified email/domain pairs per tenant
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS email_trusted_senders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      email TEXT,
+      domain TEXT,
+      display_name TEXT,
+      trust_level TEXT NOT NULL DEFAULT 'trusted',
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_trusted_email ON email_trusted_senders(tenant_id, email) WHERE email IS NOT NULL'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_trusted_domain ON email_trusted_senders(tenant_id, domain) WHERE domain IS NOT NULL'); } catch (e) {}
+
+  // Email security log: tracks blocked/flagged emails
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS email_security_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      sender_email TEXT NOT NULL,
+      sender_name TEXT,
+      subject TEXT,
+      verdict TEXT NOT NULL,
+      reason TEXT,
+      auth_results TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_security_log_tenant ON email_security_log(tenant_id, created_at DESC)'); } catch (e) {}
+}
+
+export function getTrustedSenders(tenantId) {
+  return db.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? ORDER BY display_name').all(tenantId);
+}
+
+export function getTrustedSenderByEmail(tenantId, email) {
+  return db.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? AND LOWER(email) = LOWER(?)').get(tenantId, email) || null;
+}
+
+export function getTrustedSenderByDomain(tenantId, domain) {
+  return db.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? AND LOWER(domain) = LOWER(?) LIMIT 1').get(tenantId, domain) || null;
+}
+
+export function addTrustedSender({ tenantId, email, domain, displayName, trustLevel, notes }) {
+  return db.prepare(`
+    INSERT INTO email_trusted_senders (tenant_id, email, domain, display_name, trust_level, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tenantId, email || null, domain || null, displayName || null, trustLevel || 'trusted', notes || null);
+}
+
+export function removeTrustedSender(id) {
+  return db.prepare('DELETE FROM email_trusted_senders WHERE id = ?').run(id);
+}
+
+export function logEmailSecurity({ tenantId, messageId, senderEmail, senderName, subject, verdict, reason, authResults }) {
+  try {
+    db.prepare(`
+      INSERT INTO email_security_log (tenant_id, message_id, sender_email, sender_name, subject, verdict, reason, auth_results)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(tenantId, messageId, senderEmail, senderName || null, subject || null, verdict, reason || null, authResults || null);
+  } catch (e) {
+    console.error('[DB] Failed to log email security event:', e.message);
+  }
+}
+
+export function getEmailSecurityLog(tenantId, { limit = 50, offset = 0 } = {}) {
+  return db.prepare(
+    'SELECT * FROM email_security_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+  ).all(tenantId, limit, offset);
 }
 
 // ─── Accounting Tables ──────────────────────────────────────────────────────
