@@ -3,7 +3,6 @@ import EmptyState from '../ui/EmptyState';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-
 const AGENT_ICON_COLORS = {
   outreach:       { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' },
   curtailment:    { letter: 'C', color: '#b8860b', bg: '#fdf6e8' },
@@ -32,146 +31,13 @@ const INSIGHT_TYPE_STYLES = {
   insight: 'bg-[#edf7f0] text-[#1a6b3c]',
 };
 
-// ─── Insight Modal Content (per agent) ───────────────────────────────────────
-
-const INSIGHT_MODAL_CONTENT = {
-  curtailment: {
-    title: 'Curtailment Revenue Forecast',
-    subtitle: 'Crane County site · ERCOT · Based on 30-day pattern recognition',
-    kpis: [
-      { label: "Yesterday's Revenue", value: '$1,247', delta: '\u2191 in 45 min window', green: true },
-      { label: 'Projected This Week', value: '$3,800', delta: '\u2191 3\u20134 similar windows' },
-      { label: 'Avg Price Threshold', value: '$85/MWh', delta: 'ERCOT real-time' },
-    ],
-    cardsLabel: 'Projected Curtailment Windows This Week',
-    cards: [
-      { label: 'Friday', value: '2:00 PM \u2013 3:15 PM', sub: 'Proj. peak: $118/MWh', highlight: '~$1,400', best: true },
-      { label: 'Saturday', value: '11:30 AM \u2013 12:30 PM', sub: 'Proj. peak: $97/MWh', highlight: '~$980' },
-      { label: 'Sunday', value: '3:30 PM \u2013 4:15 PM', sub: 'Proj. peak: $92/MWh', highlight: '~$720' },
-    ],
-    contextLabel: 'Signal Context',
-    context: [
-      { key: 'Pattern confidence', value: '87% \u2014 12 of 14 similar weeks triggered' },
-      { key: 'Current ERCOT real-time price', value: '$62/MWh \u2014 below threshold', warn: true },
-      { key: 'Next difficulty adjustment', value: '+4.24% \u00b7 913 blocks remaining' },
-      { key: 'Fleet efficiency', value: '28 J/TH \u00b7 P25\u2013P50 (above avg)' },
-      { key: 'S19j Pro fleet curtailable', value: '142 units \u00b7 ~8.2 MW' },
-    ],
-    cta: 'Set Curtailment Alert',
-  },
-  pool: {
-    title: 'Pool Routing Optimization',
-    subtitle: 'Automatic fee analysis across connected pools',
-    kpis: [
-      { label: 'Current Pool', value: 'Foundry', delta: 'Fee: 2.5% (up from 2.0%)' },
-      { label: 'Recommended', value: 'Luxor', delta: 'Fee: 1.8%', green: true },
-      { label: 'Monthly Savings', value: '$340', delta: '\u2191 per month at 15 PH/s', green: true },
-    ],
-    cardsLabel: 'Pool Comparison',
-    cards: [
-      { label: 'Foundry (current)', value: '2.5% fee', sub: 'Uptime: 99.7%', highlight: '$13,600/mo net' },
-      { label: 'Luxor', value: '1.8% fee', sub: 'Uptime: 99.8%', highlight: '$13,940/mo net', best: true },
-      { label: 'Braiins', value: '2.0% fee', sub: 'Uptime: 99.5%', highlight: '$13,780/mo net' },
-    ],
-    contextLabel: 'Routing Details',
-    context: [
-      { key: 'Hashrate to migrate', value: '15 PH/s \u00b7 all S19j Pro units' },
-      { key: 'Foundry fee change', value: '2.0% \u2192 2.5% \u2014 effective next block', warn: true },
-      { key: 'Luxor payout scheme', value: 'FPPS \u00b7 daily payout' },
-      { key: 'Migration downtime', value: '~2 minutes \u00b7 no revenue loss' },
-      { key: 'Annualized savings', value: '~$4,080 at current hashprice' },
-    ],
-    cta: 'Switch to Luxor',
-  },
-  outreach: {
-    title: 'Outreach Performance Analysis',
-    subtitle: 'ERCOT-personalized templates vs. generic \u00b7 last 30 days',
-    kpis: [
-      { label: 'Reply Rate (Before)', value: '5.1%', delta: 'Generic templates' },
-      { label: 'Reply Rate (After)', value: '7.3%', delta: 'ERCOT-personalized', green: true },
-      { label: 'Lift', value: '+43%', delta: '\u2191 relative improvement', green: true },
-    ],
-    cardsLabel: 'Template Performance Breakdown',
-    cards: [
-      { label: 'ERCOT Curtailment', value: '9.2% reply rate', sub: '38 sent \u00b7 top performer', highlight: '3.5 replies', best: true },
-      { label: 'Co-Location Pitch', value: '6.8% reply rate', sub: '44 sent', highlight: '3.0 replies' },
-      { label: 'Generic Intro', value: '4.1% reply rate', sub: '52 sent \u00b7 control', highlight: '2.1 replies' },
-    ],
-    contextLabel: 'Expansion Opportunity',
-    context: [
-      { key: 'PJM leads ready for ERCOT template', value: '47 leads \u00b7 enriched with contacts' },
-      { key: 'Projected additional replies', value: '3\u20134 replies from PJM batch' },
-      { key: 'Best day to send', value: 'Tuesday AM \u00b7 2.1x open rate vs Friday' },
-      { key: 'Current send rate', value: '12 emails/day \u00b7 within safe limit' },
-    ],
-    cta: 'Apply to PJM Leads',
-  },
-  hivemind: {
-    title: 'Operator Thread: Break-Even Pricing',
-    subtitle: 'Question from Google Chat \u00b7 auto-answered by Hivemind',
-    kpis: [
-      { label: 'Break-Even Price', value: '$0.068', delta: 'per kWh at current difficulty', green: true },
-      { label: 'Current Hashprice', value: '$48.20', delta: 'per PH/s/day' },
-      { label: 'Fleet Model', value: 'S19 XP', delta: '140 TH/s \u00b7 21.5 J/TH' },
-    ],
-    cardsLabel: 'Sensitivity Analysis',
-    cards: [
-      { label: 'Optimistic (+10% BTC)', value: '$0.074/kWh', sub: 'Break-even rises', highlight: '+8.8% margin', best: true },
-      { label: 'Base Case', value: '$0.068/kWh', sub: 'Current conditions', highlight: 'Break-even' },
-      { label: 'Pessimistic (-10% BTC)', value: '$0.061/kWh', sub: 'Break-even falls', highlight: '\u22126.2% margin' },
-    ],
-    contextLabel: 'Calculation Inputs',
-    context: [
-      { key: 'BTC price', value: '$67,420 \u00b7 spot' },
-      { key: 'Network difficulty', value: '83.95T \u00b7 next adj. +4.24%' },
-      { key: 'Pool fee (Foundry)', value: '2.5% FPPS' },
-      { key: 'Hosting / infra cost', value: '$0.012/kWh overhead' },
-      { key: 'Operator asked', value: 'Mar 10 \u00b7 Google Chat' },
-    ],
-    cta: 'View Full Thread',
-  },
-  meetings: {
-    title: 'Overdue Action Item',
-    subtitle: 'From: Reassurity Product Strategy Call \u00b7 March 3, 2026',
-    kpis: [
-      { label: 'Days Overdue', value: '4', delta: 'Assigned Mar 3', warn: true },
-      { label: 'Assigned To', value: 'You' },
-      { label: 'Meeting', value: 'Reassurity', delta: '42 min \u00b7 6 attendees' },
-    ],
-    cardsLabel: 'All Action Items from This Meeting',
-    cards: [
-      { label: 'You', value: 'Revise energy pricing \u00a74.2', sub: 'Oberon deal memo', highlight: '4 days overdue', best: false },
-      { label: 'You', value: 'Send site KMZ to Kishan', sub: 'Hanwha project', highlight: '2 days overdue' },
-      { label: 'Ops Team', value: 'Schedule Crane County visit', sub: 'Site inspection', highlight: 'On track' },
-    ],
-    contextLabel: 'Meeting Details',
-    context: [
-      { key: 'Date', value: 'March 3, 2026 \u00b7 10:00 AM' },
-      { key: 'Duration', value: '42 minutes' },
-      { key: 'Attendees', value: 'Spencer, Teo, Kishan, Colin, Mihir, Alex' },
-      { key: 'Key decision', value: 'Parametric trigger on ERCOT node prices' },
-      { key: 'Next check-in', value: 'March 14 \u00b7 calendar invite sent' },
-    ],
-    cta: 'Mark as Done',
-  },
-};
-
-// ─── Demo Data ──────────────────────────────────────────────────────────────
+// ─── Structural Defaults ─────────────────────────────────────────────────────
 
 const DEFAULT_METRICS = [
   { label: 'Leads', value: '—', delta: 'loading...', type: 'flat', bar: 0 },
   { label: 'Outreach', value: '—', delta: '', type: 'flat', bar: 0 },
   { label: 'Replies', value: '—', delta: '', type: 'flat', bar: 0 },
   { label: 'Meetings', value: '—', delta: '', type: 'flat', bar: 0 },
-];
-
-const ACTIVITY_FALLBACK = [
-  { id: 0, type: 'out', title: 'Outreach sent to James Torres, VP Ops at SunPeak Energy', subtitle: 'Personalized re: ERCOT curtailment patterns on their Crane County site', time: '2m', hasDetail: false },
-  { id: 1, type: 'meet', title: 'Transcribed: Reassurity Product Strategy Call', subtitle: '42 min \u2014 6 attendees \u2014 4 action items extracted', time: '1h', hasDetail: false },
-  { id: 2, type: 'lead', title: '12 new leads discovered \u2014 PJM region', subtitle: 'Solar IPPs with merchant exposure, 50 MW+ capacity', time: '3h', hasDetail: false },
-  { id: 3, type: 'in', title: 'Reply received: Sarah Chen, CFO at Meridian Renewables', subtitle: 'Interested in behind-the-meter mining conversation', time: '5h', hasDetail: false },
-  { id: 4, type: 'doc', title: 'Commented on Oberon Deal Memo v3', subtitle: 'Notes on revised energy pricing assumptions in section 4.2', time: '6h', hasDetail: false },
-  { id: 5, type: 'out', title: 'Follow-up drafted for Mark Liu at GridScale Partners', subtitle: 'Awaiting approval \u2014 5 days since last contact', time: '7h', hasDetail: false },
 ];
 
 const AGENTS_TEMPLATE = [
@@ -194,22 +60,6 @@ const DEFAULT_PIPELINE = [
 ];
 
 const FOLLOWUPS = [];
-
-const WEEKLY = [
-  { label: 'Emails Sent', value: '12' },
-  { label: 'Meetings Captured', value: '2' },
-  { label: 'Docs Reviewed', value: '3' },
-  { label: 'Action Items Open', value: '6', color: 'warn' },
-  { label: 'Monthly API Spend', value: '$4.22', color: 'green' },
-];
-
-const HUBSPOT_DEMO_PIPELINE = [
-  { stage: 'Discovery', count: 6, value: '$800K' },
-  { stage: 'Qualification', count: 4, value: '$600K' },
-  { stage: 'Proposal', count: 3, value: '$700K' },
-  { stage: 'Negotiation', count: 2, value: '$450K' },
-  { stage: 'Closed Won', count: 1, value: '$300K' },
-];
 
 // ─── Indicator Colors ───────────────────────────────────────────────────────
 
@@ -349,7 +199,7 @@ export default function CommandDashboard({ onNavigate }) {
   const [toast, setToast] = useState(null);
   const [hubspotPipeline, setHubspotPipeline] = useState(null);
   const [actionItems, setActionItems] = useState([]);
-  const [activities, setActivities] = useState(ACTIVITY_FALLBACK);
+  const [activities, setActivities] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
   const [expandedDetail, setExpandedDetail] = useState(null);
   const [insightModal, setInsightModal] = useState(null);
@@ -472,9 +322,9 @@ export default function CommandDashboard({ onNavigate }) {
           }
         } catch {}
 
-        setInsights(mapped.length > 0 ? mapped : AGENT_INSIGHTS);
+        setInsights(mapped);
       } catch {
-        setInsights(AGENT_INSIGHTS);
+        setInsights([]);
       }
     }
     fetchApprovals();
@@ -488,7 +338,7 @@ export default function CommandDashboard({ onNavigate }) {
         const res = await fetch(`${API_BASE}/v1/activity?limit=20`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.activities?.length > 0) setActivities(data.activities);
+        setActivities(data.activities || []);
       } catch {}
     }
     fetchActivities();
@@ -498,26 +348,15 @@ export default function CommandDashboard({ onNavigate }) {
 
   // Fetch action items
   useEffect(() => {
-    const DEMO_ACTION_ITEMS = [
-      { id: 'ACT-MTG-001', assignee: 'Spencer', title: 'Send Hanwha KMZ files to Kishan for site analysis', due_date: '2026-03-10', status: 'open' },
-      { id: 'ACT-MTG-002', assignee: 'Spencer', title: 'Schedule Fusion Energy strategy call with Colin', due_date: '2026-03-11', status: 'open' },
-      { id: 'ACT-MTG-003', assignee: 'Spencer', title: 'Call Connor re: Auradyne delivery timeline', due_date: '2026-03-10', status: 'open' },
-      { id: 'ACT-MTG-004', assignee: 'Spencer', title: 'Prep for Minneapolis investor meetings', due_date: '2026-03-14', status: 'open' },
-      { id: 'ACT-MTG-005', assignee: 'Spencer', title: 'Review March forecast with Mihir', due_date: '2026-03-12', status: 'open' },
-      { id: 'ACT-MTG-006', assignee: 'Mihir', title: 'Send investor tax K-1 notification email', due_date: '2026-03-11', status: 'open' },
-      { id: 'ACT-MTG-007', assignee: 'Mihir', title: 'Reconcile March forecast vs actuals', due_date: '2026-03-14', status: 'open' },
-      { id: 'ACT-MTG-008', assignee: 'Mihir', title: 'Resolve South Dakota energy billing discrepancy', due_date: '2026-03-12', status: 'open' },
-      { id: 'ACT-MTG-009', assignee: 'Colin', title: 'Send cap table update email to investors', due_date: '2026-03-11', status: 'open' },
-      { id: 'ACT-MTG-010', assignee: 'Colin', title: 'Update investor financial model with new fund terms', due_date: '2026-03-14', status: 'open' },
-    ];
     async function fetchActionItems() {
       try {
         const res = await fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`);
         if (!res.ok) throw new Error();
         const items = await res.json();
-        if (items.length > 0) { setActionItems(items); return; }
-      } catch {}
-      setActionItems(DEMO_ACTION_ITEMS);
+        setActionItems(items);
+      } catch {
+        setActionItems([]);
+      }
     }
     fetchActionItems();
   }, []);
@@ -717,7 +556,9 @@ export default function CommandDashboard({ onNavigate }) {
                 <span className="text-[11px] text-terminal-muted">From leadership sync</span>
               </div>
               <div className="px-[18px] py-2">
-                {order.map((assignee) => {
+                {actionItems.length === 0 ? (
+                  <EmptyState icon="users" title="No action items" subtitle="Action items from meetings and agents will appear here." compact />
+                ) : order.map((assignee) => {
                   const meta = ASSIGNEE_META[assignee] || { full: assignee, role: '', color: '#6b6b65' };
                   return (
                     <div key={assignee} className="mb-3 last:mb-1">
@@ -773,7 +614,9 @@ export default function CommandDashboard({ onNavigate }) {
             </div>
           </div>
           <div>
-            {approvals.map((item) => (
+            {approvals.length === 0 ? (
+              <EmptyState icon="shield" title="No pending approvals" subtitle="Agent actions requiring your review will appear here." compact />
+            ) : approvals.map((item) => (
               <div key={item.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
                 <span
                   className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
@@ -810,7 +653,9 @@ export default function CommandDashboard({ onNavigate }) {
             </div>
           </div>
           <div>
-            {insights.map((item) => {
+            {insights.length === 0 ? (
+              <EmptyState icon="zap" title="No agent insights" subtitle="Recommendations and patterns from your agents will appear here." compact />
+            ) : insights.map((item) => {
               const iconCfg = AGENT_ICON_COLORS[item.agent];
               return (
                 <div key={item.id} className="px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
@@ -852,7 +697,7 @@ export default function CommandDashboard({ onNavigate }) {
             </span>
           </div>
           <div>
-            {(hubspotPipeline || HUBSPOT_DEMO_PIPELINE).map((row, i) => (
+            {hubspotPipeline ? hubspotPipeline.map((row, i) => (
               <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
                 <span className="text-[#6b6b65]">{row.stage}</span>
                 <div className="flex items-center gap-3">
@@ -860,7 +705,9 @@ export default function CommandDashboard({ onNavigate }) {
                   <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
                 </div>
               </div>
-            ))}
+            )) : (
+              <EmptyState icon="chart" title="HubSpot not connected" subtitle="Connect your HubSpot CRM to see deal pipeline." compact />
+            )}
           </div>
         </div>
       </div>
@@ -876,7 +723,9 @@ export default function CommandDashboard({ onNavigate }) {
             <span className="text-[11px] text-terminal-muted">All agents</span>
           </div>
           <div>
-            {(() => {
+            {activities.length === 0 ? (
+              <EmptyState icon="activity" title="No activity yet" subtitle="Agent actions and events will appear here as they happen." compact />
+            ) : (() => {
               // Group consecutive activities with same title+subtitle
               const grouped = [];
               for (const item of activities) {
@@ -1002,86 +851,15 @@ export default function CommandDashboard({ onNavigate }) {
                     {insightModal.agentLabel} · {insightModal.type}
                   </span>
                 </div>
-                <h2 className="text-[20px] font-semibold text-terminal-text leading-[1.2] mb-1">{INSIGHT_MODAL_CONTENT[insightModal.agent]?.title || insightModal.title}</h2>
-                <p className="text-[12px] text-[#9a9a92]">{INSIGHT_MODAL_CONTENT[insightModal.agent]?.subtitle || ''}</p>
+                <h2 className="text-[20px] font-semibold text-terminal-text leading-[1.2] mb-1">{insightModal.title}</h2>
               </div>
               <button onClick={() => setInsightModal(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] border border-[#f0eeea] hover:bg-[#f5f4f0] hover:text-terminal-text transition-colors text-base shrink-0">&times;</button>
             </div>
 
-            {/* KPI Strip */}
-            {INSIGHT_MODAL_CONTENT[insightModal.agent]?.kpis && (
-              <div className="grid border-b border-[#f0eeea]" style={{ gridTemplateColumns: `repeat(${INSIGHT_MODAL_CONTENT[insightModal.agent].kpis.length}, 1fr)`, gap: '1px', background: '#f0eeea' }}>
-                {INSIGHT_MODAL_CONTENT[insightModal.agent].kpis.map((kpi, i) => (
-                  <div key={i} className="bg-white px-6 py-[18px]">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-1.5">{kpi.label}</div>
-                    <div className={`text-[22px] font-bold tabular-nums leading-none ${kpi.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{kpi.value}</div>
-                    {kpi.delta && <div className="text-[11px] text-[#1a6b3c] font-medium mt-1">{kpi.delta}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Chart (curtailment only) */}
-            {insightModal.agent === 'curtailment' && (
-              <div className="px-7 pt-5 pb-4 border-b border-[#f0eeea]">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-4">7-Day Price Forecast ($/MWh) · Curtailment Windows Highlighted</div>
-                <svg viewBox="0 0 620 140" className="w-full h-[140px]">
-                  <defs>
-                    <linearGradient id="igArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1a6b3c" stopOpacity="0.18"/><stop offset="100%" stopColor="#1a6b3c" stopOpacity="0"/></linearGradient>
-                    <linearGradient id="igWin" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1a6b3c" stopOpacity="0.1"/><stop offset="100%" stopColor="#1a6b3c" stopOpacity="0.02"/></linearGradient>
-                  </defs>
-                  <line x1="0" y1="28" x2="620" y2="28" stroke="#f0eeea" /><line x1="0" y1="56" x2="620" y2="56" stroke="#f0eeea" /><line x1="0" y1="84" x2="620" y2="84" stroke="#f0eeea" /><line x1="0" y1="112" x2="620" y2="112" stroke="#f0eeea" />
-                  <line x1="0" y1="42" x2="620" y2="42" stroke="#b8860b" strokeWidth="1" strokeDasharray="4 4" opacity="0.5"/>
-                  <text x="4" y="39" fontFamily="monospace" fontSize="8" fill="#b8860b" opacity="0.7">$85 threshold</text>
-                  <text x="596" y="31" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$120</text>
-                  <text x="596" y="59" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$90</text>
-                  <text x="596" y="87" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$60</text>
-                  <text x="596" y="115" fontFamily="monospace" fontSize="8" fill="#c5c5bc" textAnchor="end">$30</text>
-                  <rect x="110" y="0" width="44" height="140" fill="url(#igWin)" rx="2"/><rect x="290" y="0" width="38" height="140" fill="url(#igWin)" rx="2"/><rect x="460" y="0" width="42" height="140" fill="url(#igWin)" rx="2"/>
-                  <path d="M0,95 C20,92 40,88 60,80 C80,72 90,60 110,38 C130,18 140,28 154,48 C168,68 180,85 200,90 C220,95 250,92 270,88 C280,86 286,82 290,68 C298,48 310,35 328,55 C336,65 345,82 360,86 C380,90 410,88 430,85 C450,82 456,78 460,62 C468,42 475,30 502,52 C512,60 518,72 535,80 C552,88 580,90 620,88 L620,140 L0,140 Z" fill="url(#igArea)"/>
-                  <path d="M0,95 C20,92 40,88 60,80 C80,72 90,60 110,38 C130,18 140,28 154,48 C168,68 180,85 200,90 C220,95 250,92 270,88 C280,86 286,82 290,68 C298,48 310,35 328,55 C336,65 345,82 360,86 C380,90 410,88 430,85 C450,82 456,78 460,62 C468,42 475,30 502,52 C512,60 518,72 535,80 C552,88 580,90 620,88" fill="none" stroke="#1a6b3c" strokeWidth="1.5"/>
-                  <circle cx="132" cy="18" r="4" fill="#1a6b3c"/><circle cx="310" cy="35" r="4" fill="#1a6b3c"/><circle cx="477" cy="30" r="4" fill="#1a6b3c"/>
-                  <circle cx="132" cy="18" r="7" fill="none" stroke="#1a6b3c" strokeWidth="1" opacity="0.4"/>
-                  <text x="132" y="12" fontFamily="monospace" fontSize="7" fill="#1a6b3c" textAnchor="middle">$1,247</text>
-                </svg>
-                <div className="flex justify-between pt-1.5">
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d, i) => (
-                    <span key={d} className={`font-mono text-[10px] ${[1,4,6].includes(i) ? 'text-[#1a6b3c] font-medium' : 'text-[#c5c5bc]'}`}>
-                      {d}{i === 1 ? ' \u2190 yesterday' : ''}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Detail Cards */}
-            {INSIGHT_MODAL_CONTENT[insightModal.agent]?.cards && (
+            {/* Body */}
+            {insightModal.body && (
               <div className="px-7 py-5 border-b border-[#f0eeea]">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-3.5">{INSIGHT_MODAL_CONTENT[insightModal.agent].cardsLabel}</div>
-                <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${INSIGHT_MODAL_CONTENT[insightModal.agent].cards.length}, 1fr)` }}>
-                  {INSIGHT_MODAL_CONTENT[insightModal.agent].cards.map((card, i) => (
-                    <div key={i} className={`rounded-lg border p-3.5 ${card.best ? 'border-[#1a6b3c]/30 bg-[#edf7f0]/50' : 'border-[#f0eeea] bg-[#fafaf8]'}`}>
-                      {card.best && <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#1a6b3c] bg-[#edf7f0] border border-[#d4edda] rounded px-1.5 py-[1px] inline-block mb-1.5">Best</span>}
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[#9a9a92] mb-1">{card.label}</div>
-                      <div className="font-mono text-[13px] text-terminal-text mb-2">{card.value}</div>
-                      {card.sub && <div className="text-[11px] text-[#9a9a92] mb-1">{card.sub}</div>}
-                      <div className="font-mono text-[15px] font-medium text-[#1a6b3c]">{card.highlight}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Context Rows */}
-            {INSIGHT_MODAL_CONTENT[insightModal.agent]?.context && (
-              <div className="px-7 py-5 border-b border-[#f0eeea]">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9a9a92] mb-3">{INSIGHT_MODAL_CONTENT[insightModal.agent].contextLabel || 'Signal Context'}</div>
-                {INSIGHT_MODAL_CONTENT[insightModal.agent].context.map((row, i) => (
-                  <div key={i} className="flex justify-between items-center py-2.5 border-b border-[#f5f4f0] last:border-b-0 text-[12px]">
-                    <span className="text-[#9a9a92]">{row.key}</span>
-                    <span className={`font-mono text-[11px] ${row.warn ? 'text-[#b8860b]' : 'text-terminal-text'}`}>{row.value}</span>
-                  </div>
-                ))}
+                <div className="text-[13px] text-terminal-text leading-[1.6]" dangerouslySetInnerHTML={{ __html: insightModal.body }} />
               </div>
             )}
 
@@ -1100,7 +878,7 @@ export default function CommandDashboard({ onNavigate }) {
                   className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-[#1a6b3c] text-white hover:bg-[#22884d] transition-colors flex items-center gap-1.5"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  {INSIGHT_MODAL_CONTENT[insightModal.agent]?.cta || 'Got it'}
+                  Got it
                 </button>
               </div>
             </div>

@@ -1179,8 +1179,7 @@ function seedTenantData(targetDb, tenantId) {
   // Seed demo data via the existing initDacpTables seed logic (called per-tenant)
   initDacpSeedData(targetDb, tenantId);
 
-  // Seed activity log demo data
-  initActivityLogSeedData(targetDb, tenantId);
+  // Activity log seed data disabled — dashboards now show EmptyState when empty
 
   // Seed trusted senders for email guard
   initEmailTrustSeedData(targetDb, tenantId);

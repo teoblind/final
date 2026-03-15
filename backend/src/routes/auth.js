@@ -442,6 +442,36 @@ router.get('/me', authenticate, (req, res) => {
   }
 });
 
+// ─── GET /my-tenants ─────────────────────────────────────────────────────────
+
+router.get('/my-tenants', authenticate, (req, res) => {
+  try {
+    const user = getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Find all tenant memberships for this email
+    const users = getUsersByEmail(user.email);
+    const tenants = users.map(u => {
+      const t = getTenant(u.tenant_id);
+      return {
+        id: u.tenant_id,
+        slug: t?.slug,
+        name: t?.name,
+        subdomain: getSubdomainForSlug(t?.slug || u.tenant_id),
+        role: u.role,
+        status: u.status,
+      };
+    }).filter(t => t.status === 'active');
+
+    res.json({ tenants });
+  } catch (error) {
+    console.error('Get my tenants error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── GET /sessions ──────────────────────────────────────────────────────────
 
 router.get('/sessions', authenticate, (req, res) => {
