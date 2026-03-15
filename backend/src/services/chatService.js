@@ -597,7 +597,7 @@ const EMAIL_TOOLS = [
 
 const EMAIL_PROMPT_ADDON = `
 
-You have full email access via agent@sangha.coppice.ai. You can:
+You have full email access via agent@zhan.coppice.ai. You can:
 - Send emails on behalf of the team (send_email)
 - Check the inbox and search for emails (list_emails)
 - Read the full content of any email (read_email)
@@ -969,7 +969,7 @@ You can help with:
 - IPP mine specification analysis — use the generate_mine_specs tool when someone asks about behind-the-meter mining economics, IPP evaluation, or mine specs for a given facility. Provide capacity (MW) at minimum. The tool returns fleet sizing, revenue projections (bull/base/bear hashprice scenarios), infrastructure requirements, and an Excel report.
 - Answering questions about meetings, action items, people, companies, and deal status
 
-You have full email access via agent@sangha.coppice.ai — you can send emails, check the inbox, read messages, and manage correspondence on behalf of the team.
+You have full email access via agent@zhan.coppice.ai — you can send emails, check the inbox, read messages, and manage correspondence on behalf of the team.
 
 You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files. You can generate full branded presentations with custom styling — just provide the topic and context.
 

@@ -2,7 +2,7 @@
  * Gmail Inbox Polling Job
  *
  * Polls for unread emails across all configured tenant inboxes + the default
- * coppice@zhan.capital inbox. Matches senders to known contacts, detects
+ * agent@zhan.coppice.ai inbox. Matches senders to known contacts, detects
  * RFQ/bid requests and IPP inquiries, and routes them through pipelines.
  */
 
@@ -35,10 +35,10 @@ function makeGmailClient(refreshToken) {
 function getInboxes() {
   const inboxes = [];
 
-  // Default inbox (coppice@zhan.capital from env vars)
+  // Default inbox (agent@zhan.coppice.ai from env vars)
   const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
   if (defaultToken) {
-    inboxes.push({ tenantId: null, label: 'coppice@zhan.capital', gmail: makeGmailClient(defaultToken) });
+    inboxes.push({ tenantId: null, label: 'agent@zhan.coppice.ai', gmail: makeGmailClient(defaultToken) });
   }
 
   // Tenant inboxes from each tenant DB

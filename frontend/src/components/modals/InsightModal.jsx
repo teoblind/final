@@ -326,7 +326,7 @@ function SendReminderModal({ onClose, onAction }) {
       </div>
 
       <div className="text-[12px] text-[#9a9a92] leading-[1.5] mt-3 p-[10px_14px] bg-[#f5f4f0] rounded-lg border border-[#f0eeea]">
-        This email will be sent from claude@zhan.capital (demo) or coppice@dacpconstruction.com (production). Logged to audit trail.
+        This email will be sent from agent@zhan.coppice.ai. Logged to audit trail.
       </div>
     </ModalShell>
   );

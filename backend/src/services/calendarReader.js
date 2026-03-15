@@ -1,6 +1,6 @@
 /**
- * Reads calendar events via coppice@zhan.capital OAuth token.
- * Users share their calendar with coppice@zhan.capital — no weird service account emails.
+ * Reads calendar events via agent@zhan.coppice.ai OAuth token.
+ * Users share their calendar with agent@zhan.coppice.ai — no weird service account emails.
  */
 
 import { google } from 'googleapis';

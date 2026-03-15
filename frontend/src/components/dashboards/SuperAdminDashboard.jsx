@@ -1487,7 +1487,7 @@ function SettingsPage() {
         <SettingsSection title="Email Configuration" desc="Outbound email settings for all agent communications.">
           <SettingsCard>
             <SettingRow label="Sender Email" desc="Gmail account used for outbound emails">
-              <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[240px] outline-none focus:border-[#3b82f6]" defaultValue="claude@zhan.capital" />
+              <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[240px] outline-none focus:border-[#3b82f6]" defaultValue="agent@zhan.coppice.ai" />
             </SettingRow>
             <SettingRow label="Global Rate Limit" desc="Maximum emails per hour across all tenants">
               <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[60px] text-center outline-none focus:border-[#3b82f6]" defaultValue="30" />

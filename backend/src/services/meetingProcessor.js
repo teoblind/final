@@ -139,7 +139,7 @@ async function sendMeetingEmails({ meetingTitle, result, attendees }) {
 
   for (const email of attendees) {
     // Skip coppice's own email
-    if (email === 'coppice@zhan.capital' || email === 'claude@zhan.capital') continue;
+    if (email === 'agent@zhan.coppice.ai' || email === 'coppice@zhan.capital' || email === 'claude@zhan.capital') continue;
 
     const personData = result.attendee_tasks?.[email];
     const name = personData?.name || email.split('@')[0];

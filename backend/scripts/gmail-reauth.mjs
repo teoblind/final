@@ -31,9 +31,9 @@ const authUrl = oauth2Client.generateAuthUrl({
   prompt: 'consent',
 });
 
-console.log('\n📧 Gmail Re-Auth — coppice@zhan.capital');
+console.log('\n📧 Gmail Re-Auth — agent@zhan.coppice.ai');
 console.log('========================================\n');
-console.log('Open this URL in your browser (sign in as coppice@zhan.capital):\n');
+console.log('Open this URL in your browser (sign in as agent@zhan.coppice.ai):\n');
 console.log(authUrl);
 console.log('\nWaiting for OAuth callback on http://localhost:8099...\n');
 

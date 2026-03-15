@@ -2,7 +2,7 @@
  * Email Service — Multi-tenant Gmail API sender
  *
  * Each tenant can have its own Gmail account (sender email + refresh token).
- * Falls back to the default coppice@zhan.capital account from env vars.
+ * Falls back to the default agent@zhan.coppice.ai account from env vars.
  */
 
 import { google } from 'googleapis';
@@ -19,7 +19,7 @@ const __dirname = dirname(__filename);
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
 const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
 const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
-const FALLBACK_SENDER = 'Coppice <coppice@zhan.capital>';
+const FALLBACK_SENDER = 'Coppice <agent@zhan.coppice.ai>';
 
 /**
  * Get a Gmail client + sender identity for a tenant.
