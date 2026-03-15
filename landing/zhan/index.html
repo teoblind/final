@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Zhan Capital — Sign in</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: #111;
+    min-height: 100vh;
+    display: flex;
+  }
+  .left {
+    flex: 1;
+    background: #141414;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 40px 48px;
+    position: relative;
+    overflow: hidden;
+    border-right: 0.5px solid #1e1e1e;
+  }
+  .left::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+  .left::after {
+    content: '';
+    position: absolute;
+    top: -120px;
+    right: -120px;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(160,160,140,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .left-top { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
+  .logo-mark { width: 30px; height: 30px; border-radius: 6px; background: #1e1e1e; border: 0.5px solid #2a2a2a; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #888; letter-spacing: 0.04em; }
+  .logo-name { font-size: 14px; font-weight: 500; color: #c8c4bc; letter-spacing: 0.02em; }
+  .left-middle { position: relative; z-index: 1; }
+  .tagline-label { font-size: 10px; color: #3a3a3a; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 18px; }
+  .tagline { font-size: 42px; font-weight: 400; color: #c8c4bc; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 20px; }
+  .tagline em { font-style: italic; color: #666; }
+  .tagline-sub { font-size: 13px; color: #3a3a3a; line-height: 1.7; max-width: 380px; }
+  .stats-row { display: flex; gap: 36px; position: relative; z-index: 1; }
+  .stat-item { display: flex; flex-direction: column; gap: 3px; }
+  .stat-num { font-size: 20px; font-weight: 500; color: #888; letter-spacing: -0.01em; }
+  .stat-label { font-size: 10px; color: #2e2e2e; letter-spacing: 0.06em; text-transform: uppercase; }
+  .left-bottom { font-size: 10px; color: #242424; position: relative; z-index: 1; }
+  .right { width: 460px; min-width: 460px; background: #0e0e0e; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 52px; }
+  .sign-in-box { width: 100%; max-width: 340px; }
+  .sign-in-title { font-size: 20px; font-weight: 500; color: #d8d4cc; margin-bottom: 6px; letter-spacing: -0.01em; }
+  .sign-in-sub { font-size: 12px; color: #3a3a3a; margin-bottom: 28px; }
+  .field-group { margin-bottom: 14px; }
+  .field-label { font-size: 11px; color: #555; margin-bottom: 6px; display: block; letter-spacing: 0.02em; }
+  input[type="email"], input[type="password"], input[type="text"] { width: 100%; background: #141414; border: 0.5px solid #2a2a2a; border-radius: 6px; padding: 9px 12px; font-size: 13px; color: #c8c4bc; outline: none; transition: border-color 0.15s; font-family: inherit; }
+  input:focus { border-color: #444; }
+  input::placeholder { color: #2e2e2e; }
+  .field-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .forgot { font-size: 11px; color: #3a5a3a; text-decoration: none; cursor: pointer; }
+  .forgot:hover { color: #4a7a4a; }
+  .remember-row { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+  .remember-row input[type="checkbox"] { width: 14px; height: 14px; accent-color: #4a7a4a; }
+  .remember-row label { font-size: 11px; color: #3a3a3a; cursor: pointer; }
+  .btn-continue { width: 100%; background: #1a2a1a; border: 0.5px solid #2a3a2a; border-radius: 6px; padding: 10px; font-size: 13px; font-weight: 500; color: #4a8a5a; cursor: pointer; font-family: inherit; letter-spacing: 0.01em; transition: all 0.15s; margin-bottom: 16px; }
+  .btn-continue:hover { background: #1e3020; border-color: #3a4a3a; color: #5a9a6a; }
+  .or-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .or-line { flex: 1; height: 0.5px; background: #1e1e1e; }
+  .or-text { font-size: 10px; color: #2a2a2a; letter-spacing: 0.06em; text-transform: uppercase; }
+  .oauth-row { display: flex; gap: 10px; margin-bottom: 24px; }
+  .btn-oauth { flex: 1; background: #141414; border: 0.5px solid #222; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #555; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; font-family: inherit; transition: all 0.15s; }
+  .btn-oauth:hover { border-color: #333; color: #888; background: #1a1a1a; }
+  .oauth-icon { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .no-account { font-size: 11px; color: #2a2a2a; text-align: center; }
+  .no-account a { color: #3a5a3a; text-decoration: none; cursor: pointer; }
+  .no-account a:hover { color: #4a7a4a; }
+  .powered { margin-top: 32px; font-size: 10px; color: #1e1e1e; text-align: center; letter-spacing: 0.04em; }
+  .powered span { color: #2a2a2a; }
+  .error-msg { background: #2a1a1a; border: 0.5px solid #3a2020; color: #c84a4a; font-size: 12px; padding: 8px 12px; border-radius: 6px; margin-bottom: 14px; display: none; }
+  .success-msg { background: #1a2a1a; border: 0.5px solid #2a3a2a; color: #4a8a5a; font-size: 12px; padding: 8px 12px; border-radius: 6px; margin-bottom: 14px; display: none; }
+  .btn-continue:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* Forgot password mode */
+  .forgot-mode .password-field,
+  .forgot-mode .remember-row,
+  .forgot-mode .or-row,
+  .forgot-mode .oauth-row { display: none !important; }
+  .back-link { font-size: 11px; color: #3a5a3a; text-decoration: none; cursor: pointer; text-align: center; display: block; margin-top: 16px; }
+  .back-link:hover { color: #4a7a4a; }
+  @media (max-width: 800px) { .left { display: none; } .right { width: 100%; min-width: unset; } }
+</style>
+</head>
+<body>
+<div class="left">
+  <div class="left-top">
+    <div class="logo-mark">ZC</div>
+    <div class="logo-name">Zhan Capital</div>
+  </div>
+  <div class="left-middle">
+    <div class="tagline-label">Family Office Intelligence</div>
+    <div class="tagline">Your portfolio,<br/><em>always working.</em></div>
+    <div class="tagline-sub">AI agents monitoring portfolio companies, managing LP relations, processing deal flow, and running fund operations — around the clock, without a full team.</div>
+  </div>
+  <div class="stats-row">
+    <div class="stat-item"><div class="stat-num">24/7</div><div class="stat-label">Monitoring</div></div>
+    <div class="stat-item"><div class="stat-num">3</div><div class="stat-label">Companies</div></div>
+    <div class="stat-item"><div class="stat-num">&lt;1s</div><div class="stat-label">Response time</div></div>
+    <div class="stat-item"><div class="stat-num">1</div><div class="stat-label">Operator</div></div>
+  </div>
+  <div class="left-bottom">&copy; 2026 Zhan Capital &middot; Powered by Coppice</div>
+</div>
+<div class="right">
+  <div class="sign-in-box">
+    <div class="sign-in-title" id="formTitle">Sign in</div>
+    <div class="sign-in-sub" id="formSub">Enter your credentials to continue</div>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="success-msg" id="successMsg"></div>
+    <form id="loginForm">
+      <div class="field-group">
+        <label class="field-label">Email address</label>
+        <input type="email" id="email" placeholder="you@zhan.capital" required />
+      </div>
+      <div class="field-group password-field">
+        <div class="field-row">
+          <label class="field-label" style="margin-bottom:0">Password</label>
+          <a class="forgot" id="forgotLink">Forgot?</a>
+        </div>
+        <input type="password" id="password" placeholder="Enter password" required />
+      </div>
+      <div class="remember-row">
+        <input type="checkbox" id="remember" />
+        <label for="remember">Remember me</label>
+      </div>
+      <button type="submit" class="btn-continue" id="submitBtn">Continue</button>
+    </form>
+    <a class="back-link" id="backLink" style="display:none">Back to sign in</a>
+    <div class="or-row"><div class="or-line"></div><div class="or-text">or</div><div class="or-line"></div></div>
+    <div class="oauth-row">
+      <button class="btn-oauth" id="googleBtn">
+        <div class="oauth-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+        </div>
+        Google
+      </button>
+      <button class="btn-oauth" disabled style="opacity:0.3;cursor:not-allowed">
+        <div class="oauth-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#888">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+        </div>
+        GitHub
+      </button>
+    </div>
+    <div class="no-account">No account yet? <a href="mailto:teo@zhan.capital">Request access</a></div>
+    <div class="powered">Powered by <span>Coppice</span></div>
+  </div>
+</div>
+<script>
+(function() {
+  var mode = 'login'; // 'login' | 'forgot'
+  var form = document.getElementById('loginForm');
+  var emailInput = document.getElementById('email');
+  var passwordInput = document.getElementById('password');
+  var submitBtn = document.getElementById('submitBtn');
+  var errorEl = document.getElementById('errorMsg');
+  var successEl = document.getElementById('successMsg');
+  var forgotLink = document.getElementById('forgotLink');
+  var backLink = document.getElementById('backLink');
+  var formTitle = document.getElementById('formTitle');
+  var formSub = document.getElementById('formSub');
+  var googleBtn = document.getElementById('googleBtn');
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+    successEl.style.display = 'none';
+  }
+
+  function showSuccess(msg) {
+    successEl.textContent = msg;
+    successEl.style.display = 'block';
+    errorEl.style.display = 'none';
+  }
+
+  function clearMessages() {
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+  }
+
+  function setMode(newMode) {
+    mode = newMode;
+    clearMessages();
+    if (mode === 'forgot') {
+      document.body.classList.add('forgot-mode');
+      formTitle.textContent = 'Reset password';
+      formSub.textContent = 'Enter your email to receive a reset link';
+      submitBtn.textContent = 'Send Reset Link';
+      passwordInput.removeAttribute('required');
+      backLink.style.display = 'block';
+    } else {
+      document.body.classList.remove('forgot-mode');
+      formTitle.textContent = 'Sign in';
+      formSub.textContent = 'Enter your credentials to continue';
+      submitBtn.textContent = 'Continue';
+      passwordInput.setAttribute('required', '');
+      backLink.style.display = 'none';
+    }
+  }
+
+  forgotLink.addEventListener('click', function(e) {
+    e.preventDefault();
+    setMode('forgot');
+  });
+
+  backLink.addEventListener('click', function(e) {
+    e.preventDefault();
+    setMode('login');
+  });
+
+  // Google OAuth
+  googleBtn.addEventListener('click', function() {
+    window.location.href = '/api/v1/auth/google';
+  });
+
+  // Handle login form submission
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    clearMessages();
+
+    var email = emailInput.value.trim();
+    var password = passwordInput.value.trim();
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = mode === 'forgot' ? 'Sending...' : 'Signing in...';
+
+    try {
+      if (mode === 'forgot') {
+        var res = await fetch('/api/v1/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+        showSuccess('If that email exists, a reset link has been sent. Check your inbox.');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Send Reset Link';
+        return;
+      }
+
+      // Login flow
+      var res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: password }),
+      });
+      var data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Login failed');
+
+      // Multi-tenant picker — if user has multiple tenants, select this one
+      if (data.tenant_required && data.tenants) {
+        // Find the zhan tenant, or pick the first one
+        var zhanTenant = data.tenants.find(function(t) { return t.slug === 'zhan'; });
+        var tenantId = zhanTenant ? zhanTenant.id : data.tenants[0].id;
+
+        // Re-login with explicit tenant_id
+        var res2 = await fetch('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email, password: password, tenant_id: tenantId }),
+        });
+        var data2 = await res2.json();
+        if (!res2.ok) throw new Error(data2.error || 'Login failed');
+        data = data2;
+      }
+
+      // Store auth and redirect
+      sessionStorage.setItem('sangha_auth', JSON.stringify({
+        user: data.user,
+        tokens: {
+          accessToken: data.tokens.accessToken,
+          refreshToken: data.tokens.refreshToken,
+          expiresAt: data.tokens.expiresAt,
+        },
+      }));
+      window.location.href = '/app';
+    } catch (err) {
+      showError(err.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = mode === 'forgot' ? 'Send Reset Link' : 'Continue';
+    }
+  });
+
+  // Check if already logged in
+  try {
+    var existing = sessionStorage.getItem('sangha_auth');
+    if (existing) {
+      var parsed = JSON.parse(existing);
+      if (parsed.tokens && parsed.tokens.accessToken) {
+        window.location.href = '/app';
+      }
+    }
+  } catch (e) {}
+
+  // Handle OAuth callback (redirected back with tokens in query params)
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('oauth') === 'success') {
+    var authData = {
+      user: {
+        id: params.get('userId'),
+        email: params.get('email'),
+        name: params.get('name'),
+        role: params.get('role'),
+        tenantId: params.get('tenantId'),
+      },
+      tokens: {
+        accessToken: params.get('access_token'),
+        refreshToken: params.get('refresh_token'),
+        expiresAt: params.get('expires_at'),
+      },
+    };
+    if (authData.tokens.accessToken) {
+      sessionStorage.setItem('sangha_auth', JSON.stringify(authData));
+      window.location.href = '/app';
+    }
+  }
+
+  // Handle reset token in URL (from forgot password email)
+  if (params.get('reset_token')) {
+    var resetToken = params.get('reset_token');
+    var resetEmail = params.get('email') || '';
+    formTitle.textContent = 'Set new password';
+    formSub.textContent = 'Choose a new password (min 8 characters)';
+    emailInput.closest('.field-group').style.display = 'none';
+    passwordInput.placeholder = 'Min 8 characters';
+    passwordInput.closest('.field-group').querySelector('.field-row').innerHTML =
+      '<label class="field-label" style="margin-bottom:0">New password</label>';
+    document.querySelector('.remember-row').style.display = 'none';
+    document.querySelector('.or-row').style.display = 'none';
+    document.querySelector('.oauth-row').style.display = 'none';
+    submitBtn.textContent = 'Reset Password';
+
+    // Override form submit for reset flow
+    form.onsubmit = async function(e) {
+      e.preventDefault();
+      clearMessages();
+      var newPassword = passwordInput.value;
+      if (newPassword.length < 8) {
+        showError('Password must be at least 8 characters');
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Resetting...';
+      try {
+        var res = await fetch('/api/v1/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: resetToken, newPassword: newPassword }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Reset failed');
+        showSuccess('Password has been reset. Redirecting to sign in...');
+        // Clean URL and reload after a short delay
+        setTimeout(function() {
+          window.history.replaceState({}, '', window.location.pathname);
+          window.location.reload();
+        }, 2000);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Reset Password';
+      }
+    };
+  }
+})();
+</script>
+</body>
+</html>

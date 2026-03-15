@@ -318,26 +318,33 @@ export default function LoginPage({ onLogin }) {
   // ─── Tenant-branded login ───────────────────────────────────────────────
   const industry = tenant?.settings?.industry;
   const isConstruction = industry === 'construction';
+  const isVenture = industry === 'venture';
   const brandName = tenant?.branding?.companyName || 'Coppice';
-  const primaryColor = tenant?.branding?.primaryColor || (isConstruction ? '#1e3a5f' : '#1a6b3c');
-  const accentColor = isConstruction ? '#93c5fd' : '#6ee7b7';
-  const glowColor1 = isConstruction ? '#3b82f6' : '#34d399';
-  const glowColor2 = isConstruction ? '#93c5fd' : '#6ee7b7';
+  const primaryColor = tenant?.branding?.primaryColor || (isConstruction ? '#1e3a5f' : isVenture ? '#141414' : '#1a6b3c');
+  const accentColor = isConstruction ? '#93c5fd' : isVenture ? '#888' : '#6ee7b7';
+  const glowColor1 = isConstruction ? '#3b82f6' : isVenture ? '#555' : '#34d399';
+  const glowColor2 = isConstruction ? '#93c5fd' : isVenture ? '#888' : '#6ee7b7';
 
   const heroTitle = isConstruction
     ? <>Your AI estimator.<br /><em style={{ fontStyle: 'italic', color: accentColor }}>Always on.</em><br />Always learning.</>
-    : <>AI-powered<br /><em style={{ fontStyle: 'italic', color: accentColor }}>infrastructure</em><br />intelligence.</>;
+    : isVenture
+      ? <>Your portfolio,<br /><em style={{ fontStyle: 'italic', color: '#666' }}>always working.</em></>
+      : <>AI-powered<br /><em style={{ fontStyle: 'italic', color: accentColor }}>infrastructure</em><br />intelligence.</>;
 
   const heroDesc = isConstruction
     ? 'Coppice reads your bid requests, generates estimates from your pricing table, drafts response emails, and tracks every job — 24 hours a day, 7 days a week.'
-    : 'Real-time risk analytics, automated curtailment, pool routing optimization, and AI agents — powering the next generation of energy infrastructure.';
+    : isVenture
+      ? 'AI agents monitoring portfolio companies, managing LP relations, processing deal flow, and running fund operations — around the clock, without a full team.'
+      : 'Real-time risk analytics, automated curtailment, pool routing optimization, and AI agents — powering the next generation of energy infrastructure.';
 
   const heroStats = isConstruction
     ? [{ val: '2 min', label: 'Per estimate' }, { val: '94%', label: 'Accuracy' }, { val: '$0.05', label: 'Per estimate' }]
-    : [{ val: '24/7', label: 'Monitoring' }, { val: '6', label: 'AI agents' }, { val: '<1s', label: 'Response time' }];
+    : isVenture
+      ? [{ val: '24/7', label: 'Monitoring' }, { val: '3', label: 'Companies' }, { val: '<1s', label: 'Response time' }]
+      : [{ val: '24/7', label: 'Monitoring' }, { val: '6', label: 'AI agents' }, { val: '<1s', label: 'Response time' }];
 
-  const footerText = isConstruction ? '© 2026 Coppice · AI employees for construction' : '© 2026 Coppice · AI infrastructure platform';
-  const placeholderEmail = isConstruction ? 'you@dacpconstruction.com' : 'you@company.com';
+  const footerText = isConstruction ? '© 2026 Coppice · AI employees for construction' : isVenture ? '© 2026 Zhan Capital · Powered by Coppice' : '© 2026 Coppice · AI infrastructure platform';
+  const placeholderEmail = isConstruction ? 'you@dacpconstruction.com' : isVenture ? 'you@zhan.capital' : 'you@company.com';
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Instrument Sans', sans-serif", WebkitFontSmoothing: 'antialiased' }}>
@@ -391,15 +398,15 @@ export default function LoginPage({ onLogin }) {
 
       {/* RIGHT — login form */}
       <div style={{
-        width: 480, minHeight: '100vh', background: '#fafaf8',
+        width: 480, minHeight: '100vh', background: isVenture ? '#0e0e0e' : '#fafaf8',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 40, flexShrink: 0,
       }}>
         <div style={{ width: '100%', maxWidth: 360 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: '#111110', marginBottom: 4 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: isVenture ? '#d8d4cc' : '#111110', marginBottom: 4 }}>
             {mode === 'forgot' ? 'Reset password' : mode === 'reset' ? 'Set new password' : mode === 'login' ? 'Sign in' : 'Create account'}
           </div>
-          <div style={{ fontSize: 13, color: '#9a9a92', marginBottom: 28 }}>
+          <div style={{ fontSize: 13, color: isVenture ? '#3a3a3a' : '#9a9a92', marginBottom: 28 }}>
             {mode === 'forgot' ? 'Enter your email to receive a reset link' : mode === 'reset' ? 'Choose a new password (min 8 characters)' : mode === 'login' ? 'Enter your credentials to continue' : 'Set up your workspace'}
           </div>
 
@@ -416,7 +423,7 @@ export default function LoginPage({ onLogin }) {
           )}
 
           {error && (
-            <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 10, background: '#fbeae8', color: '#c0392b', fontSize: 13, border: '1px solid rgba(192,57,43,0.15)' }}>
+            <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 10, background: isVenture ? '#2a1a1a' : '#fbeae8', color: isVenture ? '#c84a4a' : '#c0392b', fontSize: 13, border: isVenture ? '1px solid #3a2020' : '1px solid rgba(192,57,43,0.15)' }}>
               {error}
             </div>
           )}
@@ -425,23 +432,23 @@ export default function LoginPage({ onLogin }) {
             {mode === 'register' && (
               <>
                 <div style={{ marginBottom: 16 }}>
-                  <label style={labelStyle}>Full name</label>
-                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Enter your full name" style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+                  <label style={isVenture ? { ...labelStyle, color: '#555' } : labelStyle}>Full name</label>
+                  <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Enter your full name" style={isVenture ? darkInputStyle : inputStyle} onFocus={isVenture ? (e) => { e.target.style.borderColor = '#444'; e.target.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.03)'; } : onFocus} onBlur={isVenture ? (e) => { e.target.style.borderColor = '#2a2a28'; e.target.style.boxShadow = 'none'; } : onBlur} />
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <label style={labelStyle}>Company name</label>
-                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required placeholder="Enter your company name" style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+                  <label style={isVenture ? { ...labelStyle, color: '#555' } : labelStyle}>Company name</label>
+                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required placeholder="Enter your company name" style={isVenture ? darkInputStyle : inputStyle} onFocus={isVenture ? (e) => { e.target.style.borderColor = '#444'; e.target.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.03)'; } : onFocus} onBlur={isVenture ? (e) => { e.target.style.borderColor = '#2a2a28'; e.target.style.boxShadow = 'none'; } : onBlur} />
                 </div>
               </>
             )}
 
             {mode !== 'reset' && (
               <div style={{ marginBottom: 16 }}>
-                <label style={labelStyle}>Email address</label>
+                <label style={isVenture ? { ...labelStyle, color: '#555' } : labelStyle}>Email address</label>
                 <input
                   type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   required placeholder={placeholderEmail} autoFocus={!prefillEmail}
-                  style={inputStyle} onFocus={onFocus} onBlur={onBlur}
+                  style={isVenture ? darkInputStyle : inputStyle} onFocus={isVenture ? (e) => { e.target.style.borderColor = '#444'; e.target.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.03)'; } : onFocus} onBlur={isVenture ? (e) => { e.target.style.borderColor = '#2a2a28'; e.target.style.boxShadow = 'none'; } : onBlur}
                   onKeyDown={(e) => { if (e.key === 'Enter' && passwordRef.current && mode !== 'forgot') { e.preventDefault(); passwordRef.current.focus(); } }}
                 />
               </div>
@@ -449,11 +456,11 @@ export default function LoginPage({ onLogin }) {
 
             {mode !== 'forgot' && (
               <div style={{ marginBottom: 16 }}>
-                <label style={labelStyle}>{mode === 'reset' ? 'New password' : 'Password'}</label>
+                <label style={isVenture ? { ...labelStyle, color: '#555' } : labelStyle}>{mode === 'reset' ? 'New password' : 'Password'}</label>
                 <input
                   ref={passwordRef} type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                   required minLength={8} placeholder={mode === 'reset' ? 'Min 8 characters' : 'Enter your password'}
-                  style={inputStyle} onFocus={onFocus} onBlur={onBlur}
+                  style={isVenture ? darkInputStyle : inputStyle} onFocus={isVenture ? (e) => { e.target.style.borderColor = '#444'; e.target.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.03)'; } : onFocus} onBlur={isVenture ? (e) => { e.target.style.borderColor = '#2a2a28'; e.target.style.boxShadow = 'none'; } : onBlur}
                 />
               </div>
             )}
@@ -488,13 +495,13 @@ export default function LoginPage({ onLogin }) {
           </form>
 
           {(mode === 'login' || mode === 'register') && (<>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0', fontSize: 11, color: '#c5c5bc', textTransform: 'uppercase', letterSpacing: 1 }}>
-            <div style={{ flex: 1, height: 1, background: '#f0eeea' }} />or<div style={{ flex: 1, height: 1, background: '#f0eeea' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0', fontSize: 11, color: isVenture ? '#2a2a2a' : '#c5c5bc', textTransform: 'uppercase', letterSpacing: 1 }}>
+            <div style={{ flex: 1, height: 1, background: isVenture ? '#1e1e1e' : '#f0eeea' }} />or<div style={{ flex: 1, height: 1, background: isVenture ? '#1e1e1e' : '#f0eeea' }} />
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
-            <button type="button" onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/v1/auth/google`} style={oauthStyle}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f4f0'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; }}>
+            <button type="button" onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/v1/auth/google`} style={isVenture ? { ...oauthStyle, background: '#141414', border: '1px solid #222', color: '#555' } : oauthStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.background = isVenture ? '#1a1a1a' : '#f5f4f0'; }} onMouseLeave={(e) => { e.currentTarget.style.background = isVenture ? '#141414' : '#ffffff'; }}>
               <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -503,8 +510,8 @@ export default function LoginPage({ onLogin }) {
               </svg>
               Google
             </button>
-            <button type="button" onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/v1/auth/github`} style={oauthStyle}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f4f0'; }} onMouseLeave={(e) => { e.currentTarget.style.background = '#ffffff'; }}>
+            <button type="button" onClick={() => window.location.href = `${import.meta.env.VITE_API_URL || '/api'}/v1/auth/github`} style={isVenture ? { ...oauthStyle, background: '#141414', border: '1px solid #222', color: '#555' } : oauthStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.background = isVenture ? '#1a1a1a' : '#f5f4f0'; }} onMouseLeave={(e) => { e.currentTarget.style.background = isVenture ? '#141414' : '#ffffff'; }}>
               <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="#111110">
                 <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
               </svg>
@@ -513,7 +520,7 @@ export default function LoginPage({ onLogin }) {
           </div>
           </>)}
 
-          <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: '#9a9a92' }}>
+          <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: isVenture ? '#2a2a2a' : '#9a9a92' }}>
             {(mode === 'forgot' || mode === 'reset') ? (
               <button onClick={() => { setMode('login'); setError(null); setSuccess(null); }} style={{ background: 'none', border: 'none', color: primaryColor, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
                 Back to sign in
@@ -528,8 +535,8 @@ export default function LoginPage({ onLogin }) {
             )}
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: '#c5c5bc' }}>
-            Powered by <a href="https://coppice.ai" target="_blank" rel="noopener noreferrer" style={{ color: '#9a9a92', textDecoration: 'none', fontWeight: 600 }}>Coppice</a>
+          <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: isVenture ? '#1e1e1e' : '#c5c5bc' }}>
+            Powered by <a href="https://coppice.ai" target="_blank" rel="noopener noreferrer" style={{ color: isVenture ? '#2a2a2a' : '#9a9a92', textDecoration: 'none', fontWeight: 600 }}>Coppice</a>
           </div>
         </div>
       </div>
@@ -537,15 +544,15 @@ export default function LoginPage({ onLogin }) {
       {/* Tenant Picker Modal */}
       {tenantPicker && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          position: 'fixed', inset: 0, background: isVenture ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
         }}>
           <div style={{
-            background: '#fff', borderRadius: 20, padding: 32, width: '100%', maxWidth: 400,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+            background: isVenture ? '#161615' : '#fff', borderRadius: 20, padding: 32, width: '100%', maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)', border: isVenture ? '1px solid #2a2a28' : 'none',
           }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#111110', marginBottom: 4 }}>Choose workspace</div>
-            <div style={{ fontSize: 13, color: '#9a9a92', marginBottom: 24 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: isVenture ? '#fff' : '#111110', marginBottom: 4 }}>Choose workspace</div>
+            <div style={{ fontSize: 13, color: isVenture ? '#6b6b65' : '#9a9a92', marginBottom: 24 }}>
               Your account belongs to multiple organizations.
             </div>
 
