@@ -207,8 +207,8 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   }
 
   // Send the reply with proper threading (convert markdown to HTML)
-  // CC teo@zhan.capital on meeting-related replies so Teo sees them immediately
-  const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet)\b/i;
+  // Detect meeting-related emails to CC + forward full thread to Teo
+  const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet|check size|LP|lock-?up)\b/i;
   const isMeetingRelated = meetingKeywords.test(body) || meetingKeywords.test(agentResponse);
   const cc = isMeetingRelated ? 'teo@zhan.capital' : undefined;
 
@@ -230,6 +230,36 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     console.error(`[GmailPoll] Auto-reply send failed:`, err.message);
     markEmailProcessed({ messageId, threadId, pipeline: 'general-send-error', tenantId: resolvedTenant });
     return;
+  }
+
+  // Forward full conversation thread to Teo on meeting-related emails
+  if (isMeetingRelated && gmail && threadId) {
+    try {
+      const threadRes = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' });
+      const threadMessages = threadRes.data.messages || [];
+      let threadHtml = `<h3 style="font-family:sans-serif;color:#333;">Meeting-related thread — ${fromName || from}</h3><hr>`;
+      for (const tm of threadMessages) {
+        const tmHeaders = tm.payload?.headers || [];
+        const tmFrom = tmHeaders.find(h => h.name.toLowerCase() === 'from')?.value || 'Unknown';
+        const tmDate = tmHeaders.find(h => h.name.toLowerCase() === 'date')?.value || '';
+        const tmBody = extractEmailBody(tm.payload);
+        const tmHtml = markdownToEmailHtml(tmBody);
+        threadHtml += `<div style="margin:16px 0;padding:12px;border-left:3px solid #ddd;font-family:sans-serif;">`;
+        threadHtml += `<div style="font-size:12px;color:#666;margin-bottom:8px;"><strong>${tmFrom}</strong> — ${tmDate}</div>`;
+        threadHtml += tmHtml;
+        threadHtml += `</div>`;
+      }
+      threadHtml += `<hr><p style="font-family:sans-serif;font-size:12px;color:#999;">Auto-forwarded by Coppice — reply directly to ${from} to join the conversation.</p>`;
+      await sendHtmlEmail({
+        to: 'teo@zhan.capital',
+        subject: `[Coppice] Meeting request: ${subject} — ${fromName || from}`,
+        html: threadHtml,
+        tenantId: resolvedTenant,
+      });
+      console.log(`[GmailPoll] Full thread forwarded to teo@zhan.capital for "${subject}"`);
+    } catch (err) {
+      console.warn(`[GmailPoll] Thread forward failed: ${err.message}`);
+    }
   }
 
   // Log the auto-reply
