@@ -85,11 +85,14 @@ const wss = new WebSocketServer({ noServer: true });
 
 const PORT = process.env.PORT || 3002;
 
+// Trust Nginx reverse proxy so req.ip reflects the real client IP
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
-    if (origin.endsWith('.coppice.ai') || origin === 'https://coppice.ai' || origin.includes('localhost')) {
+    if (origin.endsWith('.coppice.ai') || origin === 'https://coppice.ai' || origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
       return callback(null, true);
     }
     callback(null, false);
