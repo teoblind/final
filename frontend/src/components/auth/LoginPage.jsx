@@ -357,10 +357,10 @@ export default function LoginPage({ onLogin }) {
         <div style={{ position: 'absolute', width: 300, height: 300, borderRadius: '50%', filter: 'blur(80px)', opacity: 0.12, background: glowColor2, bottom: '10%', left: '-5%' }} />
         <div style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', filter: 'blur(80px)', opacity: 0.08, background: '#b8860b', top: '40%', right: '20%' }} />
 
-        <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <a href="https://coppice.ai" target="_blank" rel="noopener noreferrer" style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', cursor: 'pointer' }}>
           <CoppiceLogo color={primaryColor} size={36} />
           <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: 2 }}>{brandName}</span>
-        </div>
+        </a>
 
         <div style={{ position: 'relative', zIndex: 2 }}>
           <h1 style={{
