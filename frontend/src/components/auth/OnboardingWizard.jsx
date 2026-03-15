@@ -91,23 +91,56 @@ const SERVICE_AREAS = [
   { id: 'other', label: 'Other Texas', available: true },
 ];
 
+// ─── Venture (Family Office) Config ─────────────────────────────────────────
+
+const VENTURE_DATA_SOURCES = [
+  { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
+  { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
+  { id: 'docs', Icon: FileText, name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
+];
+
+const VENTURE_AGENTS = [
+  { id: 'hivemind', name: 'Command Agent', desc: 'Your main AI command center — answers questions, runs tasks, and coordinates other agents', color: '#ffffff' },
+  { id: 'lead-engine', name: 'Deal Pipeline', desc: 'Track portfolio companies, investment opportunities, and deal flow', color: '#a0a0a0' },
+  { id: 'meetings', name: 'Meeting Agent', desc: 'Joins calls, transcribes conversations, and extracts action items', color: '#666666' },
+  { id: 'reporting-engine', name: 'Reporting Engine', desc: 'Generates portfolio reports, LP updates, and market analysis', color: '#888888' },
+];
+
+const VENTURE_WELCOME = {
+  title: 'Welcome to Coppice',
+  subtitle: 'An AI operations platform for family offices — connecting portfolio management, deal flow, meetings, and communications into a single command center.',
+  features: [
+    { Icon: BarChart3, title: 'Portfolio Intelligence', desc: 'Real-time portfolio monitoring and company performance tracking' },
+    { Icon: Search, title: 'Deal Pipeline', desc: 'AI-powered deal sourcing, due diligence, and pipeline management' },
+    { Icon: Mic, title: 'Meeting Capture', desc: 'Auto-transcription, action items, and follow-up generation' },
+    { Icon: Bot, title: 'AI Agents', desc: 'Autonomous agents that optimize your operations 24/7' },
+  ],
+};
+
 export default function OnboardingWizard({ onComplete }) {
   const { tenant } = useTenant();
   const isConstruction = tenant?.settings?.industry === 'construction';
+  const isVenture = tenant?.id === 'zhan-capital' || tenant?.settings?.industry === 'venture';
 
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   // Pick config based on industry
-  const DATA_SOURCES = isConstruction ? DACP_DATA_SOURCES : MINING_DATA_SOURCES;
-  const AGENTS = isConstruction ? DACP_AGENTS : MINING_AGENTS;
-  const WELCOME = isConstruction ? DACP_WELCOME : MINING_WELCOME;
-  const brandName = isConstruction ? 'DACP' : 'Coppice';
+  const DATA_SOURCES = isVenture ? VENTURE_DATA_SOURCES : isConstruction ? DACP_DATA_SOURCES : MINING_DATA_SOURCES;
+  const AGENTS = isVenture ? VENTURE_AGENTS : isConstruction ? DACP_AGENTS : MINING_AGENTS;
+  const WELCOME = isVenture ? VENTURE_WELCOME : isConstruction ? DACP_WELCOME : MINING_WELCOME;
+  const brandName = isVenture ? 'Coppice' : isConstruction ? 'DACP' : 'Coppice';
 
   // Connect step state
   const [sources, setSources] = useState(
-    isConstruction
+    isVenture
+      ? {
+          gmail: { connected: false },
+          calendar: { connected: false },
+          docs: { connected: false },
+        }
+      : isConstruction
       ? {
           pricing: { connected: false },
           email: { connected: false, provider: 'gmail' },
@@ -131,7 +164,9 @@ export default function OnboardingWizard({ onComplete }) {
   const [crewSize, setCrewSize] = useState('');
 
   // Agents step state
-  const defaultModes = isConstruction
+  const defaultModes = isVenture
+    ? { hivemind: 'autonomous', 'lead-engine': 'autonomous', meetings: 'autonomous', 'reporting-engine': 'autonomous' }
+    : isConstruction
     ? { estimating: 'copilot', documents: 'copilot', meetings: 'autonomous', email: 'copilot' }
     : { sangha: 'autonomous', 'lead-engine': 'autonomous', meetings: 'autonomous', 'reporting-engine': 'autonomous' };
   const [agentModes, setAgentModes] = useState(defaultModes);
@@ -324,29 +359,35 @@ export default function OnboardingWizard({ onComplete }) {
               disabled={i > step}
               className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                 i === step
-                  ? isConstruction
+                  ? dk
+                    ? 'bg-white text-black shadow-[0_0_0_4px_rgba(255,255,255,0.1)]'
+                    : isConstruction
                     ? 'bg-[#1e3a5f] text-white shadow-[0_0_0_4px_rgba(30,58,95,0.12)]'
                     : 'bg-[#1a6b3c] text-white shadow-[0_0_0_4px_rgba(26,107,60,0.12)]'
                   : i < step
-                    ? isConstruction
+                    ? dk
+                      ? 'bg-white/15 text-white cursor-pointer'
+                      : isConstruction
                       ? 'bg-[#1e3a5f]/15 text-[#1e3a5f] cursor-pointer'
                       : 'bg-[#1a6b3c]/15 text-[#1a6b3c] cursor-pointer'
-                    : 'bg-terminal-panel border border-terminal-border text-terminal-muted'
+                    : dk
+                      ? 'bg-[#1a1a1a] border border-[#2a2a2a] text-[#555]'
+                      : 'bg-terminal-panel border border-terminal-border text-terminal-muted'
               }`}
             >
               {i < step ? '✓' : i + 1}
             </button>
             <span className={`text-[10px] mt-1.5 font-medium whitespace-nowrap ${
               i === step
-                ? isConstruction ? 'text-[#1e3a5f]' : 'text-[#1a6b3c]'
-                : i < step ? 'text-terminal-text' : 'text-terminal-muted'
+                ? dk ? 'text-white' : isConstruction ? 'text-[#1e3a5f]' : 'text-[#1a6b3c]'
+                : i < step ? (dk ? 'text-white/70' : 'text-terminal-text') : (dk ? 'text-[#555]' : 'text-terminal-muted')
             }`}>{s.label}</span>
           </div>
           {i < STEPS.length - 1 && (
             <div className={`w-14 sm:w-20 h-[2px] mx-1.5 mt-[-14px] rounded-full ${
               i < step
-                ? isConstruction ? 'bg-[#1e3a5f]/30' : 'bg-[#1a6b3c]/30'
-                : 'bg-terminal-border'
+                ? dk ? 'bg-white/20' : isConstruction ? 'bg-[#1e3a5f]/30' : 'bg-[#1a6b3c]/30'
+                : dk ? 'bg-[#2a2a2a]' : 'bg-terminal-border'
             }`} />
           )}
         </div>
@@ -354,12 +395,31 @@ export default function OnboardingWizard({ onComplete }) {
     </div>
   );
 
-  const accent = isConstruction ? '#1e3a5f' : '#1a6b3c';
-  const accentHover = isConstruction ? '#15304f' : '#155a32';
-  const accentDot = isConstruction ? '#3b82f6' : '#2dd478';
-  const heroBg = isConstruction
+  const accent = isVenture ? '#ffffff' : isConstruction ? '#1e3a5f' : '#1a6b3c';
+  const accentHover = isVenture ? '#e0e0e0' : isConstruction ? '#15304f' : '#155a32';
+  const accentDot = isVenture ? '#ffffff' : isConstruction ? '#3b82f6' : '#2dd478';
+  const heroBg = isVenture
+    ? 'bg-gradient-to-br from-[#111111] to-[#000000]'
+    : isConstruction
     ? 'bg-gradient-to-br from-[#1e3a5f] to-[#0f1f3a]'
     : 'bg-gradient-to-br from-[#1a2e1a] to-[#0f1f0f]';
+
+  // Dark theme classes for venture
+  const dk = isVenture ? {
+    bg: 'bg-[#0a0a0a]',
+    panel: 'bg-[#141414]',
+    card: 'bg-[#1a1a1a] border-[#2a2a2a]',
+    border: 'border-[#2a2a2a]',
+    text: 'text-white',
+    muted: 'text-[#888]',
+    input: 'bg-[#111] border-[#2a2a2a] text-white placeholder:text-[#555]',
+    hoverCard: 'hover:border-[#444]',
+    btnBg: 'bg-white text-black',
+    btnHover: 'hover:bg-[#e0e0e0]',
+    pill: 'bg-[#222] text-[#888] border-[#333]',
+    pillActive: 'bg-white/10 text-white border-white/25',
+    infoBox: 'bg-[#111]',
+  } : null;
 
   // ─── Step 1: Welcome ─────────────────────────────────────────────────────────
   const renderWelcome = () => (
@@ -378,17 +438,17 @@ export default function OnboardingWizard({ onComplete }) {
       {/* Feature cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
         {WELCOME.features.map(f => (
-          <div key={f.title} className="p-5 bg-terminal-panel border border-terminal-border rounded-[14px] hover:border-[#c5c5bc] transition-colors">
+          <div key={f.title} className={`p-5 border rounded-[14px] transition-colors ${dk ? `${dk.card} ${dk.hoverCard}` : 'bg-terminal-panel border-terminal-border hover:border-[#c5c5bc]'}`}>
             <div className="mb-3">
-              <f.Icon size={20} className="text-terminal-muted" />
+              <f.Icon size={20} className={dk ? dk.muted : 'text-terminal-muted'} />
             </div>
-            <h3 className="text-[13px] font-semibold text-terminal-text mb-1">{f.title}</h3>
-            <p className="text-[11px] text-terminal-muted leading-[1.5]">{f.desc}</p>
+            <h3 className={`text-[13px] font-semibold mb-1 ${dk ? dk.text : 'text-terminal-text'}`}>{f.title}</h3>
+            <p className={`text-[11px] leading-[1.5] ${dk ? dk.muted : 'text-terminal-muted'}`}>{f.desc}</p>
           </div>
         ))}
       </div>
 
-      <p className="text-center text-[11px] text-terminal-muted">
+      <p className={`text-center text-[11px] ${dk ? dk.muted : 'text-terminal-muted'}`}>
         This setup takes about 2 minutes. You can always change settings later.
       </p>
     </div>
@@ -398,11 +458,13 @@ export default function OnboardingWizard({ onComplete }) {
   const renderConnect = () => (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-[20px] font-bold text-terminal-text mb-1 tracking-[-0.2px]">
-          {isConstruction ? 'Connect Your Tools' : 'Connect Your Infrastructure'}
+        <h2 className={`text-[20px] font-bold mb-1 tracking-[-0.2px] ${dk ? dk.text : 'text-terminal-text'}`}>
+          {isVenture ? 'Connect Your Tools' : isConstruction ? 'Connect Your Tools' : 'Connect Your Infrastructure'}
         </h2>
-        <p className="text-[13px] text-terminal-muted">
-          {isConstruction
+        <p className={`text-[13px] ${dk ? dk.muted : 'text-terminal-muted'}`}>
+          {isVenture
+            ? 'Link your accounts to unlock AI-powered portfolio management and automation.'
+            : isConstruction
             ? 'Link your data sources to unlock AI-powered estimating and project management.'
             : 'Link your data sources to unlock real-time analytics and automation.'}
         </p>
@@ -471,27 +533,27 @@ export default function OnboardingWizard({ onComplete }) {
           const isExpanded = expandedSource === src.id;
 
           return (
-            <div key={src.id} className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+            <div key={src.id} className={`border rounded-[14px] overflow-hidden ${dk ? `${dk.card}` : 'bg-terminal-panel border-terminal-border'}`}>
               {/* Source row */}
               <div
-                className="flex items-center gap-3.5 px-4 py-3.5 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
+                className={`flex items-center gap-3.5 px-4 py-3.5 cursor-pointer transition-colors ${dk ? 'hover:bg-[#222]' : 'hover:bg-[#f5f4f0]'}`}
                 onClick={() => setExpandedSource(isExpanded ? null : src.id)}
               >
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}10` }}>
-                  <src.Icon size={16} style={{ color: accent }} />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: dk ? 'rgba(255,255,255,0.08)' : `${accent}10` }}>
+                  <src.Icon size={16} style={{ color: dk ? '#fff' : accent }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-terminal-text">{src.name}</div>
-                  <div className="text-[11px] text-terminal-muted">{src.desc}</div>
+                  <div className={`text-[13px] font-semibold ${dk ? dk.text : 'text-terminal-text'}`}>{src.name}</div>
+                  <div className={`text-[11px] ${dk ? dk.muted : 'text-terminal-muted'}`}>{src.desc}</div>
                 </div>
                 {sourceState.connected ? (
-                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-200 shrink-0">Connected</span>
+                  <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 ${dk ? 'bg-white/10 text-white border border-white/20' : 'bg-green-50 text-green-700 border border-green-200'}`}>Connected</span>
                 ) : (
-                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-[#f5f4f0] text-terminal-muted border border-terminal-border shrink-0">
+                  <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 ${dk ? dk.pill : 'bg-[#f5f4f0] text-terminal-muted border border-terminal-border'}`}>
                     {isConstruction ? 'Connect' : src.id === 'energy' ? 'Configure' : 'Connect'}
                   </span>
                 )}
-                <span className={`text-[#c5c5bc] text-base transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>›</span>
+                <span className={`text-base transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''} ${dk ? 'text-[#555]' : 'text-[#c5c5bc]'}`}>›</span>
               </div>
 
               {/* Mining: Energy config */}
@@ -538,8 +600,8 @@ export default function OnboardingWizard({ onComplete }) {
               {isExpanded && !['energy'].includes(src.id) && !(
                 !isConstruction && ['energy'].includes(src.id)
               ) && (
-                <div className="px-4 pb-4 pt-2 border-t border-terminal-border">
-                  <p className="text-[12px] text-terminal-muted mb-3">
+                <div className={`px-4 pb-4 pt-2 border-t ${dk ? dk.border : 'border-terminal-border'}`}>
+                  <p className={`text-[12px] mb-3 ${dk ? dk.muted : 'text-terminal-muted'}`}>
                     {isConstruction
                       ? {
                           pricing: 'Import your master pricing table — material, labor, and equipment costs per unit.',
@@ -567,10 +629,10 @@ export default function OnboardingWizard({ onComplete }) {
                     }}
                     className={`w-full py-2.5 text-[13px] font-semibold rounded-lg transition-colors ${
                       sourceState.connected
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : `text-white hover:opacity-90`
+                        ? dk ? 'bg-white/10 text-white border border-white/20' : 'bg-green-50 text-green-700 border border-green-200'
+                        : dk ? 'bg-white text-black hover:bg-[#e0e0e0]' : 'text-white hover:opacity-90'
                     }`}
-                    style={sourceState.connected ? {} : { backgroundColor: accent }}
+                    style={sourceState.connected ? {} : dk ? {} : { backgroundColor: accent }}
                   >
                     {sourceState.connected ? '✓ Connected' : `Connect ${src.name}`}
                   </button>
@@ -581,7 +643,7 @@ export default function OnboardingWizard({ onComplete }) {
         })}
       </div>
 
-      <p className="text-center text-[11px] text-terminal-muted mt-5">
+      <p className={`text-center text-[11px] mt-5 ${dk ? dk.muted : 'text-terminal-muted'}`}>
         {connectedCount} of {DATA_SOURCES.length} sources connected — you can add more later from Settings.
       </p>
     </div>
@@ -591,9 +653,11 @@ export default function OnboardingWizard({ onComplete }) {
   const renderAgents = () => (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-[20px] font-bold text-terminal-text mb-1 tracking-[-0.2px]">Configure Your Agents</h2>
-        <p className="text-[13px] text-terminal-muted">
-          {isConstruction
+        <h2 className={`text-[20px] font-bold mb-1 tracking-[-0.2px] ${dk ? dk.text : 'text-terminal-text'}`}>Configure Your Agents</h2>
+        <p className={`text-[13px] ${dk ? dk.muted : 'text-terminal-muted'}`}>
+          {isVenture
+            ? 'Set up AI agents to manage your portfolio, communications, and operations.'
+            : isConstruction
             ? 'Set up AI agents to automate estimating, document processing, and communication.'
             : 'Set up autonomous AI agents to monitor and optimize your operations.'}
         </p>
@@ -601,14 +665,14 @@ export default function OnboardingWizard({ onComplete }) {
 
       <div className="space-y-3">
         {AGENTS.map(agent => (
-          <div key={agent.id} className="bg-terminal-panel border border-terminal-border rounded-[14px] p-[18px]">
+          <div key={agent.id} className={`border rounded-[14px] p-[18px] ${dk ? dk.card : 'bg-terminal-panel border-terminal-border'}`}>
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: agent.color }} />
-                  <h3 className="text-[13px] font-semibold text-terminal-text">{agent.name}</h3>
+                  <h3 className={`text-[13px] font-semibold ${dk ? dk.text : 'text-terminal-text'}`}>{agent.name}</h3>
                 </div>
-                <p className="text-[11px] text-terminal-muted leading-[1.5] pl-[18px]">{agent.desc}</p>
+                <p className={`text-[11px] leading-[1.5] pl-[18px] ${dk ? dk.muted : 'text-terminal-muted'}`}>{agent.desc}</p>
               </div>
             </div>
             <div className="flex gap-1.5 pl-[18px]">
@@ -619,14 +683,14 @@ export default function OnboardingWizard({ onComplete }) {
                   className={`px-3.5 py-[6px] text-[11px] font-semibold rounded-lg transition-all ${
                     agentModes[agent.id] === mode
                       ? mode === 'off'
-                        ? 'bg-[#f0eeea] text-terminal-muted border border-terminal-border'
+                        ? dk ? 'bg-[#222] text-[#666] border border-[#333]' : 'bg-[#f0eeea] text-terminal-muted border border-terminal-border'
                         : mode === 'autonomous'
-                          ? `bg-[${accent}]/10 text-[${accent}] border border-[${accent}]/25`
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
-                      : 'text-terminal-muted hover:bg-[#f5f4f0] border border-transparent'
+                          ? dk ? 'bg-white/10 text-white border border-white/25' : `bg-[${accent}]/10 text-[${accent}] border border-[${accent}]/25`
+                          : dk ? 'bg-white/10 text-white border border-white/20' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      : dk ? 'text-[#666] hover:bg-[#1a1a1a] border border-transparent' : 'text-terminal-muted hover:bg-[#f5f4f0] border border-transparent'
                   }`}
                   style={
-                    agentModes[agent.id] === mode && mode === 'autonomous'
+                    agentModes[agent.id] === mode && mode === 'autonomous' && !dk
                       ? { backgroundColor: `${accent}15`, color: accent, borderColor: `${accent}40` }
                       : {}
                   }
@@ -639,14 +703,14 @@ export default function OnboardingWizard({ onComplete }) {
         ))}
       </div>
 
-      <div className="mt-5 p-3.5 bg-[#f5f4f0] rounded-[12px]">
+      <div className={`mt-5 p-3.5 rounded-[12px] ${dk ? dk.infoBox : 'bg-[#f5f4f0]'}`}>
         <div className="flex items-start gap-2.5">
-          <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-px" style={{ backgroundColor: `${accent}15` }}>
-            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />
+          <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-px" style={{ backgroundColor: dk ? 'rgba(255,255,255,0.1)' : `${accent}15` }}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dk ? '#fff' : accent }} />
           </div>
           <div>
-            <p className="text-[12px] text-terminal-text font-medium mb-0.5">{activeAgents} of {AGENTS.length} agents active</p>
-            <p className="text-[11px] text-terminal-muted leading-[1.4]">
+            <p className={`text-[12px] font-medium mb-0.5 ${dk ? dk.text : 'text-terminal-text'}`}>{activeAgents} of {AGENTS.length} agents active</p>
+            <p className={`text-[11px] leading-[1.4] ${dk ? dk.muted : 'text-terminal-muted'}`}>
               <strong>Autonomous</strong> agents act on their own. <strong>Copilot</strong> agents suggest actions and wait for your approval.
             </p>
           </div>
@@ -659,8 +723,8 @@ export default function OnboardingWizard({ onComplete }) {
   const renderTeam = () => (
     <div className="max-w-xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-[20px] font-bold text-terminal-text mb-1 tracking-[-0.2px]">Invite Your Team</h2>
-        <p className="text-[13px] text-terminal-muted">
+        <h2 className={`text-[20px] font-bold mb-1 tracking-[-0.2px] ${dk ? dk.text : 'text-terminal-text'}`}>Invite Your Team</h2>
+        <p className={`text-[13px] ${dk ? dk.muted : 'text-terminal-muted'}`}>
           {isConstruction
             ? 'Add project managers, estimators, and field crew to collaborate.'
             : 'Add team members to collaborate on your operations.'}
@@ -668,20 +732,20 @@ export default function OnboardingWizard({ onComplete }) {
       </div>
 
       {/* Invite form */}
-      <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-4 mb-4">
+      <div className={`border rounded-[14px] p-4 mb-4 ${dk ? dk.card : 'bg-terminal-panel border-terminal-border'}`}>
         <div className="flex gap-2">
           <input
             type="email"
             value={inviteEmail}
             onChange={e => setInviteEmail(e.target.value)}
             placeholder="email@example.com"
-            className="flex-1 px-3 py-2.5 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text placeholder:text-terminal-muted/50 focus:outline-none focus:border-[#1a6b3c]"
+            className={`flex-1 px-3 py-2.5 border rounded-lg text-[13px] focus:outline-none ${dk ? `${dk.input} focus:border-white/40` : 'bg-terminal-bg border-terminal-border text-terminal-text placeholder:text-terminal-muted/50 focus:border-[#1a6b3c]'}`}
             onKeyDown={e => e.key === 'Enter' && addInvite()}
           />
           <select
             value={inviteRole}
             onChange={e => setInviteRole(e.target.value)}
-            className="px-3 py-2.5 bg-terminal-bg border border-terminal-border rounded-lg text-[13px] text-terminal-text focus:outline-none focus:border-[#1a6b3c]"
+            className={`px-3 py-2.5 border rounded-lg text-[13px] focus:outline-none ${dk ? `${dk.input} focus:border-white/40` : 'bg-terminal-bg border-terminal-border text-terminal-text focus:border-[#1a6b3c]'}`}
           >
             {isConstruction ? (
               <>
@@ -700,8 +764,8 @@ export default function OnboardingWizard({ onComplete }) {
           <button
             onClick={addInvite}
             disabled={!inviteEmail}
-            className="px-5 py-2.5 text-white text-[13px] font-semibold rounded-lg hover:opacity-90 transition-colors disabled:opacity-40 shrink-0"
-            style={{ backgroundColor: accent }}
+            className={`px-5 py-2.5 text-[13px] font-semibold rounded-lg transition-colors disabled:opacity-40 shrink-0 ${dk ? 'bg-white text-black hover:bg-[#e0e0e0]' : 'text-white hover:opacity-90'}`}
+            style={dk ? {} : { backgroundColor: accent }}
           >
             Invite
           </button>
@@ -710,28 +774,28 @@ export default function OnboardingWizard({ onComplete }) {
 
       {/* Invited list */}
       {invitedMembers.length > 0 ? (
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+        <div className={`border rounded-[14px] overflow-hidden ${dk ? dk.card : 'bg-terminal-panel border-terminal-border'}`}>
           {invitedMembers.map((m, i) => (
-            <div key={i} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-terminal-border' : ''}`}>
+            <div key={i} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? `border-t ${dk ? dk.border : 'border-terminal-border'}` : ''}`}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
-                style={{ backgroundColor: `${accent}15`, color: accent }}>
+                style={{ backgroundColor: dk ? 'rgba(255,255,255,0.1)' : `${accent}15`, color: dk ? '#fff' : accent }}>
                 {m.email.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] text-terminal-text truncate">{m.email}</div>
+                <div className={`text-[13px] truncate ${dk ? dk.text : 'text-terminal-text'}`}>{m.email}</div>
               </div>
-              <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-[#f5f4f0] text-terminal-muted border border-terminal-border capitalize shrink-0">{m.role}</span>
-              <button onClick={() => removeInvite(i)} className="text-terminal-muted hover:text-terminal-red text-sm shrink-0">✕</button>
+              <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full capitalize shrink-0 ${dk ? dk.pill : 'bg-[#f5f4f0] text-terminal-muted border border-terminal-border'}`}>{m.role}</span>
+              <button onClick={() => removeInvite(i)} className={`text-sm shrink-0 ${dk ? 'text-[#666] hover:text-red-400' : 'text-terminal-muted hover:text-terminal-red'}`}>✕</button>
             </div>
           ))}
         </div>
       ) : (
         <div className="text-center py-10">
-          <div className="w-12 h-12 rounded-full bg-[#f5f4f0] flex items-center justify-center mx-auto mb-3">
-            <Users size={20} className="text-terminal-muted" />
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${dk ? 'bg-[#1a1a1a]' : 'bg-[#f5f4f0]'}`}>
+            <Users size={20} className={dk ? dk.muted : 'text-terminal-muted'} />
           </div>
-          <p className="text-[13px] text-terminal-muted">No team members invited yet</p>
-          <p className="text-[11px] text-terminal-muted mt-1">You can always invite people later from Settings.</p>
+          <p className={`text-[13px] ${dk ? dk.muted : 'text-terminal-muted'}`}>No team members invited yet</p>
+          <p className={`text-[11px] mt-1 ${dk ? dk.muted : 'text-terminal-muted'}`}>You can always invite people later from Settings.</p>
         </div>
       )}
     </div>
@@ -747,8 +811,8 @@ export default function OnboardingWizard({ onComplete }) {
         </svg>
       </div>
 
-      <h2 className="text-[26px] font-bold text-terminal-text mb-2 tracking-[-0.3px]">You're All Set!</h2>
-      <p className="text-[13px] text-terminal-muted mb-8">
+      <h2 className={`text-[26px] font-bold mb-2 tracking-[-0.3px] ${dk ? dk.text : 'text-terminal-text'}`}>You're All Set!</h2>
+      <p className={`text-[13px] mb-8 ${dk ? dk.muted : 'text-terminal-muted'}`}>
         Your {brandName} command center is configured and ready to launch.
       </p>
 
@@ -758,10 +822,10 @@ export default function OnboardingWizard({ onComplete }) {
           { label: 'Sources Connected', value: connectedCount, sub: `of ${DATA_SOURCES.length}` },
           { label: 'Team Members', value: invitedMembers.length, sub: 'invited' },
         ].map(s => (
-          <div key={s.label} className="bg-terminal-panel border border-terminal-border rounded-[14px] p-4">
-            <div className="text-[28px] font-bold text-terminal-text tabular-nums leading-none">{s.value}</div>
-            <div className="text-[10px] text-terminal-muted uppercase tracking-[0.8px] mt-1.5 font-semibold">{s.label}</div>
-            <div className="text-[10px] text-terminal-muted mt-0.5">{s.sub}</div>
+          <div key={s.label} className={`border rounded-[14px] p-4 ${dk ? dk.card : 'bg-terminal-panel border-terminal-border'}`}>
+            <div className={`text-[28px] font-bold tabular-nums leading-none ${dk ? dk.text : 'text-terminal-text'}`}>{s.value}</div>
+            <div className={`text-[10px] uppercase tracking-[0.8px] mt-1.5 font-semibold ${dk ? dk.muted : 'text-terminal-muted'}`}>{s.label}</div>
+            <div className={`text-[10px] mt-0.5 ${dk ? dk.muted : 'text-terminal-muted'}`}>{s.sub}</div>
           </div>
         ))}
       </div>
@@ -775,14 +839,14 @@ export default function OnboardingWizard({ onComplete }) {
       <button
         onClick={handleLaunch}
         disabled={submitting}
-        className="w-full py-3.5 text-white font-bold rounded-[14px] hover:opacity-90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-[15px]"
-        style={{ backgroundColor: accent }}
+        className={`w-full py-3.5 font-bold rounded-[14px] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-[15px] ${dk ? 'bg-white text-black hover:bg-[#e0e0e0]' : 'text-white hover:opacity-90'}`}
+        style={dk ? {} : { backgroundColor: accent }}
       >
-        {submitting && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+        {submitting && <div className={`w-5 h-5 border-2 rounded-full animate-spin ${dk ? 'border-black/20 border-t-black' : 'border-white/30 border-t-white'}`} />}
         Launch Dashboard
       </button>
 
-      <p className="text-[11px] text-terminal-muted mt-4">
+      <p className={`text-[11px] mt-4 ${dk ? dk.muted : 'text-terminal-muted'}`}>
         You can adjust all settings from the Settings panel anytime.
       </p>
     </div>
@@ -801,15 +865,15 @@ export default function OnboardingWizard({ onComplete }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-terminal-bg overflow-y-auto">
+    <div className={`fixed inset-0 z-50 overflow-y-auto ${dk ? dk.bg : 'bg-terminal-bg'}`}>
       <div className="min-h-screen flex flex-col">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-terminal-border bg-terminal-panel">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${dk ? `${dk.panel} ${dk.border}` : 'border-terminal-border bg-terminal-panel'}`}>
           <div className="flex items-center gap-2.5">
-            <CoppiceLogo color={isConstruction ? '#1e3a5f' : '#1a2e1a'} size={28} />
-            <span className="text-[13px] font-semibold text-terminal-text tracking-[0.2px]">Setup</span>
+            <CoppiceLogo color={dk ? '#ffffff' : isConstruction ? '#1e3a5f' : '#1a2e1a'} size={28} />
+            <span className={`text-[13px] font-semibold tracking-[0.2px] ${dk ? dk.text : 'text-terminal-text'}`}>Setup</span>
           </div>
-          <button onClick={handleSkip} className="text-[12px] text-terminal-muted hover:text-terminal-text transition-colors">
+          <button onClick={handleSkip} className={`text-[12px] transition-colors ${dk ? `${dk.muted} hover:text-white` : 'text-terminal-muted hover:text-terminal-text'}`}>
             Skip Setup →
           </button>
         </div>
@@ -826,21 +890,21 @@ export default function OnboardingWizard({ onComplete }) {
 
         {/* Bottom nav */}
         {step < 4 && (
-          <div className="px-6 py-4 border-t border-terminal-border bg-terminal-panel flex items-center justify-between">
+          <div className={`px-6 py-4 border-t flex items-center justify-between ${dk ? `${dk.panel} ${dk.border}` : 'border-terminal-border bg-terminal-panel'}`}>
             <button
               onClick={goBack}
               disabled={step === 0}
-              className="px-5 py-2 text-[13px] text-terminal-muted border border-terminal-border rounded-lg disabled:opacity-30 hover:bg-terminal-bg transition-colors"
+              className={`px-5 py-2 text-[13px] border rounded-lg disabled:opacity-30 transition-colors ${dk ? 'text-[#888] border-[#2a2a2a] hover:bg-[#1a1a1a]' : 'text-terminal-muted border-terminal-border hover:bg-terminal-bg'}`}
             >
               Back
             </button>
-            <span className="text-[11px] text-terminal-muted tabular-nums">
+            <span className={`text-[11px] tabular-nums ${dk ? dk.muted : 'text-terminal-muted'}`}>
               Step {step + 1} of {STEPS.length}
             </span>
             <button
               onClick={goNext}
-              className="px-6 py-2 text-[13px] text-white font-semibold rounded-lg hover:opacity-90 transition-colors"
-              style={{ backgroundColor: accent }}
+              className={`px-6 py-2 text-[13px] font-semibold rounded-lg transition-colors ${dk ? 'bg-white text-black hover:bg-[#e0e0e0]' : 'text-white hover:opacity-90'}`}
+              style={dk ? {} : { backgroundColor: accent }}
             >
               Continue
             </button>
