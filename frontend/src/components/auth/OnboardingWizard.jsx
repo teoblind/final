@@ -395,31 +395,16 @@ export default function OnboardingWizard({ onComplete }) {
     </div>
   );
 
-  const accent = isVenture ? '#ffffff' : isConstruction ? '#1e3a5f' : '#1a6b3c';
-  const accentHover = isVenture ? '#e0e0e0' : isConstruction ? '#15304f' : '#155a32';
-  const accentDot = isVenture ? '#ffffff' : isConstruction ? '#3b82f6' : '#2dd478';
+  const accent = isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#1a6b3c';
+  const accentHover = isVenture ? '#333330' : isConstruction ? '#15304f' : '#155a32';
+  const accentDot = isVenture ? '#111110' : isConstruction ? '#3b82f6' : '#2dd478';
   const heroBg = isVenture
-    ? 'bg-gradient-to-br from-[#111111] to-[#000000]'
+    ? 'bg-gradient-to-br from-[#1a1a1a] to-[#111110]'
     : isConstruction
     ? 'bg-gradient-to-br from-[#1e3a5f] to-[#0f1f3a]'
     : 'bg-gradient-to-br from-[#1a2e1a] to-[#0f1f0f]';
 
-  // Dark theme classes for venture
-  const dk = isVenture ? {
-    bg: 'bg-[#0a0a0a]',
-    panel: 'bg-[#141414]',
-    card: 'bg-[#1a1a1a] border-[#2a2a2a]',
-    border: 'border-[#2a2a2a]',
-    text: 'text-white',
-    muted: 'text-[#888]',
-    input: 'bg-[#111] border-[#2a2a2a] text-white placeholder:text-[#555]',
-    hoverCard: 'hover:border-[#444]',
-    btnBg: 'bg-white text-black',
-    btnHover: 'hover:bg-[#e0e0e0]',
-    pill: 'bg-[#222] text-[#888] border-[#333]',
-    pillActive: 'bg-white/10 text-white border-white/25',
-    infoBox: 'bg-[#111]',
-  } : null;
+  const dk = null;
 
   // ─── Step 1: Welcome ─────────────────────────────────────────────────────────
   const renderWelcome = () => (
