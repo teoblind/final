@@ -37,6 +37,12 @@ const FALLBACK_TENANTS = {
     branding: { companyName: 'COPPICE', primaryColor: '#1a6b3c', logo: null },
     settings: { industry: 'mining' },
   },
+  zhan: {
+    name: 'Zhan Capital',
+    slug: 'zhan',
+    branding: { companyName: 'Zhan Capital', primaryColor: '#141414', sidebarColor: '#0e0e0e', logo: null },
+    settings: { industry: 'venture', show_portfolio: true },
+  },
 };
 
 export function TenantProvider({ children }) {

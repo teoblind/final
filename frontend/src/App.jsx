@@ -3,7 +3,7 @@ import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
-  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone
+  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2
 } from 'lucide-react';
 
 // Auth
@@ -88,6 +88,8 @@ const AccountingDashboard = lazy(() => import('./components/dashboards/Accountin
 const AgentChat = lazy(() => import('./components/chat/AgentChat'));
 const FieldReporterChat = lazy(() => import('./components/chat/FieldReporterChat'));
 const ScopeAnalyzerChat = lazy(() => import('./components/chat/ScopeAnalyzerChat'));
+const PortfolioOverview = lazy(() => import('./components/dashboards/PortfolioOverview'));
+const CompanyDetail = lazy(() => import('./components/dashboards/CompanyDetail'));
 
 // Non-lazy supporting components
 import ManualEntryModal from './components/ManualEntryModal';
@@ -216,10 +218,15 @@ function AppContent() {
   const { user, loading: authLoading, login, logout, hasPermission, hasRole } = useAuth();
   const { tenant } = useTenant();
   const [activeTab, setActiveTab] = useState('command');
+  const handleSetActiveTab = (tab) => {
+    if (tab !== 'portfolio') setSelectedCompanyId(null);
+    setActiveTab(tab);
+  };
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showSetPassword, setShowSetPassword] = useState(false);
 
@@ -298,6 +305,20 @@ function AppContent() {
       { id: 'pitch-deck-chat', label: 'Pitch Deck', icon: Presentation },
       { id: 'sales-chat', label: 'Sales Agent', icon: Phone },
     ];
+  } else if (isVenture) {
+    platformItems = [
+      { id: 'command', label: 'Command', icon: LayoutDashboard },
+      { id: 'portfolio', label: 'Portfolio', icon: Building2 },
+      { id: 'audit-trail', label: 'Files', icon: FileText },
+    ];
+    agentItems = [
+      { id: 'hivemind-chat', label: 'Zhan Agent', icon: Bot, hivemind: true },
+      { id: 'bots', label: 'Lead Engine', icon: MessageSquare },
+      { id: 'pitch-deck-chat', label: 'Pitch Deck', icon: Presentation },
+      { id: 'sales-chat', label: 'Sales Agent', icon: Phone },
+      { id: 'meetings-chat', label: 'Meetings', icon: Mic, live: true },
+      { id: 'email-chat', label: 'Email', icon: Mail },
+    ];
   } else {
     platformItems.push({ id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 });
     platformItems.push({ id: 'audit-trail', label: 'Files', icon: FileText });
@@ -359,6 +380,7 @@ function AppContent() {
     'audit-trail': 'Audit Trail',
     'files': 'Files',
     'accounting': 'Accounting',
+    'portfolio': 'Portfolio Companies',
   };
 
   const isChatView = activeTab.endsWith('-chat') || activeTab === 'bots';
@@ -507,7 +529,7 @@ function AppContent() {
   const renderContent = () => {
     switch (activeTab) {
       case 'command':
-        return isConstruction ? <DacpCommandDashboard onNavigate={setActiveTab} /> : <CommandDashboard onNavigate={setActiveTab} />;
+        return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
       case 'estimating':
         return <DacpEstimatingDashboard />;
       case 'jobs':
@@ -517,7 +539,7 @@ function AppContent() {
       case 'field-reports':
         return <DacpFieldReportsDashboard />;
       case 'operations':
-        return <OperationsDashboard onNavigate={setActiveTab} />;
+        return <OperationsDashboard onNavigate={handleSetActiveTab} />;
       case 'macro':
         return <MacroDashboard />;
       case 'correlations':
@@ -564,6 +586,10 @@ function AppContent() {
         return <FilesDashboard />;
       case 'accounting':
         return <AccountingDashboard />;
+      case 'portfolio':
+        return selectedCompanyId
+          ? <CompanyDetail companyId={selectedCompanyId} onBack={() => setSelectedCompanyId(null)} />
+          : <PortfolioOverview onSelectCompany={(id) => setSelectedCompanyId(id)} />;
       case 'admin':
         return <AdminConsoleDashboard />;
       case 'hivemind-chat':
@@ -582,7 +608,7 @@ function AppContent() {
       case 'sales-chat':
         return <AgentChat agentId={activeTab.replace('-chat', '')} />;
       default:
-        return <CommandDashboard onNavigate={setActiveTab} />;
+        return <CommandDashboard onNavigate={handleSetActiveTab} />;
     }
   };
 
@@ -591,7 +617,7 @@ function AppContent() {
       {/* Left Sidebar */}
       <AppSidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleSetActiveTab}
         navGroups={navGroups}
         user={user}
         logout={logout}
@@ -642,7 +668,7 @@ function AppContent() {
 
             <div className="flex items-center gap-3">
               <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-terminal-red'}`} title={wsConnected ? 'Connected' : 'Disconnected'} />
-              <NotificationBell onNavigate={setActiveTab} />
+              <NotificationBell onNavigate={handleSetActiveTab} />
               {hasPermission('exportData') && (
                 <button
                   onClick={() => setManualEntryOpen(true)}

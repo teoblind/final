@@ -75,6 +75,7 @@ import recallRoutes from './routes/recall.js';
 import intuitRoutes from './routes/intuit.js';
 import accountingRoutes from './routes/accounting.js';
 import priceMonitorRoutes from './routes/priceMonitor.js';
+import portfolioRoutes from './routes/portfolio.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -148,6 +149,14 @@ try {
   startPriceMonitorScheduler(5);
 } catch (err) {
   console.warn('Price monitor scheduler not started:', err.message);
+}
+
+// Start company email stats job (daily)
+try {
+  const { startCompanyEmailStatsJob } = await import('./jobs/companyEmailStats.js');
+  startCompanyEmailStatsJob(24);
+} catch (err) {
+  console.warn('Company email stats job not started:', err.message);
 }
 
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
@@ -312,6 +321,7 @@ app.use('/api/v1/recall', recallRoutes);
 app.use('/api/v1/auth/intuit', intuitRoutes);
 app.use('/api/v1/accounting', accountingRoutes);
 app.use('/api/v1/price-monitor', priceMonitorRoutes);
+app.use('/api/v1/portfolio', portfolioRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/

@@ -35,7 +35,7 @@ const router = express.Router();
 // Valid agent IDs
 const VALID_AGENTS = new Set([
   'hivemind', 'estimating', 'documents', 'meetings', 'email',
-  'sangha', 'curtailment', 'pools', 'lead-engine', 'sales',
+  'sangha', 'zhan', 'curtailment', 'pools', 'lead-engine', 'sales', 'pitch-deck',
 ]);
 
 function resolveIds(req) {
