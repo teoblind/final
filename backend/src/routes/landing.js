@@ -8,7 +8,7 @@
 import express from 'express';
 import { sendEmail } from '../services/emailService.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
-import { getTenantDb } from '../cache/database.js';
+import { getTenantDb, getAllTenants } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -91,18 +91,27 @@ router.post('/auth/lookup-tenant', (req, res) => {
 
     const db = getDb();
 
-    // Look up all user records for this email (multi-tenant support)
-    const users = db.prepare(`
-      SELECT u.email, t.id as tenant_id, t.slug as tenant_slug, t.name as tenant_name
-      FROM users u JOIN tenants t ON u.tenant_id = t.id
-      WHERE LOWER(u.email) = LOWER(?)
-    `).all(email);
+    // Look up all user records for this email across ALL tenant databases
+    const allTenants = getAllTenants();
+    const users = [];
+    for (const tenant of allTenants) {
+      try {
+        const tenantDb = getTenantDb(tenant.id);
+        const u = tenantDb.prepare('SELECT email, role, tenant_id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+        if (u) {
+          const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
+          const subdomain = (isAdmin && tenant.id === 'default') ? 'admin' : getSubdomainForSlug(tenant.slug);
+          const displayName = (isAdmin && tenant.id === 'default') ? 'Platform Admin' : tenant.name;
+          users.push({ slug: subdomain, name: displayName, id: tenant.id, role: u.role });
+        }
+      } catch (e) { /* tenant DB may not have users table */ }
+    }
 
     if (users.length > 1) {
-      return res.json({ tenants: users.map(u => ({ slug: getSubdomainForSlug(u.tenant_slug), name: u.tenant_name, id: u.tenant_id })) });
+      return res.json({ tenants: users });
     }
     if (users.length === 1) {
-      return res.json({ tenant_slug: getSubdomainForSlug(users[0].tenant_slug), tenant_name: users[0].tenant_name });
+      return res.json({ tenant_slug: users[0].slug, tenant_name: users[0].name });
     }
 
     // Fallback: match by email domain
