@@ -181,7 +181,10 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   // Ask the tenant's primary agent to draft a response
   const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
-  const prompt = `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`;
+  const hasThreadContext = body.includes('--- Previous messages in this thread ---');
+  const prompt = hasThreadContext
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`;
 
   let agentResponse;
   try {
@@ -276,32 +279,75 @@ async function pollSingleInbox(gmail, tenantId, label) {
       const body = extractEmailBody(full.data.payload);
       const msgThreadId = full.data.threadId;
 
-      // Check if this thread was already processed by a pipeline — follow-up reply
+      // Check if this thread was already processed — handle multi-turn conversation
       const priorThread = isThreadProcessed(msgThreadId);
       if (priorThread) {
-        console.log(`[GmailPoll] [${label}] Follow-up in already-processed thread (pipeline: ${priorThread.pipeline}), logging and skipping`);
         const followupTenant = priorThread.tenant_id || tenantId || 'default';
-        insertActivity({
+
+        // Skip our own sent messages to avoid reply loops
+        const ownAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital'];
+        if (ownAddresses.some(addr => senderEmail?.toLowerCase() === addr)) {
+          console.log(`[GmailPoll] [${label}] Skipping own sent message in thread ${msgThreadId}`);
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'self-skip', tenantId: followupTenant });
+          try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+          continue;
+        }
+
+        console.log(`[GmailPoll] [${label}] Follow-up in thread (pipeline: ${priorThread.pipeline}), processing multi-turn reply`);
+
+        // Run through email guard for the follow-up
+        const followupClassification = classifyEmail({
           tenantId: followupTenant,
-          type: 'in',
-          title: `Follow-up from ${senderName || senderEmail}`,
-          subtitle: `${subject} (thread already processed by ${priorThread.pipeline})`,
-          detailJson: JSON.stringify({
-            from: senderEmail, fromName: senderName, subject,
-            body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id,
-            originalPipeline: priorThread.pipeline,
-          }),
-          sourceType: 'email',
-          sourceId: msg.id,
-          agentId: 'coppice',
+          senderEmail,
+          senderName,
+          subject,
+          body,
+          headers: full.data.payload?.headers || [],
+          messageId: msg.id,
         });
+
+        if (followupClassification.verdict === 'blocked' || followupClassification.verdict === 'spam' || followupClassification.verdict === 'spoofed') {
+          console.log(`[GmailPoll] [${label}] Follow-up blocked by email guard: ${followupClassification.verdict}`);
+          try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: `follow-up-${followupClassification.verdict}`, tenantId: followupTenant });
+          newReplies++;
+          continue;
+        }
+
+        // Fetch thread history for context
+        let threadContext = '';
         try {
-          await gmail.users.messages.modify({
-            userId: 'me', id: msg.id,
-            requestBody: { removeLabelIds: ['UNREAD'] },
-          });
-        } catch {}
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up', tenantId: followupTenant });
+          const threadRes = await gmail.users.threads.get({ userId: 'me', id: msgThreadId, format: 'full' });
+          const threadMessages = threadRes.data.messages || [];
+          // Build conversation history (last 5 messages, excluding current)
+          const recentMessages = threadMessages.slice(-6, -1);
+          if (recentMessages.length > 0) {
+            threadContext = '\n\n--- Previous messages in this thread ---\n';
+            for (const tm of recentMessages) {
+              const tmHeaders = tm.payload?.headers || [];
+              const tmFrom = tmHeaders.find(h => h.name.toLowerCase() === 'from')?.value || 'Unknown';
+              const tmBody = extractEmailBody(tm.payload);
+              threadContext += `\nFrom: ${tmFrom}\n${tmBody.slice(0, 1500)}\n---\n`;
+            }
+          }
+        } catch (err) {
+          console.warn(`[GmailPoll] Could not fetch thread history: ${err.message}`);
+        }
+
+        // Route to generalEmailHandler with thread context baked into the body
+        await generalEmailHandler({
+          messageId: msg.id,
+          threadId: msgThreadId,
+          from: senderEmail,
+          fromName: senderName,
+          subject,
+          body: body + threadContext,
+          tenantId: followupTenant,
+          gmail,
+          classification: followupClassification,
+        });
+
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         newReplies++;
         continue;
       }
