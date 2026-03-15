@@ -482,7 +482,7 @@ export default function SettingsPanel() {
 
   const SETTINGS_TABS = [
     { id: 'general', label: 'General', icon: Cpu },
-    { id: 'integrations', label: 'Integrations', icon: Link2 },
+    ...(isAdmin ? [{ id: 'integrations', label: 'Integrations', icon: Link2 }] : []),
     ...(isAdmin ? [{ id: 'email-security', label: 'Email Security', icon: Mail }] : []),
   ];
 
@@ -520,7 +520,7 @@ export default function SettingsPanel() {
         </Suspense>
       )}
 
-      {settingsTab === 'integrations' && <IntegrationsPanel />}
+      {settingsTab === 'integrations' && isAdmin && <IntegrationsPanel />}
 
       {settingsTab === 'general' && <div className="space-y-4">
         {/* Team Management */}
