@@ -69,6 +69,104 @@ interface FleetEntry {
   location: string;
 }
 
+function IntegrationsPanel() {
+  const [integrations, setIntegrations] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const api = useApi();
+
+  useEffect(() => {
+    api.get('/api/v1/auth/google/integrations')
+      .then(res => res.json())
+      .then(data => {
+        const map: Record<string, boolean> = {};
+        (data.connected || []).forEach((s: string) => { map[s.replace('google-', '')] = true; });
+        setIntegrations(map);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const connectIntegration = (scopes: string, sourceId: string) => {
+    const token = localStorage.getItem('coppice_token');
+    if (!token) return;
+    const url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=google-${sourceId}&token=${encodeURIComponent(token)}`;
+    const popup = window.open(url, 'oauth-popup', 'width=600,height=700,scrollbars=yes');
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'oauth-integration-success') {
+        const connectedSource = event.data.source?.replace('google-', '');
+        if (connectedSource) {
+          setIntegrations(prev => ({ ...prev, [connectedSource]: true }));
+        }
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+  };
+
+  const AVAILABLE_INTEGRATIONS = [
+    {
+      id: 'email',
+      name: 'Email & Calendar',
+      description: 'Send emails, manage inbox, and schedule meetings on behalf of your team',
+      icon: Mail,
+      scopes: 'gmail.send,gmail.modify,calendar.readonly,calendar.events',
+    },
+    {
+      id: 'drive',
+      name: 'Google Drive',
+      description: 'Create and manage documents, spreadsheets, and presentations',
+      icon: Globe,
+      scopes: 'drive,docs,spreadsheets',
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <SettingsSection
+        title="Connected Services"
+        description="Connect your Google account to enable email, calendar, and document features"
+        icon={<Link2 size={18} className="text-terminal-green" />}
+        active
+      >
+        {loading ? (
+          <p className="text-sm text-terminal-muted">Loading...</p>
+        ) : (
+          <div className="space-y-3">
+            {AVAILABLE_INTEGRATIONS.map(integration => {
+              const connected = integrations[integration.id];
+              const Icon = integration.icon;
+              return (
+                <div key={integration.id} className="flex items-center justify-between p-3 bg-terminal-bg rounded-lg border border-terminal-border">
+                  <div className="flex items-center gap-3">
+                    <Icon size={20} className={connected ? 'text-terminal-green' : 'text-terminal-muted'} />
+                    <div>
+                      <p className="text-sm font-medium text-terminal-text">{integration.name}</p>
+                      <p className="text-xs text-terminal-muted">{integration.description}</p>
+                    </div>
+                  </div>
+                  {connected ? (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-terminal-green bg-terminal-green/10 rounded-lg">
+                      <Shield size={12} /> Connected
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => connectIntegration(integration.scopes, integration.id)}
+                      className="px-4 py-1.5 text-xs font-semibold bg-[#1a6b3c] text-white rounded-lg hover:bg-[#15572f] transition-colors"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SettingsSection>
+    </div>
+  );
+}
+
 export default function SettingsPanel() {
   // Phase 2: Energy settings
   const { data: settingsData, refetch: refetchSettings } = useApi('/energy/settings', { refreshInterval: 0 });
@@ -384,6 +482,7 @@ export default function SettingsPanel() {
 
   const SETTINGS_TABS = [
     { id: 'general', label: 'General', icon: Cpu },
+    { id: 'integrations', label: 'Integrations', icon: Link2 },
     ...(isAdmin ? [{ id: 'email-security', label: 'Email Security', icon: Mail }] : []),
   ];
 
@@ -420,6 +519,8 @@ export default function SettingsPanel() {
           <EmailSecurityPanel />
         </Suspense>
       )}
+
+      {settingsTab === 'integrations' && <IntegrationsPanel />}
 
       {settingsTab === 'general' && <div className="space-y-4">
         {/* Team Management */}
