@@ -119,6 +119,11 @@
       <div id="error-msg" class="login-error"></div>
     </div>
 
+    <div id="tenant-picker" style="display:none;">
+      <div class="login-divider">Choose your workspace</div>
+      <div class="direct-links"></div>
+    </div>
+
   </div>
 
   <div class="login-footer">
@@ -163,13 +168,14 @@ async function lookupTenant() {
       window.location.href = 'https://' + data.tenant_slug + '.coppice.ai?email=' + encodeURIComponent(email);
     } else if (data.tenants && data.tenants.length > 0) {
       // Multi-tenant: show picker
-      var linksEl = document.querySelector('.direct-links');
+      document.getElementById('email-step').style.display = 'none';
+      var picker = document.getElementById('tenant-picker');
+      var linksEl = picker.querySelector('.direct-links');
       linksEl.innerHTML = '';
       data.tenants.forEach(function(t) {
         var a = document.createElement('a');
         a.href = 'https://' + t.slug + '.coppice.ai?email=' + encodeURIComponent(email);
         a.className = 'direct-link';
-        // Style admin tenant differently
         if (t.slug === 'admin') {
           a.style.borderColor = '#3b82f6';
           a.style.color = '#3b82f6';
@@ -179,7 +185,7 @@ async function lookupTenant() {
         }
         linksEl.appendChild(a);
       });
-      document.querySelector('.login-divider').textContent = 'Choose your workspace';
+      picker.style.display = 'block';
     } else {
       errorEl.textContent = 'No account found for this email. Contact your admin or request a demo.';
       errorEl.style.display = 'block';
