@@ -169,6 +169,7 @@ const WORKSPACE_TOOLS = [
         audience: { type: 'string', description: 'Who will see this presentation' },
         slide_count: { type: 'integer', description: 'Number of slides (default 10)' },
         tone: { type: 'string', description: 'Presentation tone (default: professional, data-driven)' },
+        include_backgrounds: { type: 'boolean', description: 'Whether to generate AI background images' },
       },
       required: ['topic', 'context'],
     },
@@ -374,6 +375,105 @@ async function callHubSpotTool(toolName, toolInput, tenantId) {
       });
     default:
       throw new Error(`Unknown HubSpot tool: ${toolName}`);
+  }
+}
+
+// ─── Email Security Tools (Hivemind only) ───────────────────────────────────
+
+const EMAIL_SECURITY_TOOLS = [
+  {
+    name: 'add_trusted_sender',
+    description: 'Add an email address or domain to the trusted senders list. Trusted senders get automatic responses from the agent. Use when the user asks to whitelist, trust, or add a sender.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['email', 'domain'], description: 'Whether this is a full email address or a domain' },
+        value: { type: 'string', description: 'The email address (e.g. john@acme.com) or domain (e.g. @acme.com or acme.com)' },
+      },
+      required: ['type', 'value'],
+    },
+  },
+  {
+    name: 'remove_trusted_sender',
+    description: 'Remove an email address or domain from the trusted senders list. Use when the user asks to remove, untrust, or delete a sender from the whitelist.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        value: { type: 'string', description: 'The email address or domain to remove' },
+      },
+      required: ['value'],
+    },
+  },
+  {
+    name: 'list_trusted_senders',
+    description: 'List all trusted senders for this tenant. Use when the user asks who the trusted senders are, what the whitelist looks like, or wants to see email security settings.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+];
+
+const EMAIL_SECURITY_PROMPT_ADDON = `
+
+You can manage the email security whitelist:
+- add_trusted_sender: Add an email or domain to the trusted senders list
+- remove_trusted_sender: Remove an entry from the trusted senders list
+- list_trusted_senders: Show all trusted senders grouped by type
+
+Examples: "Add @turnerconstruction.com to trusted senders", "Remove noreply@spam.com", "Who are our trusted senders?"`;
+
+async function callEmailSecurityTool(toolName, toolInput, tenantId) {
+  const { getTrustedSenders, addTrustedSender, removeTrustedSender } = await import('../cache/database.js');
+
+  switch (toolName) {
+    case 'add_trusted_sender': {
+      let value = toolInput.value.trim();
+      const isEmail = toolInput.type === 'email';
+      if (!isEmail) {
+        // Normalize domain — strip leading @
+        value = value.replace(/^@/, '');
+      }
+      addTrustedSender({
+        tenantId,
+        email: isEmail ? value : null,
+        domain: isEmail ? null : value,
+        displayName: null,
+        trustLevel: 'trusted',
+        notes: 'Added via Hivemind',
+      });
+      const displayVal = isEmail ? value : `@${value}`;
+      return { success: true, message: `Done — emails from ${displayVal} will now get automatic responses.` };
+    }
+    case 'remove_trusted_sender': {
+      const value = toolInput.value.trim().replace(/^@/, '');
+      const senders = getTrustedSenders(tenantId);
+      const match = senders.find(s =>
+        (s.email && s.email.toLowerCase() === value.toLowerCase()) ||
+        (s.domain && s.domain.toLowerCase() === value.toLowerCase())
+      );
+      if (!match) {
+        return { success: false, message: `No trusted sender found matching "${toolInput.value}".` };
+      }
+      removeTrustedSender(match.id);
+      const displayVal = match.email || `@${match.domain}`;
+      return { success: true, message: `Removed — ${displayVal} will no longer get automatic responses.` };
+    }
+    case 'list_trusted_senders': {
+      const senders = getTrustedSenders(tenantId);
+      if (senders.length === 0) {
+        return { message: 'No trusted senders configured yet.' };
+      }
+      const domains = senders.filter(s => s.domain).map(s => `@${s.domain}`);
+      const emails = senders.filter(s => s.email).map(s => s.email);
+      let result = '';
+      if (domains.length > 0) result += `**Trusted Domains (${domains.length}):**\n${domains.map(d => `• ${d}`).join('\n')}\n\n`;
+      if (emails.length > 0) result += `**Trusted Emails (${emails.length}):**\n${emails.map(e => `• ${e}`).join('\n')}`;
+      return { message: result.trim(), count: senders.length };
+    }
+    default:
+      throw new Error(`Unknown email security tool: ${toolName}`);
   }
 }
 
@@ -905,6 +1005,18 @@ You can help with:
 
 You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files. You can generate full branded presentations with custom styling — just provide the topic and context.
 
+
+When the user requests a PDF, report, or document:
+- Before generating, ask what style they prefer:
+  Option 1: Clean/legal — plain text, numbered sections, no cover page
+  Option 2: Formatted — branded cover page with background image, styled headings, professional layout
+- Present these as clear options the user can pick from.
+
+When the user requests a presentation or pitch deck:
+- Ask if they want AI-generated background images for each slide (adds ~60 seconds per slide)
+- Ask about tone: formal/corporate, casual/startup, or data-heavy
+- Then proceed with generation based on their choices.
+
 Keep responses concise and professional. Use construction industry terminology naturally. When referencing numbers, be specific. If you don't have the data to answer something, say so clearly.`,
 
   estimating: `You are the Estimating Bot for DACP Construction, a concrete subcontractor in Houston, Texas. You specialize in concrete estimating and bid preparation.
@@ -975,6 +1087,18 @@ You have access to Google Workspace tools — you can create Docs, Sheets, and S
 
 You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
 
+
+When the user requests a PDF, report, or document:
+- Before generating, ask what style they prefer:
+  Option 1: Clean/legal — plain text, numbered sections, no cover page
+  Option 2: Formatted — branded cover page with background image, styled headings, professional layout
+- Present these as clear options the user can pick from.
+
+When the user requests a presentation or pitch deck:
+- Ask if they want AI-generated background images for each slide (adds ~60 seconds per slide)
+- Ask about tone: formal/corporate, casual/startup, or data-heavy
+- Then proceed with generation based on their choices.
+
 Use Bitcoin mining and energy market terminology naturally. Be precise with numbers — hashrate in PH/s, energy in MW, prices in $/MWh. When referencing meeting data, cite specific dates, numbers, and names.
 
 RECENT MEETING CONTEXT:
@@ -986,7 +1110,51 @@ The most recent Sangha weekly operations call (March 9, 2026) covered:
 - Operations: ambient heat causing mining downtime, March revenue forecasts revised downward
 - Blockers: Fusion deal in legal review, blocking hard money loan; Bit Deer non-committal on hosting
 
-When Spencer or team members ask about action items, status of deals, or operational issues, reference this meeting data. Be specific with numbers and names.`,
+When Spencer or team members ask about action items, status of deals, or operational issues, reference this meeting data. Be specific with numbers and names.
+
+ZHAN CAPITAL CONTEXT:
+You also serve as the knowledge agent for Zhan Capital LLC — the parent investment firm that owns Sangha Holdings, Coppice AI, and Volt Charging. When emails arrive asking about Zhan Capital, answer using the context below.
+
+Zhan Capital LLC is a thesis-driven investment firm focused on sovereign AI infrastructure, energy systems, and digital monetary networks. Founded by Teo Blind. The firm operates at the intersection of three macro themes they call "pillars":
+
+Pillar 1 — Energy & Nuclear: The AI buildout requires 10-100x more power than current grid capacity. Zhan invests in energy assets (Bitcoin mining, power purchase agreements, behind-the-meter infrastructure) positioned to benefit from rising electricity demand. Nuclear is the only scalable baseload source for AI data centers.
+
+Pillar 2 — Rare Earth & Supply Chain: Sovereign AI requires domestic supply chains for critical minerals (lithium, cobalt, rare earths). China controls 60%+ of processing. Zhan tracks supply chain reshoring as a structural investment theme.
+
+Pillar 3 — Hashprice as Macro Signal: Bitcoin mining economics (hashprice = $/TH/day) serve as a real-time barometer for energy costs, network security, and monetary policy. Zhan uses hashprice modeling to inform cross-asset positioning.
+
+Investment Approach:
+- Scenario-based positioning (not point forecasts) — bull/base/bear frameworks
+- Physical-world bias — preference for assets with tangible infrastructure
+- Sovereign infrastructure focus — energy independence, supply chain security
+- Hashprice as a cross-asset signal for energy, monetary, and technology cycles
+
+Portfolio Companies:
+- Sangha Holdings / Sangha Renewables — Bitcoin mining operations, 8 years experience, ERCOT-based
+- Coppice AI — AI employees for construction & energy companies ($3-5K/month, autonomous agents for estimating, lead gen, operations)
+- Volt Charging — EV charging partnerships with restaurants, hotels, and retail venues
+- Ampera — Teo Blind's energy startup (Duke-affiliated)
+
+Teo Blind (Founder):
+- Duke University — BS Mathematics & Computer Science
+- Associate at Sangha Holdings (current)
+- Founded Ampera (energy/cleantech)
+- Former analyst at BVN Architecture (NYC)
+- Hanoi University of Science and Technology (exchange)
+- Expertise: quantitative modeling, energy markets, Bitcoin mining economics, AI infrastructure
+
+Coppice AI (Product):
+- AI employees for construction and energy companies
+- Multi-tenant platform: each client gets their own AI agent trained on their business
+- Agents handle: estimating, lead generation, outreach, document creation, meeting analysis, email management
+- Current clients: Sangha Renewables (energy), DACP Construction (concrete subcontractor)
+- Pricing: $3,000-5,000/month per AI employee
+- Built on Claude (Anthropic) with proprietary orchestration layer
+
+Website: www.zhan.capital
+Contact: teo@zhan.capital
+
+When responding to emails about Zhan Capital, be knowledgeable but concise. Don't volunteer all information at once — answer what's asked and offer to elaborate. Use the Hot Potato framework for sales-oriented inquiries (answer briefly, ask a question back).`,
 
   curtailment: `You are the Curtailment Agent for Sangha Holdings. You monitor ERCOT real-time pricing and manage fleet power states to maximize mining revenue.
 
@@ -1079,6 +1247,18 @@ Adapt your product knowledge to the current tenant:
 Keep responses conversational and natural — you're a closer, not a robot. Use short sentences. Be direct. Sound human.`,
 
   'pitch-deck': `You are the Coppice Pitch Deck Production Agent. You create investor-grade, editorial-quality HTML presentations through a multi-stage pipeline.
+
+
+When the user requests a PDF, report, or document:
+- Before generating, ask what style they prefer:
+  Option 1: Clean/legal — plain text, numbered sections, no cover page
+  Option 2: Formatted — branded cover page with background image, styled headings, professional layout
+- Present these as clear options the user can pick from.
+
+When the user requests a presentation or pitch deck:
+- Ask if they want AI-generated background images for each slide (adds ~60 seconds per slide)
+- Ask about tone: formal/corporate, casual/startup, or data-heavy
+- Then proceed with generation based on their choices.
 
 ═══ WORKFLOW (follow this order strictly) ═══
 
@@ -1296,7 +1476,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Email tools for agents with email access
   const emailAgents = ['sangha', 'hivemind', 'email'];
   const emailAddon = emailAgents.includes(agentId) ? EMAIL_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + knowledgeContext;
+  // Email security tools — hivemind only
+  const esAgents = ['sangha', 'hivemind'];
+  const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -1320,6 +1503,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Email tools for agents with inbox access
   if (emailAgents.includes(agentId)) {
     tools.push(...EMAIL_TOOLS);
+  }
+  // Email security tools — hivemind only
+  if (esAgents.includes(agentId)) {
+    tools.push(...EMAIL_SECURITY_TOOLS);
   }
   // Web browsing — available to all agents
   tools.push(...WEB_TOOLS);
@@ -1370,8 +1557,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const webToolNames = ['browse_url'];
       const legalToolNames = ['generate_legal_doc'];
       const emailToolNames = ['send_email', 'list_emails', 'read_email'];
+      const emailSecurityToolNames = ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'];
       try {
-        if (emailToolNames.includes(toolName)) {
+        if (emailSecurityToolNames.includes(toolName)) {
+          toolResult = await callEmailSecurityTool(toolName, toolInput, tenantId);
+        } else if (emailToolNames.includes(toolName)) {
           toolResult = await callEmailTool(toolName, toolInput, tenantId);
         } else if (leadEngineToolNames.includes(toolName)) {
           toolResult = await callLeadEngineTool(toolName, toolInput, tenantId);
