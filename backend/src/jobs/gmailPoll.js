@@ -12,7 +12,7 @@ import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
 import { chat } from '../services/chatService.js';
-import { sendEmail, sendHtmlEmail, markdownToEmailHtml } from '../services/emailService.js';
+import { sendEmail, sendHtmlEmail, sendEmailWithAttachments, markdownToEmailHtml } from '../services/emailService.js';
 
 let pollInterval = null;
 let lastPoll = null;
@@ -182,14 +182,19 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
   const hasThreadContext = body.includes('--- Previous messages in this thread ---');
+  const docInstruction = '\n\nIMPORTANT: If the sender is requesting a document (legal doc, report, memo, proposal, summary, etc.), use the generate_document or generate_legal_doc tool to create it. The file will be automatically attached to your email reply. After generating, write a brief message explaining what you created.';
   const prompt = hasThreadContext
-    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`
-    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`;
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}`;
 
   let agentResponse;
+  let agentToolResult = null;
+  let agentToolUsed = null;
   try {
     const result = await chat(resolvedTenant, agentId, 'system-auto-reply', prompt);
     agentResponse = result.response;
+    agentToolResult = result.tool_result || null;
+    agentToolUsed = result.tool_used || null;
   } catch (err) {
     console.error(`[GmailPoll] Agent draft failed for ${messageId}:`, err.message);
     insertActivity({
@@ -206,6 +211,18 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     return;
   }
 
+  // Check if the agent generated a file (document, legal doc, etc.)
+  const generatedFile = agentToolResult?.file || (agentToolResult?.filePath ? agentToolResult : null);
+  const attachments = [];
+  if (generatedFile?.filePath) {
+    attachments.push({
+      filename: generatedFile.filename,
+      path: generatedFile.filePath,
+      contentType: generatedFile.contentType,
+    });
+    console.log(`[GmailPoll] Agent generated file: ${generatedFile.filename} (tool: ${agentToolUsed})`);
+  }
+
   // Send the reply with proper threading (convert markdown to HTML)
   // Detect meeting-related emails to CC + forward full thread to Teo
   const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet|check size|LP|lock-?up)\b/i;
@@ -215,17 +232,33 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
   try {
     const html = markdownToEmailHtml(agentResponse);
-    await sendHtmlEmail({
-      to: from,
-      subject: replySubject,
-      html,
-      cc,
-      tenantId: resolvedTenant,
-      threadId,
-      inReplyTo: messageId,
-      references: messageId,
-    });
-    console.log(`[GmailPoll] Auto-reply sent to ${from} for "${subject}"${cc ? ` (CC: ${cc})` : ''}`);
+    if (attachments.length > 0) {
+      // Send with attachments
+      await sendEmailWithAttachments({
+        to: from,
+        subject: replySubject,
+        html,
+        cc,
+        tenantId: resolvedTenant,
+        threadId,
+        inReplyTo: messageId,
+        references: messageId,
+        attachments,
+      });
+      console.log(`[GmailPoll] Auto-reply sent to ${from} with ${attachments.length} attachment(s) for "${subject}"`);
+    } else {
+      await sendHtmlEmail({
+        to: from,
+        subject: replySubject,
+        html,
+        cc,
+        tenantId: resolvedTenant,
+        threadId,
+        inReplyTo: messageId,
+        references: messageId,
+      });
+      console.log(`[GmailPoll] Auto-reply sent to ${from} for "${subject}"${cc ? ` (CC: ${cc})` : ''}`);
+    }
   } catch (err) {
     console.error(`[GmailPoll] Auto-reply send failed:`, err.message);
     markEmailProcessed({ messageId, threadId, pipeline: 'general-send-error', tenantId: resolvedTenant });

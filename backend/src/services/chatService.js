@@ -550,21 +550,61 @@ async function callLegalTool(toolName, toolInput, tenantId) {
     const { generateLegalDoc } = await import('./legalDocService.js');
     const doc = generateLegalDoc(toolInput);
 
-    // Create the doc in Google Drive via workspace tools
+    // Generate a DOCX file for attachment
+    const { generateDocx } = await import('./documentService.js');
+    const fileResult = await generateDocx({ title: doc.title, content: doc.content });
+
+    // Also try Google Drive
+    let googleDoc = null;
     try {
       const wsResult = await callWorkspaceTool('workspace_create_doc', {
         title: doc.title,
         content: doc.content,
         folder: 'Legal Documents',
       }, tenantId);
-      return { ...doc, google_doc: wsResult };
+      googleDoc = wsResult;
     } catch (wsErr) {
-      // If workspace agent is unavailable, still return the content
-      return { ...doc, google_doc_error: wsErr.message };
+      // Non-critical — file attachment still works
     }
+
+    return { ...doc, file: fileResult, google_doc: googleDoc };
   }
   throw new Error(`Unknown legal tool: ${toolName}`);
 }
+
+// ─── Document Generation Tools ───────────────────────────────────────────────
+
+const DOCUMENT_TOOLS = [
+  {
+    name: 'generate_document',
+    description: 'Generate a formatted document (DOCX or PDF). Use for reports, memos, proposals, summaries, or any document the user requests. Returns a file that can be attached to an email reply.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Document title' },
+        content: { type: 'string', description: 'Full document content in markdown format. Use # for headings, ** for bold, * for italic, - for bullet lists, numbered lists, --- for horizontal rules.' },
+        format: { type: 'string', enum: ['docx', 'pdf'], description: 'Output format (default: docx)' },
+        filename: { type: 'string', description: 'Custom filename (without extension)' },
+      },
+      required: ['title', 'content'],
+    },
+  },
+];
+
+async function callDocumentTool(toolName, toolInput, tenantId) {
+  if (toolName === 'generate_document') {
+    const { generateDocument } = await import('./documentService.js');
+    const result = await generateDocument(toolInput);
+    return result;
+  }
+  throw new Error(`Unknown document tool: ${toolName}`);
+}
+
+const DOCUMENT_TOOLS_PROMPT_ADDON = `
+
+You can generate formatted documents on request:
+- generate_document: Create DOCX or PDF files (reports, memos, proposals, summaries, letters, any document)
+Write the full content in markdown format. The document will be generated and attached to your email reply or available for download.`;
 
 // ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
 
@@ -1484,7 +1524,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Web browsing — available to all agents
   const webAddon = WEB_TOOLS_PROMPT_ADDON;
   // Legal tools for relevant agents
-  const legalAgents = ['sangha', 'hivemind', 'documents'];
+  const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
   // Email tools for agents with email access
   const emailAgents = ['sangha', 'hivemind', 'email', 'zhan'];
@@ -1492,7 +1532,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Email security tools — hivemind only
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + knowledgeContext;
+  // Document generation tools — all agents
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email'];
+  const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -1526,6 +1569,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Legal document tools
   if (legalAgents.includes(agentId)) {
     tools.push(...LEGAL_TOOLS);
+  }
+  // Document generation tools
+  if (docAgents.includes(agentId)) {
+    tools.push(...DOCUMENT_TOOLS);
   }
 
   // 5. Call Claude API
@@ -1569,6 +1616,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const miningToolNames = ['generate_mine_specs'];
       const webToolNames = ['browse_url'];
       const legalToolNames = ['generate_legal_doc'];
+      const documentToolNames = ['generate_document'];
       const emailToolNames = ['send_email', 'list_emails', 'read_email'];
       const emailSecurityToolNames = ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'];
       try {
@@ -1588,6 +1636,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           toolResult = await callWebTool(toolName, toolInput);
         } else if (legalToolNames.includes(toolName)) {
           toolResult = await callLegalTool(toolName, toolInput, tenantId);
+        } else if (documentToolNames.includes(toolName)) {
+          toolResult = await callDocumentTool(toolName, toolInput, tenantId);
         } else {
           toolResult = await callWorkspaceTool(toolName, toolInput, tenantId);
         }
