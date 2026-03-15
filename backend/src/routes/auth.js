@@ -123,7 +123,9 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
         // Return tenant picker — don't verify password yet
         const tenants = users.map(u => {
           const t = getTenant(u.tenant_id);
-          return { id: u.tenant_id, slug: t?.slug, name: t?.name };
+          const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
+          const displayName = (isAdmin && u.tenant_id === 'default') ? 'Platform Admin' : t?.name;
+          return { id: u.tenant_id, slug: t?.slug, name: displayName, role: u.role };
         });
         return res.json({ tenant_required: true, tenants });
       }
@@ -455,10 +457,12 @@ router.get('/my-tenants', authenticate, (req, res) => {
     const users = getUsersByEmail(user.email);
     const tenants = users.map(u => {
       const t = getTenant(u.tenant_id);
+      const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
+      const displayName = (isAdmin && u.tenant_id === 'default') ? 'Platform Admin' : t?.name;
       return {
         id: u.tenant_id,
         slug: t?.slug,
-        name: t?.name,
+        name: displayName,
         subdomain: getSubdomainForSlug(t?.slug || u.tenant_id),
         role: u.role,
         status: u.status,
