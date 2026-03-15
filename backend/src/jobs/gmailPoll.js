@@ -335,8 +335,10 @@ async function pollSingleInbox(gmail, tenantId, label) {
         }
 
         // Route to generalEmailHandler with thread context baked into the body
+        const followupHeaders = full.data.payload?.headers || [];
+        const followupRfc822Id = followupHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
         await generalEmailHandler({
-          messageId: msg.id,
+          messageId: followupRfc822Id,
           threadId: msgThreadId,
           from: senderEmail,
           fromName: senderName,
@@ -346,6 +348,10 @@ async function pollSingleInbox(gmail, tenantId, label) {
           gmail,
           classification: followupClassification,
         });
+        // Also mark the internal Gmail ID as processed for dedup
+        if (followupRfc822Id !== msg.id) {
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up-dedup', tenantId: followupTenant });
+        }
 
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         newReplies++;
@@ -541,6 +547,10 @@ async function pollSingleInbox(gmail, tenantId, label) {
           gmail,
           classification,
         });
+        // Also mark the internal Gmail ID as processed for dedup
+        if (rfc822MessageId !== msg.id) {
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'general-dedup', tenantId: resolvedTenant });
+        }
       } catch (err) {
         console.error(`[GmailPoll] [${label}] General handler error:`, err.message);
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'general-error', tenantId: resolvedTenant });
