@@ -292,13 +292,14 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename, t
 /**
  * Send an HTML email.
  */
-export async function sendHtmlEmail({ to, subject, html, tenantId, threadId, inReplyTo, references }) {
+export async function sendHtmlEmail({ to, subject, html, cc, tenantId, threadId, inReplyTo, references }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
   const htmlBase64 = Buffer.from(html, 'utf-8').toString('base64');
   const headers = [
     `From: ${sender}`,
     `To: ${to}`,
+    cc ? `Cc: ${cc}` : null,
     `Subject: ${encodeSubject(subject)}`,
     inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
     references ? `References: ${references}` : null,

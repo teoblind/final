@@ -207,6 +207,11 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   }
 
   // Send the reply with proper threading (convert markdown to HTML)
+  // CC teo@zhan.capital on meeting-related replies so Teo sees them immediately
+  const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet)\b/i;
+  const isMeetingRelated = meetingKeywords.test(body) || meetingKeywords.test(agentResponse);
+  const cc = isMeetingRelated ? 'teo@zhan.capital' : undefined;
+
   const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
   try {
     const html = markdownToEmailHtml(agentResponse);
@@ -214,12 +219,13 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
       to: from,
       subject: replySubject,
       html,
+      cc,
       tenantId: resolvedTenant,
       threadId,
       inReplyTo: messageId,
       references: messageId,
     });
-    console.log(`[GmailPoll] Auto-reply sent to ${from} for "${subject}"`);
+    console.log(`[GmailPoll] Auto-reply sent to ${from} for "${subject}"${cc ? ` (CC: ${cc})` : ''}`);
   } catch (err) {
     console.error(`[GmailPoll] Auto-reply send failed:`, err.message);
     markEmailProcessed({ messageId, threadId, pipeline: 'general-send-error', tenantId: resolvedTenant });
