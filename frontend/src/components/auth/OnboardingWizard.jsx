@@ -348,53 +348,6 @@ export default function OnboardingWizard({ onComplete }) {
     setSpecialties(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
   };
 
-  // ─── Step Indicator ──────────────────────────────────────────────────────────
-  const renderStepIndicator = () => (
-    <div className="flex items-center justify-center gap-0">
-      {STEPS.map((s, i) => (
-        <div key={s.id} className="flex items-center">
-          <div className="flex flex-col items-center">
-            <button
-              onClick={() => i < step && setStep(i)}
-              disabled={i > step}
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                i === step
-                  ? dk
-                    ? 'bg-white text-black shadow-[0_0_0_4px_rgba(255,255,255,0.1)]'
-                    : isConstruction
-                    ? 'bg-[#1e3a5f] text-white shadow-[0_0_0_4px_rgba(30,58,95,0.12)]'
-                    : 'bg-[#1a6b3c] text-white shadow-[0_0_0_4px_rgba(26,107,60,0.12)]'
-                  : i < step
-                    ? dk
-                      ? 'bg-white/15 text-white cursor-pointer'
-                      : isConstruction
-                      ? 'bg-[#1e3a5f]/15 text-[#1e3a5f] cursor-pointer'
-                      : 'bg-[#1a6b3c]/15 text-[#1a6b3c] cursor-pointer'
-                    : dk
-                      ? 'bg-[#1a1a1a] border border-[#2a2a2a] text-[#555]'
-                      : 'bg-terminal-panel border border-terminal-border text-terminal-muted'
-              }`}
-            >
-              {i < step ? '✓' : i + 1}
-            </button>
-            <span className={`text-[10px] mt-1.5 font-medium whitespace-nowrap ${
-              i === step
-                ? dk ? 'text-white' : isConstruction ? 'text-[#1e3a5f]' : 'text-[#1a6b3c]'
-                : i < step ? (dk ? 'text-white/70' : 'text-terminal-text') : (dk ? 'text-[#555]' : 'text-terminal-muted')
-            }`}>{s.label}</span>
-          </div>
-          {i < STEPS.length - 1 && (
-            <div className={`w-14 sm:w-20 h-[2px] mx-1.5 mt-[-14px] rounded-full ${
-              i < step
-                ? dk ? 'bg-white/20' : isConstruction ? 'bg-[#1e3a5f]/30' : 'bg-[#1a6b3c]/30'
-                : dk ? 'bg-[#2a2a2a]' : 'bg-terminal-border'
-            }`} />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-
   const accent = isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#1a6b3c';
   const accentHover = isVenture ? '#333330' : isConstruction ? '#15304f' : '#155a32';
   const accentDot = isVenture ? '#111110' : isConstruction ? '#3b82f6' : '#2dd478';
@@ -406,13 +359,57 @@ export default function OnboardingWizard({ onComplete }) {
 
   const dk = null;
 
+  // ─── Step Indicator ──────────────────────────────────────────────────────────
+  const renderStepIndicator = () => (
+    <div className="flex items-center justify-center gap-0">
+      {STEPS.map((s, i) => (
+        <div key={s.id} className="flex items-center">
+          <div className="flex flex-col items-center">
+            <button
+              onClick={() => i < step && setStep(i)}
+              disabled={i > step}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                i === step
+                  ? 'text-white'
+                  : i < step
+                    ? 'cursor-pointer'
+                    : 'bg-terminal-panel border border-terminal-border text-terminal-muted'
+              }`}
+              style={
+                i === step
+                  ? { backgroundColor: accent, boxShadow: `0 0 0 4px ${accent}20` }
+                  : i < step
+                    ? { backgroundColor: `${accent}20`, color: accent }
+                    : {}
+              }
+            >
+              {i < step ? '✓' : i + 1}
+            </button>
+            <span
+              className={`text-[10px] mt-1.5 font-medium whitespace-nowrap ${
+                i > step ? 'text-terminal-muted' : i < step ? 'text-terminal-text' : ''
+              }`}
+              style={i === step ? { color: accent } : {}}
+            >{s.label}</span>
+          </div>
+          {i < STEPS.length - 1 && (
+            <div
+              className="w-14 sm:w-20 h-[2px] mx-1.5 mt-[-14px] rounded-full bg-terminal-border"
+              style={i < step ? { backgroundColor: `${accent}40` } : {}}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   // ─── Step 1: Welcome ─────────────────────────────────────────────────────────
   const renderWelcome = () => (
     <div className="max-w-2xl mx-auto">
       {/* Hero */}
       <div className={`text-center mb-8 px-8 py-10 rounded-[18px] ${heroBg} text-white`}>
         <div className="mx-auto mb-5 flex justify-center">
-          <CoppiceLogo color={isConstruction ? '#1e3a5f' : '#1a2e1a'} size={56} />
+          <CoppiceLogo color={isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#1a2e1a'} size={56} />
         </div>
         <h2 className="text-[26px] font-bold mb-2.5 tracking-[-0.3px]">{WELCOME.title}</h2>
         <p className="text-white/55 text-[13px] leading-relaxed max-w-md mx-auto">
@@ -855,7 +852,7 @@ export default function OnboardingWizard({ onComplete }) {
         {/* Top bar */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${dk ? `${dk.panel} ${dk.border}` : 'border-terminal-border bg-terminal-panel'}`}>
           <div className="flex items-center gap-2.5">
-            <CoppiceLogo color={dk ? '#ffffff' : isConstruction ? '#1e3a5f' : '#1a2e1a'} size={28} />
+            <CoppiceLogo color={isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#1a2e1a'} size={28} />
             <span className={`text-[13px] font-semibold tracking-[0.2px] ${dk ? dk.text : 'text-terminal-text'}`}>Setup</span>
           </div>
           <button onClick={handleSkip} className={`text-[12px] transition-colors ${dk ? `${dk.muted} hover:text-white` : 'text-terminal-muted hover:text-terminal-text'}`}>
