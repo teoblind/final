@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield } from 'lucide-react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield, Mail } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import SettingsTeamPanel from './SettingsTeamPanel';
+const EmailSecurityPanel = lazy(() => import('./EmailSecurityPanel'));
 
 interface SettingsSectionProps {
   title: string;
@@ -375,6 +376,17 @@ export default function SettingsPanel() {
     power: acc.power + (entry.asicModel.powerConsumption * entry.quantity),
   }), { machines: 0, hashrate: 0, power: 0 });
 
+  const [settingsTab, setSettingsTab] = useState('general');
+
+  // Check if user is admin/owner (role from localStorage)
+  const storedUser = JSON.parse(localStorage.getItem('coppice_user') || '{}');
+  const isAdmin = ['owner', 'admin'].includes(storedUser.role);
+
+  const SETTINGS_TABS = [
+    { id: 'general', label: 'General', icon: Cpu },
+    ...(isAdmin ? [{ id: 'email-security', label: 'Email Security', icon: Mail }] : []),
+  ];
+
   return (
     <div className="p-4 max-w-4xl mx-auto">
       <div className="mb-6">
@@ -383,9 +395,33 @@ export default function SettingsPanel() {
           Configure your mining operations platform. Settings marked with a phase number
           will become available as those features are built.
         </p>
+        {SETTINGS_TABS.length > 1 && (
+          <div className="flex gap-1 mt-4">
+            {SETTINGS_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSettingsTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
+                  settingsTab === tab.id
+                    ? 'bg-[#1a6b3c] text-white'
+                    : 'text-terminal-muted hover:bg-[#f5f4f0] hover:text-terminal-text'
+                }`}
+              >
+                <tab.icon size={13} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="space-y-4">
+      {settingsTab === 'email-security' && isAdmin && (
+        <Suspense fallback={<div className="text-terminal-muted text-sm py-8 text-center">Loading...</div>}>
+          <EmailSecurityPanel />
+        </Suspense>
+      )}
+
+      {settingsTab === 'general' && <div className="space-y-4">
         {/* Team Management */}
         <SettingsTeamPanel />
 
@@ -1807,7 +1843,7 @@ export default function SettingsPanel() {
 
         {/* Phase 9: Insurance Settings */}
         <InsuranceSettingsSection />
-      </div>
+      </div>}
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Building2, DollarSign, BarChart3, MessageSquare, FileText,
-  Truck, Users, AlertTriangle, ChevronDown
+  Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon
 } from 'lucide-react';
 import SettingsTeamPanel from './SettingsTeamPanel';
+const EmailSecurityPanel = lazy(() => import('./EmailSecurityPanel'));
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -213,13 +214,47 @@ export default function DacpSettingsPanel() {
     });
   };
 
+  const [settingsTab, setSettingsTab] = useState('general');
+  const storedUser = JSON.parse(localStorage.getItem('coppice_user') || '{}');
+  const isAdmin = ['owner', 'admin'].includes(storedUser.role);
+
+  const SETTINGS_TABS = [
+    { id: 'general', label: 'General', icon: SettingsIcon },
+    ...(isAdmin ? [{ id: 'email-security', label: 'Email Security', icon: Mail }] : []),
+  ];
+
   return (
     <div className="p-6 lg:px-7 lg:py-6 max-w-[860px]">
       <div className="mb-6">
         <h2 className="text-[24px] font-normal text-terminal-text" style={{ fontFamily: "'Newsreader', Georgia, serif" }}>Settings</h2>
         <p className="text-[13px] text-terminal-muted mt-1">Configure your construction estimating platform. All changes are saved per section.</p>
+        {SETTINGS_TABS.length > 1 && (
+          <div className="flex gap-1 mt-4">
+            {SETTINGS_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setSettingsTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
+                  settingsTab === tab.id
+                    ? 'bg-[#1e3a5f] text-white'
+                    : 'text-terminal-muted hover:bg-[#f5f4f0] hover:text-terminal-text'
+                }`}
+              >
+                <tab.icon size={13} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
+      {settingsTab === 'email-security' && isAdmin && (
+        <Suspense fallback={<div className="text-terminal-muted text-sm py-8 text-center">Loading...</div>}>
+          <EmailSecurityPanel />
+        </Suspense>
+      )}
+
+      {settingsTab === 'general' && <>
       {/* ═══ TEAM MANAGEMENT ═══ */}
       <SettingsTeamPanel />
 
@@ -548,6 +583,7 @@ export default function DacpSettingsPanel() {
           <Btn variant="danger" onClick={() => { if (confirm('Are you sure? This permanently deletes all job records.')) alert('Historical data cleared.'); }}>Clear</Btn>
         </div>
       </Section>
+      </>}
     </div>
   );
 }
