@@ -38,7 +38,7 @@ function getInboxes() {
   // Default inbox (agent@zhan.coppice.ai from env vars)
   const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
   if (defaultToken) {
-    inboxes.push({ tenantId: null, label: 'agent@zhan.coppice.ai', gmail: makeGmailClient(defaultToken) });
+    inboxes.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', gmail: makeGmailClient(defaultToken) });
   }
 
   // Tenant inboxes from each tenant DB
@@ -179,7 +179,8 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   }
 
   // Ask the tenant's primary agent to draft a response
-  const agentId = resolvedTenant === 'default' ? 'sangha' : 'hivemind';
+  const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
+  const agentId = agentMap[resolvedTenant] || 'hivemind';
   const prompt = `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.`;
 
   let agentResponse;

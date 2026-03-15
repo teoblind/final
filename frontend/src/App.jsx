@@ -238,6 +238,7 @@ function AppContent() {
 
   const industry = tenant?.settings?.industry;
   const isConstruction = industry === 'construction';
+  const isVenture = industry === 'venture';
 
   // Dynamic PWA manifest per tenant
   useEffect(() => {
@@ -566,7 +567,7 @@ function AppContent() {
       case 'admin':
         return <AdminConsoleDashboard />;
       case 'hivemind-chat':
-        return <AgentChat agentId={isConstruction ? 'hivemind' : 'sangha'} />;
+        return <AgentChat agentId={isConstruction ? 'hivemind' : isVenture ? 'zhan' : 'sangha'} />;
       case 'field-chat':
         return <FieldReporterChat />;
       case 'scope-chat':

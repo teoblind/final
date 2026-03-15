@@ -846,6 +846,66 @@ function initSchemaForDb(targetDb) {
   // Initialize accounting tables (QuickBooks / Bill.com)
   initAccountingTables(targetDb);
 
+
+  // =========================================================================
+  // Portfolio Companies (Zhan Capital)
+  // =========================================================================
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS portfolio_companies (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT,
+      status TEXT DEFAULT 'active',
+      description TEXT,
+      tenant_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS company_email_accounts (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES portfolio_companies(id),
+      gmail_address TEXT NOT NULL,
+      oauth_refresh_token TEXT,
+      connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_synced_at DATETIME,
+      is_active INTEGER DEFAULT 1,
+      tenant_id TEXT NOT NULL
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS company_drive_folders (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL REFERENCES portfolio_companies(id),
+      folder_id TEXT NOT NULL,
+      folder_name TEXT,
+      folder_url TEXT,
+      connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_synced_at DATETIME,
+      tenant_id TEXT NOT NULL
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS company_email_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_id TEXT NOT NULL REFERENCES portfolio_companies(id),
+      date TEXT NOT NULL,
+      sent_count INTEGER DEFAULT 0,
+      received_count INTEGER DEFAULT 0,
+      draft_count INTEGER DEFAULT 0,
+      tenant_id TEXT NOT NULL,
+      UNIQUE(company_id, date)
+    )
+  `);
+
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_portfolio_tenant ON portfolio_companies(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_company_email_company ON company_email_accounts(company_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_company_drive_company ON company_drive_folders(company_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_company_email_stats_company ON company_email_stats(company_id, date)'); } catch (e) {}
   // Initialize price alert rules table
   initPriceAlertRulesTable(targetDb);
 
@@ -996,6 +1056,21 @@ function seedTenantsInSystemDb() {
     console.log('[DB] DACP tenant created in systemDb');
   }
 
+  // Create Zhan Capital tenant if not exists
+  const zhanTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('zhan-capital');
+  if (!zhanTenant) {
+    systemDb.prepare(`
+      INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      'zhan-capital', 'Zhan Capital', 'zhan', 'enterprise', 'active',
+      JSON.stringify({ companyName: 'Zhan Capital', primaryColor: '#141414', sidebarColor: '#0e0e0e', hideSanghaBranding: true }),
+      JSON.stringify({ industry: 'venture', show_portfolio: true, auto_reply_enabled: true }),
+      JSON.stringify({ maxUsers: 50, maxSites: 10, maxWorkloads: 100, maxAgents: 20, apiRateLimit: 120, dataRetentionDays: 365 })
+    );
+    console.log('[DB] Zhan Capital tenant created in systemDb');
+  }
+
   // Backfill settings_json for existing default tenant if missing
   const existingDefault = systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('default');
   if (existingDefault && !existingDefault.settings_json) {
@@ -1071,6 +1146,33 @@ function seedTenantData(targetDb, tenantId) {
         VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
       `).run(hash);
       console.log('[DB] DACP admin user created: admin@dacp.localhost');
+    }
+  }
+
+  // Seed Zhan Capital admin user + portfolio companies
+  if (tenantId === 'zhan-capital') {
+    const zhanAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
+    if (!zhanAdmin) {
+      const salt = bcryptPkg.genSaltSync(12);
+      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
+      targetDb.prepare(`
+        INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
+        VALUES ('zhan-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'zhan-capital', 'owner', 'active')
+      `).run(hash);
+      console.log('[DB] Zhan Capital admin user created: teo@zhan.capital');
+    }
+
+    // Seed portfolio companies
+    const companyCount = targetDb.prepare('SELECT COUNT(*) as c FROM portfolio_companies WHERE tenant_id = ?').get('zhan-capital');
+    if (companyCount.c === 0) {
+      const insertCompany = targetDb.prepare(`
+        INSERT OR IGNORE INTO portfolio_companies (id, name, type, status, description, tenant_id)
+        VALUES (?, ?, ?, ?, ?, 'zhan-capital')
+      `);
+      insertCompany.run('pc-coppice', 'Coppice AI', 'Vertical AI SaaS', 'active', 'AI-powered multi-tenant operations platform for industrial businesses');
+      insertCompany.run('pc-volt', 'Volt Charging', 'EV Infrastructure', 'pilot', 'EV charging partnerships with hospitality venues across the US');
+      insertCompany.run('pc-sangha', 'Sangha Renewables', 'Bitcoin Mining / Energy', 'partner', 'Behind-the-meter bitcoin mining and renewable energy optimization');
+      console.log('[DB] Zhan Capital portfolio companies seeded');
     }
   }
 
@@ -5454,6 +5556,82 @@ export function deletePriceAlertRule(id, tenantId) {
 
 export function updateAlertRuleLastTriggered(id) {
   db.prepare("UPDATE price_alert_rules SET last_triggered_at = datetime('now') WHERE id = ?").run(id);
+}
+
+// ─── Portfolio Companies Helpers ──────────────────────────────────────────────
+
+export function getPortfolioCompanies(tenantId) {
+  return db.prepare('SELECT * FROM portfolio_companies WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getPortfolioCompany(id, tenantId) {
+  return db.prepare('SELECT * FROM portfolio_companies WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+}
+
+export function createPortfolioCompany({ id, name, type, status, description, tenantId }) {
+  return db.prepare(`
+    INSERT INTO portfolio_companies (id, name, type, status, description, tenant_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, name, type || null, status || 'active', description || null, tenantId);
+}
+
+export function updatePortfolioCompany(id, updates, tenantId) {
+  const sets = [];
+  const params = [];
+  if (updates.name !== undefined) { sets.push('name = ?'); params.push(updates.name); }
+  if (updates.type !== undefined) { sets.push('type = ?'); params.push(updates.type); }
+  if (updates.status !== undefined) { sets.push('status = ?'); params.push(updates.status); }
+  if (updates.description !== undefined) { sets.push('description = ?'); params.push(updates.description); }
+  if (sets.length === 0) return;
+  params.push(id, tenantId);
+  return db.prepare(`UPDATE portfolio_companies SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...params);
+}
+
+export function getCompanyEmailAccounts(companyId, tenantId) {
+  return db.prepare('SELECT * FROM company_email_accounts WHERE company_id = ? AND tenant_id = ? ORDER BY connected_at DESC').all(companyId, tenantId);
+}
+
+export function addCompanyEmailAccount({ id, companyId, gmailAddress, oauthRefreshToken, tenantId }) {
+  return db.prepare(`
+    INSERT INTO company_email_accounts (id, company_id, gmail_address, oauth_refresh_token, tenant_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, companyId, gmailAddress, oauthRefreshToken || null, tenantId);
+}
+
+export function updateCompanyEmailAccountToken(id, refreshToken, tenantId) {
+  return db.prepare(`
+    UPDATE company_email_accounts SET oauth_refresh_token = ?, connected_at = datetime('now') WHERE id = ? AND tenant_id = ?
+  `).run(refreshToken, id, tenantId);
+}
+
+export function getCompanyDriveFolders(companyId, tenantId) {
+  return db.prepare('SELECT * FROM company_drive_folders WHERE company_id = ? AND tenant_id = ? ORDER BY connected_at DESC').all(companyId, tenantId);
+}
+
+export function addCompanyDriveFolder({ id, companyId, folderId, folderName, folderUrl, tenantId }) {
+  return db.prepare(`
+    INSERT INTO company_drive_folders (id, company_id, folder_id, folder_name, folder_url, tenant_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, companyId, folderId, folderName || null, folderUrl || null, tenantId);
+}
+
+export function upsertCompanyEmailStats({ companyId, date, sentCount, receivedCount, draftCount, tenantId }) {
+  return db.prepare(`
+    INSERT INTO company_email_stats (company_id, date, sent_count, received_count, draft_count, tenant_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(company_id, date) DO UPDATE SET
+      sent_count = excluded.sent_count,
+      received_count = excluded.received_count,
+      draft_count = excluded.draft_count
+  `).run(companyId, date, sentCount || 0, receivedCount || 0, draftCount || 0, tenantId);
+}
+
+export function getCompanyEmailStats(companyId, tenantId, days = 30) {
+  return db.prepare(`
+    SELECT * FROM company_email_stats
+    WHERE company_id = ? AND tenant_id = ? AND date >= date('now', '-' || ? || ' days')
+    ORDER BY date DESC
+  `).all(companyId, tenantId, days);
 }
 
 export default db;
