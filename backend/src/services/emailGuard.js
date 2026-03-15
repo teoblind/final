@@ -18,7 +18,9 @@ import {
   getTrustedSenderByEmail,
   getTrustedSenderByDomain,
   getTrustedSenders,
+  addTrustedSender,
   logEmailSecurity,
+  insertActivity,
 } from '../cache/database.js';
 
 /**
@@ -29,6 +31,72 @@ import {
  *   'spam'     — bulk/marketing email, skip entirely
  *   'spoofed'  — impersonation attempt, block and alert
  */
+
+// ─── Sender Rate Limiting ───────────────────────────────────────────────────
+// Track email frequency per sender. Auto-block if they exceed the threshold.
+// Key: "tenantId:email" → { count, firstSeen }
+
+const senderRateMap = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX_EMAILS = 5;              // max emails per window before auto-block
+
+/**
+ * Check if a sender is spamming (too many emails in the rate window).
+ * If they exceed the limit, auto-add them to the blocked list.
+ * Returns a reason string if blocked, null otherwise.
+ */
+function checkSenderRateLimit(tenantId, senderEmail) {
+  const key = `${tenantId}:${senderEmail}`;
+  const now = Date.now();
+  const entry = senderRateMap.get(key);
+
+  if (!entry || (now - entry.firstSeen) > RATE_LIMIT_WINDOW_MS) {
+    // Reset window
+    senderRateMap.set(key, { count: 1, firstSeen: now });
+    return null;
+  }
+
+  entry.count++;
+
+  if (entry.count > RATE_LIMIT_MAX_EMAILS) {
+    // Auto-block this sender
+    try {
+      addTrustedSender({
+        tenantId,
+        email: senderEmail,
+        displayName: null,
+        trustLevel: 'blocked',
+        notes: `Auto-blocked: ${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} min`,
+      });
+      console.log(`[EmailGuard] Auto-blocked ${senderEmail} for tenant ${tenantId} (${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} min)`);
+      try {
+        insertActivity({
+          tenantId,
+          type: 'alert',
+          title: `Sender auto-blocked: ${senderEmail}`,
+          subtitle: `${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} minutes`,
+          sourceType: 'email-guard',
+          agentId: 'email-guard',
+        });
+      } catch (e) { /* non-critical */ }
+    } catch (e) {
+      // May fail if already blocked (unique constraint) — that's fine
+    }
+    return `Rate limit exceeded: ${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} min`;
+  }
+
+  return null;
+}
+
+// Clean up stale entries every 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of senderRateMap) {
+    if ((now - entry.firstSeen) > RATE_LIMIT_WINDOW_MS * 2) {
+      senderRateMap.delete(key);
+    }
+  }
+}, 30 * 60 * 1000);
 
 // ─── Spam Signals ────────────────────────────────────────────────────────────
 
@@ -151,26 +219,38 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'spoofed', reason: spoofCheck, trustLevel: null, authResults };
   }
 
-  // 2. Check trusted sender registry (exact email match)
+  // 2. Check if sender is already blocked
   const trustedByEmail = getTrustedSenderByEmail(tenantId, lowerEmail);
+  if (trustedByEmail && trustedByEmail.trust_level === 'blocked') {
+    logEmailSecurity({
+      tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
+      verdict: 'blocked', reason: 'Sender is on block list', authResults: JSON.stringify(authResults),
+    });
+    return { verdict: 'spam', reason: 'Blocked sender', trustLevel: 'blocked', authResults };
+  }
+
+  // 3. Rate limit check — auto-block senders who send too many emails
+  const rateBlock = checkSenderRateLimit(tenantId, lowerEmail);
+  if (rateBlock) {
+    logEmailSecurity({
+      tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
+      verdict: 'spam', reason: rateBlock, authResults: JSON.stringify(authResults),
+    });
+    return { verdict: 'spam', reason: rateBlock, trustLevel: 'blocked', authResults };
+  }
+
+  // 4. Check trusted sender registry (exact email match)
   if (trustedByEmail) {
-    if (trustedByEmail.trust_level === 'blocked') {
-      logEmailSecurity({
-        tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
-        verdict: 'blocked', reason: 'Sender is on block list', authResults: JSON.stringify(authResults),
-      });
-      return { verdict: 'spam', reason: 'Blocked sender', trustLevel: 'blocked', authResults };
-    }
     return { verdict: 'trusted', reason: 'Registered trusted sender', trustLevel: trustedByEmail.trust_level, authResults };
   }
 
-  // 3. Check trusted domain
+  // 5. Check trusted domain
   const trustedByDomain = getTrustedSenderByDomain(tenantId, senderDomain);
   if (trustedByDomain && trustedByDomain.trust_level !== 'blocked') {
     return { verdict: 'trusted', reason: `Domain ${senderDomain} is trusted`, trustLevel: trustedByDomain.trust_level, authResults };
   }
 
-  // 4. Check spam signals
+  // 6. Check spam signals
   const spamReason = detectSpam({ senderEmail: lowerEmail, senderName, subject, body, headers: headers || [] });
   if (spamReason) {
     logEmailSecurity({
@@ -180,12 +260,12 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'spam', reason: spamReason, trustLevel: null, authResults };
   }
 
-  // 5. Check if sender is a known contact (le_contacts match, passed in)
+  // 7. Check if sender is a known contact (le_contacts match, passed in)
   if (contact) {
     return { verdict: 'known', reason: 'Recognized contact in pipeline', trustLevel: null, authResults };
   }
 
-  // 6. Check DMARC — if it fails for an unknown sender, that's suspicious
+  // 8. Check DMARC — if it fails for an unknown sender, that's suspicious
   if (authResults.dmarc === 'fail') {
     logEmailSecurity({
       tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
@@ -194,7 +274,7 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'unknown', reason: 'DMARC failed — treat with caution', trustLevel: null, authResults };
   }
 
-  // 7. Unknown sender — log only, no auto-reply
+  // 9. Unknown sender — log only, no auto-reply
   return { verdict: 'unknown', reason: 'Unrecognized sender', trustLevel: null, authResults };
 }
 
