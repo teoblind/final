@@ -125,7 +125,8 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
           const t = getTenant(u.tenant_id);
           const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
           const displayName = (isAdmin && u.tenant_id === 'default') ? 'Platform Admin' : t?.name;
-          return { id: u.tenant_id, slug: t?.slug, name: displayName, role: u.role };
+          const subdomain = (isAdmin && u.tenant_id === 'default') ? 'admin' : getSubdomainForSlug(t?.slug || u.tenant_id);
+          return { id: u.tenant_id, slug: t?.slug, name: displayName, role: u.role, subdomain };
         });
         return res.json({ tenant_required: true, tenants });
       }
@@ -459,11 +460,12 @@ router.get('/my-tenants', authenticate, (req, res) => {
       const t = getTenant(u.tenant_id);
       const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
       const displayName = (isAdmin && u.tenant_id === 'default') ? 'Platform Admin' : t?.name;
+      const subdomain = (isAdmin && u.tenant_id === 'default') ? 'admin' : getSubdomainForSlug(t?.slug || u.tenant_id);
       return {
         id: u.tenant_id,
         slug: t?.slug,
         name: displayName,
-        subdomain: getSubdomainForSlug(t?.slug || u.tenant_id),
+        subdomain,
         role: u.role,
         status: u.status,
       };
