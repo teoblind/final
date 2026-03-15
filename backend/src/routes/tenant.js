@@ -32,6 +32,10 @@ import {
   addTrustedSender,
   removeTrustedSender,
   getEmailSecurityLog,
+  getFleetConfig,
+  saveFleetConfig,
+  getPoolConfig,
+  savePoolConfig,
 } from '../cache/database.js';
 import { generateApiKey } from '../services/authService.js';
 import { sendHtmlEmail } from '../services/emailService.js';
@@ -594,6 +598,59 @@ router.get('/email-security/log', requirePermission('viewAuditLog'), (req, res) 
   } catch (error) {
     console.error('Get email security log error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Fleet Config ─────────────────────────────────────────────────────────
+
+router.get('/fleet-config', authenticate, (req, res) => {
+  try {
+    const config = getFleetConfig();
+    res.json({ configured: !!config, config: config || null });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/fleet-config', authenticate, requireRole('owner', 'sangha_admin', 'admin'), (req, res) => {
+  try {
+    saveFleetConfig(req.body);
+    insertAuditLog({
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      action: 'fleet_config_updated',
+      details: 'Fleet configuration saved',
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Pool Config ──────────────────────────────────────────────────────────
+
+router.get('/pool-config', authenticate, (req, res) => {
+  try {
+    const config = getPoolConfig();
+    const hasConfig = config && (config.pools?.length > 0 || config.provider);
+    res.json({ configured: !!hasConfig, config });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/pool-config', authenticate, requireRole('owner', 'sangha_admin', 'admin'), (req, res) => {
+  try {
+    savePoolConfig(req.body);
+    insertAuditLog({
+      tenantId: req.user.tenantId,
+      userId: req.user.id,
+      action: 'pool_config_updated',
+      details: 'Pool configuration saved',
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

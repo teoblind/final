@@ -261,18 +261,48 @@ async def _generate_single_image(
         logger.info("  Slide %d is infographic — will be rendered in Stage 4", slide_index)
         return slide_index, None
 
-    # ── MOCK implementation ──────────────────────────────────────────────
-    # Replace this block with a real image generation API call
-    # (e.g., Replicate Flux, DALL-E, Midjourney) when API keys are available.
-    #
-    # Expected real implementation:
-    #   response = await replicate.async_run("black-forest-labs/flux-1.1-pro", ...)
-    #   image_bytes = download(response.url)
-    #   path.write_bytes(image_bytes)
+    api_key = os.getenv("FAL_AI_API_KEY", "")
+    if api_key:
+        # ── Real Fal AI image generation ─────────────────────────────────
+        try:
+            import fal_client
+            import httpx
+
+            os.environ["FAL_KEY"] = api_key
+
+            prompt = (
+                f"Abstract background image for a presentation slide. "
+                f"{visual_description}. "
+                f"Soft, blurred, editorial quality. No text, no words, no letters. 1920x1080."
+            )
+
+            logger.info("  Slide %d: calling fal-ai/nana-banana-2 with prompt: %s", slide_index, prompt[:100])
+
+            result = await asyncio.to_thread(
+                fal_client.subscribe,
+                "fal-ai/nana-banana-2",
+                arguments={"prompt": prompt, "image_size": "landscape_16_9"},
+            )
+
+            image_url = result["images"][0]["url"]
+            path = work_dir / f"image_slide_{slide_index:02d}.png"
+
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(image_url)
+                path.write_bytes(resp.content)
+
+            logger.info("  Slide %d: Fal AI image saved to %s (%d bytes)", slide_index, path, len(resp.content))
+            return slide_index, str(path)
+
+        except Exception as e:
+            logger.warning("  Slide %d: Fal AI generation failed (%s) — falling back to placeholder", slide_index, e)
+            # Fall through to placeholder
+
+    # ── Placeholder fallback (no FAL_AI_API_KEY or generation failed) ──
+    logger.warning("No FAL_AI_API_KEY — using placeholder for slide %d", slide_index)
 
     path = work_dir / f"image_slide_{slide_index:02d}.png"
 
-    # Create a simple placeholder SVG rendered as a "image"
     placeholder_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
   <rect width="1920" height="1080" fill="#e8e8e4"/>
   <rect x="660" y="340" width="600" height="400" rx="24" fill="#d4d4cf" stroke="#bbb" stroke-width="2"/>
@@ -284,7 +314,6 @@ async def _generate_single_image(
   </text>
 </svg>"""
     path.write_text(placeholder_svg)
-    # Rename to .svg since it's an SVG placeholder
     svg_path = path.with_suffix(".svg")
     if svg_path != path:
         path.rename(svg_path)
@@ -721,6 +750,22 @@ async def generate_presentation(
         (work_dir / "slide_plan.json").write_text(
             json.dumps(slide_plan, indent=2), encoding="utf-8"
         )
+
+        # Extract image prompts document from slide plan
+        image_prompts = []
+        for slide in slide_plan.get("slides", []):
+            if slide.get("visual_needed") and slide.get("visual_description"):
+                image_prompts.append({
+                    "slide_index": slide.get("index"),
+                    "layout": slide.get("layout"),
+                    "title": slide.get("title", ""),
+                    "visual_type": slide.get("visual_type", "hero_image"),
+                    "visual_description": slide.get("visual_description"),
+                })
+        (work_dir / "image_prompts.json").write_text(
+            json.dumps(image_prompts, indent=2), encoding="utf-8"
+        )
+        logger.info("Image prompts document saved: %d visual slides", len(image_prompts))
 
         # ── Stage 2: Style System ────────────────────────────────────────
         style_system = await stage_2_style_system(

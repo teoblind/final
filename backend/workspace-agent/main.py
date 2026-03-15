@@ -108,6 +108,14 @@ class GeneratePresentationRequest(BaseModel):
     output_format: str = "pdf"
     folder: str = ""
 
+class PlanContentRequest(BaseModel):
+    topic: str
+    context: str
+    audience: str = ""
+    slide_count: int = 10
+    tone: str = "Professional, confident, data-driven"
+    include_backgrounds: bool = False
+
 
 # ─── Lifespan ────────────────────────────────────────────────────────────────
 
@@ -352,6 +360,49 @@ async def generate_presentation_endpoint(
         folder=req.folder,
     )
     return result
+
+
+# ─── Plan Content (Stage 1 only) ─────────────────────────────────────────────
+
+@app.post("/tools/plan_content")
+async def plan_content_endpoint(
+    req: PlanContentRequest,
+    x_tenant_id: str = Header(""),
+    x_internal_secret: str = Header(""),
+):
+    """Run only Stage 1 (content planning) and return the structured slide plan for review."""
+    tenant_id = verify_request(x_tenant_id, x_internal_secret)
+    from presentation_pipeline import stage_1_content_planning
+    import json
+    import tempfile
+    from pathlib import Path
+
+    slide_plan = await stage_1_content_planning(
+        topic=req.topic,
+        context=req.context,
+        audience=req.audience,
+        slide_count=req.slide_count,
+        tone=req.tone,
+    )
+
+    # Extract image prompts from the plan
+    image_prompts = []
+    for slide in slide_plan.get("slides", []):
+        if slide.get("visual_needed") and slide.get("visual_description"):
+            image_prompts.append({
+                "slide_index": slide.get("index"),
+                "layout": slide.get("layout"),
+                "title": slide.get("title", ""),
+                "visual_type": slide.get("visual_type", "hero_image"),
+                "visual_description": slide.get("visual_description"),
+            })
+
+    return {
+        "slide_plan": slide_plan,
+        "image_prompts": image_prompts,
+        "slide_count": len(slide_plan.get("slides", [])),
+        "include_backgrounds": req.include_backgrounds,
+    }
 
 
 # ─── Templates ───────────────────────────────────────────────────────────────

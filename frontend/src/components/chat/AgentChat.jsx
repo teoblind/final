@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -427,18 +427,20 @@ function EmailCard({ data }) {
 function ActionButtons({ actions, accentColor = '#1e3a5f', onAction, disabled }) {
   if (!actions?.length) return null;
   return (
-    <div className="flex gap-1.5 mt-2.5">
+    <div className="flex gap-1.5 mt-2.5 flex-wrap">
       {actions.map((a, i) => (
         <button
           key={i}
-          onClick={() => onAction?.(a.label)}
+          onClick={() => onAction?.(a.label, a.variant)}
           disabled={disabled}
           className={`px-3.5 py-[6px] rounded-lg text-[11px] font-semibold transition-colors ${
             disabled ? 'opacity-50 cursor-not-allowed' : ''
           } ${
-            a.variant === 'primary'
-              ? 'text-white'
-              : 'bg-terminal-panel text-[#6b6b65] border-[1.5px] border-[#e8e6e1] hover:bg-[#f5f4f0]'
+            a.variant === 'quick_reply'
+              ? 'bg-terminal-panel text-terminal-text border-[1.5px] border-[#d4d4cf] hover:border-[#9a9a92] hover:bg-[#f0eeea]'
+              : a.variant === 'primary'
+                ? 'text-white'
+                : 'bg-terminal-panel text-[#6b6b65] border-[1.5px] border-[#e8e6e1] hover:bg-[#f5f4f0]'
           }`}
           style={a.variant === 'primary' ? { backgroundColor: accentColor } : undefined}
         >
@@ -980,7 +982,7 @@ function ChatMessage({ msg, agentDef, onAction }) {
         )}
 
         {/* Actions */}
-        <ActionButtons actions={msg.actions} accentColor={accent} onAction={(label) => onAction?.(label, msg)} disabled={msg.actionDone} />
+        <ActionButtons actions={msg.actions} accentColor={accent} onAction={(label, variant) => onAction?.(label, msg, variant)} disabled={msg.actionDone} />
       </div>
     </div>
   );
@@ -1536,8 +1538,28 @@ function formatRelativeTime(dateStr) {
 }
 
 // ─── Thread Sidebar ─────────────────────────────────────────────────────────
-function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, onUpdateVisibility, agentDef, currentUserId, isAdmin }) {
+function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, onUpdateVisibility, onRenameThread, onPinThread, onDeleteThread, agentDef, currentUserId, isAdmin }) {
   const accent = agentDef?.accentColor || '#1e3a5f';
+  const [editingThreadId, setEditingThreadId] = React.useState(null);
+  const [editTitle, setEditTitle] = React.useState('');
+
+  const startEditing = (thread, e) => {
+    if (e) e.stopPropagation();
+    setEditingThreadId(thread.id);
+    setEditTitle(thread.title || '');
+  };
+
+  const commitRename = (threadId) => {
+    const trimmed = editTitle.trim();
+    if (trimmed && trimmed !== (threads.find(t => t.id === threadId)?.title || '')) {
+      onRenameThread(threadId, trimmed);
+    }
+    setEditingThreadId(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingThreadId(null);
+  };
 
   return (
     <div className="w-[240px] flex flex-col border-r border-terminal-border bg-[#f5f4f0] shrink-0">
@@ -1565,6 +1587,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
           const VisIcon = vis.icon;
           const isOwner = thread.userId === currentUserId;
           const canToggle = isOwner || isAdmin;
+          const isEditing = editingThreadId === thread.id;
 
           return (
             <div
@@ -1573,7 +1596,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
               className={`px-3 py-2.5 cursor-pointer border-b border-[#eeece7] transition-colors group ${
                 isActive ? 'bg-terminal-panel border-l-2' : 'hover:bg-[#eceae5] border-l-2 border-l-transparent'
               }`}
-              style={isActive ? { borderLeftColor: accent } : undefined}
+              style={isActive ? { borderLeftColor: thread.isPinned ? '#f59e0b' : accent } : thread.isPinned ? { borderLeftColor: '#f59e0b22' } : undefined}
             >
               <div className="flex items-center gap-1.5 mb-0.5">
                 {/* Visibility badge */}
@@ -1599,11 +1622,66 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
                     <VisIcon size={8} />
                   </span>
                 )}
-                <span className="text-[10px] text-[#c5c5bc] ml-auto tabular-nums">{formatRelativeTime(thread.updatedAt)}</span>
+
+                {/* Action icons — visible on hover (or always for pinned icon when pinned) */}
+                <div className="ml-auto flex items-center gap-0.5">
+                  {thread.isPinned && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onPinThread(thread.id, false); }}
+                      className="w-4 h-4 rounded flex items-center justify-center text-[#f59e0b] hover:bg-[#f59e0b15] transition-colors"
+                      title="Unpin thread"
+                    >
+                      <Pin size={9} />
+                    </button>
+                  )}
+                  {!thread.isPinned && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onPinThread(thread.id, true); }}
+                      className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#f59e0b] hover:bg-[#f59e0b15] opacity-0 group-hover:opacity-100 transition-all"
+                      title="Pin thread"
+                    >
+                      <Pin size={9} />
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => startEditing(thread, e)}
+                    className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#6b6b65] hover:bg-[#e8e6e1] opacity-0 group-hover:opacity-100 transition-all"
+                    title="Rename thread"
+                  >
+                    <Pencil size={9} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteThread(thread.id); }}
+                    className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#dc2626] hover:bg-[#dc262615] opacity-0 group-hover:opacity-100 transition-all"
+                    title="Delete thread"
+                  >
+                    <Trash2 size={9} />
+                  </button>
+                  <span className="text-[10px] text-[#c5c5bc] tabular-nums ml-0.5">{formatRelativeTime(thread.updatedAt)}</span>
+                </div>
               </div>
-              <div className="text-[12px] font-medium text-terminal-text truncate leading-[1.3]">
-                {thread.title || 'Untitled thread'}
-              </div>
+              {isEditing ? (
+                <input
+                  autoFocus
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); commitRename(thread.id); }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelEditing(); }
+                  }}
+                  onBlur={() => commitRename(thread.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full text-[12px] font-medium text-terminal-text bg-white border border-[#d5d3ce] rounded px-1.5 py-0.5 outline-none focus:border-[#9a9a92]"
+                  style={{ lineHeight: '1.3' }}
+                />
+              ) : (
+                <div
+                  className="text-[12px] font-medium text-terminal-text truncate leading-[1.3]"
+                  onDoubleClick={(e) => startEditing(thread, e)}
+                >
+                  {thread.title || 'Untitled thread'}
+                </div>
+              )}
             </div>
           );
         })}
@@ -1714,7 +1792,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
       });
       const data = await res.json();
       if (data.id) {
-        const newThread = { id: data.id, title: data.title, visibility: data.visibility, userId: data.userId, createdAt: data.createdAt, updatedAt: data.updatedAt };
+        const newThread = { id: data.id, title: data.title, visibility: data.visibility, userId: data.userId, isPinned: false, createdAt: data.createdAt, updatedAt: data.updatedAt };
         setThreads(prev => [newThread, ...prev]);
         setActiveThreadId(data.id);
         setMessages([]);
@@ -1739,6 +1817,65 @@ export default function AgentChat({ agentId = 'estimating' }) {
     }
   }, [agentId]);
 
+  // Rename thread
+  const handleRenameThread = useCallback(async (threadId, newTitle) => {
+    const token = getAuthToken();
+    try {
+      await fetch(`${API_BASE}/v1/chat/${agentId}/threads/${threadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ title: newTitle }),
+      });
+      setThreads(prev => prev.map(t => t.id === threadId ? { ...t, title: newTitle } : t));
+    } catch (err) {
+      console.error('Failed to rename thread:', err);
+    }
+  }, [agentId]);
+
+  // Pin/unpin thread
+  const handlePinThread = useCallback(async (threadId, pinned) => {
+    const token = getAuthToken();
+    try {
+      await fetch(`${API_BASE}/v1/chat/${agentId}/threads/${threadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ pinned }),
+      });
+      setThreads(prev => {
+        const updated = prev.map(t => t.id === threadId ? { ...t, isPinned: pinned } : t);
+        return updated.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return new Date(b.updatedAt) - new Date(a.updatedAt);
+        });
+      });
+    } catch (err) {
+      console.error('Failed to pin thread:', err);
+    }
+  }, [agentId]);
+
+  // Delete thread
+  const handleDeleteThread = useCallback(async (threadId) => {
+    if (!window.confirm('Delete this conversation?')) return;
+    const token = getAuthToken();
+    try {
+      await fetch(`${API_BASE}/v1/chat/${agentId}/threads/${threadId}`, {
+        method: 'DELETE',
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      setThreads(prev => {
+        const remaining = prev.filter(t => t.id !== threadId);
+        if (activeThreadId === threadId && remaining.length > 0) {
+          setActiveThreadId(remaining[0].id);
+        }
+        return remaining;
+      });
+    } catch (err) {
+      console.error('Failed to delete thread:', err);
+    }
+  }, [agentId, activeThreadId]);
+
+
   // Keep ref in sync with state (so callbacks see latest value)
   useEffect(() => { autoVoiceRef.current = autoVoice; }, [autoVoice]);
 
@@ -1748,7 +1885,60 @@ export default function AgentChat({ agentId = 'estimating' }) {
   }, [messages]);
 
   // Handle action button clicks in chat messages (Approve & Send, etc.)
-  const handleChatAction = async (actionLabel, msg) => {
+  const handleChatAction = async (actionLabel, msg, variant) => {
+    // quick_reply: send the button label as a new user message
+    if (variant === 'quick_reply') {
+      setInput(actionLabel);
+      // Mark buttons as done so they can't be clicked again
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDone: true } : m));
+      // Trigger send after a tick so the input state updates
+      setTimeout(() => {
+        const userMsg = {
+          id: Date.now(),
+          role: 'user',
+          content: actionLabel,
+          time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        };
+        setMessages(prev => [...prev, userMsg]);
+        setInput('');
+        setSending(true);
+        const token = getAuthToken();
+        const postUrl = activeThreadId
+          ? `${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`
+          : `${API_BASE}/v1/chat/${agentId}/messages`;
+        fetch(postUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ content: actionLabel }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.response) {
+              const agentMsg = {
+                id: Date.now() + 1,
+                role: 'agent',
+                content: data.response,
+                time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+              };
+              if (data.workspace) agentMsg.workspace = data.workspace;
+              if (data.actions) agentMsg.actions = data.actions;
+              if (data.audio_url) agentMsg.audio_url = data.audio_url;
+              setMessages(prev => [...prev, agentMsg]);
+            }
+          })
+          .catch(() => {
+            setMessages(prev => [...prev, {
+              id: Date.now() + 1,
+              role: 'agent',
+              content: "I'm having trouble connecting right now. Please try again.",
+              error: true,
+              time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+            }]);
+          })
+          .finally(() => setSending(false));
+      }, 0);
+      return;
+    }
     if (actionLabel === 'Approve & Send' && msg.email) {
       // Mark buttons as done so they can't be clicked twice
       setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDone: true } : m));
@@ -1944,13 +2134,16 @@ export default function AgentChat({ agentId = 'estimating' }) {
       {activeTab === 'Chat' && (
       <div className="flex flex-1 min-h-0">
         {/* Thread Sidebar */}
-        {threadsLoaded && threads.length > 0 && (
+        {threadsLoaded && (
           <ThreadSidebar
             threads={threads}
             activeThreadId={activeThreadId}
             onSelectThread={setActiveThreadId}
             onNewThread={handleNewThread}
             onUpdateVisibility={handleUpdateVisibility}
+            onRenameThread={handleRenameThread}
+            onPinThread={handlePinThread}
+            onDeleteThread={handleDeleteThread}
             agentDef={agent}
             currentUserId={authUser?.id || 'anonymous'}
             isAdmin={isAdmin}

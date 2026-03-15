@@ -18,7 +18,7 @@ import { getOpusModel } from '../services/modelRouter.js';
 import {
   checkOpusLimit, incrementOpusUsage, insertAuditLog,
   createThread, getThread, updateThreadVisibility, updateThreadTitle,
-  deleteThread, listThreads, getPinnedThreads,
+  deleteThread, listThreads, getPinnedThreads, pinThread, unpinThread,
   getOrphanMessageCount, backfillOrphanMessages,
 } from '../cache/database.js';
 
@@ -96,6 +96,7 @@ router.get('/:agentId/threads', async (req, res) => {
         visibility: t.visibility,
         userId: t.user_id,
         createdAt: t.created_at,
+        isPinned: !!t.is_pinned,
         updatedAt: t.updated_at,
       })),
     });
@@ -115,7 +116,7 @@ router.post('/:agentId/threads', async (req, res) => {
       return res.status(400).json({ error: `Unknown agent: ${agentId}` });
     }
 
-    const { title, visibility } = req.body;
+    const { title, visibility, pinned } = req.body;
     const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const vis = ['private', 'team', 'pinned'].includes(visibility) ? visibility : 'private';
 
@@ -163,6 +164,7 @@ router.get('/:agentId/threads/:threadId/messages', async (req, res) => {
         title: thread.title,
         visibility: thread.visibility,
         userId: thread.user_id,
+        isPinned: !!thread.is_pinned,
       },
       count: messages.length,
       messages: messages.map(m => ({
@@ -340,7 +342,7 @@ router.patch('/:agentId/threads/:threadId', async (req, res) => {
       return res.status(403).json({ error: 'Only thread creator or admin can modify' });
     }
 
-    const { title, visibility } = req.body;
+    const { title, visibility, pinned } = req.body;
 
     if (title !== undefined) {
       updateThreadTitle(threadId, title);
@@ -363,6 +365,11 @@ router.patch('/:agentId/threads/:threadId', async (req, res) => {
       });
     }
 
+
+    if (typeof pinned === 'boolean') {
+      if (pinned) pinThread(threadId);
+      else unpinThread(threadId);
+    }
     const updated = getThread(threadId);
     res.json({
       id: updated.id,
@@ -371,6 +378,7 @@ router.patch('/:agentId/threads/:threadId', async (req, res) => {
       userId: updated.user_id,
       createdAt: updated.created_at,
       updatedAt: updated.updated_at,
+      isPinned: !!updated.is_pinned,
     });
   } catch (error) {
     console.error('Thread PATCH error:', error);

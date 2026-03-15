@@ -137,22 +137,30 @@ function base64ToInt16Array(base64) {
     return;
   }
 
-  const recCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-  const recSrc = recCtx.createMediaStreamSource(stream);
+  // Use a SINGLE AudioContext for both recording and playback (required for headless browsers)
+  const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  // Force resume — critical for headless/autoplay-restricted environments
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+  console.log('[Coppice] AudioContext state:', audioCtx.state);
+
+  const recSrc = audioCtx.createMediaStreamSource(stream);
   const recBlob = new Blob([recorderWorkletCode], { type: 'application/javascript' });
   const recUrl = URL.createObjectURL(recBlob);
-  await recCtx.audioWorklet.addModule(recUrl);
-  const recNode = new AudioWorkletNode(recCtx, 'recorder-processor');
+  await audioCtx.audioWorklet.addModule(recUrl);
+  const recNode = new AudioWorkletNode(audioCtx, 'recorder-processor');
   recSrc.connect(recNode);
-  recNode.connect(recCtx.destination); // needed to keep worklet alive
+  recNode.connect(audioCtx.destination); // needed to keep worklet alive
 
-  // 2. Set up audio playback
-  const playCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  // 2. Set up audio playback (same AudioContext)
   const playBlob = new Blob([playerWorkletCode], { type: 'application/javascript' });
   const playUrl = URL.createObjectURL(playBlob);
-  await playCtx.audioWorklet.addModule(playUrl);
-  const playNode = new AudioWorkletNode(playCtx, 'player-processor');
-  playNode.connect(playCtx.destination);
+  await audioCtx.audioWorklet.addModule(playUrl);
+  const playNode = new AudioWorkletNode(audioCtx, 'player-processor');
+  playNode.connect(audioCtx.destination);
+
+  // Audio chunk buffer — accumulate samples before sending (like the demo's 8192 chunk size)
+  const CHUNK_SIZE = 4800; // 200ms at 24kHz
+  let audioBuffer = new Int16Array(0);
 
   // 3. Connect to relay WebSocket
   const ws = new WebSocket(wssUrl);
@@ -198,14 +206,22 @@ function base64ToInt16Array(base64) {
     console.log('[Coppice] Recording started');
   };
 
-  // Send mic audio to relay
+  // Send mic audio to relay (batched into larger chunks)
   recNode.port.onmessage = (e) => {
-    if (e.data.pcm16 && ws.readyState === WebSocket.OPEN) {
-      const base64 = arrayBufferToBase64(e.data.pcm16.buffer);
+    if (!e.data.pcm16 || ws.readyState !== WebSocket.OPEN) return;
+    // Accumulate samples
+    const newBuf = new Int16Array(audioBuffer.length + e.data.pcm16.length);
+    newBuf.set(audioBuffer);
+    newBuf.set(e.data.pcm16, audioBuffer.length);
+    audioBuffer = newBuf;
+    // Send when we have enough
+    if (audioBuffer.length >= CHUNK_SIZE) {
+      const base64 = arrayBufferToBase64(audioBuffer.buffer);
       ws.send(JSON.stringify({
         type: 'input_audio_buffer.append',
         audio: base64,
       }));
+      audioBuffer = new Int16Array(0);
     }
   };
 

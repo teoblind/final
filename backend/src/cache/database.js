@@ -2711,19 +2711,27 @@ export function deleteThread(id) {
   return db.prepare('DELETE FROM chat_threads WHERE id = ?').run(id);
 }
 
+export function pinThread(id) {
+  return db.prepare("UPDATE chat_threads SET is_pinned = 1, updated_at = datetime('now') WHERE id = ?").run(id);
+}
+
+export function unpinThread(id) {
+  return db.prepare("UPDATE chat_threads SET is_pinned = 0, updated_at = datetime('now') WHERE id = ?").run(id);
+}
+
 export function listThreads(tenantId, agentId, userId, { isAdmin = false, limit = 50, offset = 0 } = {}) {
   if (isAdmin) {
     return db.prepare(`
       SELECT * FROM chat_threads
       WHERE tenant_id = ? AND agent_id = ?
-      ORDER BY updated_at DESC LIMIT ? OFFSET ?
+      ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?
     `).all(tenantId, agentId, limit, offset);
   }
   return db.prepare(`
     SELECT * FROM chat_threads
     WHERE tenant_id = ? AND agent_id = ?
       AND (user_id = ? OR visibility IN ('team', 'pinned'))
-    ORDER BY updated_at DESC LIMIT ? OFFSET ?
+    ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?
   `).all(tenantId, agentId, userId, limit, offset);
 }
 
@@ -3813,6 +3821,9 @@ function initDacpTablesSchema(targetDb) {
 
   // Add thread_id column to chat_messages (idempotent)
   try { targetDb.exec('ALTER TABLE chat_messages ADD COLUMN thread_id TEXT REFERENCES chat_threads(id)'); } catch (e) { /* already exists */ }
+
+  // Add is_pinned column to chat_threads (idempotent)
+  try { targetDb.exec('ALTER TABLE chat_threads ADD COLUMN is_pinned INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 
   // Approval queue
   targetDb.exec(`
@@ -5408,7 +5419,7 @@ export function getAccountingInvoices(tenantId, { status, source, limit = 100, o
   const params = [tenantId];
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (source) { sql += ' AND source = ?'; params.push(source); }
-  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  sql += ' ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
   return db.prepare(sql).all(...params);
 }
@@ -5435,7 +5446,7 @@ export function getAccountingBills(tenantId, { status, source, limit = 100, offs
   const params = [tenantId];
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (source) { sql += ' AND source = ?'; params.push(source); }
-  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  sql += ' ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
   return db.prepare(sql).all(...params);
 }
@@ -5460,7 +5471,7 @@ export function getAccountingPayments(tenantId, { type, source, limit = 100, off
   const params = [tenantId];
   if (type) { sql += ' AND type = ?'; params.push(type); }
   if (source) { sql += ' AND source = ?'; params.push(source); }
-  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  sql += ' ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
   return db.prepare(sql).all(...params);
 }

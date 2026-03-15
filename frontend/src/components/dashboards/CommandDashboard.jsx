@@ -1,24 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import EmptyState from '../ui/EmptyState';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-// ─── Approval Queue Data (demo fallback) ────────────────────────────────────
-
-const DEMO_APPROVAL_QUEUE = [
-  { id: 1, agent: 'outreach', agentLabel: 'Outreach', icon: { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' }, title: 'Reply draft: Sarah Chen — Meridian Renewables', desc: 'Personalized response to behind-the-meter mining inquiry, references Crane County site performance', time: '12m ago' },
-  { id: 2, agent: 'outreach', agentLabel: 'Outreach', icon: { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' }, title: 'Follow-up draft: Mark Liu — GridScale Partners', desc: '5 days since last contact — gentle check-in with updated hashrate economics', time: '2h ago' },
-  { id: 3, agent: 'reporting', agentLabel: 'Reporting', icon: { letter: 'R', color: '#5b3a8c', bg: '#f3eef8' }, title: 'Weekly briefing ready for review', desc: 'Week 10 operations report — revenue, curtailment savings, pipeline summary', time: '3h ago' },
-  { id: 4, agent: 'curtailment', agentLabel: 'Curtailment', icon: { letter: 'C', color: '#b8860b', bg: '#fdf6e8' }, title: 'Curtailment recommendation: Pecos County', desc: 'ERCOT price forecast shows $92/MWh window 14:00–16:30 — recommends pre-curtailment at 13:45', time: '5h ago' },
-  { id: 5, agent: 'meetings', agentLabel: 'Meetings', icon: { letter: 'M', color: '#2c5282', bg: '#e8eef5' }, title: 'Meeting action items: Reassurity call', desc: '4 action items extracted — 2 assigned to you, 2 to ops team', time: '6h ago' },
-];
-
-const AGENT_INSIGHTS = [
-  { id: 1, agent: 'pool', agentLabel: 'Pool Routing', type: 'Recommendation', time: '15m ago', title: 'Foundry fee increase detected', body: 'Foundry raised fees from <b>2.0% to 2.5%</b> effective next block. Switching 15 PH/s to <b>Luxor (1.8%)</b> would save ~$340/month.', actions: ['Switch Now', 'Dismiss'] },
-  { id: 2, agent: 'hivemind', agentLabel: 'Hivemind', type: 'Question', time: '1h ago', title: 'PPA pricing question from operator', body: 'Operator asked: "What\'s the break-even electricity price for our S19 fleet?" Answer computed: <b>$0.068/kWh</b> at current difficulty.', actions: ['View Thread'] },
-  { id: 3, agent: 'outreach', agentLabel: 'Lead Engine', type: 'Pattern', time: '2h ago', title: 'Outreach reply rate trending up', body: 'Reply rate increased from <b>5.1% to 7.3%</b> after switching to ERCOT-data-personalized templates. Recommend expanding to all PJM leads.', actions: ['Apply to PJM', 'Dismiss'] },
-  { id: 4, agent: 'curtailment', agentLabel: 'Curtailment', type: 'Analysis', time: '4h ago', title: 'Curtailment revenue opportunity', body: 'Yesterday\'s curtailment at Crane County netted <b>$1,247</b> in 45 minutes. Pattern suggests <b>3–4 similar windows</b> this week.', actions: ['View Forecast'] },
-  { id: 5, agent: 'meetings', agentLabel: 'Meetings', type: 'Follow-up', time: '5h ago', title: 'Overdue action item: Oberon deal memo', body: 'Action item from March 3 call: "<b>Revise energy pricing assumptions in section 4.2</b>" — assigned to you, 4 days overdue.', actions: ['Mark Done', 'Snooze'] },
-];
 
 const AGENT_ICON_COLORS = {
   outreach:       { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' },

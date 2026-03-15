@@ -1,12 +1,13 @@
 /**
  * Activity Feed Routes
  *
- * GET  /api/v1/activity        — List recent activities (paginated, filterable by type)
- * GET  /api/v1/activity/:id    — Get single activity with full detail_json
+ * GET  /api/v1/activity          — List recent activities (paginated, filterable by type)
+ * GET  /api/v1/activity/summary  — Dashboard summary (stats + recent activity)
+ * GET  /api/v1/activity/:id      — Get single activity with full detail_json
  */
 
 import express from 'express';
-import { getActivities, getActivityDetail, getActivityCount } from '../cache/database.js';
+import { getActivities, getActivityDetail, getActivityCount, getLeadStats, getFleetConfig, getPoolConfig } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -49,6 +50,57 @@ router.get('/', (req, res) => {
     res.json({ activities, total });
   } catch (error) {
     console.error('Activity list error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /summary — Dashboard summary (stats + recent activity)
+ * Used by Command dashboard for live polling every 30s.
+ */
+router.get('/summary', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+
+    // Lead/outreach stats
+    let leads = 0, outreach = 0, replies = 0;
+    try {
+      const stats = getLeadStats(tenantId);
+      leads = stats?.totalLeads || 0;
+      outreach = stats?.totalEmailsSent || 0;
+      replies = stats?.responded || 0;
+    } catch {}
+
+    // Meeting count from activity log
+    const meetings = getActivityCount(tenantId, 'meet');
+
+    // Recent activity
+    const recentRows = getActivities(tenantId, { limit: 20 });
+    const recentActivity = recentRows.map(row => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      subtitle: row.subtitle,
+      time: formatRelativeTime(row.created_at),
+      agentId: row.agent_id,
+    }));
+
+    // Config status
+    let fleetConnected = false, poolConnected = false;
+    try { fleetConnected = !!getFleetConfig()?.config_json; } catch {}
+    try { poolConnected = !!getPoolConfig()?.config_json; } catch {}
+
+    res.json({
+      leads,
+      outreach,
+      replies,
+      meetings,
+      recentActivity,
+      fleetConnected,
+      poolConnected,
+    });
+  } catch (error) {
+    console.error('Dashboard summary error:', error);
     res.status(500).json({ error: error.message });
   }
 });
