@@ -224,10 +224,10 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
 - Direct and confident tone, not corporate or stiff
 - Use specific numbers over vague claims
 - Use dashes freely for asides
-- Closing: "Best," on its own line (never "Best regards," never "Sincerely,")
-- Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
 - No emoji in professional emails
-- IMPORTANT: Always end with a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.
+- Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
+- IMPORTANT: The LAST paragraph before "Best," must be a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.
+- Closing: "Best," on its own line AFTER the question paragraph (never "Best regards," never "Sincerely,"). The structure is always: body paragraphs → question paragraph → "Best,"
 
 CONFIDENTIALITY (critical):
 - NEVER mention other clients, partners, or prospects by name in outbound emails
