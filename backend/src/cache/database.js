@@ -1758,6 +1758,19 @@ export function getAgentRow(agentId) {
   return db.prepare('SELECT * FROM agents WHERE id = ?').get(agentId);
 }
 
+/**
+ * Get the operational mode for an agent: 'autonomous' | 'copilot' | 'off'.
+ * Reads from config_json.mode; defaults to 'autonomous' if not set.
+ */
+export function getAgentMode(agentId) {
+  const row = db.prepare('SELECT config_json FROM agents WHERE id = ?').get(agentId);
+  if (!row || !row.config_json) return 'autonomous';
+  try {
+    const config = JSON.parse(row.config_json);
+    return config.mode || 'autonomous';
+  } catch { return 'autonomous'; }
+}
+
 export function getAllAgentRows() {
   return db.prepare('SELECT * FROM agents ORDER BY created_at').all();
 }
@@ -3833,7 +3846,7 @@ function initDacpTablesSchema(targetDb) {
       agent_id TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT,
-      type TEXT NOT NULL CHECK(type IN ('email_draft', 'curtailment', 'estimate', 'report', 'config_change', 'document')),
+      type TEXT NOT NULL CHECK(type IN ('email_draft', 'curtailment', 'estimate', 'report', 'config_change', 'document', 'tool_action', 'meeting_instruction')),
       payload_json TEXT,
       status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
       required_role TEXT DEFAULT 'admin',
