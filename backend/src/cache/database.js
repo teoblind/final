@@ -5246,6 +5246,21 @@ export function logAutoReply({ messageId, sender, subject, responsePreview, tena
   }
 }
 
+/**
+ * Count auto-replies sent to a specific sender within a time window.
+ * Used for conversation rate limiting (day/week/month caps).
+ */
+export function countAutoReplies(tenantId, senderEmail, sinceDatetime) {
+  try {
+    const row = db.prepare(
+      'SELECT COUNT(*) as c FROM auto_replies WHERE tenant_id = ? AND LOWER(sender) LIKE ? AND sent_at >= ?'
+    ).get(tenantId || null, `%${senderEmail.toLowerCase()}%`, sinceDatetime);
+    return row?.c || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 // ─── Tenant Email Config ─────────────────────────────────────────────────────
 
 export function getTenantEmailConfig(tenantId) {

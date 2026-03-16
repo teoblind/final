@@ -21,6 +21,7 @@ import {
   addTrustedSender,
   logEmailSecurity,
   insertActivity,
+  countAutoReplies,
 } from '../cache/database.js';
 
 /**
@@ -33,33 +34,38 @@ import {
  */
 
 // ─── Sender Rate Limiting ───────────────────────────────────────────────────
-// Track email frequency per sender. Auto-block if they exceed the threshold.
-// Key: "tenantId:email" → { count, firstSeen }
+// Two layers:
+//   1. In-memory burst protection (5 emails/hour) — auto-blocks spammers
+//   2. Persistent conversation caps (DB-backed) — prevents chatbot abuse
+//      Day: 10 replies, Week: 25 replies, Month: 50 replies
 
+// Layer 1: In-memory burst detection
 const senderRateMap = new Map();
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const RATE_LIMIT_MAX_EMAILS = 5;              // max emails per window before auto-block
+const BURST_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const BURST_MAX = 5;
+
+// Layer 2: Persistent conversation limits (per sender per tenant)
+const DAILY_LIMIT = 10;
+const WEEKLY_LIMIT = 25;
+const MONTHLY_LIMIT = 50;
 
 /**
- * Check if a sender is spamming (too many emails in the rate window).
- * If they exceed the limit, auto-add them to the blocked list.
- * Returns a reason string if blocked, null otherwise.
+ * Check burst rate (in-memory) — catches rapid-fire spam.
+ * Auto-blocks sender if they exceed 5 emails/hour.
  */
-function checkSenderRateLimit(tenantId, senderEmail) {
+function checkBurstRate(tenantId, senderEmail) {
   const key = `${tenantId}:${senderEmail}`;
   const now = Date.now();
   const entry = senderRateMap.get(key);
 
-  if (!entry || (now - entry.firstSeen) > RATE_LIMIT_WINDOW_MS) {
-    // Reset window
+  if (!entry || (now - entry.firstSeen) > BURST_WINDOW_MS) {
     senderRateMap.set(key, { count: 1, firstSeen: now });
     return null;
   }
 
   entry.count++;
 
-  if (entry.count > RATE_LIMIT_MAX_EMAILS) {
-    // Auto-block this sender
+  if (entry.count > BURST_MAX) {
     try {
       addTrustedSender({
         tenantId,
@@ -79,20 +85,63 @@ function checkSenderRateLimit(tenantId, senderEmail) {
           agentId: 'email-guard',
         });
       } catch (e) { /* non-critical */ }
-    } catch (e) {
-      // May fail if already blocked (unique constraint) — that's fine
-    }
-    return `Rate limit exceeded: ${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} min`;
+    } catch (e) { /* unique constraint — fine */ }
+    return `Burst rate exceeded: ${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} min`;
   }
 
   return null;
 }
 
-// Clean up stale entries every 30 minutes
+/**
+ * Check persistent conversation limits (DB-backed).
+ * Returns a reason string if over limit, null otherwise.
+ * Does NOT auto-block — just silently stops replying.
+ */
+function checkConversationLimits(tenantId, senderEmail) {
+  const now = new Date();
+
+  // Daily limit
+  const dayAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+  const dailyCount = countAutoReplies(tenantId, senderEmail, dayAgo);
+  if (dailyCount >= DAILY_LIMIT) {
+    console.log(`[EmailGuard] Daily limit (${DAILY_LIMIT}) reached for ${senderEmail} (${dailyCount} today)`);
+    return `Daily reply limit reached (${dailyCount}/${DAILY_LIMIT})`;
+  }
+
+  // Weekly limit
+  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const weeklyCount = countAutoReplies(tenantId, senderEmail, weekAgo);
+  if (weeklyCount >= WEEKLY_LIMIT) {
+    console.log(`[EmailGuard] Weekly limit (${WEEKLY_LIMIT}) reached for ${senderEmail} (${weeklyCount} this week)`);
+    return `Weekly reply limit reached (${weeklyCount}/${WEEKLY_LIMIT})`;
+  }
+
+  // Monthly limit
+  const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const monthlyCount = countAutoReplies(tenantId, senderEmail, monthAgo);
+  if (monthlyCount >= MONTHLY_LIMIT) {
+    console.log(`[EmailGuard] Monthly limit (${MONTHLY_LIMIT}) reached for ${senderEmail} (${monthlyCount} this month)`);
+    return `Monthly reply limit reached (${monthlyCount}/${MONTHLY_LIMIT})`;
+  }
+
+  return null;
+}
+
+/**
+ * Combined rate limit check: burst + conversation caps.
+ */
+function checkSenderRateLimit(tenantId, senderEmail) {
+  const burst = checkBurstRate(tenantId, senderEmail);
+  if (burst) return burst;
+
+  return checkConversationLimits(tenantId, senderEmail);
+}
+
+// Clean up stale burst entries every 30 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of senderRateMap) {
-    if ((now - entry.firstSeen) > RATE_LIMIT_WINDOW_MS * 2) {
+    if ((now - entry.firstSeen) > BURST_WINDOW_MS * 2) {
       senderRateMap.delete(key);
     }
   }
