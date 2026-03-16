@@ -216,7 +216,11 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
   const hasThreadContext = body.includes('--- Previous messages in this thread ---');
-  const docInstruction = '\n\nIMPORTANT: If the sender is requesting a document (legal doc, report, memo, proposal, summary, etc.), use the generate_document or generate_legal_doc tool to create it. The file will be automatically attached to your email reply. After generating, write a brief message explaining what you created.';
+  const docInstruction = `\n\nDOCUMENT RULES:
+- You may generate informational documents (reports, analyses, overviews) using the generate_document tool
+- NEVER generate term sheets, contracts, proposals, NDAs, LOIs, agreements, or any deal/legal documents
+- When a prospect asks for a term sheet, contract, proposal, or wants to discuss deal terms: tell them you're looping in a team member to put that together and suggest setting up a call. Do NOT draft it yourself.
+- If you generate a document, write a brief message explaining what you created`;
   const styleGuide = `\n\nWRITING STYLE (mandatory):
 - Greeting: "Hey [First Name]," (casual, never "Dear", never "Hello", never "Good morning")
 - Get straight to the point - no pleasantries, no "I hope this finds you well"
@@ -277,7 +281,7 @@ CONFIDENTIALITY (critical):
 
   // Send the reply with proper threading (convert markdown to HTML)
   // Detect meeting-related emails to CC + forward full thread to Teo
-  const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet|check size|LP|lock-?up)\b/i;
+  const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet|check size|LP|lock-?up|term sheet|contract|proposal|agreement|NDA|LOI|deal terms|site visit)\b/i;
   const isMeetingRelated = meetingKeywords.test(body) || meetingKeywords.test(agentResponse);
   const cc = isMeetingRelated ? 'teo@zhan.capital' : undefined;
 
