@@ -963,27 +963,32 @@ router.get('/google/integrate/callback', async (req, res) => {
     const oauth2Client = getIntegrationOAuth2Client(req);
     const { tokens } = await oauth2Client.getToken(code);
 
-    // Store refresh_token in key_vault
-    if (tokens.refresh_token) {
-      upsertKeyVaultEntry({
-        tenantId,
-        service: source,
-        keyName: 'refresh_token',
-        keyValue: tokens.refresh_token,
-        addedBy: userId,
-      });
-    }
+    // Determine which services to store tokens for
+    const services = source === 'google-all'
+      ? ['google-gmail', 'google-calendar', 'google-docs']
+      : [source];
 
-    // Store access_token with expiry if available
-    if (tokens.access_token) {
-      upsertKeyVaultEntry({
-        tenantId,
-        service: source,
-        keyName: 'access_token',
-        keyValue: tokens.access_token,
-        addedBy: userId,
-        expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
-      });
+    // Store tokens in key_vault for each service
+    for (const svc of services) {
+      if (tokens.refresh_token) {
+        upsertKeyVaultEntry({
+          tenantId,
+          service: svc,
+          keyName: 'refresh_token',
+          keyValue: tokens.refresh_token,
+          addedBy: userId,
+        });
+      }
+      if (tokens.access_token) {
+        upsertKeyVaultEntry({
+          tenantId,
+          service: svc,
+          keyName: 'access_token',
+          keyValue: tokens.access_token,
+          addedBy: userId,
+          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+        });
+      }
     }
 
     // Audit log
@@ -993,7 +998,7 @@ router.get('/google/integrate/callback', async (req, res) => {
       action: 'integration.connected',
       resourceType: 'integration',
       resourceId: source,
-      details: { source, hasRefreshToken: !!tokens.refresh_token },
+      details: { source, services, hasRefreshToken: !!tokens.refresh_token },
       ipAddress: req.ip,
     });
 

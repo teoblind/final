@@ -457,7 +457,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
         const followupTenant = priorThread.tenant_id || tenantId || 'default';
 
         // Skip our own sent messages to avoid reply loops
-        const ownAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital'];
+        const ownAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai'];
         if (ownAddresses.some(addr => senderEmail?.toLowerCase() === addr)) {
           console.log(`[GmailPoll] [${label}] Skipping own sent message in thread ${msgThreadId}`);
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'self-skip', tenantId: followupTenant });
@@ -674,32 +674,39 @@ async function pollSingleInbox(gmail, tenantId, label) {
         continue;
       }
 
-      // Known contact reply (not RFQ/IPP)
+      // Known contact reply (not RFQ/IPP) → route to general handler for auto-reply
       if (contact) {
         const contactTenant = contact.tenant_id;
-        const displayName = contact.name || senderName || senderEmail;
-        const company = contact.company || '';
+        const rfc822Id = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
 
-        insertActivity({
-          tenantId: contactTenant,
-          type: 'in',
-          title: company ? `Reply from ${displayName} at ${company}` : `Reply from ${displayName}`,
-          subtitle: subject,
-          detailJson: JSON.stringify({
-            from: senderEmail,
-            fromName: displayName,
-            subject,
-            body: body.slice(0, 5000),
+        // Extract text from inbound attachments
+        let contactAttText = '';
+        try {
+          const contactAtts = await extractAttachments(gmail, msg.id, full.data.payload);
+          if (contactAtts.length > 0) contactAttText = await extractAttachmentText(contactAtts);
+        } catch {}
+
+        try {
+          await generalEmailHandler({
+            messageId: rfc822Id,
             threadId: msgThreadId,
-            messageId: msg.id,
-          }),
-          sourceType: 'email',
-          sourceId: msg.id,
-          agentId: 'coppice',
-        });
+            from: senderEmail,
+            fromName: contact.name || senderName,
+            subject,
+            body: body + contactAttText,
+            tenantId: contactTenant,
+            gmail,
+            classification,
+          });
+          if (rfc822Id !== msg.id) {
+            markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'contact-dedup', tenantId: contactTenant });
+          }
+        } catch (err) {
+          console.error(`[GmailPoll] [${label}] Contact handler error:`, err.message);
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'contact-error', tenantId: contactTenant });
+        }
 
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: null, tenantId: contactTenant });
         newReplies++;
         continue;
       }

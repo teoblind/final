@@ -203,9 +203,14 @@ export default function OnboardingWizard({ onComplete }) {
 
     const handleMessage = (event) => {
       if (event.data?.type === 'oauth-integration-success') {
-        const connectedSource = oauthType === 'intuit' ? 'quickbooks' : event.data.source?.replace('google-', '');
-        if (connectedSource) {
-          updateSource(connectedSource, { connected: true });
+        if (event.data.source === 'google-all') {
+          // Connect All flow — mark all Google sources as connected
+          ['gmail', 'calendar', 'docs'].forEach(id => updateSource(id, { connected: true }));
+        } else {
+          const connectedSource = oauthType === 'intuit' ? 'quickbooks' : event.data.source?.replace('google-', '');
+          if (connectedSource) {
+            updateSource(connectedSource, { connected: true });
+          }
         }
         window.removeEventListener('message', handleMessage);
       }
@@ -218,6 +223,17 @@ export default function OnboardingWizard({ onComplete }) {
       setError('Popup was blocked. Please allow popups for this site.');
     }
   };
+
+  // Connect all Google services in a single OAuth flow
+  const handleConnectAllGoogle = () => {
+    const googleSources = DATA_SOURCES.filter(s => s.oauth === 'google');
+    const allScopes = googleSources.map(s => s.scopes).join(',');
+    handleOAuthConnect('all', allScopes, 'google');
+  };
+
+  const allGoogleConnected = DATA_SOURCES.filter(s => s.oauth === 'google').every(s => sources[s.id]?.connected);
+  const anyGoogleConnected = DATA_SOURCES.filter(s => s.oauth === 'google').some(s => sources[s.id]?.connected);
+  const hasGoogleSources = DATA_SOURCES.some(s => s.oauth === 'google');
 
   // Check existing integrations on mount (Google + Intuit)
   useEffect(() => {
@@ -505,6 +521,28 @@ export default function OnboardingWizard({ onComplete }) {
               />
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Connect All Google Services button */}
+      {hasGoogleSources && !allGoogleConnected && (
+        <button
+          onClick={handleConnectAllGoogle}
+          className={`w-full mb-4 py-3 text-[13px] font-semibold rounded-[14px] transition-colors border ${
+            dk
+              ? 'bg-white text-black hover:bg-[#e0e0e0] border-white/20'
+              : 'text-white hover:opacity-90 border-transparent'
+          }`}
+          style={dk ? {} : { backgroundColor: accent }}
+        >
+          Connect Gmail, Calendar & Drive
+        </button>
+      )}
+      {hasGoogleSources && allGoogleConnected && (
+        <div className={`w-full mb-4 py-3 text-center text-[13px] font-semibold rounded-[14px] border ${
+          dk ? 'bg-white/10 text-white border-white/20' : 'bg-green-50 text-green-700 border-green-200'
+        }`}>
+          ✓ All Google services connected
         </div>
       )}
 

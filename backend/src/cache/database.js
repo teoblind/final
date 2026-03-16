@@ -1050,7 +1050,7 @@ function seedTenantsInSystemDb() {
     `).run(
       'dacp-construction-001', 'DACP Construction', 'dacp', 'professional', 'active',
       JSON.stringify({ companyName: 'DACP', primaryColor: '#1e3a5f', secondaryColor: '#d4cdc5', hideSanghaBranding: true }),
-      JSON.stringify({ industry: 'construction', defaultOverheadPct: 10, defaultProfitPct: 15, region: 'Texas' }),
+      JSON.stringify({ industry: 'construction', defaultOverheadPct: 10, defaultProfitPct: 15, region: 'Texas', auto_reply_enabled: true }),
       JSON.stringify({ maxUsers: 25, maxSites: 5, maxWorkloads: 50, maxAgents: 10, apiRateLimit: 120, dataRetentionDays: 365 })
     );
     console.log('[DB] DACP tenant created in systemDb');
@@ -1082,6 +1082,7 @@ function seedTenantsInSystemDb() {
         liquidity: true,
         hpc_enabled: false,
         thread_privacy: true,
+        auto_reply_enabled: true,
       }),
       'default'
     );

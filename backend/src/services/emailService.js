@@ -139,16 +139,31 @@ const SIGNATURES = {
 </div>`,
     text: '\n\n—\nCoppice\nAI Agent, Zhan Capital\nzhan.capital | zhan.capital/portal',
   },
+  'dacp-construction-001': {
+    html: `
+<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif;">
+  <p style="margin:0 0 2px;font-size:13px;color:#333;font-weight:600;">Coppice</p>
+  <p style="margin:0 0 6px;font-size:12px;color:#666;font-style:italic;">AI Agent, DACP Construction</p>
+  <p style="margin:0;font-size:12px;color:#999;">
+    <a href="https://dacpconstruction.com" style="color:#1a73e8;text-decoration:none;">dacpconstruction.com</a>
+    &nbsp;·&nbsp;
+    <a href="https://dacp.coppice.ai" style="color:#1a73e8;text-decoration:none;">dacp.coppice.ai</a>
+  </p>
+</div>`,
+    text: '\n\n—\nCoppice\nAI Agent, DACP Construction\ndacpconstruction.com | dacp.coppice.ai',
+  },
   default: {
     html: `
 <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif;">
   <p style="margin:0 0 2px;font-size:13px;color:#333;font-weight:600;">Coppice</p>
-  <p style="margin:0 0 6px;font-size:12px;color:#666;font-style:italic;">AI Agent</p>
+  <p style="margin:0 0 6px;font-size:12px;color:#666;font-style:italic;">AI Agent, Sangha Renewables</p>
   <p style="margin:0;font-size:12px;color:#999;">
-    <a href="https://coppice.ai" style="color:#1a73e8;text-decoration:none;">coppice.ai</a>
+    <a href="https://sangha.coppice.ai" style="color:#1a73e8;text-decoration:none;">sangha.coppice.ai</a>
+    &nbsp;·&nbsp;
+    <a href="https://sanghasystems.com" style="color:#1a73e8;text-decoration:none;">sanghasystems.com</a>
   </p>
 </div>`,
-    text: '\n\n—\nCoppice\nAI Agent\ncoppice.ai',
+    text: '\n\n—\nCoppice\nAI Agent, Sangha Renewables\nsangha.coppice.ai | sanghasystems.com',
   },
 };
 
