@@ -606,6 +606,100 @@ You can generate formatted documents on request:
 - generate_document: Create DOCX or PDF files (reports, memos, proposals, summaries, letters, any document)
 Write the full content in markdown format. The document will be generated and attached to your email reply or available for download.`;
 
+// ─── Calendar Tools ──────────────────────────────────────────────────────────
+
+const CALENDAR_TOOLS = [
+  {
+    name: 'create_meeting',
+    description: 'Create a Google Calendar event with a Google Meet video link. Use when someone asks to schedule a meeting, call, or working session. Returns the event link and Meet URL.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Event title (e.g., "DACP Estimating Walkthrough")' },
+        description: { type: 'string', description: 'Event description or agenda' },
+        start_time: { type: 'string', description: 'Start time in ISO 8601 format (e.g., "2026-03-20T09:00:00-06:00" for 9am CST)' },
+        end_time: { type: 'string', description: 'End time in ISO 8601 format (e.g., "2026-03-20T10:00:00-06:00" for 10am CST)' },
+        duration_minutes: { type: 'number', description: 'Duration in minutes (used if end_time not provided, default 60)' },
+        attendees: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of attendee email addresses to invite',
+        },
+        timezone: { type: 'string', description: 'Timezone (default: America/Chicago for CST)' },
+      },
+      required: ['title', 'start_time', 'attendees'],
+    },
+  },
+];
+
+async function callCalendarTool(toolName, toolInput, tenantId) {
+  if (toolName === 'create_meeting') {
+    const { google } = await import('googleapis');
+    const { getTenantDb } = await import('../cache/database.js');
+
+    // Get the tenant's refresh token from tenant_email_config
+    const resolvedTenant = tenantId || 'default';
+    let refreshToken = process.env.GMAIL_REFRESH_TOKEN; // fallback to default agent
+
+    try {
+      const tdb = getTenantDb(resolvedTenant);
+      const row = tdb.prepare('SELECT gmail_refresh_token FROM tenant_email_config WHERE tenant_id = ? LIMIT 1').get(resolvedTenant);
+      if (row?.gmail_refresh_token) refreshToken = row.gmail_refresh_token;
+    } catch {}
+
+    if (!refreshToken) throw new Error('No calendar credentials configured for this tenant');
+
+    const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+    const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+    const auth = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
+    auth.setCredentials({ refresh_token: refreshToken });
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    const tz = toolInput.timezone || 'America/Chicago';
+    let endTime = toolInput.end_time;
+    if (!endTime) {
+      const start = new Date(toolInput.start_time);
+      const durationMs = (toolInput.duration_minutes || 60) * 60 * 1000;
+      endTime = new Date(start.getTime() + durationMs).toISOString();
+    }
+
+    const event = {
+      summary: toolInput.title,
+      description: toolInput.description || '',
+      start: { dateTime: toolInput.start_time, timeZone: tz },
+      end: { dateTime: endTime, timeZone: tz },
+      attendees: (toolInput.attendees || []).map(email => ({ email })),
+      conferenceData: {
+        createRequest: {
+          requestId: `coppice-${Date.now()}`,
+          conferenceSolutionKey: { type: 'hangoutsMeet' },
+        },
+      },
+    };
+
+    const result = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+      conferenceDataVersion: 1,
+      sendUpdates: 'all',
+    });
+
+    const meetLink = result.data.conferenceData?.entryPoints?.find(e => e.entryPointType === 'video')?.uri;
+
+    return {
+      eventId: result.data.id,
+      htmlLink: result.data.htmlLink,
+      meetLink: meetLink || null,
+      summary: result.data.summary,
+      start: result.data.start,
+      end: result.data.end,
+      attendees: (result.data.attendees || []).map(a => a.email),
+      status: 'created',
+    };
+  }
+  throw new Error(`Unknown calendar tool: ${toolName}`);
+}
+
 // ─── DACP Estimation Tools ───────────────────────────────────────────────────
 
 const DACP_TOOLS = [
@@ -1818,6 +1912,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   if (docAgents.includes(agentId)) {
     tools.push(...DOCUMENT_TOOLS);
   }
+  // Calendar tools — available to agents with email/scheduling access
+  const calendarAgents = ['hivemind', 'sangha', 'zhan'];
+  if (calendarAgents.includes(agentId)) {
+    tools.push(...CALENDAR_TOOLS);
+  }
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -1925,6 +2024,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const webToolNames = ['browse_url'];
       const legalToolNames = ['generate_legal_doc'];
       const documentToolNames = ['generate_document'];
+      const calendarToolNames = ['create_meeting'];
       const dacpToolNames = ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats'];
       const emailToolNames = ['send_email', 'list_emails', 'read_email'];
       const emailSecurityToolNames = ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'];
@@ -1933,6 +2033,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           toolResult = await callEmailSecurityTool(toolName, toolInput, tenantId);
         } else if (emailToolNames.includes(toolName)) {
           toolResult = await callEmailTool(toolName, toolInput, tenantId);
+        } else if (calendarToolNames.includes(toolName)) {
+          toolResult = await callCalendarTool(toolName, toolInput, tenantId);
         } else if (leadEngineToolNames.includes(toolName)) {
           toolResult = await callLeadEngineTool(toolName, toolInput, tenantId);
         } else if (knowledgeToolNames.includes(toolName)) {
@@ -2008,6 +2110,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
             nextToolResult = await callEmailSecurityTool(nextToolName, nextToolInput, tenantId);
           } else if (emailToolNames.includes(nextToolName)) {
             nextToolResult = await callEmailTool(nextToolName, nextToolInput, tenantId);
+          } else if (calendarToolNames.includes(nextToolName)) {
+            nextToolResult = await callCalendarTool(nextToolName, nextToolInput, tenantId);
           } else if (leadEngineToolNames.includes(nextToolName)) {
             nextToolResult = await callLeadEngineTool(nextToolName, nextToolInput, tenantId);
           } else if (knowledgeToolNames.includes(nextToolName)) {
