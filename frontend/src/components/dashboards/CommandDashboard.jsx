@@ -380,7 +380,8 @@ export default function CommandDashboard({ onNavigate }) {
     const item = approvals.find(a => a.id === id);
     try {
       await fetch(`${API_BASE}/v1/approvals/${id}/approve`, { method: 'POST' });
-      showToast(item?.type === 'email_draft' ? 'Approved — email sent' : 'Approved');
+      const toastMap = { email_draft: 'Approved — email sent', tool_action: 'Approved — executing action', meeting_instruction: 'Approved — executing instruction' };
+      showToast(toastMap[item?.type] || 'Approved');
     } catch {
       showToast('Approve failed');
     }

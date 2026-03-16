@@ -11,7 +11,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { sendEmail } from './emailService.js';
-import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig, getAgentMode } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -327,9 +327,44 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
 
   console.log(`[MeetingProcessor] Found ${instructions.length} agent instruction(s) to execute`);
 
-  // 2. Execute each instruction via the tenant's chat agent
-  const { chat } = await import('./chatService.js');
+  // 2. Check agent mode — copilot creates approval items, autonomous executes directly
   const agentId = TENANT_AGENT_MAP[tenantId] || 'sangha';
+  const agentMode = getAgentMode(agentId);
+
+  if (agentMode === 'off') {
+    console.log(`[MeetingProcessor] Agent "${agentId}" is off — skipping instruction execution`);
+    return 0;
+  }
+
+  if (agentMode === 'copilot') {
+    // Create approval items for each instruction instead of executing
+    for (const instruction of instructions) {
+      db.prepare(`
+        INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
+        VALUES (?, ?, ?, ?, 'meeting_instruction', ?, 'pending')
+      `).run(
+        tenantId, agentId,
+        `Meeting instruction: ${instruction.task.slice(0, 80)}`,
+        `From "${meetingTitle}" — requested by ${instruction.requestedBy || 'participant'}. Approve to execute.`,
+        JSON.stringify({
+          instruction, meetingTitle, summary, attendees,
+          tenantId, agentId, userId: 'meeting-bot',
+        }),
+      );
+    }
+    console.log(`[MeetingProcessor] Copilot mode — created ${instructions.length} approval item(s)`);
+    insertActivity({
+      tenantId, type: 'alert',
+      title: `${instructions.length} meeting instruction(s) awaiting approval`,
+      subtitle: `From "${meetingTitle}" — review in Approvals queue`,
+      detailJson: JSON.stringify({ instructions, meetingTitle }),
+      sourceType: 'meeting', agentId: 'meetings',
+    });
+    return instructions.length;
+  }
+
+  // Autonomous mode — execute directly
+  const { chat } = await import('./chatService.js');
   let executed = 0;
 
   for (const instruction of instructions) {

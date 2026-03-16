@@ -221,6 +221,62 @@ router.post('/:id/approve', async (req, res) => {
       }
     }
 
+    // If this is a tool_action (copilot mode), execute the tool now
+    if ((item.type === 'tool_action' || item.type === 'meeting_instruction') && item.payload_json) {
+      try {
+        const payload = JSON.parse(item.payload_json);
+        const { chat } = await import('../services/chatService.js');
+        let prompt;
+
+        if (item.type === 'meeting_instruction' && payload.instruction) {
+          // Meeting instruction — re-send the full instruction prompt
+          const instr = payload.instruction;
+          prompt = `You are processing a post-meeting instruction that has been APPROVED by the user. During the meeting "${payload.meetingTitle}", someone directed you to do the following:
+
+INSTRUCTION: ${instr.task}
+CONTEXT: ${instr.context || ''}
+REQUESTED BY: ${instr.requestedBy || 'a meeting participant'}
+MEETING ATTENDEES: ${(payload.attendees || []).join(', ')}
+
+MEETING SUMMARY:
+${payload.summary || ''}
+
+Execute this instruction now. This action has been explicitly approved.`;
+        } else {
+          // Tool action — re-invoke with tool parameters
+          prompt = `The user has APPROVED your previous request to use the "${payload.toolName}" tool. Execute it now with exactly these parameters:\n\nTool: ${payload.toolName}\nInput: ${JSON.stringify(payload.toolInput, null, 2)}\n\nProceed immediately — this action has been explicitly approved.`;
+        }
+
+        const result = await chat(
+          payload.tenantId || tenantId,
+          payload.agentId || item.agent_id,
+          payload.userId || userId,
+          prompt,
+        );
+
+        console.log(`Approval ${item.id}: ${item.type} executed`);
+
+        insertActivity({
+          tenantId,
+          type: 'out',
+          title: `Executed: ${item.title}`,
+          subtitle: result.response?.slice(0, 100),
+          detailJson: JSON.stringify({ type: item.type, response: result.response?.slice(0, 2000) }),
+          sourceType: 'approval', sourceId: String(item.id), agentId: item.agent_id,
+        });
+      } catch (toolErr) {
+        console.error(`Approval ${item.id}: ${item.type} execution failed:`, toolErr.message);
+        insertActivity({
+          tenantId,
+          type: 'alert',
+          title: `Failed to execute: ${item.title}`,
+          subtitle: toolErr.message,
+          detailJson: item.payload_json,
+          sourceType: 'approval', sourceId: String(item.id), agentId: item.agent_id,
+        });
+      }
+    }
+
     res.json(formatItem(updated));
   } catch (error) {
     console.error('Approvals approve error:', error);

@@ -11,6 +11,7 @@ import {
   getPendingApprovals, getApproval,
   getAgentMetrics, getAllAgentMetrics,
   getAgentReports, getAgentReport,
+  getAgentMode, updateAgentConfig,
 } from '../cache/database.js';
 
 const router = express.Router();
@@ -271,6 +272,27 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+/** GET /:id/mode — Get agent operational mode */
+router.get('/:id/mode', (req, res) => {
+  const mode = getAgentMode(req.params.id);
+  res.json({ agentId: req.params.id, mode });
+});
+
+/** PUT /:id/mode — Set agent mode (autonomous/copilot/off) */
+router.put('/:id/mode', (req, res) => {
+  const { mode } = req.body;
+  if (!['autonomous', 'copilot', 'off'].includes(mode)) {
+    return res.status(400).json({ error: 'mode must be autonomous, copilot, or off' });
+  }
+  const row = getAgentRow(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Agent not found' });
+
+  const existing = row.config_json ? JSON.parse(row.config_json) : {};
+  existing.mode = mode;
+  updateAgentConfig(req.params.id, existing);
+  res.json({ success: true, agentId: req.params.id, mode });
 });
 
 /** PUT /:id/config — Update agent config */
