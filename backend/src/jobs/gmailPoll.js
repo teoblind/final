@@ -572,6 +572,60 @@ async function pollSingleInbox(gmail, tenantId, label) {
         console.log(`[GmailPoll] [${label}] CC-only but explicitly addressed by ${senderEmail} — processing normally`);
       }
 
+      // ─── Owner/internal sender detection ───────────────────────────────
+      // Owners (CEO, team members) should NOT get auto-replies unless they
+      // explicitly ask Coppice to do something. This prevents the agent from
+      // treating internal emails as prospect inquiries or hallucinating responses.
+      const ownerTenant = tenantId || 'default';
+      const senderTrustRecord = getTrustedSenderByEmail(ownerTenant, senderEmail);
+      const isOwner = senderTrustRecord?.trust_level === 'owner';
+
+      if (isOwner && !isCcOnly) {
+        // Owner sent email TO the agent — only respond if explicitly addressed
+        const coppiceDirectAddress = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
+        const isExplicitlyAddressed = coppiceDirectAddress.test(body.slice(0, 2000));
+
+        if (!isExplicitlyAddressed) {
+          console.log(`[GmailPoll] [${label}] Owner ${senderEmail} — observing, not replying ("${subject}")`);
+          insertActivity({
+            tenantId: ownerTenant,
+            type: 'in',
+            title: `Email from owner: ${senderName || senderEmail}`,
+            subtitle: `${subject} (observed — owner not explicitly requesting agent action)`,
+            detailJson: JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id, ownerObserve: true }),
+            sourceType: 'email',
+            sourceId: msg.id,
+            agentId: 'coppice',
+          });
+
+          // Store as knowledge entry
+          try {
+            const knEntryId = `KN-owner-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            const tdb = getTenantDb(ownerTenant);
+            tdb.prepare(`
+              INSERT INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+              VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))
+            `).run(
+              knEntryId, ownerTenant,
+              `Owner email: ${subject} (from ${senderName || senderEmail})`,
+              JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id }),
+              `owner-observe:${senderEmail}`
+            );
+            processKnowledgeEntry(knEntryId, ownerTenant).catch(err => {
+              console.warn(`[GmailPoll] Owner knowledge processing failed: ${err.message}`);
+            });
+          } catch (knErr) {
+            console.warn(`[GmailPoll] Owner knowledge storage failed: ${knErr.message}`);
+          }
+
+          try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'owner-observe', tenantId: ownerTenant });
+          newReplies++;
+          continue;
+        }
+        console.log(`[GmailPoll] [${label}] Owner ${senderEmail} explicitly addressed Coppice — processing task`);
+      }
+
       // ─── Thread-level dedup: skip if we already replied to this thread ───
       if (repliedThreads.has(msgThreadId)) {
         console.log(`[GmailPoll] [${label}] Skipping duplicate in thread ${msgThreadId} (already replied this cycle)`);

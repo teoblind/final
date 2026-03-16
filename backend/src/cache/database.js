@@ -1198,16 +1198,21 @@ function initEmailTrustSeedData(targetDb, tenantId) {
     'INSERT OR IGNORE INTO email_trusted_senders (tenant_id, email, domain, display_name, trust_level, notes) VALUES (?, ?, ?, ?, ?, ?)'
   );
 
+  // Platform owners — observe-only unless explicitly addressed
+  insert.run(tenantId, 'teo@zhan.capital', null, 'Teo Blind', 'owner', 'Platform owner — Zhan Capital');
+  insert.run(tenantId, 'teo.blind@gmail.com', null, 'Teo Blind', 'owner', 'Platform owner — personal Gmail');
+
   if (tenantId === 'default') {
     // Sangha internal team — trust by domain and key individuals
     insert.run('default', null, 'sanghasystems.com', null, 'trusted', 'Sangha Systems internal domain');
     insert.run('default', null, 'zhan.capital', null, 'trusted', 'Zhan Capital internal domain');
-    insert.run('default', 'teo@zhan.capital', null, 'Teo Blind', 'trusted', 'Founder');
-    insert.run('default', 'spencer@sanghasystems.com', null, 'Spencer Marr', 'trusted', 'CEO');
+    insert.run('default', 'spencer@sanghasystems.com', null, 'Spencer Marr', 'owner', 'CEO — Sangha');
     console.log('Email trust: Seeded Sangha trusted senders');
   }
 
   if (tenantId === 'dacp-construction-001') {
+    // DACP owner
+    insert.run('dacp-construction-001', 'mpineda@dacpholdings.com', null, 'Marcel Pineda', 'owner', 'CEO — DACP Holdings');
     // DACP key GC contacts — trust by domain for known GCs
     insert.run('dacp-construction-001', null, 'turnerconstruction.com', null, 'trusted', 'Turner Construction — active GC partner');
     insert.run('dacp-construction-001', null, 'dpr.com', null, 'trusted', 'DPR Construction — active GC partner');
