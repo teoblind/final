@@ -457,7 +457,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
         const followupTenant = priorThread.tenant_id || tenantId || 'default';
 
         // Skip our own sent messages to avoid reply loops
-        const ownAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai'];
+        const ownAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai', 'agent@dacp.coppice.ai'];
         if (ownAddresses.some(addr => senderEmail?.toLowerCase() === addr)) {
           console.log(`[GmailPoll] [${label}] Skipping own sent message in thread ${msgThreadId}`);
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'self-skip', tenantId: followupTenant });

@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getCurrentTenantId, getTenantDb } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -881,14 +881,22 @@ const EMAIL_TOOLS = [
   },
 ];
 
-const EMAIL_PROMPT_ADDON = `
+function getEmailPromptAddon(tenantId) {
+  const emailMap = {
+    'default': 'agent@sangha.coppice.ai',
+    'dacp-construction-001': 'agent@dacp.coppice.ai',
+    'zhan-capital': 'agent@zhan.coppice.ai',
+  };
+  const email = emailMap[tenantId] || 'agent@zhan.coppice.ai';
+  return `
 
-You have full email access via agent@zhan.coppice.ai. You can:
+You have full email access via ${email}. You can:
 - Send emails on behalf of the team (send_email)
 - Check the inbox and search for emails (list_emails)
 - Read the full content of any email (read_email)
 
 When sending emails, use a professional tone. Always confirm with the user before sending unless they explicitly told you to send it.`;
+}
 
 async function callEmailTool(toolName, toolInput, tenantId) {
   const { google } = await import('googleapis');
@@ -1756,7 +1764,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
   // Email tools for agents with email access
   const emailAgents = ['sangha', 'hivemind', 'email', 'zhan'];
-  const emailAddon = emailAgents.includes(agentId) ? EMAIL_PROMPT_ADDON : '';
+  const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
   // Email security tools — hivemind only
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
@@ -1843,7 +1851,71 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 
       const { id: toolUseId, name: toolName, input: toolInput } = toolBlock;
 
-      // Call the tool — route to appropriate handler
+      // ─── Copilot Mode Interceptor ──────────────────────────────────────
+      // Read-only tools always execute. Action tools need approval in copilot mode.
+      const SAFE_TOOLS = new Set([
+        'search_knowledge', 'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
+        'browse_url', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue',
+        'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
+        'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
+        'get_estimates', 'get_jobs', 'get_dacp_stats',
+      ]);
+
+      const agentMode = getAgentMode(agentId);
+
+      if (agentMode === 'copilot' && !SAFE_TOOLS.has(toolName)) {
+        // Build a human-readable description of the proposed action
+        const actionDescriptions = {
+          send_email: () => `Send email to ${toolInput.to}: "${toolInput.subject}"`,
+          generate_outreach: () => `Generate outreach emails for ${toolInput.count || 'selected'} leads`,
+          discover_leads: () => `Discover new leads: "${toolInput.query || toolInput.industry || 'search'}"`,
+          generate_document: () => `Generate document: "${toolInput.title || toolInput.type || 'untitled'}"`,
+          generate_legal_doc: () => `Generate legal document: "${toolInput.title || toolInput.doc_type || 'untitled'}"`,
+          generate_mine_specs: () => `Generate mine specifications`,
+          create_estimate: () => `Create estimate for ${toolInput.project || toolInput.client || 'project'}`,
+          create_hubspot_contact: () => `Create HubSpot contact: ${toolInput.email || toolInput.name || 'contact'}`,
+          add_trusted_sender: () => `Add trusted sender: ${toolInput.email}`,
+          remove_trusted_sender: () => `Remove trusted sender: ${toolInput.email}`,
+          workspace_create_doc: () => `Create document: "${toolInput.title || 'untitled'}"`,
+          workspace_create_sheet: () => `Create spreadsheet: "${toolInput.title || 'untitled'}"`,
+          workspace_create_slides: () => `Create presentation: "${toolInput.title || 'untitled'}"`,
+        };
+        const descFn = actionDescriptions[toolName];
+        const actionDesc = descFn ? descFn() : `Execute tool: ${toolName}`;
+
+        // Insert approval item
+        db.prepare(`
+          INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
+          VALUES (?, ?, ?, ?, 'tool_action', ?, 'pending')
+        `).run(
+          tenantId, agentId,
+          actionDesc,
+          `Agent wants to use "${toolName}" — awaiting your approval.`,
+          JSON.stringify({ toolName, toolInput, toolUseId, agentId, tenantId, userId }),
+        );
+
+        // Save assistant response explaining the pending action
+        const copilotResponse = `I'd like to **${actionDesc.toLowerCase()}**, but I need your approval first. You can approve or reject this action from the Approvals queue.`;
+        saveMessage(tenantId, agentId, userId, 'assistant', copilotResponse, {
+          model: completion.model,
+          input_tokens: completion.usage?.input_tokens,
+          output_tokens: completion.usage?.output_tokens,
+          stop_reason: 'copilot_approval',
+          tool_proposed: toolName,
+          tool_input: toolInput,
+        }, threadId);
+
+        return { response: copilotResponse, approval_pending: true, tool_proposed: toolName };
+      }
+
+      if (agentMode === 'off') {
+        const offResponse = `This agent is currently set to **Off** mode. Enable Copilot or Autonomous mode to allow tool execution.`;
+        saveMessage(tenantId, agentId, userId, 'assistant', offResponse, null, threadId);
+        return { response: offResponse };
+      }
+      // ─── End Copilot Interceptor ───────────────────────────────────────
+
+      // Call the tool — route to appropriate handler (autonomous mode or safe tool)
       let toolResult;
       let toolIsError = false;
       const leadEngineToolNames = ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue'];
