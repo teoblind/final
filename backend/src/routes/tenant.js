@@ -204,12 +204,12 @@ router.post('/users/invite', requirePermission('manageUsers'), async (req, res) 
     const brandInitials = tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
     const tagline = branding.tagline || (isVenture ? 'Family Office Intelligence' : 'Powered by Coppice');
 
-    // Role display
+    // Role display (light bg)
     const roleColors = {
-      viewer: { color: '#3a5a7a', bg: '#141e26', border: '#1e2a36' },
-      operator: { color: '#4a7a5a', bg: '#141e18', border: '#1e2a20' },
-      admin: { color: '#7a6a4a', bg: '#1e1a14', border: '#2a2620' },
-      owner: { color: '#7a4a4a', bg: '#1e1414', border: '#2a2020' },
+      viewer: { color: '#2a6090', bg: '#e8f0f8', border: '#c8daf0' },
+      operator: { color: '#1a6b3c', bg: '#e8f5ee', border: '#c0e4d0' },
+      admin: { color: '#8a6a20', bg: '#f8f2e0', border: '#e8d8b0' },
+      owner: { color: '#8a3030', bg: '#f8e8e8', border: '#e8c0c0' },
     };
     const rc = roleColors[role] || roleColors.viewer;
 
@@ -672,99 +672,132 @@ router.post('/pool-config', authenticate, requireRole('owner', 'sangha_admin', '
 // ─── Invite Email Template ───────────────────────────────────────────────────
 
 function buildInviteEmailHtml({ inviterName, tenantName, role, email, inviteUrl, domain, agentEmail, agentName, brandInitials, tagline, accentColor, accentBg, accentBorder, rc, isVenture }) {
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/></head>
-<body style="margin:0;padding:0;background:#0e0e0e;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;">
-<div style="max-width:520px;margin:0 auto;padding:40px 20px;">
+  const logoUrl = `https://${domain}/coppice-logo.png`;
+  // Role labels
+  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
 
-  <!-- Top bar -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding:0 2px;">
-    <div style="display:flex;align-items:center;gap:8px;">
-      <div style="width:26px;height:26px;border-radius:6px;background:#1a1a1a;border:1px solid #2a2a2a;text-align:center;line-height:26px;font-size:10px;font-weight:600;color:#666;letter-spacing:0.04em;">${brandInitials}</div>
-      <span style="font-size:13px;font-weight:500;color:#555;letter-spacing:0.02em;">${tenantName}</span>
-    </div>
-    <span style="font-size:10px;color:#2a2a2a;letter-spacing:0.04em;">Sent by ${agentEmail}</span>
-  </div>
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f5f5f3;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;">
+
+<!-- Gmail uses tables, so use table-based layout for compatibility -->
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f5f3;">
+<tr><td align="center" style="padding:40px 20px;">
+<table width="520" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;width:100%;">
+
+  <!-- Header -->
+  <tr><td style="padding:0 0 24px;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td style="vertical-align:middle;">
+        <img src="${logoUrl}" alt="Coppice" width="28" height="28" style="border-radius:7px;vertical-align:middle;margin-right:10px;"/>
+        <span style="font-size:14px;font-weight:600;color:#1a1a1a;letter-spacing:-0.01em;vertical-align:middle;">${tenantName}</span>
+      </td>
+      <td align="right" style="font-size:11px;color:#999;vertical-align:middle;">
+        via ${agentEmail}
+      </td>
+    </tr>
+    </table>
+  </td></tr>
 
   <!-- Card -->
-  <div style="background:#141414;border:1px solid #222;border-radius:12px;overflow:hidden;">
-    <div style="height:2px;background:linear-gradient(90deg,${accentBorder} 0%,${accentBg} 50%,#111 100%);"></div>
-    <div style="padding:36px 40px 32px;">
+  <tr><td>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;border:1px solid #e8e8e4;border-radius:12px;overflow:hidden;">
 
-      <!-- Agent row -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
-        <div style="width:36px;height:36px;border-radius:50%;background:${accentBg};border:1px solid ${accentBorder};text-align:center;line-height:36px;font-size:14px;">&#10022;</div>
-        <div>
-          <div style="font-size:12px;color:${accentColor};font-weight:500;">${agentName}</div>
-          <div style="font-size:10px;color:#2a3a2a;margin-top:1px;">${tagline}</div>
+    <!-- Accent bar -->
+    <tr><td style="height:3px;background:linear-gradient(90deg,#1a6b3c,#2ecc71,#e8e8e4);font-size:0;line-height:0;">&nbsp;</td></tr>
+
+    <!-- Body -->
+    <tr><td style="padding:36px 40px 32px;">
+
+      <!-- Heading -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+      <tr><td>
+        <div style="font-size:10px;font-weight:600;color:#999;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:12px;">Access Invitation</div>
+        <div style="font-size:24px;font-weight:400;color:#1a1a1a;line-height:1.3;letter-spacing:-0.02em;">
+          You've been invited to<br/><strong style="font-weight:600;">${tenantName}</strong>
         </div>
+      </td></tr>
+      </table>
+
+      <!-- Body text -->
+      <div style="font-size:14px;color:#666;line-height:1.7;margin-bottom:28px;">
+        ${inviterName} has given you access to the ${tenantName} platform &mdash;
+        a live view of operations, communications, and agent actions.
       </div>
 
-      <div style="height:1px;background:#1e1e1e;margin-bottom:28px;"></div>
+      <!-- Access details box -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#fafaf8;border:1px solid #eeeeea;border-radius:8px;margin-bottom:28px;">
+      <tr><td style="padding:18px 20px;">
+        <div style="font-size:10px;font-weight:600;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">Your access</div>
 
-      <!-- Invite content -->
-      <div style="font-size:9px;font-weight:500;color:#2e2e2e;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">Access invitation</div>
-      <div style="font-size:22px;font-weight:400;color:#c8c4bc;line-height:1.3;letter-spacing:-0.02em;margin-bottom:14px;">
-        You've been invited to<br/><strong style="font-weight:500;color:#d8d4cc;">${tenantName}</strong>
-      </div>
-      <div style="font-size:13px;color:#3a3a3a;line-height:1.7;margin-bottom:28px;">
-        ${inviterName} has given you access to the ${tenantName} intelligence platform &mdash;
-        a live view of operations, deal flow, and agent actions.
-      </div>
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr style="border-bottom:1px solid #f0f0ec;">
+          <td style="font-size:12px;color:#999;padding:7px 0;border-bottom:1px solid #f0f0ec;">Workspace</td>
+          <td align="right" style="font-size:12px;color:#1a1a1a;font-weight:500;padding:7px 0;border-bottom:1px solid #f0f0ec;">${domain}</td>
+        </tr>
+        <tr>
+          <td style="font-size:12px;color:#999;padding:7px 0;border-bottom:1px solid #f0f0ec;">Role</td>
+          <td align="right" style="padding:7px 0;border-bottom:1px solid #f0f0ec;">
+            <span style="font-size:11px;font-weight:600;color:${rc.color};background:${rc.bg};border:1px solid ${rc.border};padding:2px 10px;border-radius:4px;">${roleLabel}</span>
+          </td>
+        </tr>
+        <tr>
+          <td style="font-size:12px;color:#999;padding:7px 0;border-bottom:1px solid #f0f0ec;">Access</td>
+          <td align="right" style="font-size:12px;color:#1a1a1a;padding:7px 0;border-bottom:1px solid #f0f0ec;">Dashboard, agents, reports</td>
+        </tr>
+        <tr>
+          <td style="font-size:12px;color:#999;padding:7px 0;">Expires</td>
+          <td align="right" style="font-size:12px;color:#1a1a1a;padding:7px 0;">7 days</td>
+        </tr>
+        </table>
+      </td></tr>
+      </table>
 
-      <!-- Access details -->
-      <div style="background:#111;border:1px solid #1e1e1e;border-radius:8px;padding:16px 18px;margin-bottom:24px;">
-        <div style="font-size:9px;color:#2a2a2a;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">Your access</div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #181818;">
-          <span style="font-size:11px;color:#2e2e2e;">Workspace</span>
-          <span style="font-size:11px;color:#666;font-family:'SF Mono','Fira Code',monospace;">${domain}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #181818;">
-          <span style="font-size:11px;color:#2e2e2e;">Role</span>
-          <span style="font-size:10px;color:${rc.color};background:${rc.bg};border:1px solid ${rc.border};padding:1px 8px;border-radius:4px;text-transform:capitalize;">${role}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #181818;">
-          <span style="font-size:11px;color:#2e2e2e;">Access</span>
-          <span style="font-size:11px;color:#666;">Dashboard, agents, reports</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;">
-          <span style="font-size:11px;color:#2e2e2e;">Expires</span>
-          <span style="font-size:11px;color:#666;">7 days</span>
-        </div>
-      </div>
-
-      <!-- CTA -->
-      <div style="margin-bottom:20px;">
-        <a href="${inviteUrl}" style="display:block;width:100%;background:${accentBg};border:1px solid ${accentBorder};border-radius:7px;padding:13px 20px;text-align:center;font-size:13px;font-weight:500;color:${accentColor};text-decoration:none;letter-spacing:0.01em;box-sizing:border-box;">
+      <!-- CTA Button -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px;">
+      <tr><td>
+        <a href="${inviteUrl}" style="display:block;background:#1a6b3c;border-radius:8px;padding:14px 24px;text-align:center;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:0.01em;">
           Accept invitation &amp; sign in &rarr;
         </a>
-      </div>
+      </td></tr>
+      </table>
 
       <!-- Link fallback -->
-      <div style="background:#0e0e0e;border:1px solid #1a1a1a;border-radius:6px;padding:10px 14px;margin-bottom:28px;overflow:hidden;">
-        <span style="font-size:9px;color:#2a2a2a;letter-spacing:0.06em;text-transform:uppercase;">Link: </span>
-        <span style="font-size:10px;color:#333;font-family:'SF Mono','Fira Code',monospace;">${inviteUrl}</span>
+      <div style="background:#f5f5f3;border:1px solid #e8e8e4;border-radius:6px;padding:10px 14px;margin-bottom:24px;word-break:break-all;">
+        <span style="font-size:10px;color:#aaa;letter-spacing:0.06em;text-transform:uppercase;">Link: </span>
+        <span style="font-size:11px;color:#666;">${inviteUrl}</span>
       </div>
 
-      <!-- Expiry -->
-      <div style="font-size:10px;color:#2a2a2a;margin-bottom:28px;">
-        &#128339; This link expires in 7 days. If it expires, ask ${inviterName.split(' ')[0]} to resend.
+      <!-- Expiry note -->
+      <div style="font-size:12px;color:#aaa;margin-bottom:24px;">
+        This link expires in 7 days. If it expires, ask ${inviterName.split(' ')[0]} to resend.
       </div>
 
-      <div style="height:1px;background:#1a1a1a;margin-bottom:20px;"></div>
+      <!-- Divider -->
+      <div style="height:1px;background:#eeeeea;margin-bottom:20px;"></div>
 
       <!-- Footer -->
-      <div style="display:flex;justify-content:space-between;">
-        <div style="font-size:10px;color:#1e1e1e;line-height:1.6;">${tenantName}<br/>Powered by Coppice</div>
-        <div style="font-size:10px;color:#1e1e1e;text-align:right;">Not expecting this?<br/>Ignore this message.</div>
-      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td style="font-size:11px;color:#bbb;line-height:1.6;">${tenantName}<br/>Powered by Coppice</td>
+        <td align="right" style="font-size:11px;color:#bbb;line-height:1.6;">Not expecting this?<br/>Ignore this message.</td>
+      </tr>
+      </table>
 
-    </div>
-  </div>
+    </td></tr>
+    </table>
+  </td></tr>
 
-  <div style="text-align:center;margin-top:20px;font-size:10px;color:#1e1e1e;letter-spacing:0.04em;">&copy; 2026 ${tenantName} &middot; ${domain}</div>
+  <!-- Bottom -->
+  <tr><td style="text-align:center;padding:20px 0 0;font-size:11px;color:#ccc;letter-spacing:0.02em;">
+    &copy; 2026 ${tenantName} &middot; ${domain}
+  </td></tr>
 
-</div>
+</table>
+</td></tr>
+</table>
+
 </body></html>`;
 }
 
