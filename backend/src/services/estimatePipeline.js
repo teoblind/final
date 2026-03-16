@@ -355,7 +355,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
   const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
   await sendEmailWithAttachments({
     to: from,
-    subject: `RE: ${subject} — DACP Construction Bid Proposal`,
+    subject: subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`,
     body: emailDraft.body,
     attachments: [{
       filename,

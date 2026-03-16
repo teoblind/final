@@ -283,9 +283,34 @@ export function draftClarificationEmail(bidRequest, missingItems) {
 }
 
 export function draftQuoteEmail(estimate) {
+  const firstName = (estimate.gcName || '').split(/\s+/)[0] || 'there';
+  const lineItemSummary = (estimate.lineItems || [])
+    .map(li => `- ${li.description}: ${li.quantity.toLocaleString()} ${li.unit} @ $${li.unit_price.toLocaleString()}/${li.unit}`)
+    .join('\n');
+
   return {
     to: '',
-    subject: `DACP Construction — ${estimate.projectName} — Bid Proposal`,
-    body: `Dear ${estimate.gcName} Estimating Team,\n\nPlease find our bid for the above-referenced project:\n\nTotal Bid Amount: $${estimate.totalBid.toLocaleString()}\n\nThis proposal includes:\n- All concrete materials, labor, and equipment\n- ${estimate.overheadPct}% overhead and ${estimate.profitPct}% profit\n- Mobilization & testing allowance: $${estimate.mobilization.toLocaleString()}\n\nExclusions:\n- Subgrade preparation (by others)\n- Earthwork and backfill\n- Waterproofing\n- Structural steel embeds (unless noted)\n\nThis bid is valid for 30 days. Please don't hesitate to reach out with questions.\n\nBest regards,\nDACP Construction`,
+    subject: `RE: ${estimate.projectName}`,
+    body: `Hey ${firstName},
+
+Ran the numbers on this - here's what we're looking at:
+
+Total Bid: $${estimate.totalBid.toLocaleString()}
+
+Breakdown:
+${lineItemSummary}
+
+Subtotal: $${estimate.subtotal?.toLocaleString() || 'see attached'}
+Overhead (${estimate.overheadPct}%) + Profit (${estimate.profitPct}%)
+Mobilization: $${estimate.mobilization.toLocaleString()}
+
+Full estimate with line-item detail is in the attached Excel.
+
+Standard exclusions apply - subgrade prep, earthwork, waterproofing, and structural steel embeds are by others unless noted.
+
+Bid is good for 30 days. Happy to walk through any of the numbers if you want to jump on a call.
+
+Best,
+DACP Construction`,
   };
 }

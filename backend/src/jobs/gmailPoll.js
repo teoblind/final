@@ -217,9 +217,19 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   const agentId = agentMap[resolvedTenant] || 'hivemind';
   const hasThreadContext = body.includes('--- Previous messages in this thread ---');
   const docInstruction = '\n\nIMPORTANT: If the sender is requesting a document (legal doc, report, memo, proposal, summary, etc.), use the generate_document or generate_legal_doc tool to create it. The file will be automatically attached to your email reply. After generating, write a brief message explaining what you created.';
+  const styleGuide = `\n\nWRITING STYLE (mandatory):
+- Greeting: "Hey [First Name]," (casual, never "Dear", never "Hello", never "Good morning")
+- Get straight to the point - no pleasantries, no "I hope this finds you well"
+- Short paragraphs: 2-4 sentences max
+- Direct and confident tone, not corporate or stiff
+- Use specific numbers over vague claims
+- Use dashes freely for asides
+- Closing: "Best," on its own line (never "Best regards," never "Sincerely,")
+- Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
+- No emoji in professional emails`;
   const prompt = hasThreadContext
-    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}`
-    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a professional response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}`;
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`;
 
   let agentResponse;
   let agentToolResult = null;
