@@ -227,7 +227,14 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
 - Closing: "Best," on its own line (never "Best regards," never "Sincerely,")
 - Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
 - No emoji in professional emails
-- IMPORTANT: Always end with a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.`;
+- IMPORTANT: Always end with a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.
+
+CONFIDENTIALITY (critical):
+- NEVER mention other clients, partners, or prospects by name in outbound emails
+- NEVER reference specific case studies, deal terms, contract values, or revenue figures from other engagements
+- NEVER fabricate or hallucinate case studies, client names, or partnership details
+- If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" — never name names or cite specific numbers from other deals
+- This is a hard rule — violating client confidentiality is a fireable offense`;
   const prompt = hasThreadContext
     ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`
     : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`;
