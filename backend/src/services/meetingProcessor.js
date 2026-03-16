@@ -261,14 +261,12 @@ export async function processMeetingComplete({
   const itemCount = insertActionItems({ tenantId, entryId, result });
   console.log(`[MeetingProcessor] Inserted ${itemCount} action items`);
 
-  // 4. Send personalized emails
-  const emailResult = await sendMeetingEmails({
-    meetingTitle,
-    result,
-    attendees,
-    tenantId,
-  });
-  console.log(`[MeetingProcessor] Emails sent: ${emailResult.sent.length}, failed: ${emailResult.failed.length}`);
+  // 4. Post-meeting emails DISABLED — action items are stored in DB and
+  //    visible on the dashboard. Sending unsolicited emails to every
+  //    meeting participant is too aggressive.
+  // To re-enable per-tenant, check tenant settings:
+  //   const emailResult = await sendMeetingEmails({ meetingTitle, result, attendees, tenantId });
+  const emailResult = { sent: [], failed: [] };
 
   insertActivity({
     tenantId, type: 'meet',
