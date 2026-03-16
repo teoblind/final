@@ -478,6 +478,41 @@ async function pollSingleInbox(gmail, tenantId, label) {
       const body = extractEmailBody(fullData.payload);
       const msgThreadId = fullData.threadId;
 
+      // ─── CC-only detection: observe vs. respond ───────────────────────
+      // If the agent is only in CC (not TO), treat as "observe only" unless
+      // the sender explicitly addresses the agent (e.g., "Coppice, can you...").
+      const toHeader = (headers.find(h => h.name.toLowerCase() === 'to')?.value || '').toLowerCase();
+      const ccHeader = (headers.find(h => h.name.toLowerCase() === 'cc')?.value || '').toLowerCase();
+      const agentAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai', 'agent@dacp.coppice.ai'];
+      const isInTo = agentAddresses.some(addr => toHeader.includes(addr));
+      const isInCc = agentAddresses.some(addr => ccHeader.includes(addr));
+      const isCcOnly = isInCc && !isInTo;
+
+      if (isCcOnly) {
+        // Check if the sender explicitly addressed the agent in the body
+        const agentMentionPatterns = /\b(coppice|agent)\b.*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create)/i;
+        const isExplicitlyAddressed = agentMentionPatterns.test(body.slice(0, 2000));
+
+        if (!isExplicitlyAddressed) {
+          console.log(`[GmailPoll] [${label}] CC-only from ${senderEmail} — observing, not replying ("${subject}")`);
+          insertActivity({
+            tenantId: tenantId || 'default',
+            type: 'in',
+            title: `CC'd email from ${senderName || senderEmail}`,
+            subtitle: `${subject} (observed — agent not directly addressed)`,
+            detailJson: JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id, ccOnly: true }),
+            sourceType: 'email',
+            sourceId: msg.id,
+            agentId: 'coppice',
+          });
+          try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'cc-observe', tenantId: tenantId || 'default' });
+          newReplies++;
+          continue;
+        }
+        console.log(`[GmailPoll] [${label}] CC-only but explicitly addressed by ${senderEmail} — processing normally`);
+      }
+
       // ─── Thread-level dedup: skip if we already replied to this thread ───
       if (repliedThreads.has(msgThreadId)) {
         console.log(`[GmailPoll] [${label}] Skipping duplicate in thread ${msgThreadId} (already replied this cycle)`);
