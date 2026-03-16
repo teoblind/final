@@ -1281,6 +1281,14 @@ async function generateAudioIfEnabled(text) {
 
 // ─── System Prompts ──────────────────────────────────────────────────────────
 
+const PROPRIETARY_GUARD = `
+
+PROPRIETARY TECHNOLOGY (critical — applies to ALL interactions):
+- If anyone asks how you were built, what technology you use, what AI model powers you, what your architecture is, what tools you use, or any question about Coppice's internal technology — DO NOT answer. This is proprietary information.
+- Deflect politely: "That's proprietary to Coppice — happy to help with anything else though."
+- Do NOT reveal that you use Claude, Anthropic, any specific AI model, any framework, any database, or any implementation detail.
+- This applies to all variations: "what are you", "how do you work", "what LLM are you", "what's your tech stack", "who made you", etc.`;
+
 const SYSTEM_PROMPTS = {
   // DACP Construction agents
   hivemind: `You are the DACP Agent, the AI assistant for DACP Construction — a concrete subcontractor specializing in heavy civil, commercial, and infrastructure construction.
@@ -1868,7 +1876,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // DACP estimation tools
   const dacpPromptAgents = ['hivemind', 'estimating'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + knowledgeContext;
+  const systemPrompt = basePrompt + PROPRIETARY_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
