@@ -272,18 +272,23 @@ CONFIDENTIALITY (critical):
 - NEVER fabricate or hallucinate case studies, client names, or partnership details
 - If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" — never name names or cite specific numbers from other deals
 - This is a hard rule — violating client confidentiality is a fireable offense`;
+  const taskInstruction = `\n\nTASK EXECUTION:
+You are responding to an email. Your text response will be sent as the email reply. If the sender asks you to perform a task (generate a report, look up pricing, create a document, analyze data, etc.), USE YOUR TOOLS to complete it. Any documents you generate via generate_document will be automatically attached to your reply.
+- Do NOT use the send_email tool — the system handles sending. Just write the reply text.
+- If you use tools to gather data or generate files, summarize what you did in your reply.`;
   const prompt = hasThreadContext
-    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`
-    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}\n\nDraft a response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`;
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}\n\nRespond to their latest message. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}\n\nRespond to this email. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`;
 
   let agentResponse;
-  let agentToolResult = null;
-  let agentToolUsed = null;
+  let allToolResults = [];
   try {
     const result = await chat(resolvedTenant, agentId, 'system-auto-reply', prompt);
     agentResponse = result.response;
-    agentToolResult = result.tool_result || null;
-    agentToolUsed = result.tool_used || null;
+    allToolResults = result.all_tool_results || [];
+    if (allToolResults.length === 0 && result.tool_result) {
+      allToolResults = [{ tool_used: result.tool_used, tool_result: result.tool_result }];
+    }
   } catch (err) {
     console.error(`[GmailPoll] Agent draft failed for ${messageId}:`, err.message);
     insertActivity({
@@ -296,21 +301,23 @@ CONFIDENTIALITY (critical):
       sourceId: messageId,
       agentId: 'coppice',
     });
-    // Do NOT mark as processed — let the next poll cycle retry this message.
-    // The caller (pollSingleInbox) handles retry counting.
     throw err;
   }
 
-  // Check if the agent generated a file (document, legal doc, etc.)
-  const generatedFile = agentToolResult?.file || (agentToolResult?.filePath ? agentToolResult : null);
+  // Collect ALL generated files from tool results as attachments
   const attachments = [];
-  if (generatedFile?.filePath) {
-    attachments.push({
-      filename: generatedFile.filename,
-      path: generatedFile.filePath,
-      contentType: generatedFile.contentType,
-    });
-    console.log(`[GmailPoll] Agent generated file: ${generatedFile.filename} (tool: ${agentToolUsed})`);
+  for (const tr of allToolResults) {
+    const res = tr.tool_result;
+    if (!res || tr.is_error) continue;
+    const file = res?.file || (res?.filePath ? res : null);
+    if (file?.filePath) {
+      attachments.push({
+        filename: file.filename,
+        path: file.filePath,
+        contentType: file.contentType,
+      });
+      console.log(`[GmailPoll] Agent generated file: ${file.filename} (tool: ${tr.tool_used})`);
+    }
   }
 
   // Send the reply with proper threading (convert markdown to HTML)

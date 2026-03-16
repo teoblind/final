@@ -1957,8 +1957,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         toolIsError = true;
       }
 
-      // Send tool result back to Claude for a final response
-      const followUpMessages = [
+      // ─── Multi-tool loop: keep calling tools until Claude produces text ───
+      // Tracks all tool results so callers (e.g. email handler) can collect
+      // every generated file, not just the last one.
+      const allToolResults = [{ tool_used: toolName, tool_input: toolInput, tool_result: toolResult, is_error: toolIsError }];
+      let loopMessages = [
         ...messages,
         { role: 'assistant', content: completion.content },
         {
@@ -1973,29 +1976,108 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           ],
         },
       ];
+      let totalInputTokens = completion.usage?.input_tokens || 0;
+      let totalOutputTokens = completion.usage?.output_tokens || 0;
+      let lastToolName = toolName;
+      let lastToolInput = toolInput;
+      let lastToolResult = toolResult;
 
-      const followUp = await getAnthropic().messages.create({
+      const MAX_TOOL_ITERATIONS = 5;
+      let currentResponse = await getAnthropic().messages.create({
         model: MODEL,
         max_tokens: 2048,
         system: systemPrompt,
-        messages: followUpMessages,
-        tools: WORKSPACE_TOOLS,
+        messages: loopMessages,
+        tools,
       });
+      totalInputTokens += currentResponse.usage?.input_tokens || 0;
+      totalOutputTokens += currentResponse.usage?.output_tokens || 0;
 
-      const responseText = followUp.content
+      let iteration = 0;
+      while (currentResponse.stop_reason === 'tool_use' && iteration < MAX_TOOL_ITERATIONS) {
+        iteration++;
+        const nextToolBlock = currentResponse.content.find(block => block.type === 'tool_use');
+        if (!nextToolBlock) break;
+
+        const { id: nextToolUseId, name: nextToolName, input: nextToolInput } = nextToolBlock;
+        let nextToolResult;
+        let nextToolIsError = false;
+
+        try {
+          if (emailSecurityToolNames.includes(nextToolName)) {
+            nextToolResult = await callEmailSecurityTool(nextToolName, nextToolInput, tenantId);
+          } else if (emailToolNames.includes(nextToolName)) {
+            nextToolResult = await callEmailTool(nextToolName, nextToolInput, tenantId);
+          } else if (leadEngineToolNames.includes(nextToolName)) {
+            nextToolResult = await callLeadEngineTool(nextToolName, nextToolInput, tenantId);
+          } else if (knowledgeToolNames.includes(nextToolName)) {
+            nextToolResult = await callKnowledgeTool(nextToolName, nextToolInput, tenantId);
+          } else if (hubspotToolNames.includes(nextToolName)) {
+            nextToolResult = await callHubSpotTool(nextToolName, nextToolInput, tenantId);
+          } else if (miningToolNames.includes(nextToolName)) {
+            nextToolResult = await callMiningTool(nextToolName, nextToolInput, tenantId);
+          } else if (webToolNames.includes(nextToolName)) {
+            nextToolResult = await callWebTool(nextToolName, nextToolInput);
+          } else if (legalToolNames.includes(nextToolName)) {
+            nextToolResult = await callLegalTool(nextToolName, nextToolInput, tenantId);
+          } else if (documentToolNames.includes(nextToolName)) {
+            nextToolResult = await callDocumentTool(nextToolName, nextToolInput, tenantId);
+          } else if (dacpToolNames.includes(nextToolName)) {
+            nextToolResult = await callDacpTool(nextToolName, nextToolInput, tenantId);
+          } else {
+            nextToolResult = await callWorkspaceTool(nextToolName, nextToolInput, tenantId);
+          }
+        } catch (toolError) {
+          nextToolResult = { error: toolError.message };
+          nextToolIsError = true;
+        }
+
+        allToolResults.push({ tool_used: nextToolName, tool_input: nextToolInput, tool_result: nextToolResult, is_error: nextToolIsError });
+        lastToolName = nextToolName;
+        lastToolInput = nextToolInput;
+        lastToolResult = nextToolResult;
+
+        loopMessages = [
+          ...loopMessages,
+          { role: 'assistant', content: currentResponse.content },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: nextToolUseId,
+                content: JSON.stringify(nextToolResult),
+                is_error: nextToolIsError,
+              },
+            ],
+          },
+        ];
+
+        currentResponse = await getAnthropic().messages.create({
+          model: MODEL,
+          max_tokens: 2048,
+          system: systemPrompt,
+          messages: loopMessages,
+          tools,
+        });
+        totalInputTokens += currentResponse.usage?.input_tokens || 0;
+        totalOutputTokens += currentResponse.usage?.output_tokens || 0;
+      }
+
+      const responseText = currentResponse.content
         .filter(block => block.type === 'text')
         .map(block => block.text)
         .join('\n');
 
       // Save assistant response with tool metadata
       saveMessage(tenantId, agentId, userId, 'assistant', responseText, {
-        model: followUp.model,
-        input_tokens: (completion.usage?.input_tokens || 0) + (followUp.usage?.input_tokens || 0),
-        output_tokens: (completion.usage?.output_tokens || 0) + (followUp.usage?.output_tokens || 0),
-        stop_reason: followUp.stop_reason,
-        tool_used: toolName,
-        tool_input: toolInput,
-        tool_result: toolResult,
+        model: currentResponse.model,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        stop_reason: currentResponse.stop_reason,
+        tool_used: lastToolName,
+        tool_input: lastToolInput,
+        tool_result: lastToolResult,
       }, threadId);
 
       // Generate TTS audio for tool-use responses
@@ -2004,9 +2086,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       return {
         response: responseText,
         audio_url: audioUrl,
-        tool_used: toolName,
-        tool_input: toolInput,
-        tool_result: toolResult,
+        tool_used: lastToolName,
+        tool_input: lastToolInput,
+        tool_result: lastToolResult,
+        all_tool_results: allToolResults,
       };
     }
 
