@@ -305,10 +305,20 @@ export default function OnboardingWizard({ onComplete }) {
   };
 
   // Team helpers
-  const addInvite = () => {
-    if (!inviteEmail || !inviteEmail.includes('@')) return;
-    setInvitedMembers(prev => [...prev, { email: inviteEmail, role: inviteRole }]);
-    setInviteEmail('');
+  const [inviting, setInviting] = useState(false);
+  const addInvite = async () => {
+    if (!inviteEmail || !inviteEmail.includes('@') || inviting) return;
+    setInviting(true);
+    try {
+      await api.post('/v1/tenant/users/invite', { email: inviteEmail, role: inviteRole });
+      setInvitedMembers(prev => [...prev, { email: inviteEmail, role: inviteRole }]);
+      setInviteEmail('');
+    } catch (err) {
+      console.warn('Invite failed (saved locally):', err.message);
+      setInvitedMembers(prev => [...prev, { email: inviteEmail, role: inviteRole }]);
+      setInviteEmail('');
+    }
+    setInviting(false);
   };
 
   const removeInvite = (index) => {
@@ -783,11 +793,11 @@ export default function OnboardingWizard({ onComplete }) {
           </select>
           <button
             onClick={addInvite}
-            disabled={!inviteEmail}
+            disabled={!inviteEmail || inviting}
             className={`px-5 py-2.5 text-[13px] font-semibold rounded-lg transition-colors disabled:opacity-40 shrink-0 ${dk ? 'bg-white text-black hover:bg-[#e0e0e0]' : 'text-white hover:opacity-90'}`}
             style={dk ? {} : { backgroundColor: accent }}
           >
-            Invite
+            {inviting ? '...' : 'Invite'}
           </button>
         </div>
       </div>

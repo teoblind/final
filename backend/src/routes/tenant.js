@@ -39,6 +39,7 @@ import {
 } from '../cache/database.js';
 import { generateApiKey } from '../services/authService.js';
 import { sendHtmlEmail } from '../services/emailService.js';
+import { getTenantEmailConfig } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -182,33 +183,47 @@ router.post('/users/invite', requirePermission('manageUsers'), async (req, res) 
     });
 
     // Auto-send invitation email
-    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    const origin = req.headers.origin || `${proto}://${host}`;
-    const inviteUrl = `${origin}/login?invite=${token}&email=${encodeURIComponent(email)}`;
+    const tenantId = req.user.tenantId;
+    const slug = tenant.slug || 'app';
+    const subdomain = slug === 'default' ? 'sangha' : slug;
+    const domain = `${subdomain}.coppice.ai`;
+    const inviteUrl = `https://${domain}/login?invite=${token}&email=${encodeURIComponent(email)}`;
     const inviterName = req.user.name || 'Your team';
     const tenantName = tenant.name || 'Coppice';
+    const branding = tenant.branding || {};
+    const primaryColor = branding.primaryColor || '#1a6b3c';
+    const agentConfig = getTenantEmailConfig(tenantId);
+    const agentEmail = agentConfig?.senderEmail || 'agent@coppice.ai';
+    const agentName = agentConfig?.senderName || 'Coppice Agent';
+
+    // Tenant-specific theming
+    const isVenture = branding.hideSanghaBranding || slug === 'zhan';
+    const accentColor = isVenture ? '#4a8a5a' : primaryColor;
+    const accentBg = isVenture ? '#1a2a1a' : `${primaryColor}15`;
+    const accentBorder = isVenture ? '#2a3a2a' : `${primaryColor}30`;
+    const brandInitials = tenantName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const tagline = branding.tagline || (isVenture ? 'Family Office Intelligence' : 'Powered by Coppice');
+
+    // Role display
+    const roleColors = {
+      viewer: { color: '#3a5a7a', bg: '#141e26', border: '#1e2a36' },
+      operator: { color: '#4a7a5a', bg: '#141e18', border: '#1e2a20' },
+      admin: { color: '#7a6a4a', bg: '#1e1a14', border: '#2a2620' },
+      owner: { color: '#7a4a4a', bg: '#1e1414', border: '#2a2020' },
+    };
+    const rc = roleColors[role] || roleColors.viewer;
 
     try {
       await sendHtmlEmail({
         to: email,
-        subject: `${inviterName} invited you to ${tenantName} on Coppice`,
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-            <h2 style="color: #1a1a1a; margin-bottom: 8px;">You're invited</h2>
-            <p style="color: #666; font-size: 14px; line-height: 1.5;">
-              ${inviterName} has invited you to join <strong>${tenantName}</strong> on Coppice as a <strong>${role}</strong>.
-            </p>
-            <a href="${inviteUrl}" style="display: inline-block; margin: 24px 0; padding: 12px 32px; background: #1a6b3c; color: #fff; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
-              Accept Invitation
-            </a>
-            <p style="color: #999; font-size: 12px; line-height: 1.5;">
-              This invitation expires in 7 days.<br>
-              Link: <a href="${inviteUrl}" style="color: #999;">${inviteUrl}</a>
-            </p>
-          </div>
-        `,
-        tenantId: req.user.tenantId,
+        subject: `You've been invited to ${tenantName}`,
+        html: buildInviteEmailHtml({
+          inviterName, tenantName, role, email, inviteUrl, domain,
+          agentEmail, agentName, brandInitials, tagline, accentColor,
+          accentBg, accentBorder, rc, isVenture,
+        }),
+        tenantId,
+        skipSignature: true,
       });
     } catch (emailErr) {
       console.warn('Failed to send invitation email:', emailErr.message);
@@ -653,5 +668,104 @@ router.post('/pool-config', authenticate, requireRole('owner', 'sangha_admin', '
     res.status(500).json({ error: error.message });
   }
 });
+
+// ─── Invite Email Template ───────────────────────────────────────────────────
+
+function buildInviteEmailHtml({ inviterName, tenantName, role, email, inviteUrl, domain, agentEmail, agentName, brandInitials, tagline, accentColor, accentBg, accentBorder, rc, isVenture }) {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/></head>
+<body style="margin:0;padding:0;background:#0e0e0e;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;">
+<div style="max-width:520px;margin:0 auto;padding:40px 20px;">
+
+  <!-- Top bar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding:0 2px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="width:26px;height:26px;border-radius:6px;background:#1a1a1a;border:1px solid #2a2a2a;text-align:center;line-height:26px;font-size:10px;font-weight:600;color:#666;letter-spacing:0.04em;">${brandInitials}</div>
+      <span style="font-size:13px;font-weight:500;color:#555;letter-spacing:0.02em;">${tenantName}</span>
+    </div>
+    <span style="font-size:10px;color:#2a2a2a;letter-spacing:0.04em;">Sent by ${agentEmail}</span>
+  </div>
+
+  <!-- Card -->
+  <div style="background:#141414;border:1px solid #222;border-radius:12px;overflow:hidden;">
+    <div style="height:2px;background:linear-gradient(90deg,${accentBorder} 0%,${accentBg} 50%,#111 100%);"></div>
+    <div style="padding:36px 40px 32px;">
+
+      <!-- Agent row -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:${accentBg};border:1px solid ${accentBorder};text-align:center;line-height:36px;font-size:14px;">&#10022;</div>
+        <div>
+          <div style="font-size:12px;color:${accentColor};font-weight:500;">${agentName}</div>
+          <div style="font-size:10px;color:#2a3a2a;margin-top:1px;">${tagline}</div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#1e1e1e;margin-bottom:28px;"></div>
+
+      <!-- Invite content -->
+      <div style="font-size:9px;font-weight:500;color:#2e2e2e;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">Access invitation</div>
+      <div style="font-size:22px;font-weight:400;color:#c8c4bc;line-height:1.3;letter-spacing:-0.02em;margin-bottom:14px;">
+        You've been invited to<br/><strong style="font-weight:500;color:#d8d4cc;">${tenantName}</strong>
+      </div>
+      <div style="font-size:13px;color:#3a3a3a;line-height:1.7;margin-bottom:28px;">
+        ${inviterName} has given you access to the ${tenantName} intelligence platform &mdash;
+        a live view of operations, deal flow, and agent actions.
+      </div>
+
+      <!-- Access details -->
+      <div style="background:#111;border:1px solid #1e1e1e;border-radius:8px;padding:16px 18px;margin-bottom:24px;">
+        <div style="font-size:9px;color:#2a2a2a;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">Your access</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #181818;">
+          <span style="font-size:11px;color:#2e2e2e;">Workspace</span>
+          <span style="font-size:11px;color:#666;font-family:'SF Mono','Fira Code',monospace;">${domain}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #181818;">
+          <span style="font-size:11px;color:#2e2e2e;">Role</span>
+          <span style="font-size:10px;color:${rc.color};background:${rc.bg};border:1px solid ${rc.border};padding:1px 8px;border-radius:4px;text-transform:capitalize;">${role}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #181818;">
+          <span style="font-size:11px;color:#2e2e2e;">Access</span>
+          <span style="font-size:11px;color:#666;">Dashboard, agents, reports</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;">
+          <span style="font-size:11px;color:#2e2e2e;">Expires</span>
+          <span style="font-size:11px;color:#666;">7 days</span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div style="margin-bottom:20px;">
+        <a href="${inviteUrl}" style="display:block;width:100%;background:${accentBg};border:1px solid ${accentBorder};border-radius:7px;padding:13px 20px;text-align:center;font-size:13px;font-weight:500;color:${accentColor};text-decoration:none;letter-spacing:0.01em;box-sizing:border-box;">
+          Accept invitation &amp; sign in &rarr;
+        </a>
+      </div>
+
+      <!-- Link fallback -->
+      <div style="background:#0e0e0e;border:1px solid #1a1a1a;border-radius:6px;padding:10px 14px;margin-bottom:28px;overflow:hidden;">
+        <span style="font-size:9px;color:#2a2a2a;letter-spacing:0.06em;text-transform:uppercase;">Link: </span>
+        <span style="font-size:10px;color:#333;font-family:'SF Mono','Fira Code',monospace;">${inviteUrl}</span>
+      </div>
+
+      <!-- Expiry -->
+      <div style="font-size:10px;color:#2a2a2a;margin-bottom:28px;">
+        &#128339; This link expires in 7 days. If it expires, ask ${inviterName.split(' ')[0]} to resend.
+      </div>
+
+      <div style="height:1px;background:#1a1a1a;margin-bottom:20px;"></div>
+
+      <!-- Footer -->
+      <div style="display:flex;justify-content:space-between;">
+        <div style="font-size:10px;color:#1e1e1e;line-height:1.6;">${tenantName}<br/>Powered by Coppice</div>
+        <div style="font-size:10px;color:#1e1e1e;text-align:right;">Not expecting this?<br/>Ignore this message.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-top:20px;font-size:10px;color:#1e1e1e;letter-spacing:0.04em;">&copy; 2026 ${tenantName} &middot; ${domain}</div>
+
+</div>
+</body></html>`;
+}
 
 export default router;
