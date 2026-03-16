@@ -1091,7 +1091,7 @@ WRITING STYLE (mandatory):
     const gmailMessageId = messageId;
     await sendEmailWithAttachments({
       to: from,
-      subject: `RE: ${subject} — Analysis Report`,
+      subject: subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`,
       html: textToHtml(replyBody),
       attachments: [{
         filename,
@@ -1182,7 +1182,7 @@ WRITING STYLE (mandatory):
   const gmailMessageId2 = messageId;
   await sendEmailWithAttachments({
     to: from,
-    subject: `RE: ${subject} — Mine Specification Report`,
+    subject: subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`,
     html: textToHtml(replyBody),
     attachments: [{
       filename,
