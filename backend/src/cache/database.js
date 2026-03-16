@@ -27,6 +27,8 @@ function tenantDirName(tenantId) {
 // System DB — stores tenants table for routing, always available
 const systemDb = new Database(join(dataDir, 'system.db'));
 systemDb.pragma('journal_mode = WAL');
+systemDb.pragma('busy_timeout = 5000');
+systemDb.pragma('synchronous = NORMAL');
 systemDb.pragma('foreign_keys = ON');
 
 // Per-tenant DB cache: tenantId → Database instance
@@ -48,6 +50,8 @@ function getTenantDb(tenantId) {
   const dbPath = join(tenantDir, `${dirName}.db`);
   const tdb = new Database(dbPath);
   tdb.pragma('journal_mode = WAL');
+  tdb.pragma('busy_timeout = 5000');
+  tdb.pragma('synchronous = NORMAL');
   tdb.pragma('foreign_keys = ON');
 
   tenantDbCache.set(tenantId, tdb);
@@ -5657,5 +5661,36 @@ export function getCompanyEmailStats(companyId, tenantId, days = 30) {
     ORDER BY date DESC
   `).all(companyId, tenantId, days);
 }
+
+// ─── Graceful Shutdown ─────────────────────────────────────────────────────
+// Checkpoint WAL and close all database connections on process exit to prevent corruption.
+
+export function closeAllDatabases() {
+  for (const [tenantId, tdb] of tenantDbCache) {
+    try {
+      tdb.pragma('wal_checkpoint(TRUNCATE)');
+      tdb.close();
+    } catch (err) {
+      console.error(`Error closing tenant DB [${tenantId}]:`, err.message);
+    }
+  }
+  tenantDbCache.clear();
+  try {
+    systemDb.pragma('wal_checkpoint(TRUNCATE)');
+    systemDb.close();
+  } catch (err) {
+    console.error('Error closing system DB:', err.message);
+  }
+  console.log('All databases closed cleanly.');
+}
+
+function handleShutdown(signal) {
+  console.log(`${signal} received — closing databases...`);
+  closeAllDatabases();
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 export default db;
