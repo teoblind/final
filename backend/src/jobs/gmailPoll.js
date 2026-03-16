@@ -371,11 +371,12 @@ async function pollSingleInbox(gmail, tenantId, label) {
   try {
     const listRes = await gmail.users.messages.list({
       userId: 'me',
-      q: 'is:unread newer_than:1h -from:me',
+      q: 'is:unread newer_than:2d -from:me',
       maxResults: 10,
     });
 
     const messages = listRes.data.messages || [];
+    console.log(`[GmailPoll] [${label}] Found ${messages.length} unread message(s)`);
     let newReplies = 0;
 
     for (const msg of messages) {
