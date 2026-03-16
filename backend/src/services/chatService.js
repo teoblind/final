@@ -1829,11 +1829,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 
   try {
     // Route to optimal model based on complexity
-    const isAutoReply = userId === 'system-auto-reply';
-    const selectedModel = selectModel(agentId, userContent, messages.length, true, { isAutoReply });
+    const selectedModel = selectModel(agentId, userContent, messages.length, true);
 
-    // Pitch deck and Opus agents get more tokens for richer responses
-    const maxTokens = agentId === 'pitch-deck' ? 4096 : selectedModel.includes('opus') ? 4096 : 2048;
+    // Pitch deck agent needs more tokens for detailed slide plans
+    const maxTokens = agentId === 'pitch-deck' ? 4096 : 2048;
 
     const completion = await getAnthropic().messages.create({
       model: selectedModel,
