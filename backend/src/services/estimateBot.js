@@ -285,7 +285,7 @@ export function draftClarificationEmail(bidRequest, missingItems) {
 export function draftQuoteEmail(estimate) {
   const firstName = (estimate.gcName || '').split(/\s+/)[0] || 'there';
   const lineItemSummary = (estimate.lineItems || [])
-    .map(li => `- ${li.description}: ${li.quantity.toLocaleString()} ${li.unit} @ $${li.unit_price.toLocaleString()}/${li.unit}`)
+    .map(li => `- ${li.description}: ${li.quantity.toLocaleString()} ${li.unit} @ $${(li.unitPrice || 0).toLocaleString()}/${li.unit}`)
     .join('\n');
 
   return {
