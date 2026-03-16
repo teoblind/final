@@ -23,6 +23,7 @@ import {
   getTenantDb,
   insertActivity,
   runWithTenant,
+  getTrustedSenderByEmail,
 } from '../cache/database.js';
 import {
   createBot,
@@ -548,6 +549,83 @@ ${transcript}`,
   }
 }
 
+// ─── Auto-Accept Calendar Invites ────────────────────────────────────────────
+
+/**
+ * Auto-accept pending calendar invites from owners/trusted senders.
+ * Checks for events where agent's responseStatus is 'needsAction' and
+ * the organizer is a trusted sender for that tenant.
+ */
+async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refreshToken }) {
+  if (!calendarClient) return;
+
+  try {
+    const now = new Date();
+    // Look ahead 30 days for pending invites
+    const windowEnd = new Date(now.getTime() + 30 * 24 * 3600000);
+
+    const res = await calendarClient.events.list({
+      calendarId: 'primary',
+      timeMin: now.toISOString(),
+      timeMax: windowEnd.toISOString(),
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    for (const event of (res.data.items || [])) {
+      const selfAttendee = (event.attendees || []).find(
+        a => a.self || a.email?.toLowerCase() === agentEmail.toLowerCase()
+      );
+      if (!selfAttendee || selfAttendee.responseStatus !== 'needsAction') continue;
+
+      // Check if organizer is an owner or trusted sender
+      const organizerEmail = event.organizer?.email;
+      if (!organizerEmail) continue;
+
+      const trusted = getTrustedSenderByEmail(tenantId, organizerEmail);
+      if (!trusted) continue; // Only auto-accept from trusted senders
+
+      // Accept the invite
+      const updatedAttendees = (event.attendees || []).map(a => {
+        if (a.self || a.email?.toLowerCase() === agentEmail.toLowerCase()) {
+          return { ...a, responseStatus: 'accepted' };
+        }
+        return a;
+      });
+
+      // Need calendar.events scope for patching
+      const auth = makeOAuth2(refreshToken);
+      const calWithWrite = google.calendar({ version: 'v3', auth });
+
+      await calWithWrite.events.patch({
+        calendarId: 'primary',
+        eventId: event.id,
+        requestBody: { attendees: updatedAttendees },
+        sendUpdates: 'all',
+      });
+
+      console.log(`[CalendarPoll] Auto-accepted invite: "${event.summary}" from ${organizerEmail} (${tenantId})`);
+
+      runWithTenant(tenantId, () => {
+        insertActivity({
+          tenantId,
+          type: 'calendar',
+          title: `Accepted: ${event.summary}`,
+          subtitle: `Invited by ${organizerEmail}`,
+          sourceType: 'calendar',
+          sourceId: event.id,
+          agentId: 'meetings',
+        });
+      });
+    }
+  } catch (err) {
+    // calendar.events scope may not be available — silent fail
+    if (!err.message?.includes('insufficient')) {
+      console.warn(`[CalendarPoll] Auto-accept error for ${agentEmail}: ${err.message}`);
+    }
+  }
+}
+
 // ─── Main Poll Loop ──────────────────────────────────────────────────────────
 
 async function poll() {
@@ -556,6 +634,9 @@ async function poll() {
 
   for (const cal of calendars) {
     try {
+      // Auto-accept pending invites from trusted senders
+      await autoAcceptInvites(cal);
+
       const meetings = await pollTenantCalendar(cal);
       for (const meeting of meetings) {
         await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
