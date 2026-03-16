@@ -133,7 +133,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
           {logo ? (
             <img src={logo} className="h-8 rounded-lg" alt="" />
           ) : (
-            <CoppiceLogo color={tenant?.branding?.sidebarColor || '#1a2e1a'} size={32} />
+            <CoppiceLogo color={tenant?.branding?.hideSanghaBranding ? 'transparent' : (tenant?.branding?.sidebarColor || '#1a2e1a')} size={32} />
           )}
           <span className="text-[13px] font-bold tracking-[2.5px] text-white/70 uppercase">{brandName}</span>
           <button onClick={() => setSidebarOpen(false)} className="ml-auto lg:hidden text-white/50 hover:text-white">
