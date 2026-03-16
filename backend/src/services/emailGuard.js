@@ -209,7 +209,25 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
   const authResults = parseAuthResults(headers || []);
   const authDomain = extractAuthDomain(headers || []);
 
-  // 1. Check for spoofing FIRST — highest priority
+  // 1. Check trusted sender registry (exact email match) — before spoofing so
+  //    explicitly trusted emails aren't blocked by display-name mismatch
+  const trustedByEmail = getTrustedSenderByEmail(tenantId, lowerEmail);
+
+  // 2. Check if sender is already blocked
+  if (trustedByEmail && trustedByEmail.trust_level === 'blocked') {
+    logEmailSecurity({
+      tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
+      verdict: 'blocked', reason: 'Sender is on block list', authResults: JSON.stringify(authResults),
+    });
+    return { verdict: 'spam', reason: 'Blocked sender', trustLevel: 'blocked', authResults };
+  }
+
+  // 3. If explicitly trusted by email, skip spoofing check entirely
+  if (trustedByEmail) {
+    return { verdict: 'trusted', reason: 'Registered trusted sender', trustLevel: trustedByEmail.trust_level, authResults };
+  }
+
+  // 4. Check for spoofing — only for non-trusted senders
   const spoofCheck = checkSpoofing({ tenantId, senderEmail: lowerEmail, senderName, senderDomain, authResults, authDomain });
   if (spoofCheck) {
     logEmailSecurity({
@@ -219,17 +237,7 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'spoofed', reason: spoofCheck, trustLevel: null, authResults };
   }
 
-  // 2. Check if sender is already blocked
-  const trustedByEmail = getTrustedSenderByEmail(tenantId, lowerEmail);
-  if (trustedByEmail && trustedByEmail.trust_level === 'blocked') {
-    logEmailSecurity({
-      tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
-      verdict: 'blocked', reason: 'Sender is on block list', authResults: JSON.stringify(authResults),
-    });
-    return { verdict: 'spam', reason: 'Blocked sender', trustLevel: 'blocked', authResults };
-  }
-
-  // 3. Rate limit check — auto-block senders who send too many emails
+  // 5. Rate limit check — auto-block senders who send too many emails
   const rateBlock = checkSenderRateLimit(tenantId, lowerEmail);
   if (rateBlock) {
     logEmailSecurity({
@@ -237,11 +245,6 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
       verdict: 'spam', reason: rateBlock, authResults: JSON.stringify(authResults),
     });
     return { verdict: 'spam', reason: rateBlock, trustLevel: 'blocked', authResults };
-  }
-
-  // 4. Check trusted sender registry (exact email match)
-  if (trustedByEmail) {
-    return { verdict: 'trusted', reason: 'Registered trusted sender', trustLevel: trustedByEmail.trust_level, authResults };
   }
 
   // 5. Check trusted domain
