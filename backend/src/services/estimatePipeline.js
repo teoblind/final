@@ -384,6 +384,7 @@ WRITING STYLE (mandatory):
 - Closing: "Best," then "DACP Construction" on next line (never "Best regards," never "Sincerely,")
 - Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
 - Do NOT sign as any person's name - sign as "DACP Construction"
+- IMPORTANT: Always end with a specific question that bounces the ball back to the sender. Make them think and engage. Examples: "What's your timeline looking like on this one?" / "Are you bidding this competitively or is there a target number you're working toward?" / "Want us to break out any alternates?" Never end with a generic "let me know if you have questions."
 - Reply with ONLY the email body text - no subject line, no meta-commentary`;
 
   let agentResponse;
@@ -395,7 +396,6 @@ WRITING STYLE (mandatory):
     agentResponse = `Hey ${senderFirstName},\n\nRan the numbers - total comes to $${estimate.totalBid.toLocaleString()}. Full line-item breakdown is in the attached Excel.\n\nBest,\nDACP Construction`;
   }
 
-  const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
   const replySubject = subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`;
   const html = markdownToEmailHtml(agentResponse);
 
@@ -410,8 +410,8 @@ WRITING STYLE (mandatory):
     }],
     tenantId,
     threadId,
-    inReplyTo: gmailMessageId,
-    references: gmailMessageId,
+    inReplyTo: messageId,
+    references: messageId,
   });
 
   console.log(`[EstimatePipeline] Reply sent to ${from} with estimate ${estimate.id}`);

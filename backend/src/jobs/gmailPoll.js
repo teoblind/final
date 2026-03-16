@@ -226,7 +226,8 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
 - Use dashes freely for asides
 - Closing: "Best," on its own line (never "Best regards," never "Sincerely,")
 - Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
-- No emoji in professional emails`;
+- No emoji in professional emails
+- IMPORTANT: Always end with a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.`;
   const prompt = hasThreadContext
     ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`
     : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`;
@@ -599,8 +600,9 @@ async function pollSingleInbox(gmail, tenantId, label) {
         const rfqTenant = tenantId || contact?.tenant_id || 'dacp-construction-001';
         if (autoRespondAllowed) {
           try {
+            const rfcMessageId = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
             const result = await processRfqEmail({
-              messageId: msg.id,
+              messageId: rfcMessageId,
               threadId: msgThreadId,
               from: senderEmail,
               fromName: senderName,
