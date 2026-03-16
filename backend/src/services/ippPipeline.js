@@ -1014,7 +1014,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         `Coppice`,
         `Sangha Renewables`,
       ].join('\n');
-      const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
+      const gmailMessageId = messageId;
       await sendEmailWithAttachments({
         to: from,
         subject: `RE: ${subject}`,
@@ -1054,7 +1054,19 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       const replyResp = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
-        system: `You are Coppice, an AI agent at Sangha Renewables. Write a brief, professional email reply to an IPP inquiry. Sign off as "Best,\\nCoppice\\nSangha Renewables". Keep it under 150 words. Be specific about the data you analyzed. Don't use markdown formatting — write plain text.`,
+        system: `You are Coppice, an AI agent at Sangha Renewables. Write a brief email reply to an IPP inquiry. Keep it under 150 words. Be specific about the data you analyzed. Don't use markdown formatting — write plain text.
+
+WRITING STYLE (mandatory):
+- Greeting: "Hey [First Name]," (casual, never "Dear", never "Hi", never "Hello", never "Good morning")
+- Get straight to the point — no pleasantries, no "Thank you for your inquiry"
+- Short paragraphs: 2-4 sentences max
+- Direct and confident tone, not corporate or stiff
+- Use specific numbers over vague claims
+- Use dashes freely for asides
+- Sign off as "Best,\\nCoppice\\nSangha Renewables"
+- Never say "I'd be happy to discuss", "Please don't hesitate", or "Looking forward to hearing from you"
+- No emoji
+- IMPORTANT: Always end with a specific question that bounces the ball back to the sender. Make them think and engage — ask something specific about their situation, timeline, or needs. Don't ask generic "would you be available for a call" — ask about their data, their curtailment patterns, their goals.`,
         messages: [{
           role: 'user',
           content: `Write a reply to ${firstName} about their IPP data. Here's what we extracted and analyzed:\n\n${JSON.stringify(claudeData, null, 2)}\n\nWe generated a tailored Excel report (${filename}) with their data organized into sheets. ${analysis ? `Our mine spec analysis suggests an optimal mine size of ${analysis.bestMineSize}MW.` : 'We included all the pricing, production, and market data they shared.'}\n\nThe original email subject was: ${subject}`,
@@ -1076,7 +1088,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       ].join('\n');
     }
 
-    const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
+    const gmailMessageId = messageId;
     await sendEmailWithAttachments({
       to: from,
       subject: `RE: ${subject} — Analysis Report`,
@@ -1167,7 +1179,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
     `Sangha Renewables`,
   ].join('\n');
 
-  const gmailMessageId2 = '<' + messageId + '@mail.gmail.com>';
+  const gmailMessageId2 = messageId;
   await sendEmailWithAttachments({
     to: from,
     subject: `RE: ${subject} — Mine Specification Report`,

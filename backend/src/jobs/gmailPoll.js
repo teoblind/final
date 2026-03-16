@@ -647,8 +647,9 @@ async function pollSingleInbox(gmail, tenantId, label) {
         if (autoRespondAllowed) {
           try {
             const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
+            const rfcMessageIdIpp = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
             const result = await processIppEmail({
-              messageId: msg.id,
+              messageId: rfcMessageIdIpp,
               threadId: msgThreadId,
               from: senderEmail,
               fromName: senderName,
