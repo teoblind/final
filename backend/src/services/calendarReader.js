@@ -1,45 +1,60 @@
 /**
- * Reads calendar events via agent@zhan.coppice.ai OAuth token.
- * Users share their calendar with agent@zhan.coppice.ai — no weird service account emails.
+ * Calendar Reader — Per-tenant calendar access via tenant_email_config tokens.
+ *
+ * Each tenant's agent has its own Google Workspace account with calendar access.
+ * This reads the agent's own calendar (primary) using the token stored in
+ * tenant_email_config. No more hardcoded calendar map.
  */
 
 import { google } from 'googleapis';
+import { getTenantDb } from '../cache/database.js';
 
-// Map tenant → calendar email to read (the user's calendar shared with coppice@)
-const TENANT_CALENDARS = {
-  'default': 'teo@sanghasystems.com',
-  'sangha': 'teo@sanghasystems.com',
-  'dacp-construction-001': 'estimating@dacpconstruction.com',
-};
+const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
+const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
 
-let calClient = null;
+// Cache calendar clients per tenant to avoid re-creating OAuth on every call
+const calClientCache = new Map();
 
-function getCalendar() {
-  if (calClient) return calClient;
+/**
+ * Get a Calendar API client for a tenant.
+ * Uses the tenant's agent OAuth token from tenant_email_config,
+ * falling back to the default agent token from env vars.
+ */
+function getCalendarForTenant(tenantId) {
+  if (calClientCache.has(tenantId)) return calClientCache.get(tenantId);
 
-  const clientId = process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+  let refreshToken = FALLBACK_REFRESH_TOKEN;
 
-  if (!clientId || !clientSecret || !refreshToken) {
-    console.warn('[CalendarReader] Missing Gmail OAuth credentials');
+  // Try tenant-specific token
+  try {
+    const tdb = getTenantDb(tenantId);
+    const row = tdb.prepare('SELECT gmail_refresh_token FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+    if (row?.gmail_refresh_token) {
+      refreshToken = row.gmail_refresh_token;
+    }
+  } catch {
+    // tenant_email_config may not exist — use fallback
+  }
+
+  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) {
     return null;
   }
 
-  const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
+  const oauth2 = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
   oauth2.setCredentials({ refresh_token: refreshToken });
-  calClient = google.calendar({ version: 'v3', auth: oauth2 });
-  return calClient;
+  const cal = google.calendar({ version: 'v3', auth: oauth2 });
+
+  calClientCache.set(tenantId, cal);
+  return cal;
 }
 
 /**
  * Count meetings in the last N days for a tenant.
+ * Reads the tenant agent's own calendar (primary).
  */
 export async function getMeetingCount(tenantId, days = 30) {
-  const calendarId = TENANT_CALENDARS[tenantId];
-  if (!calendarId) return null;
-
-  const cal = getCalendar();
+  const cal = getCalendarForTenant(tenantId);
   if (!cal) return null;
 
   try {
@@ -47,7 +62,7 @@ export async function getMeetingCount(tenantId, days = 30) {
     const timeMin = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
     const res = await cal.events.list({
-      calendarId,
+      calendarId: 'primary',
       timeMin: timeMin.toISOString(),
       timeMax: now.toISOString(),
       maxResults: 250,
@@ -72,7 +87,7 @@ export async function getMeetingCount(tenantId, days = 30) {
       }).length,
     };
   } catch (err) {
-    console.error('[CalendarReader] Error:', err.message);
+    console.error(`[CalendarReader] Error for tenant ${tenantId}:`, err.message);
     return null;
   }
 }

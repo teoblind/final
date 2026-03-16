@@ -10,7 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { sendEmail } from './emailService.js';
-import { insertActivity, getCurrentTenantId, getTenantDb } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -129,17 +129,29 @@ Rules:
 /**
  * Send personalized post-meeting emails to each attendee.
  */
-async function sendMeetingEmails({ meetingTitle, result, attendees }) {
+async function sendMeetingEmails({ meetingTitle, result, attendees, tenantId }) {
   const dateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
+
+  // Build skip list: all known agent/coppice emails + this tenant's agent email
+  const skipEmails = new Set([
+    'agent@zhan.coppice.ai',
+    'coppice@zhan.capital',
+    'claude@zhan.capital',
+  ]);
+  try {
+    const tenantConfig = getTenantEmailConfig(tenantId);
+    if (tenantConfig?.senderEmail) skipEmails.add(tenantConfig.senderEmail.toLowerCase());
+  } catch {}
 
   const sent = [];
   const failed = [];
 
   for (const email of attendees) {
-    // Skip coppice's own email
-    if (email === 'agent@zhan.coppice.ai' || email === 'coppice@zhan.capital' || email === 'claude@zhan.capital') continue;
+    // Skip agent's own email addresses
+    if (skipEmails.has(email.toLowerCase())) continue;
+    if (email.toLowerCase().match(/^agent@.*\.coppice\.ai$/)) continue;
 
     const personData = result.attendee_tasks?.[email];
     const name = personData?.name || email.split('@')[0];
@@ -179,7 +191,7 @@ These tasks have been added to your Coppice dashboard. Let me know if anything n
         to: email,
         subject: `Meeting Summary: ${meetingTitle} — Your Action Items`,
         body,
-        tenantId: 'default',
+        tenantId,
       });
       sent.push(email);
     } catch (err) {
@@ -254,6 +266,7 @@ export async function processMeetingComplete({
     meetingTitle,
     result,
     attendees,
+    tenantId,
   });
   console.log(`[MeetingProcessor] Emails sent: ${emailResult.sent.length}, failed: ${emailResult.failed.length}`);
 

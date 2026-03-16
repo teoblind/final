@@ -264,4 +264,16 @@ router.post('/transcript-event', async (req, res) => {
   }
 });
 
+/**
+ * GET /calendar-status — Calendar poll scheduler status + active meeting bots
+ */
+router.get('/calendar-status', async (req, res) => {
+  try {
+    const { getCalendarPollStatus } = await import('../jobs/calendarPoll.js');
+    res.json(getCalendarPollStatus());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
