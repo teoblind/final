@@ -522,9 +522,12 @@ async function pollSingleInbox(gmail, tenantId, label) {
       const isCcOnly = isInCc && !isInTo;
 
       if (isCcOnly) {
-        // Check if the sender explicitly addressed the agent in the body
-        const agentMentionPatterns = /\b(coppice|agent)\b.*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create)/i;
-        const isExplicitlyAddressed = agentMentionPatterns.test(body.slice(0, 2000));
+        // Check if the sender explicitly addressed the agent in the body.
+        // Must be a DIRECT address to "Coppice" (not generic "agent") — e.g.,
+        // "Coppice, can you...", "Hey Coppice", "@Coppice", "Coppice please..."
+        // The word "agent" alone is too ambiguous (common in construction/business).
+        const coppiceDirectAddress = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
+        const isExplicitlyAddressed = coppiceDirectAddress.test(body.slice(0, 2000));
 
         if (!isExplicitlyAddressed) {
           const ccTenant = tenantId || 'default';
