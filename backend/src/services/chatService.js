@@ -606,6 +606,152 @@ You can generate formatted documents on request:
 - generate_document: Create DOCX or PDF files (reports, memos, proposals, summaries, letters, any document)
 Write the full content in markdown format. The document will be generated and attached to your email reply or available for download.`;
 
+// ─── DACP Estimation Tools ───────────────────────────────────────────────────
+
+const DACP_TOOLS = [
+  {
+    name: 'lookup_pricing',
+    description: 'Look up DACP Construction pricing from the master pricing database. Returns unit prices for concrete work items (SOG, curb & gutter, rebar, sidewalks, etc.) with material, labor, and equipment cost breakdowns. Use when someone asks about pricing, rates, or costs for concrete work.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'Filter by category (e.g. "Flatwork", "Rebar", "Curb & Gutter", "Foundation"). Leave empty for all pricing.' },
+      },
+    },
+  },
+  {
+    name: 'get_bid_requests',
+    description: 'Get bid requests / RFQs received by DACP Construction. Returns bid details including GC name, scope, due date, status, and urgency.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['new', 'reviewing', 'estimated', 'sent', 'won', 'lost', 'declined'], description: 'Filter by status. Leave empty for all.' },
+        id: { type: 'string', description: 'Get a specific bid request by ID' },
+      },
+    },
+  },
+  {
+    name: 'get_estimates',
+    description: 'Get estimates created by DACP Construction. Returns line items, subtotals, overhead, profit, mobilization, and total bid amount.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Get a specific estimate by ID. Leave empty for all estimates.' },
+      },
+    },
+  },
+  {
+    name: 'create_estimate',
+    description: 'Create a new concrete estimate for a project. Provide line items with quantities, units, and unit prices. The system calculates subtotal, applies overhead/profit percentages, adds mobilization, and returns the total bid.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_name: { type: 'string', description: 'Project name' },
+        gc_name: { type: 'string', description: 'General contractor name' },
+        bid_request_id: { type: 'string', description: 'Associated bid request ID (if applicable)' },
+        line_items: {
+          type: 'array',
+          description: 'Array of line items',
+          items: {
+            type: 'object',
+            properties: {
+              description: { type: 'string' },
+              quantity: { type: 'number' },
+              unit: { type: 'string' },
+              unit_price: { type: 'number' },
+            },
+            required: ['description', 'quantity', 'unit', 'unit_price'],
+          },
+        },
+        overhead_pct: { type: 'number', description: 'Overhead percentage (default: 10)' },
+        profit_pct: { type: 'number', description: 'Profit percentage (default: 10)' },
+        mobilization: { type: 'number', description: 'Mobilization cost (default: 2500)' },
+        notes: { type: 'string', description: 'Additional notes or assumptions' },
+      },
+      required: ['project_name', 'line_items'],
+    },
+  },
+  {
+    name: 'get_jobs',
+    description: 'Get DACP Construction jobs/projects. Returns project details including status, estimated vs actual cost, bid amount, margin, and dates.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['active', 'complete', 'lost', 'pending'], description: 'Filter by status. Leave empty for all.' },
+        id: { type: 'string', description: 'Get a specific job by ID' },
+      },
+    },
+  },
+  {
+    name: 'get_dacp_stats',
+    description: 'Get DACP Construction business statistics: bid request counts, estimate counts, job win/loss rates, average margins, total revenue, and field report counts.',
+    input_schema: { type: 'object', properties: {} },
+  },
+];
+
+async function callDacpTool(toolName, toolInput, tenantId) {
+  const {
+    getDacpPricing, getDacpBidRequests, getDacpBidRequest,
+    getDacpEstimates, getDacpEstimate, createDacpEstimate,
+    getDacpJobs, getDacpJob, getDacpStats, updateDacpBidRequest,
+  } = await import('../cache/database.js');
+  const tid = tenantId || 'dacp-construction-001';
+
+  switch (toolName) {
+    case 'lookup_pricing':
+      return getDacpPricing(tid, toolInput.category || null);
+    case 'get_bid_requests':
+      if (toolInput.id) return getDacpBidRequest(tid, toolInput.id);
+      return getDacpBidRequests(tid, toolInput.status || null);
+    case 'get_estimates':
+      if (toolInput.id) return getDacpEstimate(tid, toolInput.id);
+      return getDacpEstimates(tid);
+    case 'create_estimate': {
+      const items = toolInput.line_items || [];
+      const subtotal = items.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+      const overheadPct = toolInput.overhead_pct ?? 10;
+      const profitPct = toolInput.profit_pct ?? 10;
+      const mobilization = toolInput.mobilization ?? 2500;
+      const totalBid = Math.round(subtotal * (1 + overheadPct / 100) * (1 + profitPct / 100) + mobilization);
+      const id = `est-${Date.now().toString(36)}`;
+      createDacpEstimate({
+        id, tenantId: tid,
+        bidRequestId: toolInput.bid_request_id || null,
+        projectName: toolInput.project_name,
+        gcName: toolInput.gc_name || '',
+        status: 'draft',
+        lineItemsJson: JSON.stringify(items),
+        subtotal, overheadPct, profitPct, mobilization, totalBid,
+        confidence: 'medium',
+        notes: toolInput.notes || '',
+      });
+      if (toolInput.bid_request_id) {
+        try { updateDacpBidRequest(tid, toolInput.bid_request_id, { status: 'estimated' }); } catch {}
+      }
+      return { id, projectName: toolInput.project_name, lineItems: items, subtotal, overheadPct, profitPct, mobilization, totalBid };
+    }
+    case 'get_jobs':
+      if (toolInput.id) return getDacpJob(tid, toolInput.id);
+      return getDacpJobs(tid, toolInput.status || null);
+    case 'get_dacp_stats':
+      return getDacpStats(tid);
+    default:
+      throw new Error(`Unknown DACP tool: ${toolName}`);
+  }
+}
+
+const DACP_TOOLS_PROMPT_ADDON = `
+
+You have access to DACP Construction's estimating and project database:
+- lookup_pricing: Look up unit prices from the master pricing table (material, labor, equipment breakdowns)
+- get_bid_requests: View incoming RFQs/bid requests from GCs (status, scope, due dates)
+- get_estimates: View existing estimates with line items and totals
+- create_estimate: Build a new estimate with line items, overhead, profit, and mobilization
+- get_jobs: View project history (active, complete, won/lost, margins)
+- get_dacp_stats: Get overall business statistics (win rates, revenue, pipeline)
+
+When asked to estimate concrete work, ALWAYS use lookup_pricing first to get current rates, then create_estimate with proper line items. Be precise with quantities and units.`;
+
 // ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
 
 const MINING_TOOLS = [
@@ -1617,19 +1763,22 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Document generation tools — all agents
   const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + knowledgeContext;
+  // DACP estimation tools
+  const dacpPromptAgents = ['hivemind', 'estimating'];
+  const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
   if (leAgents.includes(agentId)) {
     tools.push(...LEAD_ENGINE_TOOLS);
   }
-  // Knowledge tools for Sangha agents
-  const knAgents = ['sangha', 'curtailment', 'pools', 'zhan'];
+  // Knowledge tools — all primary agents
+  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating'];
   if (knAgents.includes(agentId)) {
     tools.push(...KNOWLEDGE_TOOLS);
   }
-  // HubSpot tools for Sangha agents (only when key is configured)
+  // HubSpot tools (when API key is configured)
   if (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) {
     tools.push(...HUBSPOT_TOOLS);
   }
@@ -1637,6 +1786,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const miningAgents = ['sangha', 'curtailment'];
   if (miningAgents.includes(agentId)) {
     tools.push(...MINING_TOOLS);
+  }
+  // DACP estimation & project tools
+  const dacpAgents = ['hivemind', 'estimating'];
+  if (dacpAgents.includes(agentId)) {
+    tools.push(...DACP_TOOLS);
   }
   // Email tools for agents with inbox access
   if (emailAgents.includes(agentId)) {
@@ -1699,6 +1853,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const webToolNames = ['browse_url'];
       const legalToolNames = ['generate_legal_doc'];
       const documentToolNames = ['generate_document'];
+      const dacpToolNames = ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats'];
       const emailToolNames = ['send_email', 'list_emails', 'read_email'];
       const emailSecurityToolNames = ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'];
       try {
@@ -1720,6 +1875,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           toolResult = await callLegalTool(toolName, toolInput, tenantId);
         } else if (documentToolNames.includes(toolName)) {
           toolResult = await callDocumentTool(toolName, toolInput, tenantId);
+        } else if (dacpToolNames.includes(toolName)) {
+          toolResult = await callDacpTool(toolName, toolInput, tenantId);
         } else {
           toolResult = await callWorkspaceTool(toolName, toolInput, tenantId);
         }
