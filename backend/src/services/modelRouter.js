@@ -27,9 +27,11 @@ const HAIKU_AGENTS = new Set(['proactive_check', 'classifier']);
  * @param {string} messageContent - The user's message
  * @param {number} conversationLength - Number of messages in context
  * @param {boolean} hasTools - Whether tools are being passed
+ * @param {Object} [opts] - Additional options
+ * @param {boolean} [opts.isAutoReply] - If true, use Sonnet instead of Opus (cost control)
  * @returns {string} Model ID
  */
-export function selectModel(agentId, messageContent, conversationLength = 0, hasTools = false) {
+export function selectModel(agentId, messageContent, conversationLength = 0, hasTools = false, opts = {}) {
   // Background agents always use Haiku
   if (HAIKU_AGENTS.has(agentId)) {
     return HAIKU;
@@ -45,7 +47,14 @@ export function selectModel(agentId, messageContent, conversationLength = 0, has
     return HAIKU;
   }
 
-  // Everything else → Sonnet (tool calls, long conversations, complex tasks)
+  // Primary tenant agents → Opus for interactive dashboard chat
+  // Auto-replies stay on Sonnet for cost control
+  const opusAgents = new Set(['sangha', 'hivemind', 'zhan']);
+  if (opusAgents.has(agentId) && !opts.isAutoReply) {
+    return OPUS;
+  }
+
+  // Everything else → Sonnet (tool calls, auto-replies, sub-agents)
   return SONNET;
 }
 
