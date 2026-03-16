@@ -1,11 +1,12 @@
 /**
- * Meeting Processor — Post-meeting action item extraction + personalized emails
+ * Meeting Processor — Post-meeting action item extraction + instruction execution
  *
  * After MeetingBot transcribes a meeting, this service:
  * 1. Queries past meeting context (recent action items, past meetings)
  * 2. Calls Claude to extract per-person tasks from the transcript
- * 3. Sends each attendee a personalized email with summary + their tasks
- * 4. Inserts action items into the DB so they appear on the dashboard
+ * 3. Inserts action items into the DB so they appear on the dashboard
+ * 4. Extracts agent-directed instructions from the transcript and executes
+ *    them via the tenant's agent (email, Drive, docs, etc.)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -261,21 +262,29 @@ export async function processMeetingComplete({
   const itemCount = insertActionItems({ tenantId, entryId, result });
   console.log(`[MeetingProcessor] Inserted ${itemCount} action items`);
 
-  // 4. Post-meeting emails DISABLED — action items are stored in DB and
-  //    visible on the dashboard. Sending unsolicited emails to every
-  //    meeting participant is too aggressive.
-  // To re-enable per-tenant, check tenant settings:
-  //   const emailResult = await sendMeetingEmails({ meetingTitle, result, attendees, tenantId });
-  const emailResult = { sent: [], failed: [] };
+  // 4. Extract and execute agent-directed instructions from the transcript
+  let instructionsExecuted = 0;
+  try {
+    instructionsExecuted = await executeAgentInstructions({
+      tenantId,
+      meetingTitle,
+      transcript,
+      summary: result.meeting_summary || summary,
+      attendees,
+    });
+  } catch (err) {
+    console.error(`[MeetingProcessor] Instruction execution failed:`, err.message);
+  }
 
   insertActivity({
     tenantId, type: 'meet',
     title: `Transcribed: ${meetingTitle}`,
-    subtitle: `${Math.round((Date.now() - new Date(entryId.split('-')[1]).getTime()) / 60000) || '?'} min — ${attendees.length} attendees — ${itemCount} action items extracted`,
+    subtitle: `${attendees.length} attendees — ${itemCount} action items — ${instructionsExecuted} instructions executed`,
     detailJson: JSON.stringify({
       summary: result.meeting_summary,
       actionItems: Object.values(result.attendee_tasks || {}).flatMap(p => (p.tasks || []).map(t => t.task)),
       attendees,
+      instructionsExecuted,
     }),
     sourceType: 'meeting', sourceId: entryId, agentId: 'knowledge',
   });
@@ -284,7 +293,151 @@ export async function processMeetingComplete({
     meetingSummary: result.meeting_summary,
     attendeeTasks: result.attendee_tasks,
     actionItemsInserted: itemCount,
-    emailsSent: emailResult.sent,
-    emailsFailed: emailResult.failed,
+    instructionsExecuted,
   };
+}
+
+// ─── Agent-Directed Instruction Execution ────────────────────────────────────
+
+// Map tenant IDs to the agent that should handle instructions
+const TENANT_AGENT_MAP = {
+  'default': 'sangha',
+  'dacp-construction-001': 'hivemind',
+  'zhan-capital': 'zhan',
+};
+
+/**
+ * Extract agent-directed instructions from the meeting transcript
+ * and execute them via the tenant's chat agent (which has all tools).
+ *
+ * Examples of instructions:
+ * - "Agent, send Spencer the updated pipeline report"
+ * - "Coppice, update the shared folder with these notes"
+ * - "Can you email the estimate to the client?"
+ * - "Put together a summary doc and share it with the team"
+ */
+async function executeAgentInstructions({ tenantId, meetingTitle, transcript, summary, attendees }) {
+  // 1. Ask Claude to extract agent-directed instructions
+  const instructions = await extractInstructions({ meetingTitle, transcript, summary, attendees });
+
+  if (!instructions || instructions.length === 0) {
+    console.log(`[MeetingProcessor] No agent instructions found in transcript`);
+    return 0;
+  }
+
+  console.log(`[MeetingProcessor] Found ${instructions.length} agent instruction(s) to execute`);
+
+  // 2. Execute each instruction via the tenant's chat agent
+  const { chat } = await import('./chatService.js');
+  const agentId = TENANT_AGENT_MAP[tenantId] || 'sangha';
+  let executed = 0;
+
+  for (const instruction of instructions) {
+    try {
+      console.log(`[MeetingProcessor] Executing: "${instruction.task}"`);
+
+      // Build a prompt that gives the agent context + the specific instruction
+      const prompt = `You are processing a post-meeting instruction. During the meeting "${meetingTitle}", someone directed you to do the following:
+
+INSTRUCTION: ${instruction.task}
+CONTEXT: ${instruction.context || ''}
+REQUESTED BY: ${instruction.requestedBy || 'a meeting participant'}
+MEETING ATTENDEES: ${attendees.join(', ')}
+
+MEETING SUMMARY:
+${summary}
+
+Execute this instruction now. If it involves sending an email, creating a document, updating a file, or any other action — do it using your available tools. Be concise and professional. If you cannot complete the instruction (missing information, ambiguous request), log what you attempted and what's needed.`;
+
+      const result = await chat(tenantId, agentId, 'meeting-bot', prompt);
+
+      insertActivity({
+        tenantId,
+        type: 'out',
+        title: `Meeting instruction executed: ${instruction.task.slice(0, 80)}`,
+        subtitle: `From "${meetingTitle}" — requested by ${instruction.requestedBy || 'participant'}`,
+        detailJson: JSON.stringify({
+          instruction,
+          agentResponse: result.response?.slice(0, 2000),
+          meetingTitle,
+        }),
+        sourceType: 'meeting',
+        agentId: 'meetings',
+      });
+
+      executed++;
+      console.log(`[MeetingProcessor] ✓ Instruction executed: "${instruction.task.slice(0, 60)}"`);
+    } catch (err) {
+      console.error(`[MeetingProcessor] Instruction failed: "${instruction.task}" — ${err.message}`);
+      insertActivity({
+        tenantId,
+        type: 'alert',
+        title: `Meeting instruction failed: ${instruction.task.slice(0, 80)}`,
+        subtitle: err.message,
+        detailJson: JSON.stringify({ instruction, error: err.message, meetingTitle }),
+        sourceType: 'meeting',
+        agentId: 'meetings',
+      });
+    }
+  }
+
+  return executed;
+}
+
+/**
+ * Use Claude to identify instructions directed at the agent from the transcript.
+ * Returns an array of { task, context, requestedBy }.
+ */
+async function extractInstructions({ meetingTitle, transcript, summary, attendees }) {
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2000,
+    messages: [{
+      role: 'user',
+      content: `Analyze this meeting transcript and identify any instructions or requests directed at the AI agent/bot (referred to as "agent", "Coppice", "Sangha Agent", "bot", or similar).
+
+MEETING: ${meetingTitle}
+ATTENDEES: ${attendees.join(', ')}
+
+SUMMARY:
+${summary}
+
+TRANSCRIPT:
+${transcript.slice(0, 15000)}
+
+Extract ONLY explicit instructions where someone asked the agent to DO something. Examples:
+- "Agent, send the report to Spencer"
+- "Coppice, can you draft an email to the client?"
+- "Update the shared folder with the meeting notes"
+- "Put together a proposal and share it"
+- "Send everyone a follow-up with the action items"
+
+Do NOT include:
+- General discussion or opinions
+- Human-to-human task assignments (those are action items, not agent instructions)
+- Vague mentions like "the AI could help with..."
+
+Output JSON only. If no agent instructions found, return empty array:
+{
+  "instructions": [
+    {
+      "task": "Clear description of what the agent should do",
+      "context": "Brief context from the conversation around this instruction",
+      "requestedBy": "Name or email of person who gave the instruction"
+    }
+  ]
+}`,
+    }],
+  });
+
+  const text = response.content[0].text;
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return [];
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return parsed.instructions || [];
+  } catch {
+    return [];
+  }
 }
