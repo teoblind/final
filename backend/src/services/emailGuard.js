@@ -395,9 +395,11 @@ function detectSpam({ senderEmail, senderName, subject, body, headers }) {
 
 /**
  * Whether a verdict allows automatic email responses (auto-reply, RFQ response, etc.)
+ * Allows trusted, known, AND unknown senders — a business agent should respond to
+ * first-time senders (new GCs, prospects, etc.). Only spam/spoofed/blocked are silenced.
  */
 export function canAutoRespond(verdict) {
-  return verdict === 'trusted' || verdict === 'known';
+  return verdict === 'trusted' || verdict === 'known' || verdict === 'unknown';
 }
 
 /**
