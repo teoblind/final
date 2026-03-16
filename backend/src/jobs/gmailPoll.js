@@ -183,7 +183,7 @@ function isAutoReplyEnabled(tenantId) {
   }
 }
 
-async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail, classification }) {
+async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail, classification, originalTo, originalCc }) {
   const resolvedTenant = tenantId || 'default';
   const verdict = classification?.verdict || 'unknown';
 
@@ -324,7 +324,27 @@ You are responding to an email. Your text response will be sent as the email rep
   // Detect meeting-related emails to CC + forward full thread to Teo
   const meetingKeywords = /\b(meeting|call|schedule|calendar|book a time|availability|free on|tuesday|wednesday|thursday|monday|friday|slot|zoom|google meet|check size|LP|lock-?up|term sheet|contract|proposal|agreement|NDA|LOI|deal terms|site visit)\b/i;
   const isMeetingRelated = meetingKeywords.test(body) || meetingKeywords.test(agentResponse);
-  const cc = isMeetingRelated ? 'teo@zhan.capital' : undefined;
+
+  // Build CC list: original participants (reply-all) + meeting escalation
+  const agentAddrs = new Set(['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai', 'agent@dacp.coppice.ai']);
+  const senderLower = (from || '').toLowerCase();
+  const ccSet = new Set();
+  // Add original TO recipients (excluding the sender and the agent itself)
+  if (originalTo) {
+    for (const addr of originalTo.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || []) {
+      const lower = addr.toLowerCase();
+      if (!agentAddrs.has(lower) && lower !== senderLower) ccSet.add(lower);
+    }
+  }
+  // Add original CC recipients
+  if (originalCc) {
+    for (const addr of originalCc.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || []) {
+      const lower = addr.toLowerCase();
+      if (!agentAddrs.has(lower) && lower !== senderLower) ccSet.add(lower);
+    }
+  }
+  if (isMeetingRelated) ccSet.add('teo@zhan.capital');
+  const cc = ccSet.size > 0 ? [...ccSet].join(', ') : undefined;
 
   const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
   try {
@@ -771,6 +791,8 @@ async function pollSingleInbox(gmail, tenantId, label) {
             tenantId: followupTenant,
             gmail,
             classification: followupClassification,
+            originalTo: headers.find(h => h.name.toLowerCase() === 'to')?.value,
+            originalCc: headers.find(h => h.name.toLowerCase() === 'cc')?.value,
           });
           repliedThreads.add(msgThreadId);
           // Also mark the internal Gmail ID as processed for dedup
@@ -960,6 +982,8 @@ async function pollSingleInbox(gmail, tenantId, label) {
             tenantId: contactTenant,
             gmail,
             classification,
+            originalTo: allHeaders.find(h => h.name.toLowerCase() === 'to')?.value,
+            originalCc: allHeaders.find(h => h.name.toLowerCase() === 'cc')?.value,
           });
           repliedThreads.add(msgThreadId);
           if (rfc822Id !== msg.id) {
@@ -1006,6 +1030,8 @@ async function pollSingleInbox(gmail, tenantId, label) {
           tenantId: resolvedTenant,
           gmail,
           classification,
+          originalTo: allHeaders.find(h => h.name.toLowerCase() === 'to')?.value,
+          originalCc: allHeaders.find(h => h.name.toLowerCase() === 'cc')?.value,
         });
         repliedThreads.add(msgThreadId);
         // Also mark the internal Gmail ID as processed for dedup
