@@ -14,8 +14,10 @@ import {
   createDacpBidRequest,
   insertActivity,
 } from '../cache/database.js';
-import { generateEstimate, draftQuoteEmail } from './estimateBot.js';
+import { generateEstimate } from './estimateBot.js';
 import { sendEmailWithAttachments } from './emailService.js';
+import { sendHtmlEmail, markdownToEmailHtml } from './emailService.js';
+import { chat } from './chatService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -348,15 +350,59 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
   const { filename, filepath } = await generateEstimateExcel(estimate);
   console.log(`[EstimatePipeline] Generated Excel: ${filename}`);
 
-  // 5. Send reply email
-  const emailDraft = draftQuoteEmail(estimate);
-  emailDraft.to = from;
+  // 5. Draft reply via agent (natural tone, uses writing style guide from system prompt)
+  const lineItemsSummary = (estimate.lineItems || [])
+    .map(li => `${li.description}: ${li.quantity.toLocaleString()} ${li.unit} @ $${(li.unitPrice || 0).toLocaleString()}/${li.unit} = $${(li.extended || 0).toLocaleString()}`)
+    .join('\n');
+
+  const senderFirstName = (fromName || '').split(/\s+/)[0] || 'there';
+  const agentPrompt = `You received an RFQ/pricing inquiry email from ${fromName || from} (${from}). Subject: ${subject}.
+
+Their message:
+${body.slice(0, 3000)}
+
+You ran the numbers and generated an estimate. Here are the results:
+
+Total Bid: $${estimate.totalBid.toLocaleString()}
+Line Items:
+${lineItemsSummary}
+Subtotal: $${estimate.subtotal.toLocaleString()}
+Overhead: ${estimate.overheadPct}%
+Profit: ${estimate.profitPct}%
+Mobilization + Testing: $${estimate.mobilization.toLocaleString()}
+
+A detailed Excel estimate is attached to this email automatically.
+
+Draft a reply to ${senderFirstName}. Address their specific questions. Reference the numbers naturally - don't just dump a table. The Excel has the full breakdown.
+
+WRITING STYLE (mandatory):
+- Greeting: "Hey ${senderFirstName}," (casual, never "Dear", never "Hello")
+- Get straight to the point - no pleasantries
+- Short paragraphs: 2-4 sentences max
+- Direct and confident, not corporate or stiff
+- Use specific numbers from the estimate
+- Closing: "Best," then "DACP Construction" on next line (never "Best regards," never "Sincerely,")
+- Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
+- Do NOT sign as any person's name - sign as "DACP Construction"
+- Reply with ONLY the email body text - no subject line, no meta-commentary`;
+
+  let agentResponse;
+  try {
+    const result = await chat(tenantId, 'hivemind', 'system-auto-reply', agentPrompt);
+    agentResponse = result.response;
+  } catch (err) {
+    console.error(`[EstimatePipeline] Agent draft failed, using fallback:`, err.message);
+    agentResponse = `Hey ${senderFirstName},\n\nRan the numbers - total comes to $${estimate.totalBid.toLocaleString()}. Full line-item breakdown is in the attached Excel.\n\nBest,\nDACP Construction`;
+  }
 
   const gmailMessageId = '<' + messageId + '@mail.gmail.com>';
+  const replySubject = subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`;
+  const html = markdownToEmailHtml(agentResponse);
+
   await sendEmailWithAttachments({
     to: from,
-    subject: subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`,
-    body: emailDraft.body,
+    subject: replySubject,
+    html,
     attachments: [{
       filename,
       path: filepath,
