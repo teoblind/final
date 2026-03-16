@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailProcessed, isThreadProcessed, markEmailProcessed, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender } from '../cache/database.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
@@ -17,6 +17,13 @@ import { sendEmail, sendHtmlEmail, sendEmailWithAttachments, markdownToEmailHtml
 let pollInterval = null;
 let lastPoll = null;
 let repliesFound = 0;
+
+// In-memory set of message IDs currently being processed — prevents overlapping
+// poll cycles from double-processing the same message concurrently.
+const currentlyProcessing = new Set();
+
+// Maximum number of retry attempts before giving up permanently.
+const MAX_RETRIES = 3;
 
 // Shared OAuth app credentials
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
@@ -263,8 +270,9 @@ CONFIDENTIALITY (critical):
       sourceId: messageId,
       agentId: 'coppice',
     });
-    markEmailProcessed({ messageId, threadId, pipeline: 'general-error', tenantId: resolvedTenant });
-    return;
+    // Do NOT mark as processed — let the next poll cycle retry this message.
+    // The caller (pollSingleInbox) handles retry counting.
+    throw err;
   }
 
   // Check if the agent generated a file (document, legal doc, etc.)
@@ -317,8 +325,9 @@ CONFIDENTIALITY (critical):
     }
   } catch (err) {
     console.error(`[GmailPoll] Auto-reply send failed:`, err.message);
-    markEmailProcessed({ messageId, threadId, pipeline: 'general-send-error', tenantId: resolvedTenant });
-    return;
+    // Do NOT mark as processed — let the next poll cycle retry this message.
+    // The caller (pollSingleInbox) handles retry counting.
+    throw err;
   }
 
   // Forward full conversation thread to Teo on meeting-related emails
@@ -393,7 +402,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
   try {
     const listRes = await gmail.users.messages.list({
       userId: 'me',
-      q: 'is:unread newer_than:2d -from:me',
+      q: 'is:unread newer_than:1h -from:me',
       maxResults: 10,
     });
 
@@ -401,26 +410,83 @@ async function pollSingleInbox(gmail, tenantId, label) {
     console.log(`[GmailPoll] [${label}] Found ${messages.length} unread message(s)`);
     let newReplies = 0;
 
-    for (const msg of messages) {
-      if (isEmailProcessed(msg.id)) continue;
+    // ─── Thread-level dedup: track threads replied to in this poll cycle ───
+    // When multiple unread messages exist in the same thread, we only want to
+    // process the MOST RECENT one to avoid sending duplicate replies.
+    const repliedThreads = new Set();
 
-      const full = await gmail.users.messages.get({
-        userId: 'me',
-        id: msg.id,
-        format: 'full',
-      });
+    // Pre-fetch all messages to sort by internalDate descending per thread,
+    // so the first message we encounter for each thread is the latest one.
+    const unprocessedMsgs = messages.filter(m => !isEmailPermanentlyProcessed(m.id));
+    const fullMessages = [];
+    for (const msg of unprocessedMsgs) {
+      try {
+        const full = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id,
+          format: 'full',
+        });
+        fullMessages.push({ msg, full: full.data });
+      } catch (err) {
+        console.warn(`[GmailPoll] [${label}] Failed to fetch message ${msg.id}: ${err.message}`);
+      }
+    }
+    // Sort by internalDate descending so newest messages are processed first
+    fullMessages.sort((a, b) => Number(b.full.internalDate || 0) - Number(a.full.internalDate || 0));
 
-      const headers = full.data.payload?.headers || [];
+    for (const { msg, full: fullData } of fullMessages) {
+      if (isEmailPermanentlyProcessed(msg.id)) continue;
+
+      // ─── Concurrent processing guard ───
+      // Prevents overlapping poll cycles from double-processing the same message.
+      if (currentlyProcessing.has(msg.id)) {
+        console.log(`[GmailPoll] [${label}] Skipping ${msg.id} — already being processed by another poll cycle`);
+        continue;
+      }
+
+      // ─── Retry count check ───
+      // If this message has been retried MAX_RETRIES times, mark as permanently failed.
+      const retryCount = getEmailRetryCount(msg.id);
+      if (retryCount >= MAX_RETRIES) {
+        console.error(`[GmailPoll] [${label}] Message ${msg.id} failed after ${MAX_RETRIES} retries — giving up`);
+        markEmailProcessed({ messageId: msg.id, threadId: fullData.threadId, pipeline: 'send-failed-permanent', tenantId: tenantId || 'default' });
+        insertActivity({
+          tenantId: tenantId || 'default',
+          type: 'in',
+          title: `Auto-reply permanently failed (${MAX_RETRIES} retries exhausted)`,
+          subtitle: `Message ${msg.id} — manual follow-up required`,
+          detailJson: JSON.stringify({ messageId: msg.id, threadId: fullData.threadId, retries: retryCount }),
+          sourceType: 'email',
+          sourceId: msg.id,
+          agentId: 'coppice',
+        });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        newReplies++;
+        continue;
+      }
+
+      currentlyProcessing.add(msg.id);
+      try {
+
+      const headers = fullData.payload?.headers || [];
       const from = headers.find(h => h.name.toLowerCase() === 'from')?.value || '';
       const subject = headers.find(h => h.name.toLowerCase() === 'subject')?.value || '';
       const emailMatch = from.match(/<([^>]+)>/) || [null, from];
       const senderEmail = emailMatch[1];
       const senderName = from.replace(/<[^>]+>/, '').trim().replace(/^"(.*)"$/, '$1');
 
-      const body = extractEmailBody(full.data.payload);
-      const msgThreadId = full.data.threadId;
+      const body = extractEmailBody(fullData.payload);
+      const msgThreadId = fullData.threadId;
 
-      // ─── OOO / Bounce / Auto-Reply Detection ───────────────────────────
+      // ─── Thread-level dedup: skip if we already replied to this thread ───
+      if (repliedThreads.has(msgThreadId)) {
+        console.log(`[GmailPoll] [${label}] Skipping duplicate in thread ${msgThreadId} (already replied this cycle)`);
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'thread-dedup', tenantId: tenantId || 'default' });
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        newReplies++;
+        continue;
+      }
+
       const autoReplyHeader = headers.find(h => h.name.toLowerCase() === 'auto-submitted')?.value || '';
       const xAutoResponse = headers.find(h => h.name.toLowerCase() === 'x-autoreply')?.value || '';
       const precedence = headers.find(h => h.name.toLowerCase() === 'precedence')?.value || '';
@@ -497,7 +563,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
           senderName,
           subject,
           body,
-          headers: full.data.payload?.headers || [],
+          headers: fullData.payload?.headers || [],
           messageId: msg.id,
         });
 
@@ -530,33 +596,41 @@ async function pollSingleInbox(gmail, tenantId, label) {
         }
 
         // Route to generalEmailHandler with thread context baked into the body
-        const followupHeaders = full.data.payload?.headers || [];
+        const followupHeaders = fullData.payload?.headers || [];
         const followupRfc822Id = followupHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
-        await generalEmailHandler({
-          messageId: followupRfc822Id,
-          threadId: msgThreadId,
-          from: senderEmail,
-          fromName: senderName,
-          subject,
-          body: body + threadContext,
-          tenantId: followupTenant,
-          gmail,
-          classification: followupClassification,
-        });
-        // Also mark the internal Gmail ID as processed for dedup
-        if (followupRfc822Id !== msg.id) {
-          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up-dedup', tenantId: followupTenant });
+        try {
+          await generalEmailHandler({
+            messageId: followupRfc822Id,
+            threadId: msgThreadId,
+            from: senderEmail,
+            fromName: senderName,
+            subject,
+            body: body + threadContext,
+            tenantId: followupTenant,
+            gmail,
+            classification: followupClassification,
+          });
+          repliedThreads.add(msgThreadId);
+          // Also mark the internal Gmail ID as processed for dedup
+          if (followupRfc822Id !== msg.id) {
+            markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up-dedup', tenantId: followupTenant });
+          }
+          try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+          newReplies++;
+        } catch (err) {
+          // generalEmailHandler threw — agent draft or send failed. Track retry.
+          const newRetry = retryCount + 1;
+          console.warn(`[GmailPoll] [${label}] Follow-up handler failed (attempt ${newRetry}/${MAX_RETRIES}): ${err.message}`);
+          markEmailRetry({ messageId: msg.id, threadId: msgThreadId, retryCount: newRetry, tenantId: followupTenant });
+          // Do NOT mark as read — let it be retried next poll cycle
         }
-
-        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
-        newReplies++;
         continue;
       }
 
       // Resolve tenant: inbox tenantId > contact match > pipeline default
       const contact = matchContactToTenant(senderEmail);
       const resolvedTenant = tenantId || contact?.tenant_id || 'default';
-      const allHeaders = full.data.payload?.headers || [];
+      const allHeaders = fullData.payload?.headers || [];
 
       // ─── Email Guard: classify before any processing ───
       const classification = classifyEmail({
@@ -648,6 +722,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
 
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'rfq' : 'rfq-pending', tenantId: rfqTenant });
+        repliedThreads.add(msgThreadId);
         newReplies++;
         continue;
       }
@@ -657,7 +732,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
         const ippTenant = tenantId || contact?.tenant_id || 'default';
         if (autoRespondAllowed) {
           try {
-            const attachments = await extractAttachments(gmail, msg.id, full.data.payload);
+            const attachments = await extractAttachments(gmail, msg.id, fullData.payload);
             const rfcMessageIdIpp = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
             const result = await processIppEmail({
               messageId: rfcMessageIdIpp,
@@ -695,6 +770,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
 
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'ipp' : 'ipp-pending', tenantId: ippTenant });
+        repliedThreads.add(msgThreadId);
         newReplies++;
         continue;
       }
@@ -707,7 +783,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
         // Extract text from inbound attachments
         let contactAttText = '';
         try {
-          const contactAtts = await extractAttachments(gmail, msg.id, full.data.payload);
+          const contactAtts = await extractAttachments(gmail, msg.id, fullData.payload);
           if (contactAtts.length > 0) contactAttText = await extractAttachmentText(contactAtts);
         } catch {}
 
@@ -723,16 +799,20 @@ async function pollSingleInbox(gmail, tenantId, label) {
             gmail,
             classification,
           });
+          repliedThreads.add(msgThreadId);
           if (rfc822Id !== msg.id) {
             markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'contact-dedup', tenantId: contactTenant });
           }
+          try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+          newReplies++;
         } catch (err) {
-          console.error(`[GmailPoll] [${label}] Contact handler error:`, err.message);
-          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'contact-error', tenantId: contactTenant });
+          // generalEmailHandler threw — agent draft or send failed. Track retry.
+          const newRetry = retryCount + 1;
+          console.warn(`[GmailPoll] [${label}] Contact handler failed (attempt ${newRetry}/${MAX_RETRIES}): ${err.message}`);
+          markEmailRetry({ messageId: msg.id, threadId: msgThreadId, retryCount: newRetry, tenantId: contactTenant });
+          // Do NOT mark as read — let it be retried next poll cycle
         }
 
-        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
-        newReplies++;
         continue;
       }
 
@@ -742,7 +822,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
       // Extract text from inbound attachments (PDF, DOCX, XLSX, etc.)
       let attachmentText = '';
       try {
-        const inboundAttachments = await extractAttachments(gmail, msg.id, full.data.payload);
+        const inboundAttachments = await extractAttachments(gmail, msg.id, fullData.payload);
         if (inboundAttachments.length > 0) {
           attachmentText = await extractAttachmentText(inboundAttachments);
           if (attachmentText) {
@@ -765,17 +845,24 @@ async function pollSingleInbox(gmail, tenantId, label) {
           gmail,
           classification,
         });
+        repliedThreads.add(msgThreadId);
         // Also mark the internal Gmail ID as processed for dedup
         if (rfc822MessageId !== msg.id) {
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'general-dedup', tenantId: resolvedTenant });
         }
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        newReplies++;
       } catch (err) {
-        console.error(`[GmailPoll] [${label}] General handler error:`, err.message);
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'general-error', tenantId: resolvedTenant });
+        // generalEmailHandler threw — agent draft or send failed. Track retry.
+        const newRetry = retryCount + 1;
+        console.warn(`[GmailPoll] [${label}] General handler failed (attempt ${newRetry}/${MAX_RETRIES}): ${err.message}`);
+        markEmailRetry({ messageId: msg.id, threadId: msgThreadId, retryCount: newRetry, tenantId: resolvedTenant });
+        // Do NOT mark as read — let it be retried next poll cycle
       }
 
-      try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
-      newReplies++;
+      } finally {
+        currentlyProcessing.delete(msg.id);
+      }
     }
 
     return newReplies;

@@ -5220,6 +5220,40 @@ export function markEmailProcessed({ messageId, threadId, pipeline, tenantId }) 
   ).run(messageId, threadId || null, pipeline || null, tenantId || null);
 }
 
+/**
+ * Get the retry count for a message from processed_emails.
+ * Looks for pipeline values like 'retry-1', 'retry-2', etc.
+ * Returns 0 if the message has never been attempted.
+ */
+export function getEmailRetryCount(messageId) {
+  const row = db.prepare('SELECT pipeline FROM processed_emails WHERE message_id = ? LIMIT 1').get(messageId);
+  if (!row || !row.pipeline) return 0;
+  const match = row.pipeline.match(/^retry-(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/**
+ * Mark a message as needing retry (pipeline = 'retry-N').
+ * Uses INSERT OR REPLACE so it updates the pipeline if the row exists.
+ */
+export function markEmailRetry({ messageId, threadId, retryCount, tenantId }) {
+  db.prepare(
+    'INSERT OR REPLACE INTO processed_emails (message_id, thread_id, pipeline, tenant_id, processed_at) VALUES (?, ?, ?, ?, datetime(\'now\'))'
+  ).run(messageId, threadId || null, `retry-${retryCount}`, tenantId || null);
+}
+
+/**
+ * Check if a message is permanently processed (not in a retry state).
+ * Returns true only for messages that are fully processed (not retry-N).
+ */
+export function isEmailPermanentlyProcessed(messageId) {
+  const row = db.prepare('SELECT pipeline FROM processed_emails WHERE message_id = ? LIMIT 1').get(messageId);
+  if (!row) return false;
+  // retry-N entries are NOT permanently processed — they should be retried
+  if (row.pipeline && /^retry-\d+$/.test(row.pipeline)) return false;
+  return true;
+}
+
 // ─── Auto Replies ────────────────────────────────────────────────────────────
 
 function initAutoRepliesTable(targetDb) {
