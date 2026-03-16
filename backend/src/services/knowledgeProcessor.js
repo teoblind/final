@@ -226,6 +226,40 @@ Output ONLY valid JSON.`,
     linkEntity(project, 'project', 'about');
   }
 
+  // ─── Step 3b: Contact enrichment for email observations ───
+  if (entry.type === 'email-observation') {
+    try {
+      const contentData = JSON.parse(entry.content);
+      const senderEmail = contentData.from;
+      if (senderEmail) {
+        // Find contact entity by email in metadata, or by extracted person name
+        let contactEntity = allEntities.find(e => {
+          if (e.entity_type !== 'person' || !e.metadata_json) return false;
+          try { return JSON.parse(e.metadata_json).email?.toLowerCase() === senderEmail.toLowerCase(); } catch { return false; }
+        });
+
+        if (!contactEntity && (parsed.people || []).length > 0) {
+          contactEntity = findMatchingEntity(allEntities, parsed.people[0], 'person');
+        }
+
+        if (contactEntity) {
+          const existing = contactEntity.metadata_json ? JSON.parse(contactEntity.metadata_json) : {};
+          existing.email = existing.email || senderEmail;
+          existing.lastObserved = new Date().toISOString();
+          existing.observedTopics = [...new Set([...(existing.observedTopics || []), ...(parsed.topics || [])])];
+          if (parsed.summary) {
+            existing.recentContext = (existing.recentContext || []).slice(-4);
+            existing.recentContext.push({ date: new Date().toISOString(), summary: parsed.summary });
+          }
+          db.prepare('UPDATE knowledge_entities SET metadata_json = ? WHERE id = ?')
+            .run(JSON.stringify(existing), contactEntity.id);
+        }
+      }
+    } catch (err) {
+      console.warn('Contact enrichment failed (non-fatal):', err.message);
+    }
+  }
+
   // ─── Step 4: Action items ───
   for (const item of parsed.action_items || []) {
     getStmts().insertActionItem.run(
@@ -321,6 +355,48 @@ export function getOpenActionItems(tenantId, limit = 10) {
     ORDER BY ai.due_date ASC
     LIMIT ?
   `).all(tenantId, limit);
+}
+
+// ─── Thread Knowledge (for CC-observed emails) ─────────────────────────────
+
+export function getThreadKnowledge(tenantId, threadId) {
+  return db.prepare(`
+    SELECT ke.id, ke.title, ke.summary, ke.content, ke.created_at
+    FROM knowledge_entries ke
+    WHERE ke.tenant_id = ? AND ke.type = 'email-observation'
+      AND json_extract(ke.content, '$.threadId') = ?
+    ORDER BY ke.created_at ASC
+  `).all(tenantId, threadId);
+}
+
+// ─── Contact Knowledge (accumulated from observations) ──────────────────────
+
+export function getContactKnowledge(tenantId, emailAddr) {
+  const entities = db.prepare(
+    `SELECT * FROM knowledge_entities WHERE tenant_id = ? AND entity_type = 'person'`
+  ).all(tenantId);
+
+  const match = entities.find(e => {
+    if (!e.metadata_json) return false;
+    try { return JSON.parse(e.metadata_json).email?.toLowerCase() === emailAddr.toLowerCase(); } catch { return false; }
+  });
+
+  if (!match) return null;
+
+  const entries = db.prepare(`
+    SELECT ke.title, ke.summary, ke.type, ke.created_at
+    FROM knowledge_entries ke
+    JOIN knowledge_links kl ON ke.id = kl.entry_id
+    WHERE kl.entity_id = ?
+    ORDER BY ke.created_at DESC
+    LIMIT 10
+  `).all(match.id);
+
+  return {
+    entity: match,
+    metadata: match.metadata_json ? JSON.parse(match.metadata_json) : {},
+    entries,
+  };
 }
 
 export function getEntityKnowledge(tenantId, entityName) {

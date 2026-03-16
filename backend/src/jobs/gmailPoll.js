@@ -13,6 +13,7 @@ import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
 import { chat } from '../services/chatService.js';
 import { sendEmail, sendHtmlEmail, sendEmailWithAttachments, markdownToEmailHtml } from '../services/emailService.js';
+import { processKnowledgeEntry, getThreadKnowledge, getContactKnowledge } from '../services/knowledgeProcessor.js';
 
 let pollInterval = null;
 let lastPoll = null;
@@ -219,6 +220,31 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     return;
   }
 
+  // ─── Contact knowledge injection (compounding intelligence) ───
+  let contactContext = '';
+  try {
+    const ck = getContactKnowledge(resolvedTenant, from);
+    if (ck) {
+      const meta = ck.metadata || {};
+      contactContext = `\n\nCONTACT INTELLIGENCE (from previous interactions with ${fromName || from}):`;
+      if (meta.observedTopics?.length > 0) {
+        contactContext += `\n- Topics they discuss: ${meta.observedTopics.join(', ')}`;
+      }
+      if (meta.recentContext?.length > 0) {
+        contactContext += `\n- Recent interactions:`;
+        for (const rc of meta.recentContext.slice(-3)) {
+          contactContext += `\n  [${rc.date?.slice(0, 10) || 'unknown'}] ${rc.summary}`;
+        }
+      }
+      if (ck.entries?.length > 0) {
+        contactContext += `\n- ${ck.entries.length} previous email${ck.entries.length > 1 ? 's' : ''} observed involving this contact`;
+      }
+      contactContext += `\nUse this context to write a more informed, personalized response. Do NOT explicitly mention that you have this intel — just use it naturally.\n`;
+    }
+  } catch (err) {
+    console.warn(`[GmailPoll] Contact knowledge lookup failed (non-fatal): ${err.message}`);
+  }
+
   // Ask the tenant's primary agent to draft a response
   const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
@@ -247,8 +273,8 @@ CONFIDENTIALITY (critical):
 - If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" — never name names or cite specific numbers from other deals
 - This is a hard rule — violating client confidentiality is a fireable offense`;
   const prompt = hasThreadContext
-    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`
-    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}\n\nDraft a response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`;
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}\n\nDraft a response to their latest message, keeping the conversation context in mind. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}\n\nDraft a response. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${docInstruction}${styleGuide}`;
 
   let agentResponse;
   let agentToolResult = null;
@@ -494,9 +520,10 @@ async function pollSingleInbox(gmail, tenantId, label) {
         const isExplicitlyAddressed = agentMentionPatterns.test(body.slice(0, 2000));
 
         if (!isExplicitlyAddressed) {
+          const ccTenant = tenantId || 'default';
           console.log(`[GmailPoll] [${label}] CC-only from ${senderEmail} — observing, not replying ("${subject}")`);
           insertActivity({
-            tenantId: tenantId || 'default',
+            tenantId: ccTenant,
             type: 'in',
             title: `CC'd email from ${senderName || senderEmail}`,
             subtitle: `${subject} (observed — agent not directly addressed)`,
@@ -505,8 +532,30 @@ async function pollSingleInbox(gmail, tenantId, label) {
             sourceId: msg.id,
             agentId: 'coppice',
           });
+
+          // Store as knowledge entry for compounding intelligence
+          try {
+            const knEntryId = `KN-cc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            const tdb = getTenantDb(ccTenant);
+            tdb.prepare(`
+              INSERT INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+              VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))
+            `).run(
+              knEntryId, ccTenant,
+              `CC'd: ${subject} (from ${senderName || senderEmail})`,
+              JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id }),
+              `cc-observe:${senderEmail}`
+            );
+            // Process async — extract entities, summaries, enrich contacts
+            processKnowledgeEntry(knEntryId, ccTenant).catch(err => {
+              console.warn(`[GmailPoll] CC knowledge processing failed: ${err.message}`);
+            });
+          } catch (knErr) {
+            console.warn(`[GmailPoll] CC knowledge storage failed: ${knErr.message}`);
+          }
+
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
-          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'cc-observe', tenantId: tenantId || 'default' });
+          markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'cc-observe', tenantId: ccTenant });
           newReplies++;
           continue;
         }
@@ -630,6 +679,20 @@ async function pollSingleInbox(gmail, tenantId, label) {
           console.warn(`[GmailPoll] Could not fetch thread history: ${err.message}`);
         }
 
+        // Inject CC-observed knowledge for this thread (compounding intelligence)
+        let observedContext = '';
+        try {
+          const observed = getThreadKnowledge(followupTenant, msgThreadId);
+          if (observed.length > 0) {
+            observedContext = '\n\n--- Coppice observed context (CC\'d emails in this thread) ---\n';
+            for (const obs of observed.slice(-5)) {
+              observedContext += `[${obs.created_at}] ${obs.title}\n${obs.summary || ''}\n---\n`;
+            }
+          }
+        } catch (err) {
+          console.warn(`[GmailPoll] Thread knowledge lookup failed (non-fatal): ${err.message}`);
+        }
+
         // Route to generalEmailHandler with thread context baked into the body
         const followupHeaders = fullData.payload?.headers || [];
         const followupRfc822Id = followupHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
@@ -640,7 +703,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
             from: senderEmail,
             fromName: senderName,
             subject,
-            body: body + threadContext,
+            body: body + threadContext + observedContext,
             tenantId: followupTenant,
             gmail,
             classification: followupClassification,
