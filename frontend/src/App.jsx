@@ -251,9 +251,9 @@ function AppContent() {
   useEffect(() => {
     if (!tenant) return;
     const tenantManifest = {
-      name: isConstruction ? 'DACP Construction' : 'Sangha Renewables',
-      short_name: isConstruction ? 'DACP' : 'Sangha',
-      description: isConstruction ? 'AI-powered construction operations platform' : 'AI-powered mining operations platform',
+      name: tenant?.name || (isConstruction ? 'DACP Construction' : isVenture ? 'Zhan Capital' : 'Sangha Renewables'),
+      short_name: tenant?.branding?.companyName || (isConstruction ? 'DACP' : isVenture ? 'Zhan' : 'Sangha'),
+      description: isConstruction ? 'AI-powered construction operations platform' : isVenture ? 'AI-powered portfolio management platform' : 'AI-powered mining operations platform',
       start_url: window.location.origin + '/',
       display: 'standalone',
       background_color: '#fafaf8',
@@ -278,7 +278,7 @@ function AppContent() {
     if (appleIcon) appleIcon.href = '/coppice-logo.png';
     document.title = tenantManifest.name;
     return () => URL.revokeObjectURL(url);
-  }, [tenant, isConstruction]);
+  }, [tenant, isConstruction, isVenture]);
 
   // Build navigation groups
   let platformItems = [];
