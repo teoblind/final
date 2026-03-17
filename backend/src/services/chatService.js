@@ -931,6 +931,160 @@ async function callMiningTool(toolName, toolInput, tenantId) {
   throw new Error(`Unknown mining tool: ${toolName}`);
 }
 
+// ─── Google Workspace CLI Tools (gws) ─────────────────────────────────────────
+
+const GWS_TOOLS = [
+  {
+    name: 'gws_gmail_search',
+    description: 'Search the Gmail inbox using any Gmail search query. Returns matching emails with sender, subject, date, and snippet. Use for finding specific emails, threads, or correspondence.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Gmail search query (e.g., "from:spencer subject:acciona", "is:unread newer_than:7d", "has:attachment filename:pdf")' },
+        max_results: { type: 'number', description: 'Max results to return (default 10, max 20)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'gws_gmail_read',
+    description: 'Read the full content of a specific email by its message ID. Returns headers, body text, labels, and metadata. Use after gws_gmail_search to read a specific result.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: 'Gmail message ID (from gws_gmail_search results)' },
+      },
+      required: ['message_id'],
+    },
+  },
+  {
+    name: 'gws_calendar_events',
+    description: 'List upcoming calendar events. Returns event titles, times, attendees, and Meet links.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        max_results: { type: 'number', description: 'Max events to return (default 10)' },
+        time_min: { type: 'string', description: 'Start of time range (ISO 8601). Defaults to now.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'gws_drive_search',
+    description: 'Search Google Drive for files and folders. Use Drive search query syntax. Returns file names, types, links, and modification dates.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Drive search query (e.g., "name contains \'report\'", "mimeType=\'application/pdf\'", "modifiedTime > \'2026-03-01\'")' },
+        max_results: { type: 'number', description: 'Max results (default 10)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'gws_sheets_read',
+    description: 'Read data from a Google Sheets spreadsheet. Returns cell values for the specified range.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        spreadsheet_id: { type: 'string', description: 'Google Sheets spreadsheet ID (from the URL)' },
+        range: { type: 'string', description: 'Cell range in A1 notation (e.g., "Sheet1!A1:D10", "Sheet1")' },
+      },
+      required: ['spreadsheet_id', 'range'],
+    },
+  },
+  {
+    name: 'gws_sheets_append',
+    description: 'Append rows to a Google Sheets spreadsheet. Adds data after the last row in the specified range.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        spreadsheet_id: { type: 'string', description: 'Google Sheets spreadsheet ID' },
+        range: { type: 'string', description: 'Target range in A1 notation (e.g., "Sheet1!A:D")' },
+        values: {
+          type: 'array',
+          items: { type: 'array', items: { type: 'string' } },
+          description: 'Rows to append. Each row is an array of cell values (e.g., [["Name","Email"],["Teo","teo@zhan.capital"]])',
+        },
+      },
+      required: ['spreadsheet_id', 'range', 'values'],
+    },
+  },
+  {
+    name: 'gws_workspace_command',
+    description: 'Run any Google Workspace CLI command. Use this for operations not covered by other gws tools (e.g., Docs, Slides, Tasks, People). Only use services: drive, gmail, calendar, sheets, docs, slides, tasks, people.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        service: { type: 'string', description: 'Workspace service (drive, gmail, calendar, sheets, docs, slides, tasks, people)' },
+        resource: { type: 'string', description: 'API resource (e.g., "files", "users", "events", "spreadsheets.values")' },
+        method: { type: 'string', description: 'API method (e.g., "list", "get", "create", "update")' },
+        params: { type: 'object', description: 'URL/query parameters as JSON object' },
+        body: { type: 'object', description: 'Request body for POST/PATCH/PUT operations' },
+      },
+      required: ['service', 'resource', 'method'],
+    },
+  },
+];
+
+const GWS_TOOLS_PROMPT_ADDON = `
+
+GOOGLE WORKSPACE CLI (gws):
+You have access to the Google Workspace CLI for direct access to Gmail, Drive, Calendar, Sheets, Docs, and other Workspace APIs.
+
+Available tools:
+- gws_gmail_search: Search emails with any Gmail query syntax
+- gws_gmail_read: Read full email content by message ID
+- gws_calendar_events: List upcoming calendar events
+- gws_drive_search: Search Google Drive files
+- gws_sheets_read: Read spreadsheet data
+- gws_sheets_append: Append rows to a spreadsheet
+- gws_workspace_command: Run any Workspace API command (for Docs, Slides, Tasks, etc.)
+
+Notes:
+- Gmail search supports full Gmail syntax: from:, to:, subject:, has:attachment, newer_than:, etc.
+- Drive search uses Drive query syntax: name contains 'x', mimeType='...', etc.
+- For gws_workspace_command, use the service/resource/method pattern (e.g., service:"docs", resource:"documents", method:"get", params:{documentId:"..."})
+- Drive operations may fail if the agent's token lacks Drive scopes — use the existing generate_document tool for file creation instead.`;
+
+async function callGwsTool(toolName, toolInput, tenantId) {
+  const gws = await import('./gwsService.js');
+  const ALLOWED_SERVICES = new Set(['drive', 'gmail', 'calendar', 'sheets', 'docs', 'slides', 'tasks', 'people']);
+
+  switch (toolName) {
+    case 'gws_gmail_search':
+      return await gws.gmailSearch(toolInput.query, Math.min(toolInput.max_results || 10, 20));
+
+    case 'gws_gmail_read':
+      return await gws.gmailRead(toolInput.message_id);
+
+    case 'gws_calendar_events':
+      return await gws.calendarListEvents('primary', toolInput.max_results || 10, toolInput.time_min || null);
+
+    case 'gws_drive_search':
+      return await gws.driveSearch(toolInput.query, toolInput.max_results || 10);
+
+    case 'gws_sheets_read':
+      return await gws.sheetsRead(toolInput.spreadsheet_id, toolInput.range);
+
+    case 'gws_sheets_append':
+      return await gws.sheetsAppend(toolInput.spreadsheet_id, toolInput.range, toolInput.values);
+
+    case 'gws_workspace_command': {
+      if (!ALLOWED_SERVICES.has(toolInput.service)) {
+        throw new Error(`Service "${toolInput.service}" not allowed. Use: ${[...ALLOWED_SERVICES].join(', ')}`);
+      }
+      const args = [toolInput.service, toolInput.resource, toolInput.method];
+      if (toolInput.params) args.push('--params', JSON.stringify(toolInput.params));
+      if (toolInput.body) args.push('--json', JSON.stringify(toolInput.body));
+      return await gws.execGws(args);
+    }
+
+    default:
+      throw new Error(`Unknown gws tool: ${toolName}`);
+  }
+}
+
 // ─── Email Tools ──────────────────────────────────────────────────────────────
 
 const EMAIL_TOOLS = [
@@ -1876,7 +2030,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // DACP estimation tools
   const dacpPromptAgents = ['hivemind', 'estimating'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + PROPRIETARY_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + knowledgeContext;
+  // Google Workspace CLI tools — hivemind + sangha + zhan
+  const gwsAgents = ['hivemind', 'sangha', 'zhan'];
+  const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + PROPRIETARY_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -1924,6 +2081,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const calendarAgents = ['hivemind', 'sangha', 'zhan'];
   if (calendarAgents.includes(agentId)) {
     tools.push(...CALENDAR_TOOLS);
+  }
+  // Google Workspace CLI tools
+  if (gwsAgents.includes(agentId)) {
+    tools.push(...GWS_TOOLS);
   }
 
   // 5. Call Claude API
@@ -2036,8 +2197,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const dacpToolNames = ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats'];
       const emailToolNames = ['send_email', 'list_emails', 'read_email'];
       const emailSecurityToolNames = ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'];
+      const gwsToolNames = ['gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read', 'gws_sheets_append', 'gws_workspace_command'];
       try {
-        if (emailSecurityToolNames.includes(toolName)) {
+        if (gwsToolNames.includes(toolName)) {
+          toolResult = await callGwsTool(toolName, toolInput, tenantId);
+        } else if (emailSecurityToolNames.includes(toolName)) {
           toolResult = await callEmailSecurityTool(toolName, toolInput, tenantId);
         } else if (emailToolNames.includes(toolName)) {
           toolResult = await callEmailTool(toolName, toolInput, tenantId);
@@ -2114,7 +2278,9 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         let nextToolIsError = false;
 
         try {
-          if (emailSecurityToolNames.includes(nextToolName)) {
+          if (gwsToolNames.includes(nextToolName)) {
+            nextToolResult = await callGwsTool(nextToolName, nextToolInput, tenantId);
+          } else if (emailSecurityToolNames.includes(nextToolName)) {
             nextToolResult = await callEmailSecurityTool(nextToolName, nextToolInput, tenantId);
           } else if (emailToolNames.includes(nextToolName)) {
             nextToolResult = await callEmailTool(nextToolName, nextToolInput, tenantId);
