@@ -23,7 +23,8 @@ wss.on("connection", async (ws, req) => {
 
   const client = new RealtimeClient({ apiKey: OPENAI_API_KEY });
 
-  // Track audio delta count for debugging
+  // Track audio counts for debugging
+  let audioInCount = 0;
   let audioOutCount = 0;
 
   // Relay: OpenAI → Browser
@@ -32,11 +33,24 @@ wss.on("connection", async (ws, req) => {
       audioOutCount++;
     } else {
       console.log(`[VoiceRelay] OpenAI → Client: ${event.type}`);
-      // Log response.done details for debugging
       if (event.type === 'response.done') {
-        const output = event.response?.output;
-        console.log(`[VoiceRelay] Response output items: ${output?.length || 0}, audio chunks sent: ${audioOutCount}`);
+        const resp = event.response;
+        console.log(`[VoiceRelay] Response status: ${resp?.status}, output items: ${resp?.output?.length || 0}, audio chunks: ${audioOutCount}`);
+        if (resp?.output?.length) {
+          resp.output.forEach((item, i) => {
+            console.log(`[VoiceRelay]   output[${i}]: type=${item.type}, role=${item.role}, status=${item.status}`);
+          });
+        }
         audioOutCount = 0;
+      }
+      if (event.type === 'session.updated') {
+        console.log(`[VoiceRelay] Session modalities: ${JSON.stringify(event.session?.modalities)}`);
+      }
+      if (event.type === 'conversation.item.input_audio_transcription.completed') {
+        console.log(`[VoiceRelay] Heard: "${event.transcript}"`);
+      }
+      if (event.type === 'response.audio_transcript.done') {
+        console.log(`[VoiceRelay] Said: "${event.transcript}"`);
       }
     }
     ws.send(JSON.stringify(event));
@@ -46,36 +60,26 @@ wss.on("connection", async (ws, req) => {
     ws.close();
   });
 
-  // Relay: Browser → OpenAI
-  const messageQueue = [];
-  const messageHandler = (data) => {
+  // Relay: Browser → OpenAI (only audio input, skip everything else)
+  ws.on("message", (data) => {
+    if (!client.isConnected()) return;
     try {
       const event = JSON.parse(data);
       if (event.type === 'input_audio_buffer.append') {
-        // Don't log audio appends (too noisy)
-      } else if (event.type === 'session.update') {
-        // Skip client session.update — relay configures session via SDK
-        console.log(`[VoiceRelay] Skipping client session.update (relay handles session config)`);
-        return;
+        // Forward audio directly to OpenAI
+        audioInCount++;
+        client.realtime.send(event.type, event);
       } else {
-        console.log(`[VoiceRelay] Client → OpenAI: ${event.type}`);
+        // Skip all other client events — relay handles session/greeting
+        console.log(`[VoiceRelay] Ignoring client event: ${event.type}`);
       }
-      client.realtime.send(event.type, event);
     } catch (e) {
       console.error(`[VoiceRelay] Parse error: ${e.message}`);
-    }
-  };
-
-  ws.on("message", (data) => {
-    if (!client.isConnected()) {
-      messageQueue.push(data);
-    } else {
-      messageHandler(data);
     }
   });
 
   ws.on("close", () => {
-    console.log('[VoiceRelay] Client disconnected');
+    console.log(`[VoiceRelay] Client disconnected (audio in: ${audioInCount})`);
     client.disconnect();
   });
 
@@ -85,7 +89,11 @@ wss.on("connection", async (ws, req) => {
     await client.connect();
     console.log('[VoiceRelay] Connected to OpenAI!');
 
-    // Configure session via SDK (not raw event passthrough)
+    // Wait for session to be ready
+    await client.waitForSessionCreated();
+    console.log('[VoiceRelay] Session created');
+
+    // Configure session via SDK
     client.updateSession({
       modalities: ['text', 'audio'],
       instructions: INSTRUCTIONS,
@@ -100,14 +108,17 @@ wss.on("connection", async (ws, req) => {
         silence_duration_ms: 500,
       },
     });
-    console.log('[VoiceRelay] Session configured with audio modalities');
+    console.log('[VoiceRelay] Session configured');
 
-    // Flush queued messages
-    while (messageQueue.length) {
-      messageHandler(messageQueue.shift());
-    }
+    // Send greeting via SDK method
+    client.sendUserMessageContent([{
+      type: 'input_text',
+      text: 'Hello! You just joined a meeting. Please introduce yourself briefly.',
+    }]);
+    console.log('[VoiceRelay] Greeting sent via SDK');
+
   } catch (e) {
-    console.error(`[VoiceRelay] Failed to connect to OpenAI: ${e.message}`);
+    console.error(`[VoiceRelay] Failed: ${e.message}`);
     ws.close();
   }
 });
