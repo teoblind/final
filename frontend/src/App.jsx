@@ -647,17 +647,6 @@ function AppContent() {
               </button>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-lg font-semibold">{tabLabels[activeTab] || 'Overview'}</h1>
-                {user?.role && (
-                  <span className={`text-[9px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-full border ${
-                    user.role === 'admin' || user.role === 'owner'
-                      ? 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border-[var(--t-ui-accent-border)]'
-                      : user.role === 'operator'
-                        ? 'bg-[#e8eef5] text-[#2c5282] border-[#c8d8ea]'
-                        : 'bg-[#f5f4f0] text-[#888888] border-[#e5e5e0]'
-                  }`}>
-                    {user.role === 'owner' ? 'Admin' : user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                  </span>
-                )}
               </div>
             </div>
 
