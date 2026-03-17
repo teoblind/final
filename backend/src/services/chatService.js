@@ -2076,17 +2076,52 @@ async function routeToolCall(toolName, toolInput, tenantId) {
   return await callWorkspaceTool(toolName, toolInput, tenantId);
 }
 
-function getMaxTurns(agentId) {
+function getAgentConfig(agentId) {
   try {
     const row = db.prepare('SELECT config_json FROM agents WHERE id = ?').get(agentId);
-    if (row?.config_json) {
-      const config = JSON.parse(row.config_json);
-      if (config.max_turns && Number.isInteger(config.max_turns) && config.max_turns > 0) {
-        return Math.min(config.max_turns, 50); // hard cap at 50
-      }
-    }
+    if (row?.config_json) return JSON.parse(row.config_json);
   } catch {}
-  return 25; // default: 25 turns (up from 5)
+  return {};
+}
+
+function getMaxTurns(agentId) {
+  const config = getAgentConfig(agentId);
+  if (config.max_turns && Number.isInteger(config.max_turns) && config.max_turns > 0) {
+    return Math.min(config.max_turns, 50); // hard cap at 50
+  }
+  return 25; // default: 25 turns
+}
+
+// ─── Extended Thinking ──────────────────────────────────────────────────────
+// Detects complex tasks that benefit from extended thinking (planning, analysis,
+// multi-step research). Returns budget_tokens for the thinking block.
+const COMPLEX_PATTERNS = [
+  /\b(research|analyze|compare|evaluate|investigate|deep.?dive|comprehensive|thorough|detailed|in.?depth)\b/i,
+  /\b(write a report|build a|create a plan|design|architect|strategy|proposal|analysis)\b/i,
+  /\b(why does|how does|what are the implications|trade.?offs|pros and cons)\b/i,
+  /\b(review this|look into|figure out|break down|assess|audit)\b/i,
+];
+
+function shouldUseExtendedThinking(agentId, userContent, config) {
+  // Disabled if explicitly turned off
+  if (config.extended_thinking === false) return false;
+  // Always on if explicitly enabled
+  if (config.extended_thinking === true) return true;
+  // Auto-detect: complex patterns or long messages
+  if (userContent.length > 300) return true;
+  return COMPLEX_PATTERNS.some(p => p.test(userContent));
+}
+
+function buildThinkingParam(agentId, userContent) {
+  const config = getAgentConfig(agentId);
+  if (!shouldUseExtendedThinking(agentId, userContent, config)) return {};
+  const budget = config.thinking_budget || 10000; // default 10K tokens
+  return {
+    thinking: {
+      type: 'enabled',
+      budget_tokens: Math.min(budget, 32000), // hard cap 32K
+    },
+  };
 }
 
 export async function chat(tenantId, agentId, userId, userContent, threadId = null) {
@@ -2224,7 +2259,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     const selectedModel = selectModel(agentId, userContent, messages.length, true);
 
     // All agents get 4096 tokens to support agentic multi-step reasoning
-    const maxTokens = 4096;
+    // Extended thinking gets 16384 to accommodate thinking + response
+    const thinkingParams = buildThinkingParam(agentId, userContent);
+    const useThinking = !!thinkingParams.thinking;
+    const maxTokens = useThinking ? 16384 : 4096;
 
     const completion = await getAnthropic().messages.create({
       model: selectedModel,
@@ -2232,6 +2270,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       system: systemPrompt,
       messages,
       tools,
+      ...thinkingParams,
     });
 
     // Handle tool use — agent wants to invoke a workspace tool
@@ -2345,10 +2384,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       const maxTurns = getMaxTurns(agentId);
       let currentResponse = await getAnthropic().messages.create({
         model: selectedModel,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: loopMessages,
         tools,
+        ...thinkingParams,
       });
       totalInputTokens += currentResponse.usage?.input_tokens || 0;
       totalOutputTokens += currentResponse.usage?.output_tokens || 0;
@@ -2411,10 +2451,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 
         currentResponse = await getAnthropic().messages.create({
           model: selectedModel,
-          max_tokens: 4096,
+          max_tokens: maxTokens,
           system: systemPrompt,
           messages: loopMessages,
           tools,
+          ...thinkingParams,
         });
         totalInputTokens += currentResponse.usage?.input_tokens || 0;
         totalOutputTokens += currentResponse.usage?.output_tokens || 0;
