@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2 } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -964,6 +964,17 @@ function ChatMessage({ msg, agentDef, onAction }) {
           </div>
         )}
 
+        {/* Attached files */}
+        {isUser && msg.files && msg.files.length > 0 && (
+          <div className={`flex flex-wrap gap-1 mt-1.5 ${isUser ? 'justify-end' : ''}`}>
+            {msg.files.map((name, i) => (
+              <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-white/20 text-white/90">
+                <FileIcon size={10} />{name}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Audio playback */}
         {!isUser && msg.audio_url && <AudioPlayButton audioUrl={msg.audio_url} />}
 
@@ -1710,8 +1721,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [threadsLoaded, setThreadsLoaded] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [dragging, setDragging] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const autoVoiceRef = useRef(false);
   const isAdmin = ['owner', 'admin'].includes(authUser?.role);
 
@@ -1741,19 +1755,23 @@ export default function AgentChat({ agentId = 'estimating' }) {
             : data.threads[0].id;
           setActiveThreadId(targetId);
         } else {
-          // No threads — fall back to demo messages
-          const demo = (DEMO_MESSAGES[agentId] || DEMO_MESSAGES.hivemind || []).map(m => ({
-            ...m, content: m.content?.replace('{USER}', firstName),
-          }));
-          setMessages(demo);
+          // No threads — fall back to demo messages (only for agents that have them)
+          const demo = DEMO_MESSAGES[agentId];
+          if (demo) {
+            setMessages(demo.map(m => ({ ...m, content: m.content?.replace('{USER}', firstName) })));
+          } else {
+            setMessages([]);
+          }
         }
         setThreadsLoaded(true);
       })
       .catch(() => {
-        const demo = (DEMO_MESSAGES[agentId] || DEMO_MESSAGES.hivemind || []).map(m => ({
-          ...m, content: m.content?.replace('{USER}', firstName),
-        }));
-        setMessages(demo);
+        const demo = DEMO_MESSAGES[agentId];
+        if (demo) {
+          setMessages(demo.map(m => ({ ...m, content: m.content?.replace('{USER}', firstName) })));
+        } else {
+          setMessages([]);
+        }
         setThreadsLoaded(true);
       });
   }, [agentId]);
@@ -1982,33 +2000,88 @@ export default function AgentChat({ agentId = 'estimating' }) {
     }
   };
 
+  // File upload handlers
+  const addFiles = (fileList) => {
+    const newFiles = Array.from(fileList).filter(f => f.size <= 50 * 1024 * 1024);
+    setPendingFiles(prev => [...prev, ...newFiles]);
+  };
+  const removeFile = (idx) => setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+
+  const handleDragOver = (e) => { e.preventDefault(); setDragging(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); setDragging(false); };
+  const handleDrop = (e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); };
+
   // Send message
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text && pendingFiles.length === 0) return;
+    if (sending) return;
+
+    const filesToSend = [...pendingFiles];
+    const fileNames = filesToSend.map(f => f.name);
 
     const userMsg = {
       id: Date.now(),
       role: 'user',
-      content: text,
+      content: text || `Sent ${fileNames.length} file(s): ${fileNames.join(', ')}`,
+      files: fileNames.length > 0 ? fileNames : undefined,
       time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
 
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    setPendingFiles([]);
     setSending(true);
 
-    // Store message via API — use thread endpoint if active, otherwise legacy
+    // Store message via API — use upload endpoint when files are attached
     const token = getAuthToken();
-    const postUrl = activeThreadId
-      ? `${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`
-      : `${API_BASE}/v1/chat/${agentId}/messages`;
+    const hasFiles = filesToSend.length > 0;
+
+    // Auto-create thread if files need uploading but no active thread
+    let threadId = activeThreadId;
+    if (hasFiles && !threadId) {
+      try {
+        const tRes = await fetch(`${API_BASE}/v1/chat/${agentId}/threads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({}),
+        });
+        const tData = await tRes.json();
+        if (tData.id) {
+          threadId = tData.id;
+          const newThread = { id: tData.id, title: tData.title, visibility: tData.visibility, userId: tData.userId, isPinned: false, createdAt: tData.createdAt, updatedAt: tData.updatedAt };
+          setThreads(prev => [newThread, ...prev]);
+          setActiveThreadId(tData.id);
+        }
+      } catch {}
+    }
+
+    let postUrl;
+    if (hasFiles && threadId) {
+      postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/upload`;
+    } else if (threadId) {
+      postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages`;
+    } else {
+      postUrl = `${API_BASE}/v1/chat/${agentId}/messages`;
+    }
     try {
-      const res = await fetch(postUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content: text }),
-      });
+      let res;
+      if (hasFiles) {
+        const formData = new FormData();
+        filesToSend.forEach(f => formData.append('files', f));
+        if (text) formData.append('content', text);
+        res = await fetch(postUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+      } else {
+        res = await fetch(postUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ content: text }),
+        });
+      }
       const data = await res.json();
       if (data.response) {
         const agentMsg = {
@@ -2176,7 +2249,32 @@ export default function AgentChat({ agentId = 'estimating' }) {
           </div>
 
           {/* Input */}
-          <div className="px-5 py-3.5 border-t border-terminal-border bg-terminal-panel shrink-0">
+          <div
+            className={`px-5 py-3.5 border-t bg-terminal-panel shrink-0 transition-colors ${dragging ? 'border-2 border-dashed' : 'border-terminal-border'}`}
+            style={dragging ? { borderColor: agent.accentColor, backgroundColor: agent.bgColor } : {}}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={e => { if (e.target.files.length) addFiles(e.target.files); e.target.value = ''; }}
+            />
+            {/* Pending file chips */}
+            {pendingFiles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {pendingFiles.map((f, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-[#e8e7e3] text-[#6b6b65]">
+                    <FileIcon size={12} />
+                    <span className="max-w-[140px] truncate">{f.name}</span>
+                    <button onClick={() => removeFile(i)} className="ml-0.5 hover:text-red-500"><X size={12} /></button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2.5">
               <div className="flex-1 relative">
                 <textarea
@@ -2184,27 +2282,31 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={agent.placeholder}
+                  placeholder={pendingFiles.length > 0 ? 'Add a message about these files...' : agent.placeholder}
                   rows={1}
                   className="w-full px-4 py-3 pr-11 border-[1.5px] border-terminal-border rounded-[14px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none resize-none min-h-[44px] max-h-[120px] focus:bg-terminal-panel transition-colors placeholder:text-[#c5c5bc]"
                   style={{ '--tw-ring-color': agent.accentColor }}
                   onFocus={e => e.target.style.borderColor = agent.accentColor}
                   onBlur={e => e.target.style.borderColor = ''}
                 />
-                <button className="absolute right-3 bottom-2.5 text-[#c5c5bc] hover:text-[#6b6b65] transition-colors">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute right-3 bottom-2.5 text-[#c5c5bc] hover:text-[#6b6b65] transition-colors"
+                  title="Attach files"
+                >
                   <Paperclip size={16} />
                 </button>
               </div>
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || sending}
+                disabled={(!input.trim() && pendingFiles.length === 0) || sending}
                 className="w-11 h-11 rounded-xl text-white flex items-center justify-center transition-colors disabled:opacity-40 shrink-0"
                 style={{ backgroundColor: agent.accentColor }}
               >
                 <Send size={18} />
               </button>
             </div>
-            <div className="text-[10px] text-[#c5c5bc] text-center mt-1.5">{agent.hint}</div>
+            <div className="text-[10px] text-[#c5c5bc] text-center mt-1.5">{dragging ? 'Drop files here' : agent.hint}</div>
           </div>
         </div>
 
