@@ -511,6 +511,18 @@ const WEB_TOOLS = [
       required: ['url'],
     },
   },
+  {
+    name: 'web_research',
+    description: 'Perform deep web research on a topic using AI-powered search. Returns a synthesized answer with citations. Use this for market research, competitive analysis, technical questions, industry data, company research, or any query requiring up-to-date web knowledge. You can call this multiple times with different queries to build comprehensive understanding.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The research question to investigate. Be specific — e.g. "What is the current installed capacity of solar+storage in ERCOT as of 2026?" rather than "solar in Texas"' },
+        focus: { type: 'string', enum: ['general', 'academic', 'news', 'finance'], description: 'Search focus area (default: general). Use "finance" for market data, "news" for recent events, "academic" for research papers.' },
+      },
+      required: ['query'],
+    },
+  },
 ];
 
 async function callWebTool(toolName, toolInput) {
@@ -518,7 +530,71 @@ async function callWebTool(toolName, toolInput) {
     const { browseUrl } = await import('./webBrowseService.js');
     return await browseUrl(toolInput.url, { extract: toolInput.extract || 'all' });
   }
+  if (toolName === 'web_research') {
+    return await callWebResearch(toolInput.query, toolInput.focus || 'general');
+  }
   throw new Error(`Unknown web tool: ${toolName}`);
+}
+
+async function callWebResearch(query, focus) {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
+    return { error: 'Web research unavailable — PERPLEXITY_API_KEY not configured.' };
+  }
+
+  const modelMap = {
+    general: 'sonar-pro',
+    academic: 'sonar-pro',
+    news: 'sonar-pro',
+    finance: 'sonar-pro',
+  };
+
+  const focusPrompts = {
+    general: '',
+    academic: 'Focus on peer-reviewed research, technical papers, and authoritative sources.',
+    news: 'Focus on the most recent news, press releases, and current events.',
+    finance: 'Focus on financial data, market analysis, earnings, valuations, and economic indicators.',
+  };
+
+  try {
+    const res = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelMap[focus] || 'sonar-pro',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a research assistant. Provide thorough, well-sourced answers with specific data points, numbers, and facts. ${focusPrompts[focus] || ''} Always cite your sources.`,
+          },
+          { role: 'user', content: query },
+        ],
+        max_tokens: 2048,
+        return_citations: true,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { error: `Perplexity API error (${res.status}): ${errText}` };
+    }
+
+    const data = await res.json();
+    const answer = data.choices?.[0]?.message?.content || 'No results found.';
+    const citations = data.citations || [];
+
+    return {
+      answer,
+      citations,
+      query,
+      focus,
+    };
+  } catch (err) {
+    return { error: `Web research failed: ${err.message}` };
+  }
 }
 
 // ─── Legal Document Tools ────────────────────────────────────────────────────
@@ -1885,9 +1961,11 @@ When the user asks about CRM data, contacts, companies, deals, pipeline status, 
 
 const WEB_TOOLS_PROMPT_ADDON = `
 
-You also have web browsing capability:
-- browse_url: Fetch any webpage and extract its text, title, description, and links
-Use this when the user asks you to look at a URL, research a website, check a page, or gather information from the web.`;
+You have web research and browsing capabilities:
+- web_research: Perform deep AI-powered web research on any topic. Returns synthesized answers with citations. Use this for market research, competitive analysis, industry data, technical questions, company research, or anything requiring current information. You can call this MULTIPLE TIMES with different queries to build comprehensive understanding — for example, research a company's financials, then their competitors, then market trends.
+- browse_url: Fetch a specific webpage and extract its text, title, and links. Use when you have a specific URL to read.
+
+IMPORTANT: When given a research-heavy task, use web_research proactively and iteratively. Don't wait to be told — if answering well requires current data, search for it. Chain multiple research queries to build depth. Think like an analyst: what data do I need, what are the angles, what would make this answer comprehensive?`;
 
 const LEGAL_TOOLS_PROMPT_ADDON = `
 
@@ -1965,6 +2043,52 @@ export function saveMessage(tenantId, agentId, userId, role, content, metadata =
  * Send a message to Claude and get a response.
  * Saves both user message and assistant response to DB.
  */
+// ─── Tool Router Helper ─────────────────────────────────────────────────────
+// Centralised dispatch — used by both first-call and loop iterations.
+const TOOL_CATEGORIES = {
+  gws: ['gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read', 'gws_sheets_append', 'gws_workspace_command'],
+  emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
+  email: ['send_email', 'list_emails', 'read_email'],
+  calendar: ['create_meeting'],
+  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue'],
+  knowledge: ['search_knowledge'],
+  hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'],
+  mining: ['generate_mine_specs'],
+  web: ['browse_url', 'web_research'],
+  legal: ['generate_legal_doc'],
+  document: ['generate_document'],
+  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats'],
+};
+
+async function routeToolCall(toolName, toolInput, tenantId) {
+  if (TOOL_CATEGORIES.gws.includes(toolName)) return await callGwsTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.emailSecurity.includes(toolName)) return await callEmailSecurityTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.email.includes(toolName)) return await callEmailTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.calendar.includes(toolName)) return await callCalendarTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.leadEngine.includes(toolName)) return await callLeadEngineTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.knowledge.includes(toolName)) return await callKnowledgeTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.hubspot.includes(toolName)) return await callHubSpotTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.mining.includes(toolName)) return await callMiningTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.web.includes(toolName)) return await callWebTool(toolName, toolInput);
+  if (TOOL_CATEGORIES.legal.includes(toolName)) return await callLegalTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.document.includes(toolName)) return await callDocumentTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.dacp.includes(toolName)) return await callDacpTool(toolName, toolInput, tenantId);
+  return await callWorkspaceTool(toolName, toolInput, tenantId);
+}
+
+function getMaxTurns(agentId) {
+  try {
+    const row = db.prepare('SELECT config_json FROM agents WHERE id = ?').get(agentId);
+    if (row?.config_json) {
+      const config = JSON.parse(row.config_json);
+      if (config.max_turns && Number.isInteger(config.max_turns) && config.max_turns > 0) {
+        return Math.min(config.max_turns, 50); // hard cap at 50
+      }
+    }
+  } catch {}
+  return 25; // default: 25 turns (up from 5)
+}
+
 export async function chat(tenantId, agentId, userId, userContent, threadId = null) {
   // Auto-create default thread if threadId provided but doesn't exist yet
   // (thread creation is handled by the route layer)
@@ -2099,8 +2223,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     // Route to optimal model based on complexity
     const selectedModel = selectModel(agentId, userContent, messages.length, true);
 
-    // Pitch deck agent needs more tokens for detailed slide plans
-    const maxTokens = agentId === 'pitch-deck' ? 4096 : 2048;
+    // All agents get 4096 tokens to support agentic multi-step reasoning
+    const maxTokens = 4096;
 
     const completion = await getAnthropic().messages.create({
       model: selectedModel,
@@ -2123,7 +2247,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       // Read-only tools always execute. Action tools need approval in copilot mode.
       const SAFE_TOOLS = new Set([
         'search_knowledge', 'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
-        'browse_url', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue',
+        'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue',
         'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
         'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
         'get_estimates', 'get_jobs', 'get_dacp_stats',
@@ -2186,52 +2310,14 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       // Call the tool — route to appropriate handler (autonomous mode or safe tool)
       let toolResult;
       let toolIsError = false;
-      const leadEngineToolNames = ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue'];
-      const knowledgeToolNames = ['search_knowledge'];
-      const hubspotToolNames = ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'];
-      const miningToolNames = ['generate_mine_specs'];
-      const webToolNames = ['browse_url'];
-      const legalToolNames = ['generate_legal_doc'];
-      const documentToolNames = ['generate_document'];
-      const calendarToolNames = ['create_meeting'];
-      const dacpToolNames = ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats'];
-      const emailToolNames = ['send_email', 'list_emails', 'read_email'];
-      const emailSecurityToolNames = ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'];
-      const gwsToolNames = ['gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read', 'gws_sheets_append', 'gws_workspace_command'];
       try {
-        if (gwsToolNames.includes(toolName)) {
-          toolResult = await callGwsTool(toolName, toolInput, tenantId);
-        } else if (emailSecurityToolNames.includes(toolName)) {
-          toolResult = await callEmailSecurityTool(toolName, toolInput, tenantId);
-        } else if (emailToolNames.includes(toolName)) {
-          toolResult = await callEmailTool(toolName, toolInput, tenantId);
-        } else if (calendarToolNames.includes(toolName)) {
-          toolResult = await callCalendarTool(toolName, toolInput, tenantId);
-        } else if (leadEngineToolNames.includes(toolName)) {
-          toolResult = await callLeadEngineTool(toolName, toolInput, tenantId);
-        } else if (knowledgeToolNames.includes(toolName)) {
-          toolResult = await callKnowledgeTool(toolName, toolInput, tenantId);
-        } else if (hubspotToolNames.includes(toolName)) {
-          toolResult = await callHubSpotTool(toolName, toolInput, tenantId);
-        } else if (miningToolNames.includes(toolName)) {
-          toolResult = await callMiningTool(toolName, toolInput, tenantId);
-        } else if (webToolNames.includes(toolName)) {
-          toolResult = await callWebTool(toolName, toolInput);
-        } else if (legalToolNames.includes(toolName)) {
-          toolResult = await callLegalTool(toolName, toolInput, tenantId);
-        } else if (documentToolNames.includes(toolName)) {
-          toolResult = await callDocumentTool(toolName, toolInput, tenantId);
-        } else if (dacpToolNames.includes(toolName)) {
-          toolResult = await callDacpTool(toolName, toolInput, tenantId);
-        } else {
-          toolResult = await callWorkspaceTool(toolName, toolInput, tenantId);
-        }
+        toolResult = await routeToolCall(toolName, toolInput, tenantId);
       } catch (toolError) {
         toolResult = { error: toolError.message };
         toolIsError = true;
       }
 
-      // ─── Multi-tool loop: keep calling tools until Claude produces text ───
+      // ─── Agentic loop: keep calling tools until Claude produces text ───
       // Tracks all tool results so callers (e.g. email handler) can collect
       // every generated file, not just the last one.
       const allToolResults = [{ tool_used: toolName, tool_input: toolInput, tool_result: toolResult, is_error: toolIsError }];
@@ -2256,10 +2342,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       let lastToolInput = toolInput;
       let lastToolResult = toolResult;
 
-      const MAX_TOOL_ITERATIONS = 5;
+      const maxTurns = getMaxTurns(agentId);
       let currentResponse = await getAnthropic().messages.create({
-        model: MODEL,
-        max_tokens: 2048,
+        model: selectedModel,
+        max_tokens: 4096,
         system: systemPrompt,
         messages: loopMessages,
         tools,
@@ -2268,7 +2354,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       totalOutputTokens += currentResponse.usage?.output_tokens || 0;
 
       let iteration = 0;
-      while (currentResponse.stop_reason === 'tool_use' && iteration < MAX_TOOL_ITERATIONS) {
+      while (currentResponse.stop_reason === 'tool_use' && iteration < maxTurns) {
         iteration++;
         const nextToolBlock = currentResponse.content.find(block => block.type === 'tool_use');
         if (!nextToolBlock) break;
@@ -2277,34 +2363,26 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         let nextToolResult;
         let nextToolIsError = false;
 
+        // Copilot mode check for loop iterations too
+        if (agentMode === 'copilot' && !SAFE_TOOLS.has(nextToolName)) {
+          const actionDesc = `Execute tool: ${nextToolName}`;
+          db.prepare(`
+            INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
+            VALUES (?, ?, ?, ?, 'tool_action', ?, 'pending')
+          `).run(tenantId, agentId, actionDesc, `Agent wants to use "${nextToolName}" — awaiting your approval.`,
+            JSON.stringify({ toolName: nextToolName, toolInput: nextToolInput, toolUseId: nextToolUseId, agentId, tenantId, userId }));
+          // Stop the loop — can't proceed without approval
+          const pauseText = currentResponse.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+          const copilotPause = (pauseText ? pauseText + '\n\n' : '') + `I need your approval to **${actionDesc.toLowerCase()}** before I can continue. Check the Approvals queue.`;
+          saveMessage(tenantId, agentId, userId, 'assistant', copilotPause, {
+            model: currentResponse.model, input_tokens: totalInputTokens, output_tokens: totalOutputTokens,
+            stop_reason: 'copilot_approval', tool_proposed: nextToolName,
+          }, threadId);
+          return { response: copilotPause, approval_pending: true, tool_proposed: nextToolName, all_tool_results: allToolResults };
+        }
+
         try {
-          if (gwsToolNames.includes(nextToolName)) {
-            nextToolResult = await callGwsTool(nextToolName, nextToolInput, tenantId);
-          } else if (emailSecurityToolNames.includes(nextToolName)) {
-            nextToolResult = await callEmailSecurityTool(nextToolName, nextToolInput, tenantId);
-          } else if (emailToolNames.includes(nextToolName)) {
-            nextToolResult = await callEmailTool(nextToolName, nextToolInput, tenantId);
-          } else if (calendarToolNames.includes(nextToolName)) {
-            nextToolResult = await callCalendarTool(nextToolName, nextToolInput, tenantId);
-          } else if (leadEngineToolNames.includes(nextToolName)) {
-            nextToolResult = await callLeadEngineTool(nextToolName, nextToolInput, tenantId);
-          } else if (knowledgeToolNames.includes(nextToolName)) {
-            nextToolResult = await callKnowledgeTool(nextToolName, nextToolInput, tenantId);
-          } else if (hubspotToolNames.includes(nextToolName)) {
-            nextToolResult = await callHubSpotTool(nextToolName, nextToolInput, tenantId);
-          } else if (miningToolNames.includes(nextToolName)) {
-            nextToolResult = await callMiningTool(nextToolName, nextToolInput, tenantId);
-          } else if (webToolNames.includes(nextToolName)) {
-            nextToolResult = await callWebTool(nextToolName, nextToolInput);
-          } else if (legalToolNames.includes(nextToolName)) {
-            nextToolResult = await callLegalTool(nextToolName, nextToolInput, tenantId);
-          } else if (documentToolNames.includes(nextToolName)) {
-            nextToolResult = await callDocumentTool(nextToolName, nextToolInput, tenantId);
-          } else if (dacpToolNames.includes(nextToolName)) {
-            nextToolResult = await callDacpTool(nextToolName, nextToolInput, tenantId);
-          } else {
-            nextToolResult = await callWorkspaceTool(nextToolName, nextToolInput, tenantId);
-          }
+          nextToolResult = await routeToolCall(nextToolName, nextToolInput, tenantId);
         } catch (toolError) {
           nextToolResult = { error: toolError.message };
           nextToolIsError = true;
@@ -2332,14 +2410,18 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         ];
 
         currentResponse = await getAnthropic().messages.create({
-          model: MODEL,
-          max_tokens: 2048,
+          model: selectedModel,
+          max_tokens: 4096,
           system: systemPrompt,
           messages: loopMessages,
           tools,
         });
         totalInputTokens += currentResponse.usage?.input_tokens || 0;
         totalOutputTokens += currentResponse.usage?.output_tokens || 0;
+      }
+
+      if (iteration >= maxTurns) {
+        console.warn(`[Chat] Agent ${agentId} hit max_turns limit (${maxTurns})`);
       }
 
       const responseText = currentResponse.content
