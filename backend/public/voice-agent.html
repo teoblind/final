@@ -15,165 +15,489 @@ body{background:#000;color:#fff;font-family:-apple-system,system-ui,sans-serif;d
 <div class="container"><div class="logo">coppice</div></div>
 <script>
 // ============================================================
-// Coppice Voice Agent — Self-contained page for Recall.ai output_media
-// Captures meeting audio (piped to mic by Recall), sends to relay server,
-// relay forwards to OpenAI Realtime API, response audio plays back into meeting.
+// Coppice Voice Agent v2 — Using Recall.ai demo's proven wavtools
+// Architecture: Mic → WavRecorder → WebSocket → Relay → OpenAI Realtime API
+//              OpenAI → Relay → WebSocket → WavStreamPlayer → Meeting audio
 // ============================================================
 
-const SAMPLE_RATE = 24000;
-
-// --- AudioWorklet: Mic Recorder ---
-const recorderWorkletCode = `
-class RecorderProcessor extends AudioWorkletProcessor {
+// ============================================================
+// WORKLET: Audio Processor (recording) — from openai/realtime-api-beta
+// ============================================================
+const AudioProcessorWorklet = `
+class AudioProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.recording = false;
-    this.port.onmessage = (e) => {
-      if (e.data.event === 'start') this.recording = true;
-      if (e.data.event === 'stop') this.recording = false;
-    };
+    this.port.onmessage = this.receive.bind(this);
+    this.initialize();
   }
-  process(inputs) {
-    if (!this.recording || !inputs[0] || !inputs[0][0]) return true;
-    const mono = inputs[0][0];
-    // Convert float32 to int16
-    const pcm16 = new Int16Array(mono.length);
-    for (let i = 0; i < mono.length; i++) {
-      const s = Math.max(-1, Math.min(1, mono[i]));
-      pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  initialize() {
+    this.foundAudio = false;
+    this.recording = false;
+    this.chunks = [];
+  }
+  readChannelData(chunks, channel = -1, maxChannels = 9) {
+    let channelLimit;
+    if (channel !== -1) {
+      if (chunks[0] && chunks[0].length - 1 < channel) {
+        throw new Error('Channel ' + channel + ' out of range: max ' + chunks[0].length);
+      }
+      channelLimit = channel + 1;
+    } else {
+      channel = 0;
+      channelLimit = Math.min(chunks[0] ? chunks[0].length : 1, maxChannels);
     }
-    this.port.postMessage({ pcm16 }, [pcm16.buffer]);
+    const channels = [];
+    for (let n = channel; n < channelLimit; n++) {
+      const length = chunks.reduce((sum, chunk) => sum + chunk[n].length, 0);
+      const buffers = chunks.map((chunk) => chunk[n]);
+      const result = new Float32Array(length);
+      let offset = 0;
+      for (let i = 0; i < buffers.length; i++) {
+        result.set(buffers[i], offset);
+        offset += buffers[i].length;
+      }
+      channels[n] = result;
+    }
+    return channels;
+  }
+  formatAudioData(channels) {
+    if (channels.length === 1) {
+      return { float32Array: channels[0].slice(), meanValues: channels[0].slice() };
+    }
+    const float32Array = new Float32Array(channels[0].length * channels.length);
+    const meanValues = new Float32Array(channels[0].length);
+    for (let i = 0; i < channels[0].length; i++) {
+      const offset = i * channels.length;
+      let meanValue = 0;
+      for (let n = 0; n < channels.length; n++) {
+        float32Array[offset + n] = channels[n][i];
+        meanValue += channels[n][i];
+      }
+      meanValues[i] = meanValue / channels.length;
+    }
+    return { float32Array, meanValues };
+  }
+  floatTo16BitPCM(float32Array) {
+    const buffer = new ArrayBuffer(float32Array.length * 2);
+    const view = new DataView(buffer);
+    let offset = 0;
+    for (let i = 0; i < float32Array.length; i++, offset += 2) {
+      let s = Math.max(-1, Math.min(1, float32Array[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return buffer;
+  }
+  getValues(channel = -1) {
+    const channels = this.readChannelData(this.chunks, channel);
+    const { meanValues } = this.formatAudioData(channels);
+    return { meanValues, channels };
+  }
+  export() {
+    const channels = this.readChannelData(this.chunks);
+    const { float32Array, meanValues } = this.formatAudioData(channels);
+    const audioData = this.floatTo16BitPCM(float32Array);
+    return { meanValues, audio: { bitsPerSample: 16, channels, data: audioData } };
+  }
+  receive(e) {
+    const { event, id } = e.data;
+    let receiptData = {};
+    switch (event) {
+      case 'start': this.recording = true; break;
+      case 'stop': this.recording = false; break;
+      case 'clear': this.initialize(); break;
+      case 'export': receiptData = this.export(); break;
+      case 'read': receiptData = this.getValues(); break;
+    }
+    this.port.postMessage({ event: 'receipt', id, data: receiptData });
+  }
+  sendChunk(chunk) {
+    const channels = this.readChannelData([chunk]);
+    const { float32Array, meanValues } = this.formatAudioData(channels);
+    const rawAudioData = this.floatTo16BitPCM(float32Array);
+    const monoAudioData = this.floatTo16BitPCM(meanValues);
+    this.port.postMessage({ event: 'chunk', data: { mono: monoAudioData, raw: rawAudioData } });
+  }
+  process(inputList, outputList) {
+    const sourceLimit = Math.min(inputList.length, outputList.length);
+    for (let inputNum = 0; inputNum < sourceLimit; inputNum++) {
+      const input = inputList[inputNum];
+      const output = outputList[inputNum];
+      const channelCount = Math.min(input.length, output.length);
+      for (let channelNum = 0; channelNum < channelCount; channelNum++) {
+        input[channelNum].forEach((sample, i) => { output[channelNum][i] = sample; });
+      }
+    }
+    const inputs = inputList[0];
+    let sliceIndex = 0;
+    if (!this.foundAudio) {
+      for (const channel of inputs) {
+        sliceIndex = 0;
+        if (this.foundAudio) break;
+        if (channel) {
+          for (const value of channel) {
+            if (value !== 0) { this.foundAudio = true; break; }
+            else sliceIndex++;
+          }
+        }
+      }
+    }
+    if (inputs && inputs[0] && this.foundAudio && this.recording) {
+      const chunk = inputs.map((input) => input.slice(sliceIndex));
+      this.chunks.push(chunk);
+      this.sendChunk(chunk);
+    }
     return true;
   }
 }
-registerProcessor('recorder-processor', RecorderProcessor);
+registerProcessor('audio_processor', AudioProcessor);
 `;
 
-// --- AudioWorklet: Stream Player ---
-const playerWorkletCode = `
-class PlayerProcessor extends AudioWorkletProcessor {
+// ============================================================
+// WORKLET: Stream Processor (playback) — from openai/realtime-api-beta
+// ============================================================
+const StreamProcessorWorklet = `
+class StreamProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.buffers = [];
-    this.currentBuffer = null;
-    this.currentOffset = 0;
-    this.port.onmessage = (e) => {
-      if (e.data.event === 'write') {
-        this.buffers.push(e.data.buffer);
-      } else if (e.data.event === 'clear') {
-        this.buffers = [];
-        this.currentBuffer = null;
-        this.currentOffset = 0;
+    this.hasStarted = false;
+    this.hasInterrupted = false;
+    this.outputBuffers = [];
+    this.bufferLength = 128;
+    this.write = { buffer: new Float32Array(this.bufferLength), trackId: null };
+    this.writeOffset = 0;
+    this.trackSampleOffsets = {};
+    this.port.onmessage = (event) => {
+      if (!event.data) return;
+      const payload = event.data;
+      if (payload.event === 'write') {
+        const int16Array = payload.buffer;
+        const float32Array = new Float32Array(int16Array.length);
+        for (let i = 0; i < int16Array.length; i++) {
+          float32Array[i] = int16Array[i] / 0x8000;
+        }
+        this.writeData(float32Array, payload.trackId);
+      } else if (payload.event === 'offset' || payload.event === 'interrupt') {
+        const requestId = payload.requestId;
+        const trackId = this.write.trackId;
+        const offset = this.trackSampleOffsets[trackId] || 0;
+        this.port.postMessage({ event: 'offset', requestId, trackId, offset });
+        if (payload.event === 'interrupt') {
+          this.hasInterrupted = true;
+        }
       }
     };
+  }
+  writeData(float32Array, trackId = null) {
+    let { buffer } = this.write;
+    let offset = this.writeOffset;
+    for (let i = 0; i < float32Array.length; i++) {
+      buffer[offset++] = float32Array[i];
+      if (offset >= buffer.length) {
+        this.outputBuffers.push(this.write);
+        this.write = { buffer: new Float32Array(this.bufferLength), trackId };
+        buffer = this.write.buffer;
+        offset = 0;
+      }
+    }
+    this.writeOffset = offset;
+    return true;
   }
   process(inputs, outputs) {
-    const output = outputs[0][0];
-    if (!output) return true;
-    let written = 0;
-    while (written < output.length) {
-      if (!this.currentBuffer) {
-        if (this.buffers.length === 0) {
-          // Fill remaining with silence
-          for (let i = written; i < output.length; i++) output[i] = 0;
-          return true;
-        }
-        this.currentBuffer = this.buffers.shift();
-        this.currentOffset = 0;
+    const output = outputs[0];
+    const outputChannelData = output[0];
+    if (this.hasInterrupted) {
+      this.port.postMessage({ event: 'stop' });
+      return false;
+    } else if (this.outputBuffers.length) {
+      this.hasStarted = true;
+      const { buffer, trackId } = this.outputBuffers.shift();
+      for (let i = 0; i < outputChannelData.length; i++) {
+        outputChannelData[i] = buffer[i] || 0;
       }
-      const remaining = this.currentBuffer.length - this.currentOffset;
-      const toWrite = Math.min(remaining, output.length - written);
-      for (let i = 0; i < toWrite; i++) {
-        output[written + i] = this.currentBuffer[this.currentOffset + i];
+      if (trackId) {
+        this.trackSampleOffsets[trackId] = this.trackSampleOffsets[trackId] || 0;
+        this.trackSampleOffsets[trackId] += buffer.length;
       }
-      written += toWrite;
-      this.currentOffset += toWrite;
-      if (this.currentOffset >= this.currentBuffer.length) {
-        this.currentBuffer = null;
-      }
+      return true;
+    } else if (this.hasStarted) {
+      this.port.postMessage({ event: 'stop' });
+      return false;
+    } else {
+      return true;
     }
+  }
+}
+registerProcessor('stream_processor', StreamProcessor);
+`;
+
+// Create blob URLs for worklets
+function createWorkletUrl(code) {
+  const blob = new Blob([code], { type: 'application/javascript' });
+  return URL.createObjectURL(blob);
+}
+const audioProcessorSrc = createWorkletUrl(AudioProcessorWorklet);
+const streamProcessorSrc = createWorkletUrl(StreamProcessorWorklet);
+
+// ============================================================
+// WavPacker — minimal (just mergeBuffers)
+// ============================================================
+class WavPacker {
+  static mergeBuffers(left, right) {
+    const tmp = new Uint8Array(left.byteLength + right.byteLength);
+    tmp.set(new Uint8Array(left), 0);
+    tmp.set(new Uint8Array(right), left.byteLength);
+    return tmp.buffer;
+  }
+}
+
+// ============================================================
+// WavRecorder — from openai/realtime-api-beta wavtools
+// Simplified: no device listing, no WAV export, no frequency analysis
+// ============================================================
+class WavRecorder {
+  constructor({ sampleRate = 44100 } = {}) {
+    this.sampleRate = sampleRate;
+    this.stream = null;
+    this.processor = null;
+    this.source = null;
+    this.node = null;
+    this.recording = false;
+    this._lastEventId = 0;
+    this.eventReceipts = {};
+    this.eventTimeout = 5000;
+    this._chunkProcessor = () => {};
+    this._chunkProcessorSize = void 0;
+    this._chunkProcessorBuffer = { raw: new ArrayBuffer(0), mono: new ArrayBuffer(0) };
+  }
+
+  async _event(name, data = {}, _processor = null) {
+    _processor = _processor || this.processor;
+    if (!_processor) throw new Error('No processor');
+    const message = { event: name, id: this._lastEventId++, data };
+    _processor.port.postMessage(message);
+    const t0 = Date.now();
+    while (!this.eventReceipts[message.id]) {
+      if (Date.now() - t0 > this.eventTimeout) throw new Error(`Timeout: "${name}"`);
+      await new Promise(r => setTimeout(r, 1));
+    }
+    const payload = this.eventReceipts[message.id];
+    delete this.eventReceipts[message.id];
+    return payload;
+  }
+
+  async begin(deviceId) {
+    if (this.processor) throw new Error('Already connected');
+    const config = deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true };
+    this.stream = await navigator.mediaDevices.getUserMedia(config);
+    const context = new AudioContext({ sampleRate: this.sampleRate });
+    if (context.state === 'suspended') await context.resume();
+    const source = context.createMediaStreamSource(this.stream);
+    await context.audioWorklet.addModule(audioProcessorSrc);
+    const processor = new AudioWorkletNode(context, 'audio_processor');
+    processor.port.onmessage = (e) => {
+      const { event, id, data } = e.data;
+      if (event === 'receipt') {
+        this.eventReceipts[id] = data;
+      } else if (event === 'chunk') {
+        if (this._chunkProcessorSize) {
+          const buffer = this._chunkProcessorBuffer;
+          this._chunkProcessorBuffer = {
+            raw: WavPacker.mergeBuffers(buffer.raw, data.raw),
+            mono: WavPacker.mergeBuffers(buffer.mono, data.mono),
+          };
+          if (this._chunkProcessorBuffer.mono.byteLength >= this._chunkProcessorSize) {
+            this._chunkProcessor(this._chunkProcessorBuffer);
+            this._chunkProcessorBuffer = { raw: new ArrayBuffer(0), mono: new ArrayBuffer(0) };
+          }
+        } else {
+          this._chunkProcessor(data);
+        }
+      }
+    };
+    this.node = source.connect(processor);
+    this.source = source;
+    this.processor = processor;
+    this._context = context;
+    console.log('[Coppice] WavRecorder ready, sampleRate:', this.sampleRate);
+    return true;
+  }
+
+  async record(chunkProcessor = () => {}, chunkSize = 8192) {
+    if (!this.processor) throw new Error('Call begin() first');
+    if (this.recording) throw new Error('Already recording');
+    this._chunkProcessor = chunkProcessor;
+    this._chunkProcessorSize = chunkSize;
+    this._chunkProcessorBuffer = { raw: new ArrayBuffer(0), mono: new ArrayBuffer(0) };
+    await this._event('start');
+    this.recording = true;
+    console.log('[Coppice] Recording started');
+    return true;
+  }
+
+  async pause() {
+    if (!this.processor) throw new Error('Call begin() first');
+    if (!this.recording) throw new Error('Not recording');
+    if (this._chunkProcessorBuffer.raw.byteLength) {
+      this._chunkProcessor(this._chunkProcessorBuffer);
+    }
+    await this._event('stop');
+    this.recording = false;
     return true;
   }
 }
-registerProcessor('player-processor', PlayerProcessor);
-`;
 
-// --- Utility: ArrayBuffer to base64 ---
+// ============================================================
+// WavStreamPlayer — from openai/realtime-api-beta wavtools
+// Handles real-time PCM16 playback with interruption support
+// ============================================================
+class WavStreamPlayer {
+  constructor({ sampleRate = 44100 } = {}) {
+    this.sampleRate = sampleRate;
+    this.context = null;
+    this.stream = null;
+    this.trackSampleOffsets = {};
+    this.interruptedTrackIds = {};
+  }
+
+  async connect() {
+    this.context = new AudioContext({ sampleRate: this.sampleRate });
+    if (this.context.state === 'suspended') await this.context.resume();
+    await this.context.audioWorklet.addModule(streamProcessorSrc);
+    console.log('[Coppice] WavStreamPlayer ready, sampleRate:', this.sampleRate);
+    return true;
+  }
+
+  _start() {
+    const streamNode = new AudioWorkletNode(this.context, 'stream_processor');
+    streamNode.connect(this.context.destination);
+    streamNode.port.onmessage = (e) => {
+      const { event } = e.data;
+      if (event === 'stop') {
+        streamNode.disconnect();
+        this.stream = null;
+      } else if (event === 'offset') {
+        const { requestId, trackId, offset } = e.data;
+        this.trackSampleOffsets[requestId] = { trackId, offset, currentTime: offset / this.sampleRate };
+      }
+    };
+    this.stream = streamNode;
+    return true;
+  }
+
+  add16BitPCM(arrayBuffer, trackId = 'default') {
+    if (typeof trackId !== 'string') throw new Error('trackId must be string');
+    if (this.interruptedTrackIds[trackId]) return;
+    if (!this.stream) this._start();
+    let buffer;
+    if (arrayBuffer instanceof Int16Array) {
+      buffer = arrayBuffer;
+    } else if (arrayBuffer instanceof ArrayBuffer) {
+      buffer = new Int16Array(arrayBuffer);
+    } else {
+      throw new Error('argument must be Int16Array or ArrayBuffer');
+    }
+    this.stream.port.postMessage({ event: 'write', buffer, trackId });
+    return buffer;
+  }
+
+  async getTrackSampleOffset(interrupt = false) {
+    if (!this.stream) return null;
+    const requestId = crypto.randomUUID();
+    this.stream.port.postMessage({
+      event: interrupt ? 'interrupt' : 'offset',
+      requestId,
+    });
+    let trackSampleOffset;
+    while (!trackSampleOffset) {
+      trackSampleOffset = this.trackSampleOffsets[requestId];
+      await new Promise(r => setTimeout(r, 1));
+    }
+    const { trackId } = trackSampleOffset;
+    if (interrupt && trackId) {
+      this.interruptedTrackIds[trackId] = true;
+    }
+    return trackSampleOffset;
+  }
+
+  async interrupt() {
+    return this.getTrackSampleOffset(true);
+  }
+}
+
+// ============================================================
+// Utility: ArrayBuffer ↔ base64
+// ============================================================
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
 }
 
-// --- Utility: base64 to Int16Array ---
-function base64ToInt16Array(base64) {
+function base64ToArrayBuffer(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new Int16Array(bytes.buffer);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
 }
 
-// --- Main ---
+// ============================================================
+// MAIN — Connect everything
+// ============================================================
+const SAMPLE_RATE = 24000;
+
+const INSTRUCTIONS = `You are Coppice, an AI assistant participating in this meeting.
+
+Rules:
+- Be professional, concise, and helpful
+- Keep responses brief — this is a real-time conversation, not a lecture
+- Listen carefully and respond naturally when addressed
+- If someone greets you, greet them back warmly but briefly
+- If you're not sure who's speaking to you, ask for clarification
+- Never say you were "cut off" or had technical issues unless specifically asked`;
+
 (async function main() {
   const params = new URLSearchParams(location.search);
   const wssUrl = params.get('wss');
   if (!wssUrl) {
-    console.error('Missing ?wss= parameter');
+    console.error('[Coppice] Missing ?wss= parameter');
     return;
   }
-  console.log('[Coppice] Connecting to relay:', wssUrl);
+  console.log('[Coppice] Relay URL:', wssUrl);
 
-  // 1. Set up mic capture
-  let stream;
+  // 1. Initialize audio capture (WavRecorder)
+  const wavRecorder = new WavRecorder({ sampleRate: SAMPLE_RATE });
+  const wavStreamPlayer = new WavStreamPlayer({ sampleRate: SAMPLE_RATE });
+
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    await wavRecorder.begin();
   } catch (e) {
-    console.error('[Coppice] Mic access denied:', e);
+    console.error('[Coppice] Mic access failed:', e);
     return;
   }
 
-  // Use a SINGLE AudioContext for both recording and playback (required for headless browsers)
-  const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-  // Force resume — critical for headless/autoplay-restricted environments
-  if (audioCtx.state === 'suspended') await audioCtx.resume();
-  console.log('[Coppice] AudioContext state:', audioCtx.state);
+  try {
+    await wavStreamPlayer.connect();
+  } catch (e) {
+    console.error('[Coppice] Audio output failed:', e);
+    return;
+  }
 
-  const recSrc = audioCtx.createMediaStreamSource(stream);
-  const recBlob = new Blob([recorderWorkletCode], { type: 'application/javascript' });
-  const recUrl = URL.createObjectURL(recBlob);
-  await audioCtx.audioWorklet.addModule(recUrl);
-  const recNode = new AudioWorkletNode(audioCtx, 'recorder-processor');
-  recSrc.connect(recNode);
-  recNode.connect(audioCtx.destination); // needed to keep worklet alive
-
-  // 2. Set up audio playback (same AudioContext)
-  const playBlob = new Blob([playerWorkletCode], { type: 'application/javascript' });
-  const playUrl = URL.createObjectURL(playBlob);
-  await audioCtx.audioWorklet.addModule(playUrl);
-  const playNode = new AudioWorkletNode(audioCtx, 'player-processor');
-  playNode.connect(audioCtx.destination);
-
-  // Audio chunk buffer — accumulate samples before sending (like the demo's 8192 chunk size)
-  const CHUNK_SIZE = 4800; // 200ms at 24kHz
-  let audioBuffer = new Int16Array(0);
-
-  // 3. Connect to relay WebSocket
+  // 2. Connect to relay WebSocket
   const ws = new WebSocket(wssUrl);
 
-  ws.onopen = () => {
-    console.log('[Coppice] WebSocket connected to relay');
+  // Track current response for interruption
+  let currentResponseId = null;
 
-    // Configure session with Coppice instructions + server VAD
+  ws.onopen = () => {
+    console.log('[Coppice] Connected to relay');
+
+    // Configure session
     ws.send(JSON.stringify({
       type: 'session.update',
       session: {
         modalities: ['text', 'audio'],
-        instructions: `You are Coppice, an AI assistant that has joined this meeting to help. You are professional, concise, and helpful. Listen to what people say and respond naturally when addressed. Keep responses brief — this is a real-time conversation, not a lecture. If someone greets you, greet them back warmly but briefly.`,
+        instructions: INSTRUCTIONS,
         voice: 'alloy',
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
@@ -187,7 +511,7 @@ function base64ToInt16Array(base64) {
       },
     }));
 
-    // Send initial greeting
+    // Send initial greeting trigger
     ws.send(JSON.stringify({
       type: 'conversation.item.create',
       item: {
@@ -195,70 +519,82 @@ function base64ToInt16Array(base64) {
         role: 'user',
         content: [{
           type: 'input_text',
-          text: 'Hello! You just joined a meeting. Please introduce yourself briefly as Coppice, the AI assistant.',
+          text: 'Hello! You just joined a meeting. Please introduce yourself briefly.',
         }],
       },
     }));
     ws.send(JSON.stringify({ type: 'response.create' }));
 
-    // Start recording mic audio
-    recNode.port.postMessage({ event: 'start' });
-    console.log('[Coppice] Recording started');
-  };
-
-  // Send mic audio to relay (batched into larger chunks)
-  recNode.port.onmessage = (e) => {
-    if (!e.data.pcm16 || ws.readyState !== WebSocket.OPEN) return;
-    // Accumulate samples
-    const newBuf = new Int16Array(audioBuffer.length + e.data.pcm16.length);
-    newBuf.set(audioBuffer);
-    newBuf.set(e.data.pcm16, audioBuffer.length);
-    audioBuffer = newBuf;
-    // Send when we have enough
-    if (audioBuffer.length >= CHUNK_SIZE) {
-      const base64 = arrayBufferToBase64(audioBuffer.buffer);
+    // Start recording mic → send to relay
+    wavRecorder.record((data) => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      // data.mono is ArrayBuffer of PCM16 audio
+      const base64 = arrayBufferToBase64(data.mono);
       ws.send(JSON.stringify({
         type: 'input_audio_buffer.append',
         audio: base64,
       }));
-      audioBuffer = new Int16Array(0);
-    }
+    });
   };
 
-  // Receive events from relay (OpenAI)
-  ws.onmessage = (event) => {
+  // 3. Handle events from relay (OpenAI responses)
+  ws.onmessage = async (event) => {
     let msg;
-    try {
-      msg = JSON.parse(event.data);
-    } catch { return; }
+    try { msg = JSON.parse(event.data); } catch { return; }
 
-    if (msg.type === 'response.audio.delta' && msg.delta) {
-      // Play audio response
-      const int16 = base64ToInt16Array(msg.delta);
-      const float32 = new Float32Array(int16.length);
-      for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 0x8000;
-      }
-      playNode.port.postMessage({ event: 'write', buffer: float32 }, [float32.buffer]);
-    } else if (msg.type === 'input_audio_buffer.speech_started') {
-      // User started speaking — interrupt any current playback
-      playNode.port.postMessage({ event: 'clear' });
-      console.log('[Coppice] Speech detected — clearing playback');
-    } else if (msg.type === 'error') {
-      console.error('[Coppice] Error from OpenAI:', msg.error);
-    } else if (msg.type === 'response.audio_transcript.done') {
-      console.log('[Coppice] Said:', msg.transcript);
-    } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
-      console.log('[Coppice] Heard:', msg.transcript);
-    } else if (msg.type === 'session.created' || msg.type === 'session.updated') {
-      console.log('[Coppice]', msg.type);
+    switch (msg.type) {
+      case 'response.audio.delta':
+        // Feed audio to player
+        if (msg.delta) {
+          const pcmBuffer = base64ToArrayBuffer(msg.delta);
+          wavStreamPlayer.add16BitPCM(pcmBuffer, msg.item_id || 'default');
+          currentResponseId = msg.item_id || null;
+        }
+        break;
+
+      case 'input_audio_buffer.speech_started':
+        // User started speaking — interrupt AI playback
+        console.log('[Coppice] Speech detected — interrupting playback');
+        const trackOffset = await wavStreamPlayer.interrupt();
+        if (trackOffset?.trackId) {
+          // Tell OpenAI to stop generating and truncate
+          ws.send(JSON.stringify({ type: 'response.cancel' }));
+          ws.send(JSON.stringify({
+            type: 'conversation.item.truncate',
+            item_id: trackOffset.trackId,
+            content_index: 0,
+            audio_end_ms: Math.floor(trackOffset.currentTime * 1000),
+          }));
+          console.log('[Coppice] Cancelled response, truncated at', trackOffset.currentTime.toFixed(2) + 's');
+        }
+        currentResponseId = null;
+        break;
+
+      case 'response.audio_transcript.done':
+        console.log('[Coppice] Said:', msg.transcript);
+        break;
+
+      case 'conversation.item.input_audio_transcription.completed':
+        console.log('[Coppice] Heard:', msg.transcript);
+        break;
+
+      case 'session.created':
+      case 'session.updated':
+        console.log('[Coppice]', msg.type);
+        break;
+
+      case 'error':
+        console.error('[Coppice] OpenAI error:', msg.error);
+        break;
     }
   };
 
   ws.onerror = (e) => console.error('[Coppice] WS error:', e);
   ws.onclose = (e) => {
     console.log('[Coppice] WS closed:', e.code, e.reason);
-    recNode.port.postMessage({ event: 'stop' });
+    if (wavRecorder.recording) {
+      wavRecorder.pause().catch(() => {});
+    }
   };
 })();
 </script>

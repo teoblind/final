@@ -118,6 +118,69 @@ export async function sendAudio(botId, mp3Buffer) {
 }
 
 /**
+ * Create a voice agent bot — joins meeting with output_media (webpage as camera).
+ * The webpage captures meeting audio, sends to relay → OpenAI Realtime API,
+ * and plays AI responses back into the meeting.
+ *
+ * @param {string} meetingUrl - Google Meet / Zoom / Teams URL
+ * @param {object} opts
+ * @param {string} opts.botName - Bot display name (default: "Coppice")
+ * @param {string} opts.voiceAgentUrl - URL of the voice agent webpage
+ * @param {string} opts.relayUrl - WebSocket URL for the relay server
+ * @returns {{ id, meeting_url, status_changes, ... }}
+ */
+export async function createVoiceBot(meetingUrl, opts = {}) {
+  const {
+    botName = 'Coppice',
+    voiceAgentUrl = process.env.VOICE_AGENT_URL || 'https://coppice.ai/voice-agent',
+    relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
+  } = opts;
+
+  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}`;
+
+  // Detect platform for variant selection
+  const isZoom = meetingUrl.includes('zoom.us');
+  const isTeams = meetingUrl.includes('teams.microsoft.com');
+  const variant = {};
+  if (isZoom) variant.zoom = 'web_4_core';
+  else if (isTeams) variant.microsoft_teams = 'web_4_core';
+  else variant.google_meet = 'web_4_core';
+
+  const body = {
+    meeting_url: meetingUrl,
+    bot_name: botName,
+    output_media: {
+      camera: {
+        kind: 'webpage',
+        config: { url: pageUrl },
+      },
+    },
+    variant,
+    automatic_leave: {
+      waiting_room_timeout: 600,
+      noone_joined_timeout: 60,
+      everyone_left_timeout: 5,
+    },
+  };
+
+  const bot = await recallFetch('/bot/', { method: 'POST', body: JSON.stringify(body) });
+
+  activeBots.set(bot.id, {
+    id: bot.id,
+    meetingUrl,
+    botName,
+    status: 'joining',
+    isVoiceAgent: true,
+    createdAt: new Date().toISOString(),
+    transcript: [],
+  });
+
+  console.log(`[Recall] Voice bot ${bot.id} created for ${meetingUrl}`);
+  console.log(`[Recall] Page URL: ${pageUrl}`);
+  return bot;
+}
+
+/**
  * Get bot status from Recall.ai.
  */
 export async function getBotStatus(botId) {

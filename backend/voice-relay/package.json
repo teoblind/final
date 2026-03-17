@@ -1,0 +1,16 @@
+{
+  "name": "coppice-voice-relay",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WebSocket relay between Recall.ai output_media page and OpenAI Realtime API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "npx nodemon index.js"
+  },
+  "dependencies": {
+    "@openai/realtime-api-beta": "github:openai/openai-realtime-api-beta",
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  }
+}
