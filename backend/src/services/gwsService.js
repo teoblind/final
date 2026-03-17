@@ -181,16 +181,18 @@ export async function driveSearch(query, maxResults = 10) {
 
 export async function sheetsRead(spreadsheetId, range) {
   const result = await execGws([
-    'sheets', 'spreadsheets.values', 'get',
-    '--params', JSON.stringify({ spreadsheetId, range }),
+    'sheets', '+read',
+    '--spreadsheet', spreadsheetId,
+    '--range', range,
   ]);
   return { range: result.range, values: result.values || [] };
 }
 
 export async function sheetsAppend(spreadsheetId, range, values) {
   const result = await execGws([
-    'sheets', 'spreadsheets.values', 'append',
-    '--params', JSON.stringify({ spreadsheetId, range, valueInputOption: 'USER_ENTERED' }),
+    'sheets', '+append',
+    '--spreadsheet', spreadsheetId,
+    '--range', range,
     '--json', JSON.stringify({ values }),
   ]);
   return result;
