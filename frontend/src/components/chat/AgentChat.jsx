@@ -2111,6 +2111,12 @@ export default function AgentChat({ agentId = 'estimating' }) {
         }
         setMessages(prev => [...prev, agentMsg]);
       }
+      // If backend auto-created a thread, add it to sidebar
+      if (data.threadId && !activeThreadId) {
+        const newThread = { id: data.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        setThreads(prev => [newThread, ...prev]);
+        setActiveThreadId(data.threadId);
+      }
       // Update thread title in sidebar if this was the first message
       if (activeThreadId) {
         setThreads(prev => prev.map(t =>

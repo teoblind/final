@@ -508,10 +508,14 @@ router.post('/:agentId/messages', async (req, res) => {
       res.setTimeout(150_000);
     }
 
-    const result = await chat(tenantId, agentId, userId, content.trim());
+    // Auto-create a thread for threadless messages so they persist
+    const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    createThread(threadId, tenantId, agentId, userId, content.trim().slice(0, 60), 'private');
+
+    const result = await chat(tenantId, agentId, userId, content.trim(), threadId);
 
     // Map tool results to frontend format
-    const response = { response: result.response, audio_url: result.audio_url || null };
+    const response = { response: result.response, audio_url: result.audio_url || null, threadId };
     if (result.tool_used && result.tool_result) {
       const toolName = result.tool_used;
       const toolResult = result.tool_result;
