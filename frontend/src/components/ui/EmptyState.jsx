@@ -1,7 +1,8 @@
-import { AlertCircle, Database, Zap, BarChart3, Users, Mail, Shield, Settings, Activity } from 'lucide-react';
+import { AlertCircle, Calendar, Database, Zap, BarChart3, Users, Mail, Shield, Settings, Activity } from 'lucide-react';
 
 const ICONS = {
   alert: AlertCircle,
+  calendar: Calendar,
   database: Database,
   zap: Zap,
   chart: BarChart3,

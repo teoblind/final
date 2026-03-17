@@ -1,5 +1,6 @@
-import React, { useState, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import { useTenant } from '../../contexts/TenantContext';
+import api from '../../lib/hooks/useApi';
 
 const FilesDashboard = lazy(() => import('./FilesDashboard'));
 
@@ -21,6 +22,38 @@ const DACP_AGENTS = {
   bid:          { letter: 'B', color: '#b8860b', bg: '#fdf6e8' },
   workspace:    { letter: 'W', color: '#2c5282', bg: '#e8eef5' },
 };
+
+const VENTURE_AGENTS = {
+  email:      { letter: 'E', color: '#2c5282', bg: '#e8eef5' },
+  leads:      { letter: 'L', color: '#b8860b', bg: '#fdf6e8' },
+  pitch:      { letter: 'P', color: '#5b3a8c', bg: '#f3eef8' },
+  hivemind:   { letter: 'H', color: '#555555', bg: '#f0f0f0' },
+  workspace:  { letter: 'W', color: '#2c5282', bg: '#e8eef5' },
+  system:     { letter: 'S', color: '#888', bg: '#f5f4f0' },
+};
+
+const DEFAULT_AGENT_CFG = { letter: '?', color: '#888', bg: '#f5f4f0' };
+
+function getDateGroup(isoStr) {
+  if (!isoStr) return 'Today';
+  const date = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date >= today) return 'Today';
+  if (date >= yesterday) return 'Yesterday';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatEventTime(isoStr) {
+  if (!isoStr) return '';
+  const date = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+  const h = date.getHours();
+  const m = date.getMinutes().toString().padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${m} ${ampm}`;
+}
 
 // ─── Tag Styles ─────────────────────────────────────────────────────────────
 
@@ -122,9 +155,38 @@ export default function AuditTrailDashboard() {
 function AuditTrailContent() {
   const { tenant } = useTenant();
   const isConstruction = tenant?.settings?.industry === 'construction';
+  const isVenture = tenant?.settings?.industry === 'venture';
 
-  const agents = isConstruction ? DACP_AGENTS : MINING_AGENTS;
-  const allEvents = isConstruction ? DACP_EVENTS : MINING_EVENTS;
+  const [realEvents, setRealEvents] = useState(null);
+  const [realLoading, setRealLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isVenture) return;
+    setRealLoading(true);
+    api.get('/v1/activity', { params: { limit: 100 } })
+      .then(res => {
+        const activities = res.data.activities || [];
+        const grouped = {};
+        for (const a of activities) {
+          const dateKey = getDateGroup(a.createdAt);
+          if (!grouped[dateKey]) grouped[dateKey] = [];
+          grouped[dateKey].push({
+            time: formatEventTime(a.createdAt),
+            agent: a.agentId || 'system',
+            action: a.title,
+            target: a.subtitle || '',
+            detail: '',
+            tags: a.type ? [a.type] : ['auto'],
+          });
+        }
+        setRealEvents(grouped);
+      })
+      .catch(() => setRealEvents({}))
+      .finally(() => setRealLoading(false));
+  }, [isVenture]);
+
+  const agents = isVenture ? VENTURE_AGENTS : isConstruction ? DACP_AGENTS : MINING_AGENTS;
+  const allEvents = isVenture ? (realEvents || {}) : isConstruction ? DACP_EVENTS : MINING_EVENTS;
   const agentKeys = Object.keys(agents);
 
   const [period, setPeriod] = useState('All');
@@ -263,6 +325,12 @@ function AuditTrailContent() {
       </div>
 
       {/* Timeline */}
+      {realLoading ? (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] px-[18px] py-10 text-center">
+          <div className="spinner w-8 h-8 mx-auto mb-3" />
+          <p className="text-[13px] text-terminal-muted">Loading activity...</p>
+        </div>
+      ) : (
       <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Audit Trail</span>
@@ -270,7 +338,9 @@ function AuditTrailContent() {
         </div>
 
         {Object.keys(filteredGroups).length === 0 ? (
-          <div className="px-[18px] py-10 text-center text-[13px] text-terminal-muted">No events match your filters.</div>
+          <div className="px-[18px] py-10 text-center text-[13px] text-terminal-muted">
+            {isVenture && !Object.keys(allEvents).length ? 'No activity recorded yet. Agent actions will appear here.' : 'No events match your filters.'}
+          </div>
         ) : (
           Object.entries(filteredGroups).map(([date, events]) => (
             <div key={date}>
@@ -281,7 +351,7 @@ function AuditTrailContent() {
 
               {/* Events */}
               {events.map((event, i) => {
-                const agentCfg = agents[event.agent];
+                const agentCfg = agents[event.agent] || DEFAULT_AGENT_CFG;
                 return (
                   <div key={i} className="flex items-start gap-3.5 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
                     {/* Time */}
@@ -303,15 +373,13 @@ function AuditTrailContent() {
                       <div className="text-[11px] text-terminal-muted mt-0.5">{event.detail}</div>
                       <div className="flex items-center gap-1.5 mt-1.5">
                         {event.tags.map(tag => (
-                          <span key={tag} className={`text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border ${TAG_STYLES[tag]}`}>
+                          <span key={tag} className={`text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border ${TAG_STYLES[tag] || TAG_STYLES.manual}`}>
                             {tag}
                           </span>
                         ))}
                       </div>
                     </div>
 
-                    {/* Cost */}
-                    <span className="text-[11px] font-mono text-terminal-muted shrink-0 mt-0.5 tabular-nums">{event.cost}</span>
                   </div>
                 );
               })}
@@ -319,6 +387,7 @@ function AuditTrailContent() {
           ))
         )}
       </div>
+      )}
     </div>
   );
 }

@@ -192,12 +192,101 @@ function ActivityDetail({ detail, type }) {
   return <pre className="text-[11px] text-terminal-muted whitespace-pre-wrap">{JSON.stringify(detail, null, 2)}</pre>;
 }
 
+function UpcomingMeetingsPanel() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchEvents() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/crm/calendar/events`);
+        if (res.ok) {
+          const data = await res.json();
+          setEvents(data.events || []);
+        }
+      } catch {}
+      setLoading(false);
+    }
+    fetchEvents();
+    const interval = setInterval(fetchEvents, 120000); // refresh every 2 min
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTime = (isoStr, allDay) => {
+    if (!isoStr) return '';
+    if (allDay) return 'All day';
+    const d = new Date(isoStr);
+    const h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    return `${h % 12 || 12}:${m} ${ampm}`;
+  };
+
+  const formatDate = (isoStr) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const eventDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (eventDate.getTime() === today.getTime()) return 'Today';
+    if (eventDate.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  return (
+    <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+      <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Upcoming Meetings</span>
+        <span className="text-[11px] text-terminal-muted">{events.length} this week</span>
+      </div>
+      <div>
+        {loading ? (
+          <div className="px-[18px] py-6 text-center">
+            <div className="spinner w-6 h-6 mx-auto mb-2" />
+            <p className="text-[11px] text-terminal-muted">Loading calendar...</p>
+          </div>
+        ) : events.length === 0 ? (
+          <EmptyState icon="calendar" title="No upcoming meetings" subtitle="Calendar events for the next 7 days will appear here." compact />
+        ) : (
+          events.map((event) => (
+            <div key={event.id} className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+              <div className="shrink-0 text-center w-[46px]">
+                <div className="text-[10px] text-terminal-muted font-medium">{formatDate(event.start)}</div>
+                <div className="text-[12px] font-semibold text-terminal-text tabular-nums">{formatTime(event.start, event.allDay)}</div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-medium text-terminal-text truncate">{event.title}</div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {event.attendees > 0 && (
+                    <span className="text-[10px] text-terminal-muted">{event.attendees} attendee{event.attendees !== 1 ? 's' : ''}</span>
+                  )}
+                  {event.location && (
+                    <span className="text-[10px] text-terminal-muted truncate max-w-[150px]">{event.location}</span>
+                  )}
+                </div>
+              </div>
+              {event.meetLink && (
+                <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="shrink-0 px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
+                  Join
+                </a>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CommandDashboard({ onNavigate }) {
   const [timeRange, setTimeRange] = useState('30D');
   const [approvals, setApprovals] = useState([]);
   const [insights, setInsights] = useState([]);
   const [toast, setToast] = useState(null);
   const [hubspotPipeline, setHubspotPipeline] = useState(null);
+  const [crmData, setCrmData] = useState(null);
+  const [crmLoading, setCrmLoading] = useState(false);
   const [actionItems, setActionItems] = useState([]);
   const [activities, setActivities] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
@@ -232,9 +321,26 @@ export default function CommandDashboard({ onNavigate }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch HubSpot pipeline data
+  // Fetch deal pipeline data (Google Sheets CRM or HubSpot)
   useEffect(() => {
-    async function fetchHubSpot() {
+    async function fetchPipeline() {
+      try {
+        // Try Google Sheets CRM first
+        const crmRes = await fetch(`${API_BASE}/v1/crm/pipeline`);
+        if (crmRes.ok) {
+          const data = await crmRes.json();
+          if (data.configured && data.by_stage) {
+            const formatValue = (v) => v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : v > 0 ? `$${v}` : '';
+            const rows = Object.entries(data.by_stage)
+              .filter(([, v]) => v.count > 0)
+              .map(([stage, v]) => ({ stage, count: v.count, value: formatValue(v.value) }));
+            setCrmData({ rows, source: data.source, sheetUrl: data.sheetUrl, total: data.total_deals });
+            return;
+          }
+        }
+      } catch {}
+
+      // Fallback to HubSpot
       try {
         const res = await fetch(`${API_BASE}/v1/hubspot/pipeline`);
         if (!res.ok) return;
@@ -260,8 +366,8 @@ export default function CommandDashboard({ onNavigate }) {
         }
       } catch {}
     }
-    fetchHubSpot();
-    const interval = setInterval(fetchHubSpot, 60000);
+    fetchPipeline();
+    const interval = setInterval(fetchPipeline, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -643,10 +749,13 @@ export default function CommandDashboard({ onNavigate }) {
         </div>
       </div>
 
-      {/* Row 2: Agent Insights + HubSpot Pipeline */}
+      {/* Row 2: Upcoming Meetings + Deal Pipeline */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
-        {/* Agent Insights */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+        {/* Upcoming Meetings */}
+        <UpcomingMeetingsPanel />
+
+        {/* Keep Agent Insights hidden but functional */}
+        {insights.length > 0 && <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agent Insights</span>
@@ -686,19 +795,30 @@ export default function CommandDashboard({ onNavigate }) {
               );
             })}
           </div>
-        </div>
+        </div>}
 
-        {/* HubSpot CRM Pipeline */}
+        {/* Deal Pipeline */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">HubSpot CRM</span>
-            <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--t-ui-accent)]" />
-              Live
-            </span>
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Deal Pipeline</span>
+            {(crmData || hubspotPipeline) && (
+              <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
+                {crmData?.sheetUrl && (
+                  <a href={crmData.sheetUrl} target="_blank" rel="noopener noreferrer" className="hover:text-terminal-text transition-colors">
+                    Open Sheet ↗
+                  </a>
+                )}
+                {!crmData?.sheetUrl && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--t-ui-accent)]" />
+                    Live
+                  </>
+                )}
+              </span>
+            )}
           </div>
           <div>
-            {hubspotPipeline ? hubspotPipeline.map((row, i) => (
+            {crmData?.rows?.length > 0 ? crmData.rows.map((row, i) => (
               <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
                 <span className="text-[#6b6b65]">{row.stage}</span>
                 <div className="flex items-center gap-3">
@@ -706,8 +826,54 @@ export default function CommandDashboard({ onNavigate }) {
                   <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
                 </div>
               </div>
-            )) : (
-              <EmptyState icon="chart" title="HubSpot not connected" subtitle="Connect your HubSpot CRM to see deal pipeline." compact />
+            )) : hubspotPipeline ? hubspotPipeline.map((row, i) => (
+              <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
+                <span className="text-[#6b6b65]">{row.stage}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-terminal-muted tabular-nums">{row.value}</span>
+                  <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
+                </div>
+              </div>
+            )) : crmData?.rows?.length === 0 ? (
+              <div className="px-[18px] py-6 text-center">
+                <p className="text-[13px] text-terminal-muted mb-1">No deals yet</p>
+                {crmData?.sheetUrl && (
+                  <a href={crmData.sheetUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[var(--t-ui-accent)] hover:underline">
+                    Add deals in your pipeline sheet ↗
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="px-[18px] py-6 text-center">
+                <p className="text-[13px] text-terminal-muted mb-3">Track your deals with a Google Sheet or HubSpot.</p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setCrmLoading(true);
+                      try {
+                        let token = null;
+                        try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); token = s?.tokens?.accessToken; } catch {}
+                        const res = await fetch(`${API_BASE}/v1/crm/setup-sheet`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          setCrmData({ rows: [], source: 'sheets', sheetUrl: data.sheetUrl, total: 0 });
+                          showToast('Pipeline sheet created');
+                        } else {
+                          showToast(data.error || 'Failed to create sheet');
+                        }
+                      } catch { showToast('Failed to create sheet'); }
+                      setCrmLoading(false);
+                    }}
+                    disabled={crmLoading}
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-text text-white hover:opacity-90 transition-all disabled:opacity-50"
+                  >
+                    {crmLoading ? 'Creating...' : 'Connect Google Sheets'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -42,6 +42,7 @@ router.get('/', (req, res) => {
       title: row.title,
       subtitle: row.subtitle,
       time: formatRelativeTime(row.created_at),
+      createdAt: row.created_at,
       hasDetail: !!row.has_detail,
       sourceType: row.source_type,
       agentId: row.agent_id,

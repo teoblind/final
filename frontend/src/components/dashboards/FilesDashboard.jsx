@@ -2048,12 +2048,13 @@ const DACP_FOLDERS = {
 export default function FilesDashboard() {
   const { tenant } = useTenant();
   const isConstruction = tenant?.settings?.industry === 'construction';
-  const demoFolders = isConstruction ? DACP_FOLDERS : MINING_FOLDERS;
-  const driveRoot = isConstruction ? '/DACP/' : '/Sangha/';
+  const isVenture = tenant?.settings?.industry === 'venture';
+  const demoFolders = isVenture ? {} : (isConstruction ? DACP_FOLDERS : MINING_FOLDERS);
+  const driveRoot = isConstruction ? '/DACP/' : isVenture ? '/Drive/' : '/Sangha/';
 
   const [folders, setFolders] = useState(demoFolders);
   const [liveMode, setLiveMode] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(isVenture);
   const [expandedFolders, setExpandedFolders] = useState(() => new Set(Object.keys(demoFolders)));
   const [selectedFolder, setSelectedFolder] = useState(Object.keys(demoFolders)[0]);
   const [search, setSearch] = useState('');
@@ -2143,6 +2144,7 @@ export default function FilesDashboard() {
   useEffect(() => {
     let cancelled = false;
     async function fetchFiles() {
+      setLoading(true);
       try {
         // First try the tenant files endpoint
         const res = await fetch(`${API_BASE}/v1/files`);
@@ -2156,6 +2158,7 @@ export default function FilesDashboard() {
             setSelectedFolder(Object.keys(grouped)[0]);
             setLiveMode(true);
             setTotalFiles(data.total || data.files.length);
+            setLoading(false);
             return;
           }
         }
@@ -2163,39 +2166,42 @@ export default function FilesDashboard() {
         // Fall through to workspace agent
       }
 
-      // Fallback: try workspace agent
-      try {
-        const res = await fetch(`${API_BASE}/v1/workspace/files`);
-        if (!res.ok) throw new Error('Workspace agent not available');
-        const data = await res.json();
-        if (!cancelled && data.files && data.files.length > 0) {
-          const grouped = {};
-          for (const file of data.files) {
-            const folder = file.folder || 'Uncategorized';
-            if (!grouped[folder]) grouped[folder] = { path: `${driveRoot}${folder}/`, files: [] };
-            grouped[folder].files.push({
-              name: file.name,
-              type: file.type || 'doc',
-              owner: file.owner || 'Unknown',
-              modified: file.modified || '',
-              agent: file.agent || false,
-              url: file.url,
-            });
+      // Fallback: try workspace agent (skip for venture — no demo data)
+      if (!isVenture) {
+        try {
+          const res = await fetch(`${API_BASE}/v1/workspace/files`);
+          if (!res.ok) throw new Error('Workspace agent not available');
+          const data = await res.json();
+          if (!cancelled && data.files && data.files.length > 0) {
+            const grouped = {};
+            for (const file of data.files) {
+              const folder = file.folder || 'Uncategorized';
+              if (!grouped[folder]) grouped[folder] = { path: `${driveRoot}${folder}/`, files: [] };
+              grouped[folder].files.push({
+                name: file.name,
+                type: file.type || 'doc',
+                owner: file.owner || 'Unknown',
+                modified: file.modified || '',
+                agent: file.agent || false,
+                url: file.url,
+              });
+            }
+            if (Object.keys(grouped).length > 0) {
+              setFolders(grouped);
+              setExpandedFolders(new Set(Object.keys(grouped)));
+              setSelectedFolder(Object.keys(grouped)[0]);
+              setLiveMode(true);
+            }
           }
-          if (Object.keys(grouped).length > 0) {
-            setFolders(grouped);
-            setExpandedFolders(new Set(Object.keys(grouped)));
-            setSelectedFolder(Object.keys(grouped)[0]);
-            setLiveMode(true);
-          }
+        } catch {
+          // Silently fall back to demo data
         }
-      } catch {
-        // Silently fall back to demo data
       }
+      if (!cancelled) setLoading(false);
     }
     fetchFiles();
     return () => { cancelled = true; };
-  }, [isConstruction]);
+  }, [isConstruction, isVenture]);
 
   const refreshFiles = async () => {
     setLoading(true);
