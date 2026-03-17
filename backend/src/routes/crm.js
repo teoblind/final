@@ -101,6 +101,18 @@ router.post('/setup-sheet', async (req, res) => {
     const tenantId = req.resolvedTenant?.id || 'default';
     const tenant = req.resolvedTenant;
     const userEmail = req.user?.email;
+    const { confirm_replace } = req.body || {};
+
+    // If a sheet already exists, require explicit confirmation to replace
+    const existingSheetId = getKeyVaultValue(tenantId, 'crm', 'sheet_id');
+    if (existingSheetId && !confirm_replace) {
+      return res.json({
+        needs_confirmation: true,
+        existing_sheet_id: existingSheetId,
+        existing_sheet_url: `https://docs.google.com/spreadsheets/d/${existingSheetId}/edit`,
+        message: 'A contact sheet is already connected to your dashboard. Do you want to replace it with a new one?',
+      });
+    }
 
     const refreshToken = getRefreshToken(tenantId);
     if (!refreshToken) {

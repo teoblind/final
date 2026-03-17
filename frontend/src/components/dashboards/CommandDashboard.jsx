@@ -904,11 +904,20 @@ export default function CommandDashboard({ onNavigate }) {
                       try {
                         let token = null;
                         try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); token = s?.tokens?.accessToken; } catch {}
-                        const res = await fetch(`${API_BASE}/v1/crm/setup-sheet`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                        });
-                        const data = await res.json();
+                        const doSetup = async (confirmReplace = false) => {
+                          const res = await fetch(`${API_BASE}/v1/crm/setup-sheet`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                            body: JSON.stringify(confirmReplace ? { confirm_replace: true } : {}),
+                          });
+                          return res.json();
+                        };
+                        let data = await doSetup();
+                        if (data.needs_confirmation) {
+                          const yes = window.confirm('A contact sheet is already connected to your dashboard. Replace it with a new one?');
+                          if (!yes) { setCrmLoading(false); return; }
+                          data = await doSetup(true);
+                        }
                         if (data.success) {
                           setCrmData({ rows: [], source: 'sheets', sheetUrl: data.sheetUrl, total: 0 });
                           showToast('Pipeline sheet created');
