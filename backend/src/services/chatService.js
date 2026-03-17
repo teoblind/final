@@ -28,6 +28,7 @@ function getAnthropic() {
 import { selectModel, estimateCost } from './modelRouter.js';
 import { searchKnowledge, getOpenActionItems } from './knowledgeProcessor.js';
 import { textToSpeech } from './elevenlabsService.js';
+import { queryClaudeAgent, isComplexQuery } from './claudeAgent.js';
 
 const MODEL = process.env.CHAT_MODEL || 'claude-sonnet-4-20250514';
 const MAX_HISTORY = 50; // max messages to include in context
@@ -2141,8 +2142,44 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     content: row.content,
   }));
 
-  // CLI route for Hivemind — bypass API, spawn claude -p instead
-  if (agentId === 'hivemind' && process.env.HIVEMIND_USE_CLI === 'true') {
+  // ─── Claude Code CLI route ─────────────────────────────────────────────
+  // Routes complex queries through `claude -p` (Max subscription, flat rate)
+  // instead of per-token API calls. Feature-flagged via CLAUDE_CLI_ENABLED=true.
+  // Simple queries stay on the API (Haiku/Sonnet, sub-second, cheap).
+  const cliAgents = ['sangha', 'hivemind', 'zhan', 'estimating'];
+  const cliEnabled = process.env.CLAUDE_CLI_ENABLED === 'true';
+  const agentConfig = getAgentConfig(agentId);
+  const forceApi = agentConfig.force_api === true;
+  const forceCli = agentConfig.force_cli === true;
+
+  if (cliEnabled && cliAgents.includes(agentId) && !forceApi && (forceCli || isComplexQuery(userContent))) {
+    try {
+      const historyForContext = messages.slice(0, -1);
+      const cliResult = await queryClaudeAgent({
+        tenantId,
+        agentId,
+        message: userContent,
+        history: historyForContext,
+        maxTurns: agentConfig.max_turns,
+      });
+
+      saveMessage(tenantId, agentId, userId, 'assistant', cliResult.response, {
+        model: 'claude-code-cli',
+        duration_ms: cliResult.durationMs,
+        timed_out: cliResult.timedOut || false,
+        route: 'cli',
+      }, threadId);
+
+      const audioUrl = await generateAudioIfEnabled(cliResult.response);
+      return { response: cliResult.response, audio_url: audioUrl };
+    } catch (error) {
+      console.error(`[ClaudeAgent] CLI error (agent=${agentId}, tenant=${tenantId}):`, error.message);
+      // Fall through to API route on CLI failure
+      console.log(`[ClaudeAgent] Falling back to API route`);
+    }
+  }
+  // Legacy hivemind CLI route (kept for backward compat)
+  else if (agentId === 'hivemind' && process.env.HIVEMIND_USE_CLI === 'true' && !cliEnabled) {
     try {
       const { queryHivemindCli } = await import('./hivemindCli.js');
       const historyForContext = messages.slice(0, -1);
