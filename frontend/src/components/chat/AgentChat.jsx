@@ -2086,6 +2086,9 @@ export default function AgentChat({ agentId = 'estimating' }) {
         });
       }
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Server error (${res.status})`);
+      }
       if (data.response) {
         const agentMsg = {
           id: Date.now() + 1,
@@ -2124,7 +2127,9 @@ export default function AgentChat({ agentId = 'estimating' }) {
         setMessages(prev => [...prev, {
           id: Date.now() + 1,
           role: 'agent',
-          content: `I'm having trouble connecting right now. Please try again in a moment.`,
+          content: err?.message === 'Unauthorized'
+            ? 'Session expired — please refresh the page and log in again.'
+            : `Error: ${err?.message || 'Connection failed. Please try again.'}`,
           error: true,
           time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         }]);
