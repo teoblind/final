@@ -34,16 +34,9 @@ wss.on("connection", async (ws, req) => {
     } else {
       console.log(`[VoiceRelay] OpenAI → Client: ${event.type}`);
       if (event.type === 'response.done') {
-        const resp = event.response;
-        console.log(`[VoiceRelay] Response status: ${resp?.status}, output items: ${resp?.output?.length || 0}, audio chunks: ${audioOutCount}`);
-        if (resp?.status === 'failed') {
-          console.log(`[VoiceRelay] FAILURE DETAILS: ${JSON.stringify(resp?.status_details)}`);
-        }
-        if (resp?.output?.length) {
-          resp.output.forEach((item, i) => {
-            console.log(`[VoiceRelay]   output[${i}]: type=${item.type}, role=${item.role}, status=${item.status}`);
-          });
-        }
+        // Dump full response (minus large audio data)
+        const dump = JSON.stringify(event, (k, v) => k === 'audio' || k === 'delta' ? '[audio]' : v);
+        console.log(`[VoiceRelay] RESPONSE.DONE: ${dump.slice(0, 2000)}`);
         audioOutCount = 0;
       }
       if (event.type === 'session.updated') {
