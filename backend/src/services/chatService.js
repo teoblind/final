@@ -339,6 +339,15 @@ const LEAD_ENGINE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'setup_crm_sheet',
+    description: 'Create a CRM pipeline Google Sheet for tracking deals. Sets up columns (Deal Name, Company, Stage, Value, Contact, Email, Notes, Updated) with stage dropdowns and connects it to the dashboard. Only one sheet can be active at a time.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ─── HubSpot CRM Tools (Sangha tenant only) ────────────────────────────────
@@ -1582,6 +1591,76 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
       const cfg = dbGetConfig2(tenantId);
       return cfg || { configured: false, message: 'No discovery config set up yet. Use update_discovery_config to configure.' };
     }
+    case 'setup_crm_sheet': {
+      const { getKeyVaultValue: kvGet, upsertKeyVaultEntry: kvSet, getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
+
+      // Check if one already exists
+      const existingId = kvGet(tenantId, 'crm', 'sheet_id');
+      if (existingId) {
+        return { already_exists: true, sheet_id: existingId, sheet_url: `https://docs.google.com/spreadsheets/d/${existingId}/edit`, message: 'A CRM pipeline sheet is already connected to the dashboard.' };
+      }
+
+      // Get OAuth token
+      const { google: googleapis } = await import('googleapis');
+      const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+      const csecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+      let rToken = kvGet(tenantId, 'google-docs', 'refresh_token');
+      if (!rToken) {
+        const eCfg = getEmailCfg(tenantId);
+        rToken = eCfg?.gmailRefreshToken;
+      }
+      if (!cid || !csecret || !rToken) {
+        return { error: 'No Google account connected. Connect Google Docs & Drive in Settings first.' };
+      }
+
+      const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
+      oauth.setCredentials({ refresh_token: rToken });
+      const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
+
+      const STAGES = ['Discovery', 'Qualification', 'Proposal', 'Negotiation', 'Contract Sent', 'Closed Won'];
+      // Get tenant name for sheet title
+      const tenantRow = db.prepare('SELECT name FROM tenants WHERE id = ?').get(tenantId);
+      const companyName = tenantRow?.name || 'Company';
+
+      const createRes = await sheets.spreadsheets.create({
+        requestBody: {
+          properties: { title: `${companyName} — Deal Pipeline` },
+          sheets: [{
+            properties: { title: 'Pipeline', gridProperties: { frozenRowCount: 1 } },
+            data: [{
+              startRow: 0, startColumn: 0,
+              rowData: [{
+                values: ['Deal Name', 'Company', 'Stage', 'Value ($)', 'Contact', 'Email', 'Notes', 'Updated'].map(h => ({
+                  userEnteredValue: { stringValue: h },
+                  userEnteredFormat: { textFormat: { bold: true, fontSize: 10 }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.93 } },
+                })),
+              }],
+            }],
+          }],
+        },
+      });
+
+      const newSheetId = createRes.data.spreadsheetId;
+      const sheetUrl = createRes.data.spreadsheetUrl;
+
+      // Stage dropdown validation
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: newSheetId,
+        requestBody: {
+          requests: [{
+            setDataValidation: {
+              range: { sheetId: 0, startRowIndex: 1, endRowIndex: 1000, startColumnIndex: 2, endColumnIndex: 3 },
+              rule: { condition: { type: 'ONE_OF_LIST', values: STAGES.map(s => ({ userEnteredValue: s })) }, showCustomUi: true, strict: false },
+            },
+          }],
+        },
+      });
+
+      // Store in key vault
+      kvSet({ tenantId, service: 'crm', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
+
+      return { success: true, sheet_id: newSheetId, sheet_url: sheetUrl, message: `Created "${companyName} — Deal Pipeline" and connected it to your dashboard.` };
+    }
     default:
       throw new Error(`Unknown lead engine tool: ${toolName}`);
   }
@@ -2067,8 +2146,9 @@ You also have access to the Lead Engine — an automated lead discovery and outr
 - Run a complete pipeline cycle: discover → enrich → outreach → follow-ups (run_full_cycle)
 - Update lead status, notes, or priority (update_lead)
 - View or modify discovery configuration — queries, schedule, sender, mode (get_discovery_config, update_discovery_config)
+- Create a CRM pipeline Google Sheet and connect it to the dashboard (setup_crm_sheet) — only one sheet active at a time
 
-When the user asks about leads, pipeline, outreach, or prospecting, use these tools. You can configure the entire discovery pipeline through chat — set search queries, enable nightly automation, change sender identity, etc.`;
+When the user asks about leads, pipeline, outreach, or prospecting, use these tools. You can configure the entire discovery pipeline through chat — set search queries, enable nightly automation, change sender identity, etc. If the user asks to set up a pipeline sheet or CRM, use setup_crm_sheet.`;
 
 const HUBSPOT_PROMPT_ADDON = `
 
@@ -2172,7 +2252,7 @@ const TOOL_CATEGORIES = {
   emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
   email: ['send_email', 'list_emails', 'read_email'],
   calendar: ['create_meeting'],
-  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config'],
+  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config', 'setup_crm_sheet'],
   knowledge: ['search_knowledge'],
   hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'],
   mining: ['generate_mine_specs'],
@@ -2475,6 +2555,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           remove_trusted_sender: () => `Remove trusted sender: ${toolInput.email}`,
           workspace_create_doc: () => `Create document: "${toolInput.title || 'untitled'}"`,
           workspace_create_sheet: () => `Create spreadsheet: "${toolInput.title || 'untitled'}"`,
+          setup_crm_sheet: () => 'Create CRM pipeline sheet and connect to dashboard',
           workspace_create_slides: () => `Create presentation: "${toolInput.title || 'untitled'}"`,
         };
         const descFn = actionDescriptions[toolName];
