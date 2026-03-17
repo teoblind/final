@@ -1129,22 +1129,22 @@ async function callGwsTool(toolName, toolInput, tenantId) {
 
   switch (toolName) {
     case 'gws_gmail_search':
-      return await gws.gmailSearch(toolInput.query, Math.min(toolInput.max_results || 10, 20));
+      return await gws.gmailSearch(toolInput.query, Math.min(toolInput.max_results || 10, 20), tenantId);
 
     case 'gws_gmail_read':
-      return await gws.gmailRead(toolInput.message_id);
+      return await gws.gmailRead(toolInput.message_id, tenantId);
 
     case 'gws_calendar_events':
-      return await gws.calendarListEvents('primary', toolInput.max_results || 10, toolInput.time_min || null);
+      return await gws.calendarListEvents('primary', toolInput.max_results || 10, toolInput.time_min || null, tenantId);
 
     case 'gws_drive_search':
-      return await gws.driveSearch(toolInput.query, toolInput.max_results || 10);
+      return await gws.driveSearch(toolInput.query, toolInput.max_results || 10, tenantId);
 
     case 'gws_sheets_read':
-      return await gws.sheetsRead(toolInput.spreadsheet_id, toolInput.range);
+      return await gws.sheetsRead(toolInput.spreadsheet_id, toolInput.range, tenantId);
 
     case 'gws_sheets_append':
-      return await gws.sheetsAppend(toolInput.spreadsheet_id, toolInput.range, toolInput.values);
+      return await gws.sheetsAppend(toolInput.spreadsheet_id, toolInput.range, toolInput.values, tenantId);
 
     case 'gws_workspace_command': {
       if (!ALLOWED_SERVICES.has(toolInput.service)) {
@@ -1153,7 +1153,7 @@ async function callGwsTool(toolName, toolInput, tenantId) {
       const args = [toolInput.service, toolInput.resource, toolInput.method];
       if (toolInput.params) args.push('--params', JSON.stringify(toolInput.params));
       if (toolInput.body) args.push('--json', JSON.stringify(toolInput.body));
-      return await gws.execGws(args);
+      return await gws.execGws(args, tenantId);
     }
 
     default:
