@@ -297,7 +297,7 @@ function UpcomingMeetingsPanel() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {isInvited ? (
+                  {event.meetLink && (isInvited ? (
                     <span className="px-2 py-1 rounded-md text-[10px] font-medium text-terminal-muted">Invited</span>
                   ) : (
                     <button
@@ -307,7 +307,7 @@ function UpcomingMeetingsPanel() {
                     >
                       {inviting === event.id ? '...' : 'Invite Coppice'}
                     </button>
-                  )}
+                  ))}
                   {event.meetLink && (
                     <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
                       Join
