@@ -15,6 +15,16 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const DEFAULT_TIMEOUT_MS = parseInt(process.env.CLAUDE_AGENT_TIMEOUT_MS, 10) || 180_000; // 3 min
 const DEFAULT_MAX_TURNS = 25;
 
+// ─── Per-Tenant Claude Accounts ─────────────────────────────────────────────
+// Each tenant can have its own Claude Max subscription ($200/mo).
+// Auth is isolated via separate CLAUDE_CONFIG_DIR directories.
+// Setup per tenant: CLAUDE_CONFIG_DIR=/root/.claude-<tenant> claude login
+const TENANT_CLAUDE_CONFIG = {
+  'default':               '/root/.claude-sangha',
+  'dacp-construction-001': '/root/.claude-dacp',
+  'zhan-capital':          '/root/.claude-zhan',
+};
+
 // ─── Per-Tenant System Prompts ──────────────────────────────────────────────
 // Condensed versions — Claude Code adds its own base prompt, so we just
 // inject domain knowledge + tool guidance.
@@ -117,8 +127,14 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
       args.push('--model', config.cli_model);
     }
 
+    // Use tenant-specific Claude config dir for account isolation
+    const claudeConfigDir = TENANT_CLAUDE_CONFIG[resolvedTenantId] || TENANT_CLAUDE_CONFIG['zhan-capital'];
     const proc = spawn(CLAUDE_BIN, args, {
-      env: { ...process.env, LANG: 'en_US.UTF-8' },
+      env: {
+        ...process.env,
+        LANG: 'en_US.UTF-8',
+        CLAUDE_CONFIG_DIR: claudeConfigDir,
+      },
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: '/root/coppice',
     });
