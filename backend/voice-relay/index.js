@@ -79,10 +79,10 @@ wss.on("connection", async (ws, req) => {
     client.disconnect();
   });
 
-  // Connect to OpenAI Realtime API
+  // Connect to OpenAI Realtime API (bypass SDK's hardcoded model)
   try {
     console.log('[VoiceRelay] Connecting to OpenAI Realtime API...');
-    await client.connect();
+    await client.realtime.connect({ model: 'gpt-4o-realtime-preview' });
     console.log('[VoiceRelay] Connected to OpenAI!');
 
     // Wait for session to be ready
