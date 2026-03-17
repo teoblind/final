@@ -3,9 +3,9 @@ import { Plus, Mail, FolderOpen, ArrowRight, Building2 } from 'lucide-react';
 import api from '../../lib/hooks/useApi';
 
 const STATUS_COLORS = {
-  active: { bg: '#4a7a4a', text: '#a8d8a8' },
-  pilot: { bg: '#7a6a3a', text: '#d8cca0' },
-  partner: { bg: '#3a5a7a', text: '#a0c0d8' },
+  active: { bg: '#e8f5ee', text: '#2a7a4a' },
+  pilot: { bg: '#fdf6e8', text: '#8a6a20' },
+  partner: { bg: '#e8eef5', text: '#2c5282' },
 };
 
 function StatusBadge({ status }) {
@@ -40,8 +40,8 @@ function CompanyCard({ company, onClick }) {
     <button
       onClick={onClick}
       style={{
-        background: '#1a1a1a',
-        border: '1px solid #222',
+        background: '#ffffff',
+        border: '1px solid #e8e6e1',
         borderRadius: 12,
         padding: 24,
         textAlign: 'left',
@@ -49,8 +49,8 @@ function CompanyCard({ company, onClick }) {
         transition: 'border-color 0.15s',
         width: '100%',
       }}
-      onMouseOver={e => (e.currentTarget.style.borderColor = '#444')}
-      onMouseOut={e => (e.currentTarget.style.borderColor = '#222')}
+      onMouseOver={e => (e.currentTarget.style.borderColor = '#ccc')}
+      onMouseOut={e => (e.currentTarget.style.borderColor = '#e8e6e1')}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
         <div
@@ -58,8 +58,8 @@ function CompanyCard({ company, onClick }) {
             width: 44,
             height: 44,
             borderRadius: 10,
-            background: '#252525',
-            border: '1px solid #333',
+            background: '#f5f4f0',
+            border: '1px solid #e8e6e1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -72,18 +72,18 @@ function CompanyCard({ company, onClick }) {
           {initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#d8d4cc' }}>{company.name}</div>
-          <div style={{ fontSize: 12, color: '#555', marginTop: 2 }}>{company.type}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: '#1a1a1a' }}>{company.name}</div>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{company.type}</div>
         </div>
         <StatusBadge status={company.status} />
       </div>
 
       <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#555' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#888' }}>
           <Mail size={13} />
           <span>{company.email_accounts || 0} account{company.email_accounts !== 1 ? 's' : ''}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#555' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#888' }}>
           <FolderOpen size={13} />
           <span>{company.drive_folders || 0} folder{company.drive_folders !== 1 ? 's' : ''}</span>
         </div>
@@ -94,19 +94,19 @@ function CompanyCard({ company, onClick }) {
           style={{
             marginTop: 14,
             paddingTop: 12,
-            borderTop: '1px solid #222',
+            borderTop: '1px solid #e8e6e1',
             display: 'flex',
             gap: 20,
             fontSize: 12,
           }}
         >
           <div>
-            <span style={{ color: '#3a3a3a' }}>Sent (7d) </span>
-            <span style={{ color: '#d8d4cc', fontWeight: 600 }}>{company.emails_sent_7d}</span>
+            <span style={{ color: '#888' }}>Sent (7d) </span>
+            <span style={{ color: '#1a1a1a', fontWeight: 600 }}>{company.emails_sent_7d}</span>
           </div>
           <div>
-            <span style={{ color: '#3a3a3a' }}>Received (7d) </span>
-            <span style={{ color: '#d8d4cc', fontWeight: 600 }}>{company.emails_received_7d}</span>
+            <span style={{ color: '#888' }}>Received (7d) </span>
+            <span style={{ color: '#1a1a1a', fontWeight: 600 }}>{company.emails_received_7d}</span>
           </div>
         </div>
       )}
@@ -118,7 +118,7 @@ function CompanyCard({ company, onClick }) {
           alignItems: 'center',
           gap: 6,
           fontSize: 12,
-          color: '#555',
+          color: '#888',
         }}
       >
         <span>View details</span>
@@ -134,7 +134,7 @@ function AddCompanyCard({ onClick }) {
       onClick={onClick}
       style={{
         background: 'transparent',
-        border: '2px dashed #2a2a2a',
+        border: '2px dashed #d8d6d0',
         borderRadius: 12,
         padding: 24,
         cursor: 'pointer',
@@ -146,25 +146,25 @@ function AddCompanyCard({ onClick }) {
         transition: 'border-color 0.15s',
         width: '100%',
       }}
-      onMouseOver={e => (e.currentTarget.style.borderColor = '#444')}
-      onMouseOut={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+      onMouseOver={e => (e.currentTarget.style.borderColor = '#aaa')}
+      onMouseOut={e => (e.currentTarget.style.borderColor = '#d8d6d0')}
     >
       <div
         style={{
           width: 44,
           height: 44,
           borderRadius: 10,
-          background: '#1a1a1a',
-          border: '1px solid #333',
+          background: '#f5f4f0',
+          border: '1px solid #e8e6e1',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           marginBottom: 12,
         }}
       >
-        <Plus size={20} color="#555" />
+        <Plus size={20} color="#aaa" />
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Add Company</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: '#aaa' }}>Add Company</div>
     </button>
   );
 }
@@ -197,20 +197,21 @@ function AddCompanyModal({ onClose, onSubmit }) {
         onClick={e => e.stopPropagation()}
         onSubmit={handleSubmit}
         style={{
-          background: '#1a1a1a',
-          border: '1px solid #333',
+          background: '#ffffff',
+          border: '1px solid #e8e6e1',
           borderRadius: 14,
           padding: 28,
           width: 420,
           maxWidth: '90vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
         }}
       >
-        <h3 style={{ color: '#d8d4cc', fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
+        <h3 style={{ color: '#1a1a1a', fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
           Add Portfolio Company
         </h3>
 
         <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 12, color: '#555', marginBottom: 6 }}>
+          <label style={{ display: 'block', fontSize: 12, color: '#888', marginBottom: 6 }}>
             Company Name *
           </label>
           <input
@@ -220,11 +221,11 @@ function AddCompanyModal({ onClose, onSubmit }) {
             autoFocus
             style={{
               width: '100%',
-              background: '#141414',
-              border: '1px solid #333',
+              background: '#fafaf8',
+              border: '1px solid #e8e6e1',
               borderRadius: 8,
               padding: '10px 12px',
-              color: '#d8d4cc',
+              color: '#1a1a1a',
               fontSize: 13,
               outline: 'none',
               boxSizing: 'border-box',
@@ -233,7 +234,7 @@ function AddCompanyModal({ onClose, onSubmit }) {
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 12, color: '#555', marginBottom: 6 }}>
+          <label style={{ display: 'block', fontSize: 12, color: '#888', marginBottom: 6 }}>
             Type
           </label>
           <input
@@ -242,11 +243,11 @@ function AddCompanyModal({ onClose, onSubmit }) {
             placeholder="e.g. AI SaaS, EV Infrastructure"
             style={{
               width: '100%',
-              background: '#141414',
-              border: '1px solid #333',
+              background: '#fafaf8',
+              border: '1px solid #e8e6e1',
               borderRadius: 8,
               padding: '10px 12px',
-              color: '#d8d4cc',
+              color: '#1a1a1a',
               fontSize: 13,
               outline: 'none',
               boxSizing: 'border-box',
@@ -255,7 +256,7 @@ function AddCompanyModal({ onClose, onSubmit }) {
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 12, color: '#555', marginBottom: 6 }}>
+          <label style={{ display: 'block', fontSize: 12, color: '#888', marginBottom: 6 }}>
             Description
           </label>
           <textarea
@@ -265,11 +266,11 @@ function AddCompanyModal({ onClose, onSubmit }) {
             rows={3}
             style={{
               width: '100%',
-              background: '#141414',
-              border: '1px solid #333',
+              background: '#fafaf8',
+              border: '1px solid #e8e6e1',
               borderRadius: 8,
               padding: '10px 12px',
-              color: '#d8d4cc',
+              color: '#1a1a1a',
               fontSize: 13,
               outline: 'none',
               resize: 'vertical',
@@ -285,7 +286,7 @@ function AddCompanyModal({ onClose, onSubmit }) {
             style={{
               padding: '8px 18px',
               background: 'transparent',
-              border: '1px solid #333',
+              border: '1px solid #e8e6e1',
               borderRadius: 8,
               color: '#888',
               fontSize: 13,
@@ -299,10 +300,10 @@ function AddCompanyModal({ onClose, onSubmit }) {
             disabled={!name.trim()}
             style={{
               padding: '8px 18px',
-              background: name.trim() ? '#d8d4cc' : '#333',
+              background: name.trim() ? '#1a1a1a' : '#e8e6e1',
               border: 'none',
               borderRadius: 8,
-              color: name.trim() ? '#141414' : '#555',
+              color: name.trim() ? '#fff' : '#aaa',
               fontSize: 13,
               fontWeight: 600,
               cursor: name.trim() ? 'pointer' : 'default',
@@ -351,40 +352,31 @@ export default function PortfolioOverview({ onSelectCompany }) {
   };
 
   return (
-    <div style={{ background: '#141414', minHeight: '100vh', padding: 32 }}>
+    <div style={{ padding: '24px 32px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-          <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#d8d4cc', margin: 0 }}>
-              Portfolio Companies
-            </h1>
-            <p style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
-              {companies.length} compan{companies.length !== 1 ? 'ies' : 'y'} in portfolio
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Building2 size={16} color="#555" />
-            <span style={{ fontSize: 12, color: '#555' }}>Zhan Capital</span>
-          </div>
+        {/* Subheader */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <p style={{ fontSize: 13, color: '#888', margin: 0 }}>
+            {companies.length} compan{companies.length !== 1 ? 'ies' : 'y'} in portfolio
+          </p>
         </div>
 
         {/* Grid */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 60, color: '#555' }}>
+          <div style={{ textAlign: 'center', padding: 60, color: '#888' }}>
             <div className="spinner" style={{ width: 32, height: 32, margin: '0 auto 12px' }} />
             <p style={{ fontSize: 13 }}>Loading portfolio...</p>
           </div>
         ) : error ? (
-          <div style={{ textAlign: 'center', padding: 60, color: '#555' }}>
+          <div style={{ textAlign: 'center', padding: 60, color: '#888' }}>
             <p style={{ fontSize: 13 }}>Error: {error}</p>
             <button
               onClick={fetchCompanies}
               style={{
                 marginTop: 12,
                 padding: '6px 16px',
-                background: '#1a1a1a',
-                border: '1px solid #333',
+                background: '#f5f4f0',
+                border: '1px solid #e8e6e1',
                 borderRadius: 8,
                 color: '#888',
                 fontSize: 12,
