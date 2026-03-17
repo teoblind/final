@@ -17,6 +17,7 @@ import {
 } from '../services/knowledgeProcessor.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
 import { insertActivity, getCurrentTenantId, getTenantDb } from '../cache/database.js';
+import { authenticate } from '../middleware/auth.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -30,6 +31,7 @@ const db = new Proxy({}, {
 });
 
 const router = express.Router();
+router.use(authenticate);
 
 function resolveIds(req) {
   const tenantId = req.resolvedTenant?.id || 'default';

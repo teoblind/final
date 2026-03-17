@@ -12,8 +12,10 @@ import {
   markAllNotificationsRead,
   dismissNotification,
 } from '../cache/database.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 /** GET / — Get notifications */
 router.get('/', (req, res) => {

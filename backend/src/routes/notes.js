@@ -1,8 +1,10 @@
 import express from 'express';
 import { getNotes, addNote, updateNote, deleteNote } from '../cache/database.js';
 import db from '../cache/database.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 // Panels for note association
 const PANELS = [

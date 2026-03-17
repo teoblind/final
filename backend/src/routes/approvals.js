@@ -9,11 +9,15 @@
  */
 
 import express from 'express';
+import { authenticate } from '../middleware/auth.js';
 import db from '../cache/database.js';
 import { insertActivity } from '../cache/database.js';
 import { sendEstimateEmail, sendEmail } from '../services/emailService.js';
 
 const router = express.Router();
+
+// All approval routes require authentication
+router.use(authenticate);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -21,7 +25,7 @@ const router = express.Router();
 
 function resolveIds(req) {
   const tenantId = req.resolvedTenant?.id || 'default';
-  const userId = req.user?.id || 'anonymous';
+  const userId = req.user.id; // auth middleware guarantees req.user exists
   return { tenantId, userId };
 }
 

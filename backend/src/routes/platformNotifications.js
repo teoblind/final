@@ -11,8 +11,10 @@
  */
 import express from 'express';
 import db from '../cache/database.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 function resolveIds(req) {
   const tenantId = req.resolvedTenant?.id || 'default';

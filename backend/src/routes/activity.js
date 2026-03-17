@@ -7,9 +7,13 @@
  */
 
 import express from 'express';
+import { authenticate } from '../middleware/auth.js';
 import { getActivities, getActivityDetail, getActivityCount, getLeadStats, getFleetConfig, getPoolConfig } from '../cache/database.js';
 
 const router = express.Router();
+
+// All activity routes require authentication
+router.use(authenticate);
 
 function formatRelativeTime(dateStr) {
   if (!dateStr) return '';

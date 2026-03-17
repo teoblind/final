@@ -13,8 +13,10 @@ import {
   getAgentReports, getAgentReport,
   getAgentMode, updateAgentConfig,
 } from '../cache/database.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 // Lazy import runtime to avoid circular deps at module load time
 let _runtime = null;

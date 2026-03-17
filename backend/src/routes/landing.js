@@ -6,6 +6,7 @@
  */
 
 import express from 'express';
+import { authenticate } from '../middleware/auth.js';
 import { sendEmail } from '../services/emailService.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
 import { getTenantDb, getAllTenants } from '../cache/database.js';
@@ -68,7 +69,7 @@ router.post('/demo-request', (req, res) => {
 /**
  * GET /demo-request — List all demo requests (admin use)
  */
-router.get('/demo-request', (req, res) => {
+router.get('/demo-request', authenticate, (req, res) => {
   try {
     const db = getDb();
     const requests = db.prepare('SELECT * FROM demo_requests ORDER BY created_at DESC').all();

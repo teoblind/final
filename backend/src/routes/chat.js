@@ -11,7 +11,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { unlinkSync } from 'fs';
+import { unlinkSync, mkdirSync, copyFileSync, existsSync } from 'fs';
+import { authenticate } from '../middleware/auth.js';
 import { getMessages, getThreadMessages, chat, saveMessage } from '../services/chatService.js';
 import { sendEmail, sendEstimateEmail } from '../services/emailService.js';
 import { getOpusModel } from '../services/modelRouter.js';
@@ -25,12 +26,16 @@ import {
 const __filename_chat = fileURLToPath(import.meta.url);
 const __dirname_chat = dirname(__filename_chat);
 
+const UPLOADS_DIR = join(__dirname_chat, '../../data/uploads/');
 const upload = multer({
-  dest: join(__dirname_chat, '../../data/uploads/'),
-  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+  dest: UPLOADS_DIR,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
 });
 
 const router = express.Router();
+
+// All chat routes require authentication
+router.use(authenticate);
 
 // Valid agent IDs
 const VALID_AGENTS = new Set([
@@ -40,7 +45,7 @@ const VALID_AGENTS = new Set([
 
 function resolveIds(req) {
   const tenantId = req.resolvedTenant?.id || 'default';
-  const userId = req.user?.id || 'anonymous';
+  const userId = req.user.id; // auth middleware guarantees req.user exists
   const agentId = req.params.agentId;
   return { tenantId, userId, agentId };
 }
@@ -248,9 +253,10 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
 });
 
 /**
- * POST /:agentId/threads/:threadId/messages/upload — Send message with file attachment
+ * POST /:agentId/threads/:threadId/messages/upload — Send message with file attachments
+ * Supports single or multiple files. Files persist on disk for RC agent access.
  */
-router.post('/:agentId/threads/:threadId/messages/upload', upload.single('file'), async (req, res) => {
+router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files', 20), async (req, res) => {
   try {
     const { tenantId, userId, agentId } = resolveIds(req);
     const { threadId } = req.params;
@@ -267,38 +273,70 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.single('file')
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided' });
+    // Support both single 'file' and multiple 'files' field names
+    const files = req.files || (req.file ? [req.file] : []);
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'No files provided' });
     }
 
     const userText = req.body.content || '';
 
-    // Parse the uploaded file
-    const { parseFile } = await import('../services/fileParserService.js');
-    const parsed = await parseFile(req.file.path, req.file.mimetype, req.file.originalname);
+    // Persist files to tenant-specific directory for RC agent access
+    const persistDir = join(UPLOADS_DIR, tenantId, threadId);
+    mkdirSync(persistDir, { recursive: true });
 
-    let content;
-    if (parsed.isImage) {
-      // For images, prefix with metadata and let the user message be the prompt
-      content = userText
-        ? `[Uploaded image: ${req.file.originalname}]\n\n${userText}`
-        : `[Uploaded image: ${req.file.originalname}]\nPlease describe and analyze this image.`;
-    } else {
-      // For documents, inject extracted text as context
-      const fileContext = `[Uploaded file: ${req.file.originalname} (${parsed.type}${parsed.pageCount ? `, ${parsed.pageCount} pages` : ''})]\n\n--- FILE CONTENT ---\n${parsed.text}\n--- END FILE CONTENT ---`;
-      content = userText
-        ? `${fileContext}\n\n${userText}`
-        : `${fileContext}\n\nPlease summarize this document.`;
+    const { parseFile } = await import('../services/fileParserService.js');
+    const fileContexts = [];
+    const savedFiles = [];
+
+    for (const file of files) {
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._\-() ]/g, '_');
+      const persistPath = join(persistDir, safeName);
+      copyFileSync(file.path, persistPath);
+      try { unlinkSync(file.path); } catch {}
+
+      savedFiles.push({ name: file.originalname, path: persistPath, size: file.size });
+
+      const parsed = await parseFile(persistPath, file.mimetype, file.originalname);
+
+      if (parsed.isImage) {
+        fileContexts.push(`[Uploaded image: ${file.originalname}]`);
+      } else {
+        const preview = parsed.text.length > 8000
+          ? parsed.text.slice(0, 8000) + '\n[... truncated — full file available on disk]'
+          : parsed.text;
+        fileContexts.push(`[Uploaded file: ${file.originalname} (${parsed.type}${parsed.pageCount ? `, ${parsed.pageCount} pages` : ''})]\n--- FILE CONTENT ---\n${preview}\n--- END FILE CONTENT ---`);
+      }
     }
 
-    // Auto-title with filename if first message
+    // Build the prompt — include file paths so RC agent can access raw files
+    const fileList = savedFiles.map(f => `  - ${f.name} → ${f.path}`).join('\n');
+    const filesHeader = `[${savedFiles.length} file(s) uploaded — saved to disk for direct access]\n${fileList}\n\n`;
+    const allFileContexts = fileContexts.join('\n\n');
+
+    let content;
+    if (userText) {
+      content = `${filesHeader}${allFileContexts}\n\n${userText}`;
+    } else if (savedFiles.length === 1) {
+      content = `${filesHeader}${allFileContexts}\n\nPlease analyze this file.`;
+    } else {
+      content = `${filesHeader}${allFileContexts}\n\nPlease analyze these ${savedFiles.length} files.`;
+    }
+
     if (!thread.title) {
-      updateThreadTitle(threadId, `${req.file.originalname} — ${(userText || 'File upload').slice(0, 40)}`);
+      const titleName = savedFiles.length === 1
+        ? savedFiles[0].name
+        : `${savedFiles.length} files`;
+      updateThreadTitle(threadId, `${titleName} — ${(userText || 'Analysis').slice(0, 40)}`);
     }
 
     const result = await chat(tenantId, agentId, userId, content, threadId);
 
-    const response = { response: result.response, audio_url: result.audio_url || null, file: { name: req.file.originalname, type: parsed.type, pageCount: parsed.pageCount } };
+    const response = {
+      response: result.response,
+      audio_url: result.audio_url || null,
+      files: savedFiles.map(f => ({ name: f.name, size: f.size })),
+    };
     if (result.tool_used && result.tool_result) {
       const toolName = result.tool_used;
       const toolResult = result.tool_result;
@@ -316,11 +354,6 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.single('file')
   } catch (error) {
     console.error('File upload POST error:', error);
     res.status(500).json({ error: 'Failed to process uploaded file', details: error.message });
-  } finally {
-    // Clean up uploaded file
-    if (req.file?.path) {
-      try { unlinkSync(req.file.path); } catch { /* ignore */ }
-    }
   }
 });
 

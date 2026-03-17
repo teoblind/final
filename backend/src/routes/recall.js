@@ -28,8 +28,10 @@ import {
   removeBridge,
 } from '../services/recallAudioBridge.js';
 import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 /**
  * POST /join — Send a Recall bot to join a meeting

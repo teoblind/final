@@ -24,8 +24,10 @@ import {
   getAudioPath,
   getConversationalAgentUrl,
 } from '../services/elevenlabsService.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 const __filename_voice = fileURLToPath(import.meta.url);
 const __dirname_voice = dirname(__filename_voice);

@@ -8,8 +8,10 @@
 import express from 'express';
 import { google } from 'googleapis';
 import { getKeyVaultValue, upsertKeyVaultEntry, getTenantEmailConfig } from '../cache/database.js';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;

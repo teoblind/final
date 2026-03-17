@@ -5,8 +5,10 @@
  * running at localhost:3010. Forwards tenant context and auth headers.
  */
 import express from 'express';
+import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(authenticate);
 
 const WORKSPACE_URL = process.env.WORKSPACE_AGENT_URL || 'http://localhost:3010';
 const INTERNAL_SECRET = process.env.WORKSPACE_INTERNAL_SECRET || 'dev-secret';
