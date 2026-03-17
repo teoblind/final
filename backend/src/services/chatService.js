@@ -287,6 +287,58 @@ const LEAD_ENGINE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'run_full_cycle',
+    description: 'Run a complete lead engine cycle: discover new leads → enrich contacts → generate outreach emails → generate follow-ups. Returns results from each step.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'update_lead',
+    description: 'Update a lead\'s status, notes, or priority.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        lead_id: { type: 'integer', description: 'The lead ID to update' },
+        status: { type: 'string', description: 'New status', enum: ['new', 'enriched', 'contacted', 'responded', 'meeting', 'qualified', 'closed', 'declined'] },
+        notes: { type: 'string', description: 'Notes to add to the lead' },
+        priority_score: { type: 'number', description: 'Priority score (0-100)' },
+      },
+      required: ['lead_id'],
+    },
+  },
+  {
+    name: 'update_discovery_config',
+    description: 'Update lead discovery configuration — queries, regions, schedule, sender info, mode, enabled state. Use this to set up or modify the lead discovery pipeline.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        queries: { type: 'array', items: { type: 'string' }, description: 'Search queries for lead discovery (Perplexity)' },
+        regions: { type: 'array', items: { type: 'string' }, description: 'Target regions' },
+        queries_per_cycle: { type: 'integer', description: 'Queries to run per discovery cycle' },
+        max_emails_per_cycle: { type: 'integer', description: 'Max outreach emails per cycle' },
+        followup_delay_days: { type: 'integer', description: 'Days before sending follow-up' },
+        max_followups: { type: 'integer', description: 'Max follow-ups per lead' },
+        enabled: { type: 'boolean', description: 'Enable/disable the nightly discovery job' },
+        mode: { type: 'string', description: 'copilot (drafts need approval) or autonomous', enum: ['copilot', 'autonomous'] },
+        sender_name: { type: 'string', description: 'Outreach sender display name' },
+        sender_email: { type: 'string', description: 'Outreach sender email' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_discovery_config',
+    description: 'Get the current lead discovery configuration — queries, schedule, sender, mode, enabled state.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
 ];
 
 // ─── HubSpot CRM Tools (Sangha tenant only) ────────────────────────────────
@@ -1442,7 +1494,7 @@ async function callWorkspaceTool(toolName, toolInput, tenantId) {
     headers: {
       'Content-Type': 'application/json',
       'X-Tenant-Id': tenantId,
-      'X-Internal-Secret': 'dev-secret',
+      'X-Internal-Secret': process.env.WORKSPACE_INTERNAL_SECRET || 'dev-secret',
     },
     body: JSON.stringify(toolInput),
   });
@@ -2051,7 +2103,7 @@ const TOOL_CATEGORIES = {
   emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
   email: ['send_email', 'list_emails', 'read_email'],
   calendar: ['create_meeting'],
-  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue'],
+  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config'],
   knowledge: ['search_knowledge'],
   hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'],
   mining: ['generate_mine_specs'],

@@ -1146,7 +1146,7 @@ function seedTenantData(targetDb, tenantId) {
     const adminUser = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
     if (!adminUser) {
       const salt = bcryptPkg.genSaltSync(12);
-      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
+      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(24).toString('base64'), salt);
       targetDb.prepare(`
         INSERT OR IGNORE INTO users (id, email, name, password_hash, tenant_id, role, status)
         VALUES ('seed-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'default', 'sangha_admin', 'active')
@@ -1160,7 +1160,7 @@ function seedTenantData(targetDb, tenantId) {
     const dacpAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacp.localhost');
     if (!dacpAdmin) {
       const salt = bcryptPkg.genSaltSync(12);
-      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
+      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(24).toString('base64'), salt);
       targetDb.prepare(`
         INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
         VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
@@ -1174,7 +1174,7 @@ function seedTenantData(targetDb, tenantId) {
     const zhanAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
     if (!zhanAdmin) {
       const salt = bcryptPkg.genSaltSync(12);
-      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || 'admin123', salt);
+      const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(24).toString('base64'), salt);
       targetDb.prepare(`
         INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
         VALUES ('zhan-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, 'zhan-capital', 'owner', 'active')
