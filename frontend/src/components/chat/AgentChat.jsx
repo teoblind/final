@@ -11,7 +11,10 @@ function getAuthToken() {
     const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
     if (session?.tokens?.accessToken) return session.tokens.accessToken;
   } catch {}
-  return getAuthToken();
+  // Legacy DACP auth
+  const legacy = localStorage.getItem('auth_token');
+  if (legacy) return legacy;
+  return null;
 }
 
 // ─── Agent Definitions ──────────────────────────────────────────────────────────
