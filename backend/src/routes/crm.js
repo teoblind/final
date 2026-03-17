@@ -247,4 +247,57 @@ router.get('/calendar/events', async (req, res) => {
   }
 });
 
+// ─── POST /calendar/events/:id/invite — Invite Coppice agent to a meeting ───
+
+router.post('/calendar/events/:id/invite', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+
+    let refreshToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
+    if (!refreshToken) refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'No calendar token' });
+    }
+
+    const auth = makeAuth(refreshToken);
+    if (!auth) return res.status(500).json({ error: 'OAuth client error' });
+
+    // Get the tenant agent email
+    const emailConfig = getTenantEmailConfig(tenantId);
+    const agentEmail = emailConfig?.senderEmail;
+    if (!agentEmail) {
+      return res.status(400).json({ error: 'No agent email configured for this tenant' });
+    }
+
+    const calendar = google.calendar({ version: 'v3', auth });
+
+    // Fetch current event to get existing attendees
+    const event = await calendar.events.get({
+      calendarId: 'primary',
+      eventId: req.params.id,
+    });
+
+    const existingAttendees = event.data.attendees || [];
+    const alreadyInvited = existingAttendees.some(a => a.email === agentEmail);
+    if (alreadyInvited) {
+      return res.json({ success: true, alreadyInvited: true });
+    }
+
+    // Add agent as attendee
+    existingAttendees.push({ email: agentEmail, responseStatus: 'accepted' });
+
+    await calendar.events.patch({
+      calendarId: 'primary',
+      eventId: req.params.id,
+      sendUpdates: 'none',
+      requestBody: { attendees: existingAttendees },
+    });
+
+    res.json({ success: true, agentEmail });
+  } catch (error) {
+    console.error('Calendar invite error:', error);
+    res.status(500).json({ error: error.message || 'Failed to invite Coppice' });
+  }
+});
+
 export default router;

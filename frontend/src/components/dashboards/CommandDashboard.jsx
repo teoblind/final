@@ -195,6 +195,13 @@ function ActivityDetail({ detail, type }) {
 function UpcomingMeetingsPanel() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('dismissed_meetings') || '[]'); } catch { return []; }
+  });
+  const [invitedIds, setInvitedIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('invited_meetings') || '[]'); } catch { return []; }
+  });
+  const [inviting, setInviting] = useState(null);
 
   useEffect(() => {
     async function fetchEvents() {
@@ -208,9 +215,30 @@ function UpcomingMeetingsPanel() {
       setLoading(false);
     }
     fetchEvents();
-    const interval = setInterval(fetchEvents, 120000); // refresh every 2 min
+    const interval = setInterval(fetchEvents, 120000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleDismiss = (id) => {
+    const next = [...dismissed, id];
+    setDismissed(next);
+    localStorage.setItem('dismissed_meetings', JSON.stringify(next));
+  };
+
+  const handleInvite = async (id) => {
+    setInviting(id);
+    try {
+      const res = await fetch(`${API_BASE}/v1/crm/calendar/events/${id}/invite`, { method: 'POST' });
+      if (res.ok) {
+        const next = [...invitedIds, id];
+        setInvitedIds(next);
+        localStorage.setItem('invited_meetings', JSON.stringify(next));
+      }
+    } catch {}
+    setInviting(null);
+  };
+
+  const visibleEvents = events.filter(e => !dismissed.includes(e.id));
 
   const formatTime = (isoStr, allDay) => {
     if (!isoStr) return '';
@@ -238,7 +266,7 @@ function UpcomingMeetingsPanel() {
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
         <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Upcoming Meetings</span>
-        <span className="text-[11px] text-terminal-muted">{events.length} this week</span>
+        <span className="text-[11px] text-terminal-muted">{visibleEvents.length} this week</span>
       </div>
       <div>
         {loading ? (
@@ -246,33 +274,56 @@ function UpcomingMeetingsPanel() {
             <div className="spinner w-6 h-6 mx-auto mb-2" />
             <p className="text-[11px] text-terminal-muted">Loading calendar...</p>
           </div>
-        ) : events.length === 0 ? (
+        ) : visibleEvents.length === 0 ? (
           <EmptyState icon="calendar" title="No upcoming meetings" subtitle="Calendar events for the next 7 days will appear here." compact />
         ) : (
-          events.map((event) => (
-            <div key={event.id} className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-              <div className="shrink-0 text-center w-[46px]">
-                <div className="text-[10px] text-terminal-muted font-medium">{formatDate(event.start)}</div>
-                <div className="text-[12px] font-semibold text-terminal-text tabular-nums">{formatTime(event.start, event.allDay)}</div>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium text-terminal-text truncate">{event.title}</div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {event.attendees > 0 && (
-                    <span className="text-[10px] text-terminal-muted">{event.attendees} attendee{event.attendees !== 1 ? 's' : ''}</span>
+          visibleEvents.map((event) => {
+            const isInvited = invitedIds.includes(event.id);
+            return (
+              <div key={event.id} className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+                <div className="shrink-0 text-center w-[46px]">
+                  <div className="text-[10px] text-terminal-muted font-medium">{formatDate(event.start)}</div>
+                  <div className="text-[12px] font-semibold text-terminal-text tabular-nums">{formatTime(event.start, event.allDay)}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-terminal-text truncate">{event.title}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {event.attendees > 0 && (
+                      <span className="text-[10px] text-terminal-muted">{event.attendees} attendee{event.attendees !== 1 ? 's' : ''}</span>
+                    )}
+                    {event.location && (
+                      <span className="text-[10px] text-terminal-muted truncate max-w-[150px]">{event.location}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isInvited ? (
+                    <span className="px-2 py-1 rounded-md text-[10px] font-medium text-terminal-muted">Invited</span>
+                  ) : (
+                    <button
+                      onClick={() => handleInvite(event.id)}
+                      disabled={inviting === event.id}
+                      className="px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity disabled:opacity-50"
+                    >
+                      {inviting === event.id ? '...' : 'Invite Coppice'}
+                    </button>
                   )}
-                  {event.location && (
-                    <span className="text-[10px] text-terminal-muted truncate max-w-[150px]">{event.location}</span>
+                  {event.meetLink && (
+                    <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
+                      Join
+                    </a>
                   )}
+                  <button
+                    onClick={() => handleDismiss(event.id)}
+                    className="px-1.5 py-1 rounded-md text-[10px] text-terminal-muted hover:text-terminal-text hover:bg-[#eee] transition-colors"
+                    title="Hide from dashboard"
+                  >
+                    &times;
+                  </button>
                 </div>
               </div>
-              {event.meetLink && (
-                <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="shrink-0 px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
-                  Join
-                </a>
-              )}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
