@@ -2176,38 +2176,18 @@ You can generate legal documents from templates:
 The document is automatically saved to Google Drive in a "Legal Documents" folder. Customize parties, dates, duration, governing state, and additional terms.`;
 
 // ─── Database Operations ─────────────────────────────────────────────────────
+// NOTE: All queries use db.prepare() at call time (not cached at module load)
+// because `db` is a Proxy that resolves to the current tenant's DB via
+// AsyncLocalStorage. Caching statements at load time would bind them to
+// whichever tenant DB was active during import — causing FK violations
+// when a different tenant's thread_id doesn't exist in that DB.
 
-const stmts = {
-  insertMessage: db.prepare(`
-    INSERT INTO chat_messages (tenant_id, agent_id, user_id, role, content, metadata_json, thread_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `),
-  getHistory: db.prepare(`
-    SELECT id, role, content, metadata_json, created_at
-    FROM chat_messages
-    WHERE tenant_id = ? AND agent_id = ? AND user_id = ?
-      AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
-    ORDER BY created_at ASC
-    LIMIT ?
-  `),
-  getRecentHistory: db.prepare(`
-    SELECT id, role, content, metadata_json, created_at
-    FROM chat_messages
-    WHERE tenant_id = ? AND agent_id = ? AND user_id = ?
-      AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL))
-    ORDER BY created_at DESC
-    LIMIT ?
-  `),
-  getThreadHistory: db.prepare(`
-    SELECT id, role, content, metadata_json, created_at, user_id
-    FROM chat_messages
-    WHERE thread_id = ?
-    ORDER BY created_at ASC
-    LIMIT ?
-  `),
-  touchThread: db.prepare(`
-    UPDATE chat_threads SET updated_at = datetime('now') WHERE id = ?
-  `),
+const SQL = {
+  insertMessage: `INSERT INTO chat_messages (tenant_id, agent_id, user_id, role, content, metadata_json, thread_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  getHistory: `SELECT id, role, content, metadata_json, created_at FROM chat_messages WHERE tenant_id = ? AND agent_id = ? AND user_id = ? AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL)) ORDER BY created_at ASC LIMIT ?`,
+  getRecentHistory: `SELECT id, role, content, metadata_json, created_at FROM chat_messages WHERE tenant_id = ? AND agent_id = ? AND user_id = ? AND (thread_id = ? OR (thread_id IS NULL AND ? IS NULL)) ORDER BY created_at DESC LIMIT ?`,
+  getThreadHistory: `SELECT id, role, content, metadata_json, created_at, user_id FROM chat_messages WHERE thread_id = ? ORDER BY created_at ASC LIMIT ?`,
+  touchThread: `UPDATE chat_threads SET updated_at = datetime('now') WHERE id = ?`,
 };
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -2216,27 +2196,27 @@ const stmts = {
  * Get conversation history for an agent + user, optionally scoped to a thread.
  */
 export function getMessages(tenantId, agentId, userId, limit = 50, threadId = null) {
-  return stmts.getHistory.all(tenantId, agentId, userId, threadId, threadId, limit);
+  return db.prepare(SQL.getHistory).all(tenantId, agentId, userId, threadId, threadId, limit);
 }
 
 /**
  * Get messages for a thread (any user — for team/pinned threads).
  */
 export function getThreadMessages(threadId, limit = 200) {
-  return stmts.getThreadHistory.all(threadId, limit);
+  return db.prepare(SQL.getThreadHistory).all(threadId, limit);
 }
 
 /**
  * Save a message to the database.
  */
 export function saveMessage(tenantId, agentId, userId, role, content, metadata = null, threadId = null) {
-  const result = stmts.insertMessage.run(
+  const result = db.prepare(SQL.insertMessage).run(
     tenantId, agentId, userId, role, content,
     metadata ? JSON.stringify(metadata) : null,
     threadId
   );
   if (threadId) {
-    try { stmts.touchThread.run(threadId); } catch (e) { /* ignore */ }
+    try { db.prepare(SQL.touchThread).run(threadId); } catch (e) { /* ignore */ }
   }
   return result.lastInsertRowid;
 }
@@ -2334,7 +2314,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   saveMessage(tenantId, agentId, userId, 'user', userContent, null, threadId);
 
   // 2. Load conversation history (most recent N messages, in chronological order)
-  const rows = stmts.getRecentHistory.all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
+  const rows = db.prepare(SQL.getRecentHistory).all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
   const history = rows.reverse(); // reverse to chronological order
 
   // 3. Build messages array for Claude
