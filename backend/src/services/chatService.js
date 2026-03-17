@@ -1542,6 +1542,46 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
       const followups = dbGetFollowups(tenantId, delayDays);
       return { followups, count: followups.length, delayDays };
     }
+    case 'run_full_cycle':
+      return await le.runFullCycle(tenantId);
+    case 'update_lead': {
+      const { updateLead: dbUpdateLead, getLead: dbGetLead } = await import('../cache/database.js');
+      const updates = {};
+      if (toolInput.status) updates.status = toolInput.status;
+      if (toolInput.notes) updates.notes = toolInput.notes;
+      if (toolInput.priority_score != null) updates.priority_score = toolInput.priority_score;
+      dbUpdateLead(tenantId, toolInput.lead_id, updates);
+      const updated = dbGetLead(tenantId, toolInput.lead_id);
+      return { success: true, lead: updated };
+    }
+    case 'update_discovery_config': {
+      const { getLeadDiscoveryConfig: dbGetCfg, upsertLeadDiscoveryConfig: dbUpsertCfg } = await import('../cache/database.js');
+      const existing = dbGetCfg(tenantId) || {};
+      const merged = {
+        id: existing.id || 1,
+        tenantId,
+        queries: toolInput.queries || existing.queries || [],
+        regions: toolInput.regions || existing.regions || [],
+        currentPosition: existing.current_position || 0,
+        queriesPerCycle: toolInput.queries_per_cycle ?? existing.queries_per_cycle ?? 2,
+        maxEmailsPerCycle: toolInput.max_emails_per_cycle ?? existing.max_emails_per_cycle ?? 10,
+        followupDelayDays: toolInput.followup_delay_days ?? existing.followup_delay_days ?? 5,
+        maxFollowups: toolInput.max_followups ?? existing.max_followups ?? 2,
+        minSendIntervalSeconds: existing.min_send_interval_seconds || 300,
+        enabled: toolInput.enabled != null ? (toolInput.enabled ? 1 : 0) : (existing.enabled ?? 0),
+        mode: toolInput.mode || existing.mode || 'copilot',
+        senderName: toolInput.sender_name || existing.sender_name || '',
+        senderEmail: toolInput.sender_email || existing.sender_email || '',
+        emailSignature: existing.email_signature || '',
+      };
+      dbUpsertCfg(merged);
+      return { success: true, config: merged };
+    }
+    case 'get_discovery_config': {
+      const { getLeadDiscoveryConfig: dbGetConfig2 } = await import('../cache/database.js');
+      const cfg = dbGetConfig2(tenantId);
+      return cfg || { configured: false, message: 'No discovery config set up yet. Use update_discovery_config to configure.' };
+    }
     default:
       throw new Error(`Unknown lead engine tool: ${toolName}`);
   }
@@ -2375,7 +2415,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       // Read-only tools always execute. Action tools need approval in copilot mode.
       const SAFE_TOOLS = new Set([
         'search_knowledge', 'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
-        'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue',
+        'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
         'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
         'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
         'get_estimates', 'get_jobs', 'get_dacp_stats',

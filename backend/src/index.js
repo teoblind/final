@@ -170,6 +170,14 @@ try {
   console.warn('Company email stats job not started:', err.message);
 }
 
+// Start nightly lead discovery job (runs at 2 AM server time)
+try {
+  const { startLeadDiscoveryJob } = await import('./jobs/leadDiscovery.js');
+  startLeadDiscoveryJob({ runAtHour: 2, intervalHours: 24 });
+} catch (err) {
+  console.warn('Lead discovery job not started:', err.message);
+}
+
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
 // POST /api/v1/insurance/schedulers/start to start them
 // POST /api/v1/insurance/schedulers/stop to stop them
