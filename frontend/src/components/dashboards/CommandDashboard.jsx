@@ -4,22 +4,22 @@ import EmptyState from '../ui/EmptyState';
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 const AGENT_ICON_COLORS = {
-  outreach:       { letter: 'O', color: '#1a6b3c', bg: '#edf7f0' },
+  outreach:       { letter: 'O', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
   curtailment:    { letter: 'C', color: '#b8860b', bg: '#fdf6e8' },
   pool:           { letter: 'P', color: '#5b3a8c', bg: '#f3eef8' },
   meetings:       { letter: 'M', color: '#2c5282', bg: '#e8eef5' },
   reporting:      { letter: 'R', color: '#5b3a8c', bg: '#f3eef8' },
-  hivemind:       { letter: 'H', color: '#1a6b3c', bg: '#edf7f0' },
+  hivemind:       { letter: 'H', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
   monitoring:     { letter: 'M', color: '#b8860b', bg: '#fdf6e8' },
   email:          { letter: 'E', color: '#2c5282', bg: '#e8eef5' },
-  'lead-engine':  { letter: 'L', color: '#1a6b3c', bg: '#edf7f0' },
+  'lead-engine':  { letter: 'L', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
   knowledge:      { letter: 'K', color: '#2c5282', bg: '#e8eef5' },
-  coppice:        { letter: 'C', color: '#1a6b3c', bg: '#edf7f0' },
+  coppice:        { letter: 'C', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
   estimating:     { letter: 'E', color: '#b8860b', bg: '#fdf6e8' },
 };
 
 const INSIGHT_TYPE_STYLES = {
-  Recommendation: 'bg-[#edf7f0] text-[#1a6b3c]',
+  Recommendation: 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)]',
   Question: 'bg-[#e8eef5] text-[#2c5282]',
   Pattern: 'bg-[#f3eef8] text-[#5b3a8c]',
   Analysis: 'bg-[#fdf6e8] text-[#b8860b]',
@@ -28,7 +28,7 @@ const INSIGHT_TYPE_STYLES = {
   alert: 'bg-[#fdedf0] text-[#dc3545]',
   reminder: 'bg-[#fdf6e8] text-[#b8860b]',
   follow_up: 'bg-[#fdedf0] text-[#dc3545]',
-  insight: 'bg-[#edf7f0] text-[#1a6b3c]',
+  insight: 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)]',
 };
 
 // ─── Structural Defaults ─────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ const FOLLOWUPS = [];
 // ─── Indicator Colors ───────────────────────────────────────────────────────
 
 const DOT_COLORS = {
-  out: 'bg-terminal-green',
+  out: 'bg-[var(--t-ui-accent)]',
   in: 'bg-terminal-amber',
   meet: 'bg-terminal-text',
   doc: 'bg-terminal-muted',
@@ -73,19 +73,19 @@ const DOT_COLORS = {
 };
 
 const STATUS_STYLES = {
-  on: 'bg-[#2dd478] shadow-[0_0_4px_rgba(45,212,120,0.3)]',
+  on: 'bg-[var(--t-sidebar-accent)] shadow-[0_0_4px_rgba(var(--t-sidebar-accent-rgb),0.3)]',
   standby: 'bg-terminal-amber',
   off: 'bg-[#c5c5bc]',
 };
 
 const MODE_STYLES = {
-  Auto: 'bg-[#edf7f0] text-[#1a6b3c]',
+  Auto: 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)]',
   Copilot: 'bg-[#fdf6e8] text-terminal-amber',
   Off: 'bg-[#f5f4f0] text-terminal-muted',
 };
 
 const DELTA_COLORS = {
-  up: 'text-[#1a6b3c]',
+  up: 'text-[var(--t-ui-accent)]',
   warn: 'text-terminal-amber',
   flat: 'text-terminal-muted',
 };
@@ -97,7 +97,7 @@ const URGENCY_COLORS = {
 };
 
 const VALUE_COLORS = {
-  green: 'text-[#1a6b3c]',
+  green: 'text-[var(--t-ui-accent)]',
   warn: 'text-terminal-amber',
 };
 
@@ -277,7 +277,7 @@ export default function CommandDashboard({ onNavigate }) {
           type: item.type,
           agent: item.agentId,
           agentLabel: (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1),
-          icon: AGENT_ICON_COLORS[item.agentId] || { letter: 'A', color: '#1a6b3c', bg: '#edf7f0' },
+          icon: AGENT_ICON_COLORS[item.agentId] || { letter: 'A', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
           title: item.title,
           desc: item.description || '',
           time: formatRelativeTime(item.createdAt),
@@ -522,7 +522,7 @@ export default function CommandDashboard({ onNavigate }) {
         {(() => {
           const openCount = actionItems.filter(a => a.status !== 'completed').length;
           const ASSIGNEE_META = {
-            Spencer: { full: 'Spencer Marr', role: 'President', color: '#1a6b3c' },
+            Spencer: { full: 'Spencer Marr', role: 'President', color: 'var(--t-ui-accent)' },
             Mihir: { full: 'Mihir Bhangley', role: 'Finance', color: '#5b3a8c' },
             Colin: { full: 'Colin Peirce', role: 'Fundraising', color: '#2c5282' },
           };
@@ -578,7 +578,7 @@ export default function CommandDashboard({ onNavigate }) {
                           >
                             <div className={`w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-all ${
                               done
-                                ? 'bg-[#1a6b3c] border-[#1a6b3c]'
+                                ? 'bg-[var(--t-ui-accent)] border-[var(--t-ui-accent)]'
                                 : 'border-[#d1d1cb] group-hover:border-[#a0a098]'
                             }`}>
                               {done && (
@@ -634,7 +634,7 @@ export default function CommandDashboard({ onNavigate }) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-[#1a6b3c] text-white hover:opacity-90 transition-opacity">Approve</button>
+                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
                   <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
                 </div>
               </div>
@@ -675,7 +675,7 @@ export default function CommandDashboard({ onNavigate }) {
                         className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-opacity ${
                           action === 'Dismiss' || action === 'Snooze'
                             ? 'bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0]'
-                            : 'bg-[#1a6b3c] text-white hover:opacity-90'
+                            : 'bg-[var(--t-ui-accent)] text-white hover:opacity-90'
                         }`}
                       >
                         {action}
@@ -693,7 +693,7 @@ export default function CommandDashboard({ onNavigate }) {
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">HubSpot CRM</span>
             <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-terminal-green" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--t-ui-accent)]" />
               Live
             </span>
           </div>
@@ -719,7 +719,7 @@ export default function CommandDashboard({ onNavigate }) {
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Activity</span>
-              <span className="text-[9px] font-bold text-[#1a6b3c] bg-[#edf7f0] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">Live</span>
+              <span className="text-[9px] font-bold text-[var(--t-ui-accent)] bg-[var(--t-ui-accent-bg)] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">Live</span>
             </div>
             <span className="text-[11px] text-terminal-muted">All agents</span>
           </div>
@@ -790,7 +790,7 @@ export default function CommandDashboard({ onNavigate }) {
                 <span className="text-xs text-[#6b6b65] w-[100px] shrink-0">{row.label}</span>
                 <div className="flex-1 h-1.5 bg-[#f5f4f0] rounded-[3px] overflow-hidden">
                   <div
-                    className="h-full bg-terminal-green rounded-[3px] transition-all duration-700"
+                    className="h-full bg-[var(--t-ui-accent)] rounded-[3px] transition-all duration-700"
                     style={{ width: `${Math.max(row.pct, 1)}%` }}
                   />
                 </div>
@@ -847,8 +847,8 @@ export default function CommandDashboard({ onNavigate }) {
             <div className="px-7 pt-6 pb-5 border-b border-[#f0eeea] flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-2.5">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-[2px] rounded bg-[#edf7f0] text-[#1a6b3c] border border-[#d4edda]">
-                    <span className="w-[5px] h-[5px] rounded-full bg-[#1a6b3c]" />
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-[2px] rounded bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)]">
+                    <span className="w-[5px] h-[5px] rounded-full bg-[var(--t-ui-accent)]" />
                     {insightModal.agentLabel} · {insightModal.type}
                   </span>
                 </div>
@@ -870,13 +870,13 @@ export default function CommandDashboard({ onNavigate }) {
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => { setInsightModal(null); handleInsightAction(insightModal.id, 'Dismiss'); }}
-                  className="px-4 py-2 rounded-lg text-[12px] font-medium text-[#1a6b3c] border border-[#f0eeea] hover:border-[#1a6b3c]/30 hover:bg-[#edf7f0]/30 transition-all"
+                  className="px-4 py-2 rounded-lg text-[12px] font-medium text-[var(--t-ui-accent)] border border-[#f0eeea] hover:border-[var(--t-ui-accent-border)] hover:bg-[var(--t-ui-accent-bg)]/30 transition-all"
                 >
                   Dismiss
                 </button>
                 <button
                   onClick={() => setInsightModal(null)}
-                  className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-[#1a6b3c] text-white hover:bg-[#22884d] transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-colors flex items-center gap-1.5"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                   Got it

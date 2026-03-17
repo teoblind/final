@@ -82,6 +82,20 @@ function applyBranding(branding) {
   const root = document.documentElement.style;
   if (branding.primaryColor) {
     root.setProperty('--t-accent', branding.primaryColor);
-    root.setProperty('--t-sidebar', branding.primaryColor);
+    root.setProperty('--t-sidebar', branding.sidebarColor || branding.primaryColor);
+  }
+  // Monochrome tenants (e.g. Zhan Capital) get grey accents instead of green
+  if (branding.hideSanghaBranding) {
+    root.setProperty('--t-sidebar-accent', '#888888');
+    root.setProperty('--t-sidebar-accent-rgb', '136,136,136');
+    root.setProperty('--t-ui-accent', '#555555');
+    root.setProperty('--t-ui-accent-bg', '#f0f0f0');
+    root.setProperty('--t-ui-accent-border', '#e0e0e0');
+  } else {
+    root.setProperty('--t-sidebar-accent', '#2dd478');
+    root.setProperty('--t-sidebar-accent-rgb', '45,212,120');
+    root.setProperty('--t-ui-accent', '#1a6b3c');
+    root.setProperty('--t-ui-accent-bg', '#edf7f0');
+    root.setProperty('--t-ui-accent-border', '#c5e8d0');
   }
 }

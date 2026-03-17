@@ -9,6 +9,11 @@
   --t-text: #1a1a1a;
   --t-muted: #888888;
   --t-accent: #1a2e1a;
+  --t-sidebar-accent: #2dd478;
+  --t-sidebar-accent-rgb: 45, 212, 120;
+  --t-ui-accent: #1a6b3c;
+  --t-ui-accent-bg: #edf7f0;
+  --t-ui-accent-border: #c5e8d0;
   --t-red: #dc3545;
   --t-amber: #b8860b;
   --t-blue: #2c5282;

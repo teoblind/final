@@ -153,15 +153,19 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
                   <button
                     key={item.id}
                     onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
-                    className={`w-full flex items-center gap-2.5 mx-0 my-1.5 px-3 py-2.5 rounded-[10px] transition-all ${
-                      activeTab === item.id
-                        ? 'bg-[rgba(45,212,120,0.1)] border border-[rgba(45,212,120,0.15)]'
-                        : 'bg-[rgba(45,212,120,0.04)] border border-[rgba(45,212,120,0.08)] hover:bg-[rgba(45,212,120,0.08)]'
-                    }`}
+                    className={`w-full flex items-center gap-2.5 mx-0 my-1.5 px-3 py-2.5 rounded-[10px] transition-all border`}
+                    style={{
+                      backgroundColor: activeTab === item.id
+                        ? 'rgba(var(--t-sidebar-accent-rgb), 0.1)'
+                        : 'rgba(var(--t-sidebar-accent-rgb), 0.04)',
+                      borderColor: activeTab === item.id
+                        ? 'rgba(var(--t-sidebar-accent-rgb), 0.15)'
+                        : 'rgba(var(--t-sidebar-accent-rgb), 0.08)',
+                    }}
                   >
-                    <span className="w-2 h-2 rounded-full bg-[#2dd478] animate-pulse shrink-0" />
+                    <span className="w-2 h-2 rounded-full animate-pulse shrink-0" style={{ backgroundColor: 'var(--t-sidebar-accent)' }} />
                     <div className="text-left">
-                      <div className="text-[12px] font-semibold text-[#2dd478]">{item.label}</div>
+                      <div className="text-[12px] font-semibold" style={{ color: 'var(--t-sidebar-accent)' }}>{item.label}</div>
                       <div className="text-[10px] text-white/30">Hivemind — always on</div>
                     </div>
                   </button>
@@ -171,19 +175,23 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
                     onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
                     className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${
                       activeTab === item.id
-                        ? 'bg-[rgba(45,212,120,0.08)] text-[#2dd478]'
+                        ? ''
                         : 'text-white/45 hover:bg-white/[0.04] hover:text-white/85'
                     }`}
+                    style={activeTab === item.id ? {
+                      backgroundColor: 'rgba(var(--t-sidebar-accent-rgb), 0.08)',
+                      color: 'var(--t-sidebar-accent)',
+                    } : undefined}
                   >
                     <item.icon size={16} className={activeTab === item.id ? 'opacity-100' : 'opacity-50'} />
                     <span className="flex-1">{item.label}</span>
                     {item.live && (
-                      <span className="w-[5px] h-[5px] rounded-full bg-[#2dd478] animate-pulse" />
+                      <span className="w-[5px] h-[5px] rounded-full animate-pulse" style={{ backgroundColor: 'var(--t-sidebar-accent)' }} />
                     )}
                     {item.count != null && (
                       <span className={`text-[11px] font-semibold tabular-nums ${
-                        activeTab === item.id ? 'text-[#2dd478]' : 'text-white/25'
-                      }`}>{item.count}</span>
+                        activeTab !== item.id ? 'text-white/25' : ''
+                      }`} style={activeTab === item.id ? { color: 'var(--t-sidebar-accent)' } : undefined}>{item.count}</span>
                     )}
                   </button>
                 ))}
@@ -195,7 +203,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
         {/* User footer */}
         <div className="border-t border-white/[0.06] px-3.5 py-3.5">
           <div className="flex items-center gap-2.5 px-1.5 py-1 rounded-lg hover:bg-white/[0.04] cursor-pointer">
-            <div className="w-7 h-7 rounded-lg bg-terminal-green flex items-center justify-center text-[11px] font-bold text-white">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: 'var(--t-ui-accent)' }}>
               {user?.name?.split(' ').map(n => n[0]).join('').slice(0, 1).toUpperCase() || 'U'}
             </div>
             <div className="flex-1 min-w-0">
@@ -257,7 +265,7 @@ function AppContent() {
       start_url: window.location.origin + '/',
       display: 'standalone',
       background_color: '#fafaf8',
-      theme_color: isConstruction ? '#1e3a5f' : '#1a6b3c',
+      theme_color: isConstruction ? '#1e3a5f' : (tenant?.branding?.primaryColor || '#1a6b3c'),
       orientation: 'portrait',
       icons: [
         { src: '/coppice-logo.png', sizes: '192x192', type: 'image/png' },
@@ -642,7 +650,7 @@ function AppContent() {
                 {user?.role && (
                   <span className={`text-[9px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-full border ${
                     user.role === 'admin' || user.role === 'owner'
-                      ? 'bg-[#edf7f0] text-[#1a6b3c] border-[#d0e8d8]'
+                      ? 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border-[var(--t-ui-accent-border)]'
                       : user.role === 'operator'
                         ? 'bg-[#e8eef5] text-[#2c5282] border-[#c8d8ea]'
                         : 'bg-[#f5f4f0] text-[#888888] border-[#e5e5e0]'
