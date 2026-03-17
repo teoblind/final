@@ -36,6 +36,9 @@ wss.on("connection", async (ws, req) => {
       if (event.type === 'response.done') {
         const resp = event.response;
         console.log(`[VoiceRelay] Response status: ${resp?.status}, output items: ${resp?.output?.length || 0}, audio chunks: ${audioOutCount}`);
+        if (resp?.status === 'failed') {
+          console.log(`[VoiceRelay] FAILURE DETAILS: ${JSON.stringify(resp?.status_details)}`);
+        }
         if (resp?.output?.length) {
           resp.output.forEach((item, i) => {
             console.log(`[VoiceRelay]   output[${i}]: type=${item.type}, role=${item.role}, status=${item.status}`);
