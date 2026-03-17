@@ -222,6 +222,13 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
     const result = await chat(tenantId, agentId, userId, content.trim(), threadId);
 
     const response = { response: result.response, audio_url: result.audio_url || null };
+    if (result.approval_pending) {
+      response.approval_pending = true;
+      response.approval_id = result.approval_id;
+      response.tool_proposed = result.tool_proposed;
+      response.tool_input = result.tool_input;
+      response.action_description = result.action_description;
+    }
     if (result.tool_used && result.tool_result) {
       const toolName = result.tool_used;
       const toolResult = result.tool_result;
@@ -337,6 +344,13 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
       audio_url: result.audio_url || null,
       files: savedFiles.map(f => ({ name: f.name, size: f.size })),
     };
+    if (result.approval_pending) {
+      response.approval_pending = true;
+      response.approval_id = result.approval_id;
+      response.tool_proposed = result.tool_proposed;
+      response.tool_input = result.tool_input;
+      response.action_description = result.action_description;
+    }
     if (result.tool_used && result.tool_result) {
       const toolName = result.tool_used;
       const toolResult = result.tool_result;
@@ -516,6 +530,13 @@ router.post('/:agentId/messages', async (req, res) => {
 
     // Map tool results to frontend format
     const response = { response: result.response, audio_url: result.audio_url || null, threadId };
+    if (result.approval_pending) {
+      response.approval_pending = true;
+      response.approval_id = result.approval_id;
+      response.tool_proposed = result.tool_proposed;
+      response.tool_input = result.tool_input;
+      response.action_description = result.action_description;
+    }
     if (result.tool_used && result.tool_result) {
       const toolName = result.tool_used;
       const toolResult = result.tool_result;

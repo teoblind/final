@@ -2350,7 +2350,15 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Google Workspace CLI tools — hivemind + sangha + zhan
   const gwsAgents = ['hivemind', 'sangha', 'zhan'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + PROPRIETARY_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
+  const FORMATTING_RULES = `
+
+═══ FORMATTING RULES ═══
+- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.
+- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.
+- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".
+- When presenting data, use clean tables or simple lists — no decorative formatting.`;
+
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -2473,7 +2481,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         const actionDesc = descFn ? descFn() : `Execute tool: ${toolName}`;
 
         // Insert approval item
-        db.prepare(`
+        const approvalResult = db.prepare(`
           INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
           VALUES (?, ?, ?, ?, 'tool_action', ?, 'pending')
         `).run(
@@ -2482,9 +2490,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           `Agent wants to use "${toolName}" — awaiting your approval.`,
           JSON.stringify({ toolName, toolInput, toolUseId, agentId, tenantId, userId }),
         );
+        const approvalId = approvalResult.lastInsertRowid;
 
         // Save assistant response explaining the pending action
-        const copilotResponse = `I'd like to **${actionDesc.toLowerCase()}**, but I need your approval first. You can approve or reject this action from the Approvals queue.`;
+        const copilotResponse = `I'd like to **${actionDesc.toLowerCase()}**, but I need your approval first.`;
         saveMessage(tenantId, agentId, userId, 'assistant', copilotResponse, {
           model: completion.model,
           input_tokens: completion.usage?.input_tokens,
@@ -2494,7 +2503,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           tool_input: toolInput,
         }, threadId);
 
-        return { response: copilotResponse, approval_pending: true, tool_proposed: toolName };
+        return { response: copilotResponse, approval_pending: true, approval_id: Number(approvalId), tool_proposed: toolName, tool_input: toolInput, action_description: actionDesc };
       }
 
       if (agentMode === 'off') {
@@ -2564,19 +2573,20 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         // Copilot mode check for loop iterations too
         if (agentMode === 'copilot' && !SAFE_TOOLS.has(nextToolName)) {
           const actionDesc = `Execute tool: ${nextToolName}`;
-          db.prepare(`
+          const loopApprovalResult = db.prepare(`
             INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
             VALUES (?, ?, ?, ?, 'tool_action', ?, 'pending')
           `).run(tenantId, agentId, actionDesc, `Agent wants to use "${nextToolName}" — awaiting your approval.`,
             JSON.stringify({ toolName: nextToolName, toolInput: nextToolInput, toolUseId: nextToolUseId, agentId, tenantId, userId }));
+          const loopApprovalId = loopApprovalResult.lastInsertRowid;
           // Stop the loop — can't proceed without approval
           const pauseText = currentResponse.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
-          const copilotPause = (pauseText ? pauseText + '\n\n' : '') + `I need your approval to **${actionDesc.toLowerCase()}** before I can continue. Check the Approvals queue.`;
+          const copilotPause = (pauseText ? pauseText + '\n\n' : '') + `I need your approval to **${actionDesc.toLowerCase()}** before I can continue.`;
           saveMessage(tenantId, agentId, userId, 'assistant', copilotPause, {
             model: currentResponse.model, input_tokens: totalInputTokens, output_tokens: totalOutputTokens,
             stop_reason: 'copilot_approval', tool_proposed: nextToolName,
           }, threadId);
-          return { response: copilotPause, approval_pending: true, tool_proposed: nextToolName, all_tool_results: allToolResults };
+          return { response: copilotPause, approval_pending: true, approval_id: Number(loopApprovalId), tool_proposed: nextToolName, tool_input: nextToolInput, action_description: actionDesc, all_tool_results: allToolResults };
         }
 
         try {

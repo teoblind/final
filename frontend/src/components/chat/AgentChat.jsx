@@ -924,8 +924,67 @@ function CallPanel({ agentDef, onClose }) {
   );
 }
 
+// ─── Copilot Approval Card ──────────────────────────────────────────────────────
+function CopilotApprovalCard({ msg, accentColor, onApproval }) {
+  const [status, setStatus] = useState(null); // null | 'approved' | 'rejected' | 'loading'
+
+  const handleAction = async (action) => {
+    setStatus('loading');
+    try {
+      await onApproval(msg.approval_id, action);
+      setStatus(action === 'approve' ? 'approved' : 'rejected');
+    } catch {
+      setStatus(null);
+    }
+  };
+
+  if (status === 'approved') {
+    return (
+      <div className="mt-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-[12px] text-green-700 font-medium">
+        Approved — executing now
+      </div>
+    );
+  }
+  if (status === 'rejected') {
+    return (
+      <div className="mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-600 font-medium">
+        Rejected
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2.5 border border-[#e8e6e1] rounded-[10px] overflow-hidden bg-terminal-panel">
+      <div className="px-3.5 py-2.5 border-b border-[#f0eeea] flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+        <span className="text-[11px] font-semibold text-[#6b6b65] uppercase tracking-[0.5px]">Approval Required</span>
+      </div>
+      <div className="px-3.5 py-2.5 text-[12px] text-[#6b6b65]">
+        <span className="font-mono text-[11px] text-[#9a9a92]">{msg.tool_proposed}</span>
+      </div>
+      <div className="px-3.5 pb-3 flex gap-2">
+        <button
+          onClick={() => handleAction('approve')}
+          disabled={status === 'loading'}
+          className="px-4 py-[6px] rounded-lg text-[11px] font-semibold text-white transition-colors disabled:opacity-50"
+          style={{ backgroundColor: accentColor }}
+        >
+          {status === 'loading' ? 'Processing...' : 'Approve'}
+        </button>
+        <button
+          onClick={() => handleAction('reject')}
+          disabled={status === 'loading'}
+          className="px-4 py-[6px] rounded-lg text-[11px] font-semibold bg-terminal-panel text-[#6b6b65] border-[1.5px] border-[#e8e6e1] hover:bg-[#f5f4f0] transition-colors disabled:opacity-50"
+        >
+          Reject
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Chat Message ───────────────────────────────────────────────────────────────
-function ChatMessage({ msg, agentDef, onAction }) {
+function ChatMessage({ msg, agentDef, onAction, onApproval }) {
   const accent = agentDef?.accentColor || '#1e3a5f';
 
   if (msg.type === 'invoke') {
@@ -965,6 +1024,11 @@ function ChatMessage({ msg, agentDef, onAction }) {
           >
             {formatContent(msg.content)}
           </div>
+        )}
+
+        {/* Copilot approval card */}
+        {msg.approval_pending && msg.approval_id && (
+          <CopilotApprovalCard msg={msg} accentColor={accent} onApproval={onApproval} />
         )}
 
         {/* Attached files */}
@@ -1905,6 +1969,20 @@ export default function AgentChat({ agentId = 'estimating' }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Handle copilot approval/rejection inline in chat
+  const handleApproval = useCallback(async (approvalId, action) => {
+    const token = getAuthToken();
+    const res = await fetch(`${API_BASE}/v1/approvals/${approvalId}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed');
+    }
+    return res.json();
+  }, []);
+
   // Handle action button clicks in chat messages (Approve & Send, etc.)
   const handleChatAction = async (actionLabel, msg, variant) => {
     // quick_reply: send the button label as a new user message
@@ -2103,6 +2181,12 @@ export default function AgentChat({ agentId = 'estimating' }) {
         if (data.dataCard) agentMsg.dataCard = data.dataCard;
         if (data.afterContent) agentMsg.afterContent = data.afterContent;
         if (data.actions) agentMsg.actions = data.actions;
+        if (data.approval_pending) {
+          agentMsg.approval_pending = true;
+          agentMsg.approval_id = data.approval_id;
+          agentMsg.tool_proposed = data.tool_proposed;
+          agentMsg.action_description = data.action_description;
+        }
         if (data.audio_url) {
           agentMsg.audio_url = data.audio_url;
           if (autoVoiceRef.current) {
@@ -2242,7 +2326,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
             {messages.map(msg => (
-              <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} />
+              <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} />
             ))}
 
             {/* Typing indicator */}

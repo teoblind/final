@@ -68,7 +68,7 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'title, type, and agent_id are required' });
     }
 
-    const validTypes = ['email_draft', 'curtailment', 'estimate', 'report', 'config_change', 'document'];
+    const validTypes = ['email_draft', 'curtailment', 'estimate', 'report', 'config_change', 'document', 'tool_action', 'meeting_instruction'];
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: `Invalid type. Must be one of: ${validTypes.join(', ')}` });
     }

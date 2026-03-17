@@ -14,6 +14,8 @@ build/
 backend/data/cache.db
 backend/data/*.db
 *.db
+*.db-wal
+*.db-shm
 
 # Logs
 *.log
