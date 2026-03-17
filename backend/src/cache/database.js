@@ -1091,6 +1091,21 @@ function seedTenantsInSystemDb() {
       'default'
     );
   }
+
+  // Backfill settings_json for Zhan Capital — ensure industry: 'venture' is set
+  const existingZhan = systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('zhan-capital');
+  if (existingZhan) {
+    const zhanSettings = existingZhan.settings_json ? JSON.parse(existingZhan.settings_json) : {};
+    if (!zhanSettings.industry) {
+      zhanSettings.industry = 'venture';
+      zhanSettings.show_portfolio = true;
+      systemDb.prepare('UPDATE tenants SET settings_json = ? WHERE id = ?').run(
+        JSON.stringify(zhanSettings),
+        'zhan-capital'
+      );
+      console.log('[DB] Backfilled Zhan Capital settings with industry: venture');
+    }
+  }
 }
 
 function seedTenantData(targetDb, tenantId) {
