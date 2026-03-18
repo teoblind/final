@@ -728,7 +728,37 @@ async function pollSingleInbox(gmail, tenantId, label) {
           continue;
         }
 
+        // If prior processing was cc-observe only, don't treat new messages as follow-ups
+        // to an active conversation — still apply CC detection fresh.
+        if (priorThread.pipeline === 'cc-observe' || priorThread.pipeline === 'follow-up-cc-observe') {
+          console.log(`[GmailPoll] [${label}] Prior thread was CC-observe only — re-evaluating from scratch`);
+          // Fall through to the main CC-detection + first-message processing below
+          // (don't enter the follow-up handler)
+        } else {
+
         console.log(`[GmailPoll] [${label}] Follow-up in thread (pipeline: ${priorThread.pipeline}), processing multi-turn reply`);
+
+        // ─── CC-only check for follow-ups too ──────────────────────────
+        // If the agent is still only CC'd in this follow-up (not TO), stay silent.
+        // The original CC-observe only fires on the first message in the thread.
+        const fuToHeader = (headers.find(h => h.name.toLowerCase() === 'to')?.value || '').toLowerCase();
+        const fuCcHeader = (headers.find(h => h.name.toLowerCase() === 'cc')?.value || '').toLowerCase();
+        const fuAgentAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai', 'agent@dacp.coppice.ai'];
+        const fuIsInTo = fuAgentAddresses.some(addr => fuToHeader.includes(addr));
+        const fuIsInCc = fuAgentAddresses.some(addr => fuCcHeader.includes(addr));
+        const fuIsCcOnly = fuIsInCc && !fuIsInTo;
+
+        // Also treat as CC-only if agent is not in TO or CC at all (BCC or forwarded thread)
+        if (fuIsCcOnly || (!fuIsInTo && !fuIsInCc)) {
+          const coppiceDirectAddress = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
+          if (!coppiceDirectAddress.test(body.slice(0, 2000))) {
+            console.log(`[GmailPoll] [${label}] Follow-up CC-only from ${senderEmail} — observing, not replying ("${subject}")`);
+            try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+            markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up-cc-observe', tenantId: followupTenant });
+            newReplies++;
+            continue;
+          }
+        }
 
         // Run through email guard for the follow-up
         const followupClassification = classifyEmail({
@@ -815,6 +845,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
           // Do NOT mark as read — let it be retried next poll cycle
         }
         continue;
+        } // close the else block for non-cc-observe prior threads
       }
 
       // Resolve tenant: inbox tenantId > contact match > pipeline default
