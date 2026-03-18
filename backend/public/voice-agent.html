@@ -361,18 +361,34 @@ class WavStreamPlayer {
 
   async connect() {
     this.context = new AudioContext({ sampleRate: this.sampleRate });
-    if (this.context.state === 'suspended') await this.context.resume();
+    console.log('[AUDIO-DEBUG] AudioContext created, state:', this.context.state);
+    if (this.context.state === 'suspended') {
+      console.log('[AUDIO-DEBUG] AudioContext suspended, calling resume()...');
+      await this.context.resume();
+      console.log('[AUDIO-DEBUG] AudioContext after resume():', this.context.state);
+    }
+    // Monitor state changes
+    this.context.onstatechange = () => {
+      console.log('[AUDIO-DEBUG] AudioContext state changed to:', this.context.state);
+    };
     await this.context.audioWorklet.addModule(streamProcessorSrc);
+    console.log('[AUDIO-DEBUG] StreamProcessor worklet loaded');
     console.log('[Coppice] WavStreamPlayer ready, sampleRate:', this.sampleRate);
+    this._chunksReceived = 0;
+    this._chunksWritten = 0;
     return true;
   }
 
   _start() {
     const streamNode = new AudioWorkletNode(this.context, 'stream_processor');
     streamNode.connect(this.context.destination);
+    console.log('[AUDIO-DEBUG] StreamNode created and connected to destination');
+    console.log('[AUDIO-DEBUG] AudioContext state at playback start:', this.context.state);
+    console.log('[AUDIO-DEBUG] AudioContext destination:', this.context.destination.channelCount, 'channels');
     streamNode.port.onmessage = (e) => {
       const { event } = e.data;
       if (event === 'stop') {
+        console.log('[AUDIO-DEBUG] StreamNode stopped, chunks written:', this._chunksWritten);
         streamNode.disconnect();
         this.stream = null;
       } else if (event === 'offset') {
@@ -387,7 +403,10 @@ class WavStreamPlayer {
   add16BitPCM(arrayBuffer, trackId = 'default') {
     if (typeof trackId !== 'string') throw new Error('trackId must be string');
     if (this.interruptedTrackIds[trackId]) return;
-    if (!this.stream) this._start();
+    if (!this.stream) {
+      console.log('[AUDIO-DEBUG] First audio chunk — starting stream node');
+      this._start();
+    }
     let buffer;
     if (arrayBuffer instanceof Int16Array) {
       buffer = arrayBuffer;
@@ -395,6 +414,17 @@ class WavStreamPlayer {
       buffer = new Int16Array(arrayBuffer);
     } else {
       throw new Error('argument must be Int16Array or ArrayBuffer');
+    }
+    this._chunksReceived++;
+    this._chunksWritten++;
+    // Log first few chunks and then every 50th
+    if (this._chunksReceived <= 5 || this._chunksReceived % 50 === 0) {
+      // Check if audio has actual content (not silence)
+      let maxVal = 0;
+      for (let i = 0; i < Math.min(buffer.length, 100); i++) {
+        maxVal = Math.max(maxVal, Math.abs(buffer[i]));
+      }
+      console.log(`[AUDIO-DEBUG] add16BitPCM chunk #${this._chunksReceived}: ${buffer.length} samples, maxAmp=${maxVal}, trackId=${trackId}, ctxState=${this.context.state}`);
     }
     this.stream.port.postMessage({ event: 'write', buffer, trackId });
     return buffer;
@@ -470,14 +500,18 @@ Rules:
   const wavStreamPlayer = new WavStreamPlayer({ sampleRate: SAMPLE_RATE });
 
   try {
+    console.log('[AUDIO-DEBUG] Requesting mic access...');
     await wavRecorder.begin();
+    console.log('[AUDIO-DEBUG] Mic access granted, recorder ready');
   } catch (e) {
     console.error('[Coppice] Mic access failed:', e);
     return;
   }
 
   try {
+    console.log('[AUDIO-DEBUG] Initializing audio output...');
     await wavStreamPlayer.connect();
+    console.log('[AUDIO-DEBUG] Audio output ready');
   } catch (e) {
     console.error('[Coppice] Audio output failed:', e);
     return;
@@ -504,7 +538,7 @@ Rules:
         input_audio_transcription: { model: 'whisper-1' },
         turn_detection: {
           type: 'server_vad',
-          threshold: 0.5,
+          threshold: 0.3,
           prefix_padding_ms: 300,
           silence_duration_ms: 500,
         },
@@ -528,8 +562,16 @@ Rules:
     // Start recording mic → send to relay
     wavRecorder.record((data) => {
       if (ws.readyState !== WebSocket.OPEN) return;
+      micChunkCount++;
       // data.mono is ArrayBuffer of PCM16 audio
       const base64 = arrayBufferToBase64(data.mono);
+      if (micChunkCount <= 3 || micChunkCount % 100 === 0) {
+        // Check if mic audio has actual signal
+        const view = new Int16Array(data.mono);
+        let maxVal = 0;
+        for (let i = 0; i < Math.min(view.length, 200); i++) maxVal = Math.max(maxVal, Math.abs(view[i]));
+        console.log(`[AUDIO-DEBUG] Mic chunk #${micChunkCount}: ${data.mono.byteLength} bytes, maxAmp=${maxVal}, base64len=${base64.length}`);
+      }
       ws.send(JSON.stringify({
         type: 'input_audio_buffer.append',
         audio: base64,
@@ -538,6 +580,9 @@ Rules:
   };
 
   // 3. Handle events from relay (OpenAI responses)
+  let audioChunkCount = 0;
+  let micChunkCount = 0;
+
   ws.onmessage = async (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
@@ -545,19 +590,34 @@ Rules:
     switch (msg.type) {
       case 'response.audio.delta':
         // Feed audio to player
+        audioChunkCount++;
         if (msg.delta) {
           const pcmBuffer = base64ToArrayBuffer(msg.delta);
+          if (audioChunkCount <= 3 || audioChunkCount % 50 === 0) {
+            console.log(`[AUDIO-DEBUG] response.audio.delta #${audioChunkCount}: ${pcmBuffer.byteLength} bytes, item_id=${msg.item_id}`);
+          }
           wavStreamPlayer.add16BitPCM(pcmBuffer, msg.item_id || 'default');
           currentResponseId = msg.item_id || null;
+        } else {
+          console.log(`[AUDIO-DEBUG] response.audio.delta #${audioChunkCount}: NO DELTA DATA`);
         }
+        break;
+
+      case 'response.audio.done':
+        console.log(`[AUDIO-DEBUG] response.audio.done — total chunks received: ${audioChunkCount}`);
+        console.log(`[AUDIO-DEBUG] Player state: ctxState=${wavStreamPlayer.context?.state}, hasStream=${!!wavStreamPlayer.stream}`);
+        audioChunkCount = 0;
+        break;
+
+      case 'response.done':
+        console.log('[AUDIO-DEBUG] response.done — full response complete');
         break;
 
       case 'input_audio_buffer.speech_started':
         // User started speaking — interrupt AI playback
-        console.log('[Coppice] Speech detected — interrupting playback');
+        console.log('[AUDIO-DEBUG] VAD speech_started — someone is talking');
         const trackOffset = await wavStreamPlayer.interrupt();
         if (trackOffset?.trackId) {
-          // Tell OpenAI to stop generating and truncate
           ws.send(JSON.stringify({ type: 'response.cancel' }));
           ws.send(JSON.stringify({
             type: 'conversation.item.truncate',
@@ -565,9 +625,17 @@ Rules:
             content_index: 0,
             audio_end_ms: Math.floor(trackOffset.currentTime * 1000),
           }));
-          console.log('[Coppice] Cancelled response, truncated at', trackOffset.currentTime.toFixed(2) + 's');
+          console.log('[AUDIO-DEBUG] Cancelled response, truncated at', trackOffset.currentTime.toFixed(2) + 's');
         }
         currentResponseId = null;
+        break;
+
+      case 'input_audio_buffer.speech_stopped':
+        console.log('[AUDIO-DEBUG] VAD speech_stopped');
+        break;
+
+      case 'input_audio_buffer.committed':
+        console.log('[AUDIO-DEBUG] input_audio_buffer.committed — audio sent to model');
         break;
 
       case 'response.audio_transcript.done':
@@ -579,13 +647,28 @@ Rules:
         break;
 
       case 'session.created':
+        console.log('[AUDIO-DEBUG] session.created');
+        break;
+
       case 'session.updated':
-        console.log('[Coppice]', msg.type);
+        console.log('[AUDIO-DEBUG] session.updated — config confirmed');
+        break;
+
+      case 'response.created':
+        console.log('[AUDIO-DEBUG] response.created — AI generating response');
         break;
 
       case 'error':
-        console.error('[Coppice] OpenAI error:', msg.error);
+        console.error('[Coppice] OpenAI error:', JSON.stringify(msg.error));
         break;
+
+      default:
+        // Log any unhandled event types for visibility
+        if (!['response.content_part.added', 'response.content_part.done',
+             'response.output_item.added', 'response.output_item.done',
+             'conversation.item.created'].includes(msg.type)) {
+          console.log('[AUDIO-DEBUG] Unhandled event:', msg.type);
+        }
     }
   };
 
