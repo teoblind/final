@@ -245,6 +245,32 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     console.warn(`[GmailPoll] Contact knowledge lookup failed (non-fatal): ${err.message}`);
   }
 
+  // ─── Direct-address gate ─────────────────────────────────────────────────
+  // Only auto-reply if the agent is directly addressed by name OR the email
+  // is sent TO the agent's address (not just CC/BCC). If the sender is talking
+  // to someone else and the agent happens to be on the thread, stay silent.
+  const agentEmails = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai', 'agent@dacp.coppice.ai'];
+  const toField = (originalTo || '').toLowerCase();
+  const agentIsDirectRecipient = agentEmails.some(addr => toField.includes(addr));
+  const coppiceAddressed = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
+  const isDirectlyAddressed = agentIsDirectRecipient || coppiceAddressed.test(body.slice(0, 2000));
+
+  if (!isDirectlyAddressed) {
+    console.log(`[GmailPoll] Agent not directly addressed in email from ${from} ("${subject}") — observing only`);
+    insertActivity({
+      tenantId: resolvedTenant,
+      type: 'in',
+      title: `Email from ${fromName || from}`,
+      subtitle: `${subject} (observed — agent not directly addressed)`,
+      detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, notAddressed: true }),
+      sourceType: 'email',
+      sourceId: messageId,
+      agentId: 'coppice',
+    });
+    markEmailProcessed({ messageId, threadId, pipeline: 'not-addressed-observe', tenantId: resolvedTenant });
+    return;
+  }
+
   // Ask the tenant's primary agent to draft a response
   const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
@@ -265,6 +291,12 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
 - Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
 - IMPORTANT: The LAST paragraph before "Best," must be a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.
 - Closing: "Best," on its own line AFTER the question paragraph (never "Best regards," never "Sincerely,"). The structure is always: body paragraphs → question paragraph → "Best,"
+
+NEVER FABRICATE (critical):
+- If you do not have specific context about a project, person, file, link, or situation mentioned in the email, DO NOT make something up.
+- Instead, say so honestly: "I don't have that information on file — let me check with the team" or ask the sender a clarifying question.
+- NEVER pretend to know about drawings, documents, projects, or conversations you have no record of.
+- Getting something wrong is far worse than admitting you need to check.
 
 CONFIDENTIALITY (critical):
 - NEVER mention other clients, partners, or prospects by name in outbound emails
