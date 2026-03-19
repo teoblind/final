@@ -630,7 +630,10 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
 
 async function poll() {
   const calendars = getTenantCalendars();
-  if (calendars.length === 0) return;
+  if (calendars.length === 0) {
+    console.log('[CalendarPoll] No tenant calendars configured — skipping');
+    return;
+  }
 
   for (const cal of calendars) {
     try {
@@ -638,6 +641,9 @@ async function poll() {
       await autoAcceptInvites(cal);
 
       const meetings = await pollTenantCalendar(cal);
+      if (meetings.length > 0) {
+        console.log(`[CalendarPoll] [${cal.agentEmail}] Found ${meetings.length} meeting(s) in window`);
+      }
       for (const meeting of meetings) {
         await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
       }
