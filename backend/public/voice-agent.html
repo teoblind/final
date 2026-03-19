@@ -479,23 +479,29 @@ const SAMPLE_RATE = 24000;
 // Default fallback instructions (used if tenant fetch fails)
 const DEFAULT_INSTRUCTIONS = `You are Coppice, an AI meeting assistant. Be professional, concise, and helpful. Keep responses brief. No emojis or filler phrases.`;
 
-// Fetch tenant-specific instructions from backend
+// Fetch tenant-specific instructions from backend (with retry)
 async function getInstructions() {
   const params = new URLSearchParams(location.search);
   const tenantId = params.get('tenant') || 'default';
-  try {
-    const backendUrl = location.origin.includes('coppice.ai')
-      ? 'https://coppice.ai'
-      : `http://localhost:3002`;
-    const res = await fetch(`${backendUrl}/api/v1/voice-context/${tenantId}`);
-    const data = await res.json();
-    if (data.instructions) {
-      console.log(`[AUDIO-DEBUG] Loaded tenant instructions for: ${tenantId} (${data.instructions.length} chars)`);
-      return data.instructions;
+  const urls = [
+    `https://coppice.ai/api/v1/voice-context/${tenantId}`,
+    `http://localhost:3002/api/v1/voice-context/${tenantId}`,
+    `${location.origin}/api/v1/voice-context/${tenantId}`,
+  ];
+  for (const url of urls) {
+    try {
+      console.log(`[Coppice] Fetching instructions from: ${url}`);
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      if (data.instructions && data.instructions.length > 100) {
+        console.log(`[Coppice] Loaded tenant instructions for: ${tenantId} (${data.instructions.length} chars)`);
+        return data.instructions;
+      }
+    } catch (e) {
+      console.warn(`[Coppice] Failed to fetch from ${url}:`, e.message);
     }
-  } catch (e) {
-    console.error('[AUDIO-DEBUG] Failed to fetch tenant instructions:', e.message);
   }
+  console.error('[Coppice] All instruction fetches failed — using default');
   return DEFAULT_INSTRUCTIONS;
 }
 
@@ -542,7 +548,8 @@ async function getInstructions() {
   ws.onopen = () => {
     console.log('[Coppice] Connected to relay');
 
-    // Configure session
+    // Configure session — start in passive mode (no auto-response)
+    // Server VAD detects speech but we gate responses on wake word
     ws.send(JSON.stringify({
       type: 'session.update',
       session: {
@@ -554,26 +561,15 @@ async function getInstructions() {
         input_audio_transcription: { model: 'whisper-1' },
         turn_detection: {
           type: 'server_vad',
-          threshold: 0.3,
+          threshold: 0.5,
           prefix_padding_ms: 300,
-          silence_duration_ms: 500,
+          silence_duration_ms: 800,
         },
       },
     }));
 
-    // Send initial greeting trigger
-    ws.send(JSON.stringify({
-      type: 'conversation.item.create',
-      item: {
-        type: 'message',
-        role: 'user',
-        content: [{
-          type: 'input_text',
-          text: 'Hello! You just joined a meeting. Please introduce yourself briefly.',
-        }],
-      },
-    }));
-    ws.send(JSON.stringify({ type: 'response.create' }));
+    // No greeting — bot stays silent until addressed by name
+    console.log('[Coppice] Joined in passive mode — listening for wake word');
 
     // Start recording mic → send to relay
     wavRecorder.record((data) => {
@@ -599,79 +595,112 @@ async function getInstructions() {
   let audioChunkCount = 0;
   let micChunkCount = 0;
 
+  // Wake word gating — bot only responds when addressed
+  let isActive = false;        // true = bot is in active conversation mode
+  let activeTimeout = null;    // auto-deactivate after silence
+  const ACTIVE_DURATION = 60000; // stay active for 60s after last interaction
+  let pendingResponseId = null;  // track response IDs to cancel if not addressed
+  let lastTranscriptHadWakeWord = false;
+
+  function activateBot() {
+    isActive = true;
+    if (activeTimeout) clearTimeout(activeTimeout);
+    activeTimeout = setTimeout(() => {
+      console.log('[Coppice] Deactivating — no interaction for 60s');
+      isActive = false;
+    }, ACTIVE_DURATION);
+  }
+
+  function checkWakeWord(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return lower.includes('coppice') || lower.includes('hey coppice') || lower.includes('copice') || lower.includes('copis');
+  }
+
   ws.onmessage = async (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
 
     switch (msg.type) {
       case 'response.audio.delta':
-        // Feed audio to player
+        // Only play audio if bot is active (wake word was detected)
         audioChunkCount++;
-        if (msg.delta) {
+        if (msg.delta && isActive) {
           const pcmBuffer = base64ToArrayBuffer(msg.delta);
-          if (audioChunkCount <= 3 || audioChunkCount % 50 === 0) {
-            console.log(`[AUDIO-DEBUG] response.audio.delta #${audioChunkCount}: ${pcmBuffer.byteLength} bytes, item_id=${msg.item_id}`);
-          }
           wavStreamPlayer.add16BitPCM(pcmBuffer, msg.item_id || 'default');
           currentResponseId = msg.item_id || null;
-        } else {
-          console.log(`[AUDIO-DEBUG] response.audio.delta #${audioChunkCount}: NO DELTA DATA`);
         }
         break;
 
       case 'response.audio.done':
-        console.log(`[AUDIO-DEBUG] response.audio.done — total chunks received: ${audioChunkCount}`);
-        console.log(`[AUDIO-DEBUG] Player state: ctxState=${wavStreamPlayer.context?.state}, hasStream=${!!wavStreamPlayer.stream}`);
+        console.log(`[Coppice] Response audio done — chunks: ${audioChunkCount}, active: ${isActive}`);
         audioChunkCount = 0;
         break;
 
       case 'response.done':
-        console.log('[AUDIO-DEBUG] response.done — full response complete');
+        if (isActive) {
+          console.log('[Coppice] Response complete — staying active');
+        }
         break;
 
       case 'input_audio_buffer.speech_started':
-        // User started speaking — interrupt AI playback
-        console.log('[AUDIO-DEBUG] VAD speech_started — someone is talking');
-        const trackOffset = await wavStreamPlayer.interrupt();
-        if (trackOffset?.trackId) {
-          ws.send(JSON.stringify({ type: 'response.cancel' }));
-          ws.send(JSON.stringify({
-            type: 'conversation.item.truncate',
-            item_id: trackOffset.trackId,
-            content_index: 0,
-            audio_end_ms: Math.floor(trackOffset.currentTime * 1000),
-          }));
-          console.log('[AUDIO-DEBUG] Cancelled response, truncated at', trackOffset.currentTime.toFixed(2) + 's');
+        // Interrupt AI playback if someone is speaking
+        if (isActive) {
+          const trackOffset = await wavStreamPlayer.interrupt();
+          if (trackOffset?.trackId) {
+            ws.send(JSON.stringify({ type: 'response.cancel' }));
+            ws.send(JSON.stringify({
+              type: 'conversation.item.truncate',
+              item_id: trackOffset.trackId,
+              content_index: 0,
+              audio_end_ms: Math.floor(trackOffset.currentTime * 1000),
+            }));
+          }
+          currentResponseId = null;
         }
-        currentResponseId = null;
         break;
 
       case 'input_audio_buffer.speech_stopped':
-        console.log('[AUDIO-DEBUG] VAD speech_stopped');
         break;
 
       case 'input_audio_buffer.committed':
-        console.log('[AUDIO-DEBUG] input_audio_buffer.committed — audio sent to model');
+        console.log('[Coppice] Audio committed — waiting for transcription');
         break;
 
       case 'response.audio_transcript.done':
-        console.log('[Coppice] Said:', msg.transcript);
+        if (isActive) {
+          console.log('[Coppice] Said:', msg.transcript);
+        }
         break;
 
       case 'conversation.item.input_audio_transcription.completed':
         console.log('[Coppice] Heard:', msg.transcript);
-        break;
-
-      case 'session.created':
-        console.log('[AUDIO-DEBUG] session.created');
-        break;
-
-      case 'session.updated':
-        console.log('[AUDIO-DEBUG] session.updated — config confirmed');
+        if (checkWakeWord(msg.transcript)) {
+          console.log('[Coppice] *** WAKE WORD DETECTED — activating ***');
+          activateBot();
+          lastTranscriptHadWakeWord = true;
+        }
         break;
 
       case 'response.created':
-        console.log('[AUDIO-DEBUG] response.created — AI generating response');
+        // Server VAD auto-creates responses. If bot is not active, cancel them.
+        if (!isActive && !lastTranscriptHadWakeWord) {
+          console.log('[Coppice] Cancelling response — bot not addressed');
+          ws.send(JSON.stringify({ type: 'response.cancel' }));
+        } else if (lastTranscriptHadWakeWord) {
+          // Wake word was in the latest transcript — allow this response
+          console.log('[Coppice] Allowing response — wake word detected');
+          activateBot();
+          lastTranscriptHadWakeWord = false;
+        }
+        break;
+
+      case 'session.created':
+        console.log('[Coppice] Session created — passive mode');
+        break;
+
+      case 'session.updated':
+        console.log('[Coppice] Session config confirmed');
         break;
 
       case 'error':
@@ -679,12 +708,7 @@ async function getInstructions() {
         break;
 
       default:
-        // Log any unhandled event types for visibility
-        if (!['response.content_part.added', 'response.content_part.done',
-             'response.output_item.added', 'response.output_item.done',
-             'conversation.item.created'].includes(msg.type)) {
-          console.log('[AUDIO-DEBUG] Unhandled event:', msg.type);
-        }
+        break;
     }
   };
 
