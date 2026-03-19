@@ -236,12 +236,13 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
   }
 
   // ── 2. Gmail fallback — scan inbox for meeting invite emails ──
-  // Includes read emails (gmailPoll may mark them read first) — seenGmailIds prevents duplicates
+  // Uses after: with epoch timestamp for precise time filtering (newer_than uses day granularity)
   if (gmailClient) {
     try {
+      const fiveMinAgo = Math.floor((Date.now() - 5 * 60000) / 1000);
       const listRes = await gmailClient.users.messages.list({
         userId: 'me',
-        q: '(meet.google.com OR zoom.us OR teams.microsoft.com) newer_than:5m -from:me',
+        q: `(meet.google.com OR zoom.us OR teams.microsoft.com) after:${fiveMinAgo} -from:me`,
         maxResults: 5,
       });
 
