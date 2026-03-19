@@ -28,12 +28,12 @@ import {
 } from '../cache/database.js';
 import {
   createBot,
-  createVoiceBot,
   getBotStatus,
   getTranscript,
   getLocalBot,
 } from '../services/recallService.js';
 import { startChatLoop, stopChatLoop } from '../services/meetingChatLoop.js';
+import { startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -365,7 +365,7 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
 
   try {
     const botName = deriveBotName(tenantId, agentEmail);
-    const bot = await createVoiceBot(link, { botName, tenantId });
+    const bot = await createBot(link, { botName, tenantId, enableVoice: true });
 
     activeBots.set(eventKey, {
       botId: bot.id,
@@ -377,13 +377,16 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
       startTime: new Date().toISOString(),
     });
 
+    // Start voice loop — bot stays silent until wake word "Coppice"
+    startVoiceLoop(bot.id, tenantId);
+
     // Log activity to tenant's feed
     runWithTenant(tenantId, () => {
       insertActivity({
         tenantId,
         type: 'meet',
         title: `Joined: ${summary}`,
-        subtitle: `${attendees.length} attendees — transcribing`,
+        subtitle: `${attendees.length} attendees — listening for "hey Coppice"`,
         sourceType: 'meeting',
         sourceId: eventKey,
         agentId: 'meetings',
@@ -586,6 +589,7 @@ ${transcript}`,
   } finally {
     activeBots.delete(eventKey);
     stopChatLoop(botId);
+    stopVoiceLoop(botId);
   }
 }
 

@@ -59,10 +59,11 @@ async function recallFetch(path, opts = {}) {
 export async function createBot(meetingUrl, opts = {}) {
   const {
     botName = 'Coppice Agent',
+    tenantId = null,
     joinMessage = null,
+    enableVoice = false,
   } = opts;
 
-  // Silent bot — joins meeting for transcription/note-taking only, no audio output
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
@@ -72,6 +73,24 @@ export async function createBot(meetingUrl, opts = {}) {
       everyone_left_timeout: 5,
     },
   };
+
+  // Enable real-time transcription + webhook delivery for voice-enabled bots
+  if (enableVoice) {
+    const webhookUrl = `${APP_BASE_URL}/api/v1/recall/transcript-event`;
+    body.recording_config = {
+      transcript: {
+        provider: {
+          assembly_ai_streaming: {},
+        },
+      },
+      realtime_endpoints: [{
+        type: 'webhook',
+        url: webhookUrl,
+        events: ['transcript.data'],
+      }],
+    };
+    console.log(`[Recall] Voice bot with real-time transcription → ${webhookUrl}`);
+  }
 
   if (joinMessage) {
     body.chat = { on_bot_join: { send_to: 'everyone', message: joinMessage } };
@@ -84,6 +103,7 @@ export async function createBot(meetingUrl, opts = {}) {
     id: bot.id,
     meetingUrl,
     botName,
+    tenantId,
     status: 'joining',
     createdAt: new Date().toISOString(),
     transcript: [],

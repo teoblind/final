@@ -22,15 +22,105 @@ import {
   removeLocalBot,
   listActiveBots,
 } from '../services/recallService.js';
-import {
-  RecallAudioBridge,
-  registerBridge,
-  removeBridge,
-} from '../services/recallAudioBridge.js';
 import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
+import { handleTranscriptEvent } from '../services/meetingVoiceLoop.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// ── Unauthenticated routes — Recall.ai webhooks (called by Recall servers, not users) ──
+
+/**
+ * POST /webhook — Recall.ai webhooks for bot status changes
+ * No auth — Recall.ai calls this directly.
+ */
+router.post('/webhook', (req, res) => {
+  try {
+    const event = req.body;
+    const eventType = event.event || event.type || 'unknown';
+    const botId = event.data?.bot_id || event.bot_id;
+
+    console.log(`[Recall] Webhook: ${eventType} for bot ${botId}`);
+
+    switch (eventType) {
+      case 'bot.status_change': {
+        const status = event.data?.status?.code || 'unknown';
+        updateLocalBot(botId, { status });
+        console.log(`[Recall] Bot ${botId} status → ${status}`);
+
+        if (['done', 'fatal', 'analysis_done'].includes(status)) {
+          // Clean up
+        }
+        break;
+      }
+
+      case 'bot.transcription': {
+        const transcript = event.data?.transcript;
+        if (transcript) {
+          appendTranscript(botId, {
+            speaker: transcript.speaker || 'Unknown',
+            text: (transcript.words || []).map(w => w.text).join(' '),
+            timestamp: new Date().toISOString(),
+          });
+        }
+        break;
+      }
+
+      case 'bot.done': {
+        console.log(`[Recall] Bot ${botId} meeting complete`);
+        updateLocalBot(botId, { status: 'done' });
+        break;
+      }
+
+      default:
+        console.log(`[Recall] Unhandled webhook event: ${eventType}`);
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('[Recall] Webhook error:', error.message);
+    res.sendStatus(200);
+  }
+});
+
+/**
+ * POST /transcript-event — Real-time transcript webhook from Recall.ai
+ * No auth — Recall.ai calls this directly.
+ * Feeds both voice loop (audio response) and chat loop (text response).
+ */
+router.post('/transcript-event', async (req, res) => {
+  try {
+    const event = req.body;
+    console.log(`[Recall] Transcript event: ${JSON.stringify(event).slice(0, 300)}`);
+    const botId = event.data?.bot?.id || event.bot?.id || event.data?.bot_id;
+    if (botId) {
+      const transcriptPayload = event.data?.data || event.data;
+
+      // Append to local transcript store
+      const words = transcriptPayload.words || [];
+      const text = words.map(w => w.text || w).join(' ').trim() || transcriptPayload.text || '';
+      if (text) {
+        appendTranscript(botId, {
+          speaker: transcriptPayload.speaker || transcriptPayload.participant?.name || 'Unknown',
+          text,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Voice loop: wake-word-gated audio response
+      handleTranscriptEvent(botId, { data: transcriptPayload });
+
+      // Chat loop: text chat response (secondary)
+      handleChatTranscriptEvent(botId, { data: transcriptPayload });
+    }
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('[Recall] Transcript event error:', error.message);
+    res.sendStatus(200);
+  }
+});
+
+// ── Authenticated routes ──
 router.use(authenticate);
 
 /**
@@ -69,7 +159,6 @@ router.delete('/leave/:botId', async (req, res) => {
   try {
     const { botId } = req.params;
     await removeBot(botId);
-    removeBridge(botId);
     stopChatLoop(botId);
     removeLocalBot(botId);
 
@@ -77,65 +166,6 @@ router.delete('/leave/:botId', async (req, res) => {
   } catch (error) {
     console.error('[Recall] Leave error:', error.message);
     res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * POST /webhook — Recall.ai webhooks for bot status changes and transcription
- *
- * Recall sends events like:
- * - status_change: { bot_id, status: { code, sub_code } }
- * - transcript: { bot_id, transcript: { speaker, words: [...] } }
- * - done: { bot_id, ... }
- */
-router.post('/webhook', (req, res) => {
-  try {
-    const event = req.body;
-    const eventType = event.event || event.type || 'unknown';
-    const botId = event.data?.bot_id || event.bot_id;
-
-    console.log(`[Recall] Webhook: ${eventType} for bot ${botId}`);
-
-    switch (eventType) {
-      case 'bot.status_change': {
-        const status = event.data?.status?.code || 'unknown';
-        updateLocalBot(botId, { status });
-        console.log(`[Recall] Bot ${botId} status → ${status}`);
-
-        // If bot is done/fatal, clean up the audio bridge
-        if (['done', 'fatal', 'analysis_done'].includes(status)) {
-          removeBridge(botId);
-        }
-        break;
-      }
-
-      case 'bot.transcription': {
-        const transcript = event.data?.transcript;
-        if (transcript) {
-          appendTranscript(botId, {
-            speaker: transcript.speaker || 'Unknown',
-            text: (transcript.words || []).map(w => w.text).join(' '),
-            timestamp: new Date().toISOString(),
-          });
-        }
-        break;
-      }
-
-      case 'bot.done': {
-        console.log(`[Recall] Bot ${botId} meeting complete`);
-        updateLocalBot(botId, { status: 'done' });
-        removeBridge(botId);
-        break;
-      }
-
-      default:
-        console.log(`[Recall] Unhandled webhook event: ${eventType}`);
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error('[Recall] Webhook error:', error.message);
-    res.sendStatus(200); // Always 200 to Recall to prevent retries
   }
 });
 
@@ -230,39 +260,6 @@ router.post('/chat/:botId', async (req, res) => {
   } catch (error) {
     console.error('[Recall] Chat error:', error.message);
     res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * POST /transcript-event — Real-time transcript webhook from Recall.ai
- * Receives transcript.data events, stores locally, and feeds to chat loop.
- */
-router.post('/transcript-event', async (req, res) => {
-  try {
-    const event = req.body;
-    console.log(`[Recall] Transcript event: ${JSON.stringify(event).slice(0, 300)}`);
-    const botId = event.data?.bot?.id || event.bot?.id || event.data?.bot_id;
-    if (botId) {
-      const transcriptPayload = event.data?.data || event.data;
-
-      // Append to local transcript store
-      const words = transcriptPayload.words || [];
-      const text = words.map(w => w.text || w).join(' ').trim() || transcriptPayload.text || '';
-      if (text) {
-        appendTranscript(botId, {
-          speaker: transcriptPayload.speaker || transcriptPayload.participant?.name || 'Unknown',
-          text,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      // Chat loop: respond via meeting chat if addressed
-      handleChatTranscriptEvent(botId, { data: transcriptPayload });
-    }
-    res.sendStatus(200);
-  } catch (error) {
-    console.error('[Recall] Transcript event error:', error.message);
-    res.sendStatus(200);
   }
 });
 
