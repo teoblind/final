@@ -96,7 +96,7 @@ function extractMeetingLink(event) {
   // 3. Regex from description/location — supports Meet, Zoom, and Teams
   const text = ((event.description || '') + ' ' + (event.location || '')).trim();
   const match = text.match(
-    /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s]*|teams\.microsoft\.com\/l\/meetup-join\/[^\s<"]+|teams\.live\.com\/meet\/[^\s<"]+)/
+    /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s]*|teams\.microsoft\.com\/(?:l\/meetup-join|meet)\/[^\s<"]+|teams\.live\.com\/meet\/[^\s<"]+)/
   );
   return match ? match[0] : null;
 }
@@ -266,7 +266,7 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
 
         // Find meeting link
         const match = body.match(
-          /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s"<]*)/
+          /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s"<]*|teams\.microsoft\.com\/(?:l\/meetup-join|meet)\/[^\s"<]+|teams\.live\.com\/meet\/[^\s"<]+)/
         );
         if (!match) continue;
 
