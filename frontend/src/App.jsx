@@ -3,7 +3,8 @@ import {
   Menu, X, Bell, FileText, Database, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
-  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2
+  HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2,
+  ChevronsUpDown, Check, Building
 } from 'lucide-react';
 
 // Auth
@@ -90,6 +91,7 @@ const FieldReporterChat = lazy(() => import('./components/chat/FieldReporterChat
 const ScopeAnalyzerChat = lazy(() => import('./components/chat/ScopeAnalyzerChat'));
 const PortfolioOverview = lazy(() => import('./components/dashboards/PortfolioOverview'));
 const CompanyDetail = lazy(() => import('./components/dashboards/CompanyDetail'));
+const OfficeDashboard = lazy(() => import('./components/dashboards/OfficeDashboard'));
 
 // Non-lazy supporting components
 import ManualEntryModal from './components/ManualEntryModal';
@@ -104,6 +106,100 @@ function LoadingSpinner() {
 }
 
 // ─── Sidebar Navigation ──────────────────────────────────────────────────────
+
+function WorkspaceSwitcher({ user }) {
+  const [open, setOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState(null); // null = not loaded
+  const { tenant } = useTenant();
+  const menuRef = React.useRef(null);
+
+  // Fetch workspaces eagerly on mount
+  useEffect(() => {
+    import('./lib/hooks/useApi').then(mod => {
+      mod.default.get('/v1/auth/my-tenants').then(res => {
+        setWorkspaces(res.data?.tenants || []);
+      }).catch(() => setWorkspaces([]));
+    });
+  }, []);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const currentSlug = tenant?.slug || window.location.hostname.split('.')[0];
+
+  // Only show if user is admin/owner or has multiple workspaces
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'sangha_admin' || user?.role === 'super_admin';
+  if (workspaces === null) return null; // still loading
+  if (!isAdmin && workspaces.length <= 1) return null;
+
+  const switchTo = (ws) => {
+    const subdomain = ws.subdomain || ws.slug;
+    const proto = window.location.protocol;
+    const host = window.location.hostname;
+    // Build the target URL — same domain structure, different subdomain
+    let target;
+    if (host.endsWith('.coppice.ai')) {
+      target = `${proto}//${subdomain}.coppice.ai`;
+    } else if (host.includes('localhost')) {
+      target = `${proto}//${subdomain}.localhost:${window.location.port}`;
+    } else {
+      target = `${proto}//${subdomain}.${host.split('.').slice(1).join('.')}`;
+    }
+    window.location.href = target;
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.06] transition-colors"
+      >
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white/80" style={{ backgroundColor: 'var(--t-ui-accent)' }}>
+          <Building size={14} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-[11px] font-semibold text-white/80 truncate">{tenant?.name || 'Workspace'}</p>
+          <p className="text-[9px] text-white/25 truncate">{currentSlug}.coppice.ai</p>
+        </div>
+        <ChevronsUpDown size={14} className="text-white/30 shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+          <div className="px-3 py-2 border-b border-white/[0.06]">
+            <p className="text-[9px] font-bold uppercase tracking-[1.5px] text-white/30">Workspaces</p>
+          </div>
+          {(workspaces || []).map(ws => {
+            const isCurrent = ws.slug === currentSlug || ws.subdomain === currentSlug;
+            return (
+              <button
+                key={ws.id}
+                onClick={() => { if (!isCurrent) switchTo(ws); setOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                  isCurrent ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
+                }`}
+              >
+                <div className="w-6 h-6 rounded-md bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/60 shrink-0">
+                  {(ws.name || ws.slug || '?')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-medium text-white/80 truncate">{ws.name}</p>
+                  <p className="text-[10px] text-white/25">{ws.role}</p>
+                </div>
+                {isCurrent && <Check size={14} className="text-white/50 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarOpen, setSidebarOpen }) {
   const { tenant } = useTenant();
@@ -200,9 +296,10 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
           ))}
         </nav>
 
-        {/* User footer */}
-        <div className="border-t border-white/[0.06] px-3.5 py-3.5">
-          <div className="flex items-center gap-2.5 px-1.5 py-1 rounded-lg hover:bg-white/[0.04] cursor-pointer">
+        {/* Workspace switcher + User footer */}
+        <div className="border-t border-white/[0.06] px-3 py-3 space-y-1.5">
+          <WorkspaceSwitcher user={user} />
+          <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] cursor-pointer">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: 'var(--t-ui-accent)' }}>
               {user?.name?.split(' ').map(n => n[0]).join('').slice(0, 1).toUpperCase() || 'U'}
             </div>
@@ -296,6 +393,7 @@ function AppContent() {
   if (isConstruction) {
     platformItems = [
       { id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 },
+      { id: 'office', label: 'Office', icon: Building, live: true },
       { id: 'estimating', label: 'Estimating', icon: ClipboardList },
       { id: 'jobs', label: 'Jobs', icon: HardHat },
       { id: 'field-reports', label: 'Field Reports', icon: FileCheck },
@@ -316,6 +414,7 @@ function AppContent() {
   } else if (isVenture) {
     platformItems = [
       { id: 'command', label: 'Command', icon: LayoutDashboard },
+      { id: 'office', label: 'Office', icon: Building, live: true },
       { id: 'portfolio', label: 'Portfolio', icon: Building2 },
       { id: 'audit-trail', label: 'Files', icon: FileText },
     ];
@@ -329,6 +428,7 @@ function AppContent() {
     ];
   } else {
     platformItems.push({ id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 });
+    platformItems.push({ id: 'office', label: 'Office', icon: Building, live: true });
     platformItems.push({ id: 'audit-trail', label: 'Files', icon: FileText });
 
     agentItems.push({ id: 'hivemind-chat', label: 'Sangha Agent', icon: Bot, hivemind: true });
@@ -386,6 +486,7 @@ function AppContent() {
     'agent-tasks': 'Agent Tasks',
     'field-reports': 'Field Reports',
     'audit-trail': 'Audit Trail',
+    'office': 'Office',
     'files': 'Files',
     'accounting': 'Accounting',
     'portfolio': 'Portfolio Companies',
@@ -582,6 +683,8 @@ function AppContent() {
         return <PoolRoutingDashboard />;
       case 'meetings':
         return <MeetingsDashboard />;
+      case 'office':
+        return <OfficeDashboard />;
       case 'reporting':
         return <ReportingDashboard />;
       case 'insurance':

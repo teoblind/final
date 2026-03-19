@@ -100,7 +100,16 @@ router.get('/status', async (req, res) => {
       }
 
       const tenantSlug = tenant.slug || tenant.id;
-      const tenantName = tenant.name || tenant.slug;
+      // Map default tenant to friendly name
+      const TENANT_DISPLAY_NAMES = {
+        'default': 'Sangha',
+        'sangha': 'Sangha',
+        'dacp-construction-001': 'DACP',
+        'dacp': 'DACP',
+        'zhan-capital': 'Zhan Capital',
+        'zhan': 'Zhan Capital',
+      };
+      const tenantName = TENANT_DISPLAY_NAMES[tenantSlug] || TENANT_DISPLAY_NAMES[tenant.id] || tenant.name || tenant.slug;
 
       // Email Agent
       agents.push({
