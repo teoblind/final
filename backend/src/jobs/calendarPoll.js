@@ -24,6 +24,7 @@ import {
   insertActivity,
   runWithTenant,
   getTrustedSenderByEmail,
+  getTrustedSenderByDomain,
 } from '../cache/database.js';
 import {
   createBot,
@@ -202,6 +203,18 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         );
         if (selfAttendee?.responseStatus === 'declined') continue;
 
+        // Only join meetings from trusted senders (owners, team members)
+        const organizerEmail = event.organizer?.email || event.creator?.email;
+        if (organizerEmail) {
+          const orgDomain = organizerEmail.split('@')[1];
+          const trusted = getTrustedSenderByEmail(tenantId, organizerEmail)
+            || (orgDomain && getTrustedSenderByDomain(tenantId, orgDomain));
+          if (!trusted) {
+            console.log(`[CalendarPoll] [${agentEmail}] Skipping "${event.summary}" — organizer ${organizerEmail} not trusted`);
+            continue;
+          }
+        }
+
         meetings.push({
           eventKey,
           eventId: event.id,
@@ -276,13 +289,23 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         const alreadyJoined = [...activeBots.values()].some(b => b.link === link);
         if (alreadyJoined) continue;
 
+        // Only join meetings from trusted senders
+        const senderEmail = fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader;
+        const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1] : null;
+        const trustedSender = getTrustedSenderByEmail(tenantId, senderEmail)
+          || (senderDomain && getTrustedSenderByDomain(tenantId, senderDomain));
+        if (!trustedSender) {
+          console.log(`[CalendarPoll] [${agentEmail}] Skipping email invite from untrusted sender: ${senderEmail}`);
+          continue;
+        }
+
         meetings.push({
           eventKey: gmailKey,
           eventId: `gmail_${msg.id}`,
           summary: subject,
           start: headers.find(h => h.name.toLowerCase() === 'date')?.value || '',
           link,
-          attendees: [fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader].filter(Boolean),
+          attendees: [senderEmail].filter(Boolean),
         });
 
         console.log(`[CalendarPoll] ${agentEmail}: Meeting invite in email: ${subject} — ${link}`);
