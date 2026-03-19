@@ -80,7 +80,7 @@ export async function createBot(meetingUrl, opts = {}) {
     body.recording_config = {
       transcript: {
         provider: {
-          assembly_ai_streaming: {},
+          meeting_captions: {},
         },
       },
       realtime_endpoints: [{
