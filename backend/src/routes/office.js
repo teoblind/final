@@ -99,15 +99,52 @@ router.get('/status', async (req, res) => {
         }
       }
 
+      const tenantSlug = tenant.slug || tenant.id;
+      const tenantName = tenant.name || tenant.slug;
+
+      // Email Agent
       agents.push({
         id: agentId,
-        name: `${tenant.name || tenant.slug} Email Agent`,
-        tenant: tenant.slug || tenant.id,
+        name: `${tenantName} Email Agent`,
+        tenant: tenantSlug,
         role: 'email',
         status: emailStatus,
         lastActivityAt,
         currentTask,
         senderEmail: emailConfig?.senderEmail || null,
+      });
+
+      // Chat Agent (handles user conversations)
+      agents.push({
+        id: `chat-${tenantSlug}`,
+        name: `${tenantName} Chat Agent`,
+        tenant: tenantSlug,
+        role: 'chat',
+        status: 'idle',
+        lastActivityAt: null,
+        currentTask: null,
+      });
+
+      // Meeting Agent (transcription + follow-ups)
+      agents.push({
+        id: `meeting-${tenantSlug}`,
+        name: `${tenantName} Meeting Agent`,
+        tenant: tenantSlug,
+        role: 'meeting',
+        status: 'idle',
+        lastActivityAt: null,
+        currentTask: null,
+      });
+
+      // Research Agent (knowledge base + document analysis)
+      agents.push({
+        id: `research-${tenantSlug}`,
+        name: `${tenantName} Research Agent`,
+        tenant: tenantSlug,
+        role: 'research',
+        status: 'idle',
+        lastActivityAt: null,
+        currentTask: null,
       });
 
       // Append this tenant's activities to the combined feed
