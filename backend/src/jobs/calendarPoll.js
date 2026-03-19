@@ -633,14 +633,15 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
 
 // ─── Main Poll Loop ──────────────────────────────────────────────────────────
 
+let pollCount = 0;
 async function poll() {
-  console.log('[CalendarPoll] Poll cycle starting...');
+  pollCount++;
   const calendars = getTenantCalendars();
-  if (calendars.length === 0) {
-    console.log('[CalendarPoll] No tenant calendars configured — skipping');
-    return;
+  if (calendars.length === 0) return;
+  // Log every 20 cycles (~10 min) as heartbeat
+  if (pollCount % 20 === 1) {
+    console.log(`[CalendarPoll] Heartbeat: polling ${calendars.length} calendar(s), ${joinedEvents.size} joined, ${activeBots.size} active bots`);
   }
-  console.log(`[CalendarPoll] Polling ${calendars.length} tenant calendar(s)`);
 
   for (const cal of calendars) {
     try {
