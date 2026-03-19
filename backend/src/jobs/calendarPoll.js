@@ -27,6 +27,7 @@ import {
 } from '../cache/database.js';
 import {
   createBot,
+  createVoiceBot,
   getBotStatus,
   getTranscript,
   getLocalBot,
@@ -327,10 +328,7 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
 
   try {
     const botName = deriveBotName(tenantId, agentEmail);
-    const bot = await createBot(link, { botName });
-
-    // Start in-meeting chat loop (responds when addressed)
-    startChatLoop(bot.id);
+    const bot = await createVoiceBot(link, { botName, tenantId });
 
     activeBots.set(eventKey, {
       botId: bot.id,
