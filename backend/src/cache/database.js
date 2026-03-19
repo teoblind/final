@@ -5387,15 +5387,18 @@ function initEmailTrustTables(targetDb) {
 }
 
 export function getTrustedSenders(tenantId) {
-  return db.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? ORDER BY display_name').all(tenantId);
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? ORDER BY display_name').all(tenantId);
 }
 
 export function getTrustedSenderByEmail(tenantId, email) {
-  return db.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? AND LOWER(email) = LOWER(?)').get(tenantId, email) || null;
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? AND LOWER(email) = LOWER(?)').get(tenantId, email) || null;
 }
 
 export function getTrustedSenderByDomain(tenantId, domain) {
-  return db.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? AND LOWER(domain) = LOWER(?) LIMIT 1').get(tenantId, domain) || null;
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT * FROM email_trusted_senders WHERE tenant_id = ? AND LOWER(domain) = LOWER(?) LIMIT 1').get(tenantId, domain) || null;
 }
 
 export function addTrustedSender({ tenantId, email, domain, displayName, trustLevel, notes }) {
