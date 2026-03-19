@@ -479,19 +479,34 @@ const SAMPLE_RATE = 24000;
 // Default fallback instructions (used if tenant fetch fails)
 const DEFAULT_INSTRUCTIONS = `You are Coppice, an AI meeting assistant. Be professional, concise, and helpful. Keep responses brief. No emojis or filler phrases.`;
 
-// Get instructions — prefer URL params (injected server-side), fallback to fetch
+// Get instructions — try session ID (pre-built server-side), then tenant fetch, then default
 async function getInstructions() {
   const params = new URLSearchParams(location.search);
+  const sid = params.get('sid');
+  const tenantId = params.get('tenant') || 'default';
 
-  // 1. Check URL params first (most reliable — injected by createVoiceBot)
-  const urlInstructions = params.get('instructions');
-  if (urlInstructions && urlInstructions.length > 100) {
-    console.log(`[Coppice] Using server-injected instructions (${urlInstructions.length} chars)`);
-    return urlInstructions;
+  // 1. Session ID — instructions pre-built by createVoiceBot (most reliable)
+  if (sid) {
+    const urls = [
+      `https://coppice.ai/api/v1/voice-session/${sid}`,
+      `${location.origin}/api/v1/voice-session/${sid}`,
+    ];
+    for (const url of urls) {
+      try {
+        console.log(`[Coppice] Fetching session instructions: ${sid}`);
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const data = await res.json();
+        if (data.instructions && data.instructions.length > 100) {
+          console.log(`[Coppice] Loaded session instructions (${data.instructions.length} chars)`);
+          return data.instructions;
+        }
+      } catch (e) {
+        console.warn(`[Coppice] Session fetch failed:`, e.message);
+      }
+    }
   }
 
-  // 2. Fallback to fetch
-  const tenantId = params.get('tenant') || 'default';
+  // 2. Fallback — fetch by tenant ID
   const urls = [
     `https://coppice.ai/api/v1/voice-context/${tenantId}`,
     `${location.origin}/api/v1/voice-context/${tenantId}`,
@@ -501,13 +516,14 @@ async function getInstructions() {
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
       if (data.instructions && data.instructions.length > 100) {
-        console.log(`[Coppice] Fetched instructions for: ${tenantId} (${data.instructions.length} chars)`);
+        console.log(`[Coppice] Fetched tenant instructions (${data.instructions.length} chars)`);
         return data.instructions;
       }
     } catch (e) {
-      console.warn(`[Coppice] Fetch failed: ${url}:`, e.message);
+      console.warn(`[Coppice] Tenant fetch failed:`, e.message);
     }
   }
+
   console.error('[Coppice] All instruction sources failed — using default');
   return DEFAULT_INSTRUCTIONS;
 }

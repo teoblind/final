@@ -110,6 +110,32 @@ initDatabase();
 // Landing page routes — no tenant required (root domain)
 app.use('/api/v1', landingRoutes);
 
+// Voice session instructions — pre-built by createVoiceBot, fetched by voice-agent.html
+app.get('/api/v1/voice-session/:sessionId', (req, res) => {
+  try {
+    const { voiceSessions } = require('./services/recallService.js');
+    const session = voiceSessions.get(req.params.sessionId);
+    if (session) {
+      res.json({ instructions: session.instructions });
+      // Clean up after fetch (one-time use)
+      voiceSessions.delete(req.params.sessionId);
+    } else {
+      res.json({ instructions: '' });
+    }
+  } catch (e) {
+    // ESM import fallback
+    import('./services/recallService.js').then(mod => {
+      const session = mod.voiceSessions.get(req.params.sessionId);
+      if (session) {
+        res.json({ instructions: session.instructions });
+        mod.voiceSessions.delete(req.params.sessionId);
+      } else {
+        res.json({ instructions: '' });
+      }
+    }).catch(() => res.json({ instructions: '' }));
+  }
+});
+
 // Voice agent context — public (no auth), used by voice-agent.html in Recall bot
 app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
   try {

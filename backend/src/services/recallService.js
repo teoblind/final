@@ -18,6 +18,9 @@ const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3002';
 // In-memory bot registry — tracks active bots and their state
 const activeBots = new Map();
 
+// Voice session instructions — keyed by session ID, fetched by voice agent page
+export const voiceSessions = new Map();
+
 function headers() {
   return {
     'Authorization': `Token ${RECALL_API_KEY}`,
@@ -137,12 +140,14 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
   } = opts;
 
-  // Fetch instructions server-side and pass via URL (Recall's browser can't reliably fetch)
-  let instructions = '';
+  // Pre-generate a voice session ID — instructions are stored server-side and fetched by the page
+  const sessionId = `vs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // Build instructions server-side so the page doesn't need to fetch them unreliably
   try {
     const { getMeetingPrompt } = await import('./chatService.js');
     const { getTenantDb } = await import('../cache/database.js');
-    instructions = getMeetingPrompt(tenantId);
+    let instructions = getMeetingPrompt(tenantId);
 
     // Enrich with tenant memory
     try {
@@ -158,9 +163,12 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
         for (const i of items) instructions += `\n- [${i.assignee || '?'}] ${i.title}${i.due_date ? ` (due: ${i.due_date})` : ''}`;
       }
     } catch (e) { console.warn('[Recall] Failed to enrich voice instructions:', e.message); }
-  } catch (e) { console.warn('[Recall] Failed to get meeting prompt:', e.message); }
 
-  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}&instructions=${encodeURIComponent(instructions)}`;
+    voiceSessions.set(sessionId, { instructions, createdAt: Date.now() });
+    console.log(`[Recall] Voice session ${sessionId}: ${instructions.length} chars of instructions`);
+  } catch (e) { console.warn('[Recall] Failed to build voice instructions:', e.message); }
+
+  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}&sid=${sessionId}`;
 
   // Detect platform for variant selection
   const isZoom = meetingUrl.includes('zoom.us');
