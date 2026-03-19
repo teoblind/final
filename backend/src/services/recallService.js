@@ -137,7 +137,30 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
   } = opts;
 
-  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}`;
+  // Fetch instructions server-side and pass via URL (Recall's browser can't reliably fetch)
+  let instructions = '';
+  try {
+    const { getMeetingPrompt } = await import('./chatService.js');
+    const { getTenantDb } = await import('../cache/database.js');
+    instructions = getMeetingPrompt(tenantId);
+
+    // Enrich with tenant memory
+    try {
+      const tdb = getTenantDb(tenantId);
+      const meetings = tdb.prepare(`SELECT title, content, recorded_at FROM knowledge_entries WHERE tenant_id = ? AND type = 'meeting' AND processed = 1 ORDER BY recorded_at DESC LIMIT 3`).all(tenantId);
+      const items = tdb.prepare(`SELECT title, assignee, due_date FROM action_items WHERE tenant_id = ? AND status = 'open' ORDER BY created_at DESC LIMIT 10`).all(tenantId);
+      if (meetings.length > 0) {
+        instructions += '\n\nRECENT MEETINGS:';
+        for (const m of meetings) instructions += `\n- ${m.title} (${m.recorded_at}): ${(m.content || '').slice(0, 300)}`;
+      }
+      if (items.length > 0) {
+        instructions += '\n\nOPEN ACTION ITEMS:';
+        for (const i of items) instructions += `\n- [${i.assignee || '?'}] ${i.title}${i.due_date ? ` (due: ${i.due_date})` : ''}`;
+      }
+    } catch (e) { console.warn('[Recall] Failed to enrich voice instructions:', e.message); }
+  } catch (e) { console.warn('[Recall] Failed to get meeting prompt:', e.message); }
+
+  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}&instructions=${encodeURIComponent(instructions)}`;
 
   // Detect platform for variant selection
   const isZoom = meetingUrl.includes('zoom.us');

@@ -479,29 +479,36 @@ const SAMPLE_RATE = 24000;
 // Default fallback instructions (used if tenant fetch fails)
 const DEFAULT_INSTRUCTIONS = `You are Coppice, an AI meeting assistant. Be professional, concise, and helpful. Keep responses brief. No emojis or filler phrases.`;
 
-// Fetch tenant-specific instructions from backend (with retry)
+// Get instructions — prefer URL params (injected server-side), fallback to fetch
 async function getInstructions() {
   const params = new URLSearchParams(location.search);
+
+  // 1. Check URL params first (most reliable — injected by createVoiceBot)
+  const urlInstructions = params.get('instructions');
+  if (urlInstructions && urlInstructions.length > 100) {
+    console.log(`[Coppice] Using server-injected instructions (${urlInstructions.length} chars)`);
+    return urlInstructions;
+  }
+
+  // 2. Fallback to fetch
   const tenantId = params.get('tenant') || 'default';
   const urls = [
     `https://coppice.ai/api/v1/voice-context/${tenantId}`,
-    `http://localhost:3002/api/v1/voice-context/${tenantId}`,
     `${location.origin}/api/v1/voice-context/${tenantId}`,
   ];
   for (const url of urls) {
     try {
-      console.log(`[Coppice] Fetching instructions from: ${url}`);
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
       if (data.instructions && data.instructions.length > 100) {
-        console.log(`[Coppice] Loaded tenant instructions for: ${tenantId} (${data.instructions.length} chars)`);
+        console.log(`[Coppice] Fetched instructions for: ${tenantId} (${data.instructions.length} chars)`);
         return data.instructions;
       }
     } catch (e) {
-      console.warn(`[Coppice] Failed to fetch from ${url}:`, e.message);
+      console.warn(`[Coppice] Fetch failed: ${url}:`, e.message);
     }
   }
-  console.error('[Coppice] All instruction fetches failed — using default');
+  console.error('[Coppice] All instruction sources failed — using default');
   return DEFAULT_INSTRUCTIONS;
 }
 
