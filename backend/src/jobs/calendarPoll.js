@@ -236,11 +236,12 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
   }
 
   // ── 2. Gmail fallback — scan inbox for meeting invite emails ──
+  // Includes read emails (gmailPoll may mark them read first) — seenGmailIds prevents duplicates
   if (gmailClient) {
     try {
       const listRes = await gmailClient.users.messages.list({
         userId: 'me',
-        q: '(meet.google.com OR zoom.us) newer_than:10m -from:me is:unread',
+        q: '(meet.google.com OR zoom.us OR teams.microsoft.com) newer_than:5m -from:me',
         maxResults: 5,
       });
 
@@ -289,13 +290,25 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         const alreadyJoined = [...activeBots.values()].some(b => b.link === link);
         if (alreadyJoined) continue;
 
+        // Determine who actually invited — for Google system emails, extract inviter from subject/body
+        const fromEmail = fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader;
+        let inviterEmail = fromEmail;
+        if (/noreply@google\.com$/i.test(fromEmail) || /calendar-notification@google\.com$/i.test(fromEmail)) {
+          // "Happening now: teo@zhan.capital is inviting you..." or "Invitation: ... from user@domain.com"
+          const inviterMatch = (subject + ' ' + body).match(
+            /([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})\s+is inviting you/i
+          ) || (subject + ' ' + body).match(
+            /from\s+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i
+          );
+          if (inviterMatch) inviterEmail = inviterMatch[1];
+        }
+
         // Only join meetings from trusted senders
-        const senderEmail = fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader;
-        const senderDomain = senderEmail.includes('@') ? senderEmail.split('@')[1] : null;
-        const trustedSender = getTrustedSenderByEmail(tenantId, senderEmail)
-          || (senderDomain && getTrustedSenderByDomain(tenantId, senderDomain));
+        const inviterDomain = inviterEmail.includes('@') ? inviterEmail.split('@')[1] : null;
+        const trustedSender = getTrustedSenderByEmail(tenantId, inviterEmail)
+          || (inviterDomain && getTrustedSenderByDomain(tenantId, inviterDomain));
         if (!trustedSender) {
-          console.log(`[CalendarPoll] [${agentEmail}] Skipping email invite from untrusted sender: ${senderEmail}`);
+          console.log(`[CalendarPoll] [${agentEmail}] Skipping email invite from untrusted sender: ${inviterEmail} (from: ${fromEmail})`);
           continue;
         }
 
@@ -305,10 +318,10 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
           summary: subject,
           start: headers.find(h => h.name.toLowerCase() === 'date')?.value || '',
           link,
-          attendees: [senderEmail].filter(Boolean),
+          attendees: [inviterEmail].filter(Boolean),
         });
 
-        console.log(`[CalendarPoll] ${agentEmail}: Meeting invite in email: ${subject} — ${link}`);
+        console.log(`[CalendarPoll] ${agentEmail}: Meeting invite in email: ${subject} — ${link} (inviter: ${inviterEmail})`);
       }
     } catch (err) {
       console.warn(`[CalendarPoll] ${agentEmail}: Gmail check error: ${err.message}`);
