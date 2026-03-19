@@ -183,7 +183,12 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         orderBy: 'startTime',
       });
 
-      for (const event of (res.data.items || [])) {
+      const items = res.data.items || [];
+      if (items.length > 0) {
+        console.log(`[CalendarPoll] [${agentEmail}] ${items.length} event(s) in poll window [${windowStart.toISOString()} → ${windowEnd.toISOString()}]`);
+      }
+
+      for (const event of items) {
         const eventKey = `${tenantId}:${event.id}`;
         if (joinedEvents.has(eventKey)) continue;
 
