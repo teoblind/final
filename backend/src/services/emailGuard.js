@@ -259,11 +259,27 @@ function extractAuthDomain(headers) {
  *
  * @returns {{ verdict: string, reason: string, trustLevel: string|null, authResults: object }}
  */
+// System/notification emails that should never be replied to or processed
+const SYSTEM_EMAIL_PATTERNS = [
+  /^meetings-noreply@google\.com$/i,
+  /^calendar-notification@google\.com$/i,
+  /^noreply@google\.com$/i,
+  /^no-reply@google\.com$/i,
+  /^notifications?@.*\.google\.com$/i,
+  /^mailer-daemon@/i,
+  /^postmaster@/i,
+];
+
 export function classifyEmail({ tenantId, senderEmail, senderName, subject, body, headers, messageId, contact }) {
   const lowerEmail = (senderEmail || '').toLowerCase();
   const senderDomain = lowerEmail.split('@')[1] || '';
   const authResults = parseAuthResults(headers || []);
   const authDomain = extractAuthDomain(headers || []);
+
+  // 0. System/notification emails — skip entirely, never reply
+  if (SYSTEM_EMAIL_PATTERNS.some(p => p.test(lowerEmail))) {
+    return { verdict: 'system', reason: `System notification: ${lowerEmail}`, trustLevel: 'system', authResults };
+  }
 
   // 1. Check trusted sender registry (exact email match) — before spoofing so
   //    explicitly trusted emails aren't blocked by display-name mismatch

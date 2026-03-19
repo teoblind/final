@@ -803,7 +803,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
           messageId: msg.id,
         });
 
-        if (followupClassification.verdict === 'blocked' || followupClassification.verdict === 'spam' || followupClassification.verdict === 'spoofed') {
+        if (followupClassification.verdict === 'system' || followupClassification.verdict === 'blocked' || followupClassification.verdict === 'spam' || followupClassification.verdict === 'spoofed') {
           console.log(`[GmailPoll] [${label}] Follow-up blocked by email guard: ${followupClassification.verdict}`);
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: `follow-up-${followupClassification.verdict}`, tenantId: followupTenant });
@@ -918,6 +918,15 @@ async function pollSingleInbox(gmail, tenantId, label) {
         });
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'blocked-spoof', tenantId: resolvedTenant });
+        newReplies++;
+        continue;
+      }
+
+      // SYSTEM → skip silently (calendar notifications, mailer-daemon, etc.)
+      if (classification.verdict === 'system') {
+        console.log(`[GmailPoll] [${label}] System email skipped: ${senderEmail}`);
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'system-skipped', tenantId: resolvedTenant });
         newReplies++;
         continue;
       }
