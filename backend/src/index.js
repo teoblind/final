@@ -114,7 +114,68 @@ app.use('/api/v1', landingRoutes);
 app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
   try {
     const { getMeetingPrompt } = await import('./services/chatService.js');
-    res.json({ instructions: getMeetingPrompt(req.params.tenantId) });
+    const { getTenantDb } = await import('./cache/database.js');
+
+    const tenantId = req.params.tenantId;
+    let basePrompt = getMeetingPrompt(tenantId);
+
+    // Enrich with accumulated knowledge from tenant DB
+    try {
+      const tdb = getTenantDb(tenantId);
+
+      // Recent meeting summaries
+      const recentMeetings = tdb.prepare(`
+        SELECT title, content, recorded_at FROM knowledge_entries
+        WHERE tenant_id = ? AND type = 'meeting' AND processed = 1
+        ORDER BY recorded_at DESC LIMIT 5
+      `).all(tenantId);
+
+      // Open action items
+      const openItems = tdb.prepare(`
+        SELECT title, assignee, due_date, status FROM action_items
+        WHERE tenant_id = ? AND status = 'open'
+        ORDER BY created_at DESC LIMIT 15
+      `).all(tenantId);
+
+      // Recent knowledge entries (non-meeting)
+      const knowledgeEntries = tdb.prepare(`
+        SELECT title, content, type, recorded_at FROM knowledge_entries
+        WHERE tenant_id = ? AND type != 'meeting' AND processed = 1
+        ORDER BY recorded_at DESC LIMIT 5
+      `).all(tenantId);
+
+      let memory = '';
+
+      if (recentMeetings.length > 0) {
+        memory += '\n\nRECENT MEETING HISTORY (you attended these):';
+        for (const m of recentMeetings) {
+          memory += `\n- ${m.title} (${m.recorded_at}):\n${(m.content || '').slice(0, 500)}`;
+        }
+      }
+
+      if (openItems.length > 0) {
+        memory += '\n\nOPEN ACTION ITEMS:';
+        for (const item of openItems) {
+          memory += `\n- [${item.assignee || 'Unassigned'}] ${item.title}${item.due_date ? ` (due: ${item.due_date})` : ''}`;
+        }
+      }
+
+      if (knowledgeEntries.length > 0) {
+        memory += '\n\nRECENT KNOWLEDGE:';
+        for (const k of knowledgeEntries) {
+          memory += `\n- ${k.title} (${k.type}, ${k.recorded_at}): ${(k.content || '').slice(0, 300)}`;
+        }
+      }
+
+      if (memory) {
+        basePrompt += memory;
+        console.log(`[VoiceContext] Enriched ${tenantId} prompt with ${recentMeetings.length} meetings, ${openItems.length} action items, ${knowledgeEntries.length} knowledge entries`);
+      }
+    } catch (e) {
+      console.warn('[VoiceContext] Failed to enrich with tenant data:', e.message);
+    }
+
+    res.json({ instructions: basePrompt });
   } catch (e) {
     console.error('Voice context error:', e.message);
     res.json({ instructions: '' });
