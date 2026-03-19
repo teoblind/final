@@ -132,11 +132,12 @@ export async function sendAudio(botId, mp3Buffer) {
 export async function createVoiceBot(meetingUrl, opts = {}) {
   const {
     botName = 'Coppice',
+    tenantId = 'default',
     voiceAgentUrl = process.env.VOICE_AGENT_URL || 'https://coppice.ai/voice-agent',
     relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
   } = opts;
 
-  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}`;
+  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}`;
 
   // Detect platform for variant selection
   const isZoom = meetingUrl.includes('zoom.us');

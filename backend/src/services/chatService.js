@@ -2222,6 +2222,35 @@ export function saveMessage(tenantId, agentId, userId, role, content, metadata =
 }
 
 /**
+ * Get meeting-specific system prompt for a tenant's voice agent.
+ * Returns the hivemind/primary agent's prompt adapted for real-time meetings.
+ */
+export function getMeetingPrompt(tenantId) {
+  // Map tenant to their primary agent prompt
+  const tenantAgentMap = {
+    'default': 'sangha',
+    'sangha': 'sangha',
+    'dacp-construction-001': 'hivemind',
+    'zhan-capital': 'zhan',
+  };
+  const agentId = tenantAgentMap[tenantId] || 'sangha';
+  const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
+
+  return `${basePrompt}
+
+MEETING BEHAVIOR:
+- You are participating in a live meeting as a voice assistant
+- Be professional, concise, and helpful
+- Keep responses brief — this is a real-time conversation, not a lecture
+- Listen carefully and respond naturally when addressed
+- If someone gives you a task or action item, acknowledge it and confirm what you'll do
+- If you're not sure who's speaking to you, ask for clarification
+- Never say you were "cut off" or had technical issues
+- No emojis, no filler phrases, be direct and professional
+- You cannot send emails or use tools during meetings — if asked, say you'll handle it after the meeting`;
+}
+
+/**
  * Send a message to Claude and get a response.
  * Saves both user message and assistant response to DB.
  */

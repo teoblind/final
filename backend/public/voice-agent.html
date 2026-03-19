@@ -476,37 +476,28 @@ function base64ToArrayBuffer(base64) {
 // ============================================================
 const SAMPLE_RATE = 24000;
 
-const INSTRUCTIONS = `You are Coppice, an AI meeting assistant made by Coppice AI. You are participating in a live meeting.
+// Default fallback instructions (used if tenant fetch fails)
+const DEFAULT_INSTRUCTIONS = `You are Coppice, an AI meeting assistant. Be professional, concise, and helpful. Keep responses brief. No emojis or filler phrases.`;
 
-ABOUT COPPICE AI:
-Coppice AI builds autonomous AI employees for businesses. Each client gets a team of specialized AI agents that handle real work — estimating, lead generation, email, document creation, meeting notes, and more. Pricing is $3-5K/month per agent team. Coppice agents operate 24/7, learn from every interaction, and integrate with Google Workspace, email, CRM, and other business tools.
-
-Target verticals: Construction, Energy, Real Estate, Insurance, Professional Services, Manufacturing, Legal, and Financial Services. Focus is mid-market companies ($5M-$500M revenue).
-
-Founded by Teo Blind (Duke University — Mathematics & Computer Science). Teo also runs Zhan Capital, a thesis-driven investment firm focused on AI infrastructure, energy, and digital monetary networks.
-
-KEY CAPABILITIES:
-- AI agents that send emails, create documents, generate estimates, discover leads, and manage outreach — autonomously
-- Copilot mode: agents draft actions for human approval before executing
-- Meeting bot (that's you) — joins calls, takes notes, tracks action items, and can be directed to do tasks during meetings
-- Google Workspace integration: Docs, Sheets, Slides, Drive, Calendar, Gmail
-- Multi-tenant: each client gets their own isolated instance with custom branding
-
-PORTFOLIO (Zhan Capital):
-- Sangha Holdings / Sangha Renewables — Bitcoin mining operations, ERCOT-based
-- Coppice AI — the AI employees platform
-- Volt Charging — EV charging partnerships with venues
-- Ampera — energy startup
-
-MEETING BEHAVIOR:
-- Be professional, concise, and helpful
-- Keep responses brief — this is a real-time conversation, not a lecture
-- Listen carefully and respond naturally when addressed
-- If someone asks what Coppice does or what you can do, explain clearly but concisely
-- If someone gives you a task or action item, acknowledge it and confirm what you'll do
-- If you're not sure who's speaking to you, ask for clarification
-- Never say you were "cut off" or had technical issues
-- No emojis, no filler phrases, be direct and professional`;
+// Fetch tenant-specific instructions from backend
+async function getInstructions() {
+  const params = new URLSearchParams(location.search);
+  const tenantId = params.get('tenant') || 'default';
+  try {
+    const backendUrl = location.origin.includes('coppice.ai')
+      ? 'https://coppice.ai'
+      : `http://localhost:3002`;
+    const res = await fetch(`${backendUrl}/api/v1/voice-context/${tenantId}`);
+    const data = await res.json();
+    if (data.instructions) {
+      console.log(`[AUDIO-DEBUG] Loaded tenant instructions for: ${tenantId} (${data.instructions.length} chars)`);
+      return data.instructions;
+    }
+  } catch (e) {
+    console.error('[AUDIO-DEBUG] Failed to fetch tenant instructions:', e.message);
+  }
+  return DEFAULT_INSTRUCTIONS;
+}
 
 (async function main() {
   const params = new URLSearchParams(location.search);
@@ -516,6 +507,9 @@ MEETING BEHAVIOR:
     return;
   }
   console.log('[Coppice] Relay URL:', wssUrl);
+
+  // 0. Fetch tenant-specific instructions
+  const INSTRUCTIONS = await getInstructions();
 
   // 1. Initialize audio capture (WavRecorder)
   const wavRecorder = new WavRecorder({ sampleRate: SAMPLE_RATE });

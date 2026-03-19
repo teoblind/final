@@ -109,6 +109,17 @@ initDatabase();
 // Landing page routes — no tenant required (root domain)
 app.use('/api/v1', landingRoutes);
 
+// Voice agent context — public (no auth), used by voice-agent.html in Recall bot
+app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
+  try {
+    const { getMeetingPrompt } = await import('./services/chatService.js');
+    res.json({ instructions: getMeetingPrompt(req.params.tenantId) });
+  } catch (e) {
+    console.error('Voice context error:', e.message);
+    res.json({ instructions: '' });
+  }
+});
+
 // Serve demo files (estimates, reports, etc.)
 app.use('/files', express.static(join(__dirname, '../demo-files')));
 
