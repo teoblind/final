@@ -634,11 +634,13 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
 // ─── Main Poll Loop ──────────────────────────────────────────────────────────
 
 async function poll() {
+  console.log('[CalendarPoll] Poll cycle starting...');
   const calendars = getTenantCalendars();
   if (calendars.length === 0) {
     console.log('[CalendarPoll] No tenant calendars configured — skipping');
     return;
   }
+  console.log(`[CalendarPoll] Polling ${calendars.length} tenant calendar(s)`);
 
   for (const cal of calendars) {
     try {
