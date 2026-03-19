@@ -5175,6 +5175,10 @@ function initActivityLogSeedData(targetDb, tenantId) {
   }
 }
 
+// Activity insert hook — notifies listeners (e.g. office WebSocket broadcast)
+let _activityHook = null;
+export function onActivityInsert(hook) { _activityHook = hook; }
+
 export function insertActivity({ tenantId, type, title, subtitle, detailJson, sourceType, sourceId, agentId }) {
   // Deduplicate by source_id if provided
   if (sourceId) {
@@ -5184,7 +5188,12 @@ export function insertActivity({ tenantId, type, title, subtitle, detailJson, so
   const result = db.prepare(
     'INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, source_id, agent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(tenantId, type, title, subtitle || null, detailJson || null, sourceType || null, sourceId || null, agentId || null);
-  return result.lastInsertRowid;
+  const id = result.lastInsertRowid;
+  // Notify office visualization
+  if (_activityHook) {
+    try { _activityHook({ id, tenantId, type, title, subtitle, agentId }); } catch {}
+  }
+  return id;
 }
 
 export function getActivities(tenantId, { limit = 20, offset = 0, type, sourceType } = {}) {

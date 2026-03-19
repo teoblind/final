@@ -5,7 +5,7 @@ import { createServer } from 'http';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
-import { initDatabase } from './cache/database.js';
+import { initDatabase, onActivityInsert } from './cache/database.js';
 
 dotenv.config();
 
@@ -275,6 +275,11 @@ export function broadcast(type, data) {
   });
 }
 
+// Broadcast new activities to office visualization in real-time
+onActivityInsert((activity) => {
+  broadcast('office:activity', activity);
+});
+
 // =========================================================================
 // Phase 8: Versioned API Routes (/api/v1/)
 // =========================================================================
@@ -526,6 +531,18 @@ server.listen(PORT, async () => {
     agentRuntime.registerAgent(new PoolOptimizationAgent());
     agentRuntime.registerAgent(new AlertSynthesisAgent());
     agentRuntime.registerAgent(new ReportingAgent());
+
+    // Wire AgentRuntime events to WebSocket broadcast for real-time office visualization
+    const officeEvents = [
+      'agent:started', 'agent:stopped', 'agent:action', 'agent:error',
+      'agent:recommendation', 'agent:approval_requested', 'agent:rejected',
+      'agent:registered', 'agent:unregistered', 'agent:downgraded', 'agent:auto_stopped',
+    ];
+    for (const eventName of officeEvents) {
+      agentRuntime.on(eventName, (data) => {
+        broadcast('office:agent-event', { event: eventName, ...data });
+      });
+    }
 
     console.log('Clawbot Agent Runtime initialized with 4 agents');
   } catch (err) {

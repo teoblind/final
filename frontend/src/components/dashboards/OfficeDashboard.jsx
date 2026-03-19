@@ -89,34 +89,49 @@ function IsoTile({ x, y, children, onClick, highlighted, className = '' }) {
 function AgentCharacter({ agent, selected, onClick }) {
   const role = ROLE_CONFIG[agent.role] || ROLE_CONFIG.clawbot;
   const status = STATUS_STYLES[agent.status] || STATUS_STYLES.idle;
-  const isActive = agent.status === 'processing' || agent.status === 'running' || agent.status === 'transcribing';
+  const isActive = agent.status === 'processing' || agent.status === 'running' || agent.status === 'transcribing' || agent.status === 'observing' || agent.status === 'analyzing';
 
   return (
     <div
-      className={`flex flex-col items-center transition-transform duration-300 ${isActive ? 'animate-bounce-slow' : ''} ${selected ? 'scale-110' : 'hover:scale-105'}`}
+      className={`flex flex-col items-center transition-transform duration-300 ${selected ? 'scale-110' : 'hover:scale-105'}`}
       onClick={onClick}
+      style={isActive ? { animation: 'agent-work 2s ease-in-out infinite' } : undefined}
     >
       {/* Task bubble */}
       {agent.currentTask && (
-        <div className="mb-1 px-2 py-0.5 bg-white rounded-full shadow-sm border border-[#e0ddd8] max-w-[160px]">
-          <p className="text-[8px] text-[#6b6b65] truncate">{agent.currentTask.name}</p>
+        <div className="mb-1 px-2.5 py-1 bg-white rounded-lg shadow-md border border-[#e0ddd8] max-w-[170px]" style={{ animation: 'bubble-in 0.3s ease-out' }}>
+          <p className="text-[8px] text-[#6b6b65] truncate font-medium">{agent.currentTask.name}</p>
+          {agent.currentTask.detail && <p className="text-[7px] text-[#999] truncate">{agent.currentTask.detail}</p>}
         </div>
       )}
 
       {/* Character body — 3D cube-ish */}
       <div className="relative">
-        {/* Shadow */}
-        <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-10 h-2 rounded-full bg-black/10 blur-[2px]" />
+        {/* Shadow — expands when active */}
+        <div
+          className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 rounded-full bg-black/10 blur-[2px] transition-all duration-500"
+          style={{ width: isActive ? '48px' : '40px', height: isActive ? '10px' : '8px' }}
+        />
+
+        {/* Glow ring when active */}
+        {isActive && (
+          <div
+            className="absolute inset-[-4px] rounded-2xl"
+            style={{ animation: 'glow-ring 1.5s ease-in-out infinite', boxShadow: `0 0 12px ${role.color}40` }}
+          />
+        )}
 
         {/* Body */}
         <div
-          className="w-12 h-14 rounded-xl flex items-center justify-center relative shadow-lg"
+          className="w-12 h-14 rounded-xl flex items-center justify-center relative shadow-lg transition-all duration-300"
           style={{
-            background: `linear-gradient(135deg, ${role.color}cc, ${role.color})`,
+            background: isActive
+              ? `linear-gradient(135deg, ${role.color}, ${role.color}dd)`
+              : `linear-gradient(135deg, ${role.color}99, ${role.color}77)`,
             transform: 'perspective(200px) rotateX(5deg)',
           }}
         >
-          <span className="text-xl">{role.emoji}</span>
+          <span className="text-xl" style={isActive ? { animation: 'emoji-bounce 1s ease-in-out infinite' } : undefined}>{role.emoji}</span>
 
           {/* Status dot */}
           <div
@@ -129,7 +144,7 @@ function AgentCharacter({ agent, selected, onClick }) {
       {/* Name plate */}
       <div className="mt-1.5 px-2 py-0.5 bg-white/90 rounded-md shadow-sm border border-[#e0ddd8]">
         <p className="text-[9px] font-bold text-[#333] text-center whitespace-nowrap">{agent.name.replace(/ (Email|Chat|Meeting|Research) Agent/, '')}</p>
-        <p className="text-[8px] text-center" style={{ color: status.dot }}>{status.label}</p>
+        <p className="text-[8px] text-center font-medium" style={{ color: status.dot }}>{status.label}</p>
       </div>
     </div>
   );
@@ -198,6 +213,7 @@ export default function OfficeDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [realtimeFlash, setRealtimeFlash] = useState({}); // agentId -> timestamp for animation triggers
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -215,9 +231,116 @@ export default function OfficeDashboard() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000); // Poll every 10s
+    const interval = setInterval(fetchStatus, 30000); // Poll every 30s (WebSocket handles real-time)
     return () => clearInterval(interval);
   }, [fetchStatus]);
+
+  // Map activity type → which agent role should animate
+  const ACTIVITY_ROLE_MAP = {
+    'out': 'email', 'in': 'email', 'email': 'email',
+    'meet': 'meeting', 'calendar': 'meeting',
+    'doc': 'research', 'research': 'research',
+    'chat': 'chat', 'call': 'chat',
+  };
+
+  // Listen for real-time WebSocket events to animate agents
+  useEffect(() => {
+    const idleTimers = new Map();
+
+    const setAgentActive = (agentMatcher, status, task) => {
+      setData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          agents: prev.agents.map(a => {
+            if (!agentMatcher(a)) return a;
+            return { ...a, status, currentTask: task, lastActivityAt: Date.now() };
+          }),
+        };
+      });
+    };
+
+    // Auto-revert an agent to idle after a delay
+    const scheduleIdle = (key, agentMatcher, delayMs = 15000) => {
+      if (idleTimers.has(key)) clearTimeout(idleTimers.get(key));
+      idleTimers.set(key, setTimeout(() => {
+        setData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            agents: prev.agents.map(a => {
+              if (!agentMatcher(a)) return a;
+              // Only revert if still in an active state
+              if (a.status === 'idle') return a;
+              return { ...a, status: 'idle', currentTask: null };
+            }),
+          };
+        });
+        idleTimers.delete(key);
+      }, delayMs));
+    };
+
+    const handleWsUpdate = (e) => {
+      const msg = e.detail;
+      if (!msg) return;
+
+      if (msg.type === 'office:activity') {
+        const activity = msg.data;
+        const role = ACTIVITY_ROLE_MAP[activity.type] || 'email';
+        const status = activity.type === 'meet' ? 'transcribing' : 'processing';
+
+        // Add to activity feed
+        setData(prev => {
+          if (!prev) return prev;
+          const newActivity = {
+            id: activity.id,
+            agentId: activity.agentId,
+            type: activity.type,
+            title: activity.title,
+            subtitle: activity.subtitle,
+            tenant: activity.tenantId,
+            createdAt: new Date().toISOString(),
+          };
+          return { ...prev, activities: [newActivity, ...prev.activities].slice(0, 50) };
+        });
+
+        // Animate the correct agent
+        const matcher = (a) => a.tenant === activity.tenantId && a.role === role;
+        setAgentActive(matcher, status, { name: activity.title, detail: activity.subtitle });
+
+        // Revert to idle after 15s (or 60s for meetings)
+        const idleDelay = activity.type === 'meet' ? 60000 : 15000;
+        scheduleIdle(`${activity.tenantId}-${role}`, matcher, idleDelay);
+
+        // Flash the tenant row
+        if (activity.tenantId) {
+          setRealtimeFlash(prev => ({ ...prev, [activity.tenantId]: Date.now() }));
+          setTimeout(() => setRealtimeFlash(prev => { const next = { ...prev }; delete next[activity.tenantId]; return next; }), 3000);
+        }
+      }
+
+      if (msg.type === 'office:agent-event') {
+        const { event, agentId, name } = msg.data;
+        const matcher = (a) => a.id === agentId || a.name === name;
+
+        if (event === 'agent:started' || event === 'agent:action') {
+          setAgentActive(matcher, 'running', null);
+          scheduleIdle(agentId || name, matcher, 30000);
+        } else if (event === 'agent:stopped' || event === 'agent:auto_stopped') {
+          setAgentActive(matcher, 'idle', null);
+        } else if (event === 'agent:error') {
+          setAgentActive(matcher, 'error', null);
+          scheduleIdle(agentId || name, matcher, 10000);
+        }
+      }
+    };
+
+    window.addEventListener('ws-update', handleWsUpdate);
+    return () => {
+      window.removeEventListener('ws-update', handleWsUpdate);
+      for (const timer of idleTimers.values()) clearTimeout(timer);
+    };
+  }, []);
 
   if (loading) {
     return (
