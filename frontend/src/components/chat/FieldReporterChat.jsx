@@ -1,4 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+function getAuthToken() {
+  try {
+    const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+    if (session?.tokens?.accessToken) return session.tokens.accessToken;
+  } catch {}
+  const legacy = localStorage.getItem('auth_token');
+  if (legacy) return legacy;
+  return null;
+}
+
+function authHeaders() {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 // ─── Simple markdown-like formatting ────────────────────────────────────────────
 function formatContent(text) {
@@ -17,6 +34,7 @@ function formatContent(text) {
 // ─── Constants ──────────────────────────────────────────────────────────────────
 const ACCENT = '#1e3a5f';
 
+// Demo messages kept as initial chat context
 const DEMO_MESSAGES = [
   {
     id: 1,
@@ -68,57 +86,42 @@ const DEMO_MESSAGES = [
   },
 ];
 
-const ACTIVE_JOBS = [
-  {
-    id: 'J-009',
-    name: 'Westpark Retail',
-    gc: 'Turner Construction',
-    progress: 40,
-    budget: { spent: '$118K', total: '$264K' },
-    rebar: { used: '2,400 LF', est: '2,000 LF', flag: true },
-    crew: 6,
-    status: 'active',
-  },
-  {
-    id: 'J-010',
-    name: 'St. Luke\'s Parking',
-    gc: 'DPR Construction',
-    progress: 20,
-    status: 'active',
-  },
-  {
-    id: 'J-011',
-    name: 'Samsung Fab Foundation',
-    gc: 'Hensel Phelps',
-    progress: 5,
-    status: 'mobilizing',
-  },
-];
+// ─── Helpers ────────────────────────────────────────────────────────────────────
 
-const REPORT_ITEMS = [
-  { id: 1, job: 'Westpark Retail', title: 'Daily Log', date: 'Today', badges: ['Normal'], selected: true },
-  { id: 2, job: 'Westpark Retail', title: 'Rebar Usage Flag', date: 'Today', badges: ['Anomaly'] },
-  { id: 3, job: 'Westpark Retail', title: 'Daily Log', date: 'Yesterday', badges: ['Normal'] },
-  { id: 4, job: 'Frisco Station', title: 'Rock Encounter Flag', date: '2 days ago', badges: ['Anomaly', 'Change Order'] },
-  { id: 5, job: 'St. Luke\'s Parking', title: 'Mobilization Report', date: '3 days ago', badges: ['Normal'] },
-  { id: 6, job: 'Westpark Retail', title: 'Daily Log', date: '3 days ago', badges: ['Weather'] },
-];
+function parseReport(r) {
+  return {
+    ...r,
+    work: r.work || (r.work_json ? JSON.parse(r.work_json) : []),
+    materials: r.materials || (r.materials_json ? JSON.parse(r.materials_json) : []),
+    labor: r.labor || (r.labor_json ? JSON.parse(r.labor_json) : {}),
+    equipment: r.equipment || (r.equipment_json ? JSON.parse(r.equipment_json) : []),
+    issues: r.issues || (r.issues_json ? JSON.parse(r.issues_json) : []),
+  };
+}
 
-const HISTORY_DATA = [
-  { date: 'Mar 9', job: 'Westpark Retail', type: 'Daily Log', status: 'Normal', impact: '—' },
-  { date: 'Mar 9', job: 'Westpark Retail', type: 'Anomaly', status: 'Flagged', impact: '+$4,200 rebar' },
-  { date: 'Mar 8', job: 'Westpark Retail', type: 'Daily Log', status: 'Normal', impact: '—' },
-  { date: 'Mar 7', job: 'Frisco Station', type: 'Anomaly', status: 'Change Order', impact: '+$11,200 drilling' },
-  { date: 'Mar 6', job: 'St. Luke\'s Parking', type: 'Mobilization', status: 'Normal', impact: '—' },
-  { date: 'Mar 6', job: 'Westpark Retail', type: 'Daily Log', status: 'Weather Delay', impact: '-1 day schedule' },
-];
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
-const COST_TRACKING = [
-  { item: 'Concrete', budgeted: '$123,240', actual: '$47,424', variance: '-$75,816', varianceColor: '#1a6b3c', note: 'Under (40% complete)' },
-  { item: 'Rebar', budgeted: '$28,310', actual: '$12,840', variance: '+$4,200', varianceColor: '#c0392b', note: '18% over rate' },
-  { item: 'Labor Hours', budgeted: '3,200 hrs', actual: '1,240 hrs', variance: 'On track', varianceColor: '#1a6b3c', note: '39% used' },
-  { item: 'Mob/Demob', budgeted: '$3,500', actual: '$3,500', variance: '$0', varianceColor: '#6b6b65', note: 'Complete' },
-];
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function fmtMoney(n) {
+  if (n == null) return '--';
+  if (n >= 1000) return `$${(n / 1000).toFixed(0)}K`;
+  return `$${n.toLocaleString()}`;
+}
 
 // ─── Sub-Components ─────────────────────────────────────────────────────────────
 
@@ -138,7 +141,6 @@ function FieldAlertCard({ alert, actions }) {
           {actions.map((a, i) => (
             <button
               key={i}
-              onClick={() => alert(`${a.label} action acknowledged.`)}
               className={`px-3.5 py-[6px] rounded-lg text-[11px] font-semibold transition-colors ${
                 a.variant === 'primary'
                   ? 'text-white'
@@ -216,75 +218,119 @@ function ChatMessage({ msg }) {
 function ProgressBar({ percent, color = '#1e3a5f' }) {
   return (
     <div className="w-full h-1.5 rounded-full bg-[#e8e6e1] overflow-hidden">
-      <div className="h-full rounded-full transition-all" style={{ width: `${percent}%`, backgroundColor: color }} />
+      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, percent || 0)}%`, backgroundColor: color }} />
     </div>
   );
 }
 
-function ContextPanel() {
+// ─── Context Panel (sidebar) ────────────────────────────────────────────────────
+
+function ContextPanel({ jobs, fieldReports, loading }) {
+  const activeJobs = jobs.filter(j => j.status === 'active');
+
+  // Compute today's submissions from real field reports
+  const today = new Date().toISOString().slice(0, 10);
+  const todayReports = fieldReports.filter(r => r.date === today);
+
+  // Build a map of job_id -> aggregated field report data for active jobs
+  const jobAggregates = {};
+  for (const j of activeJobs) {
+    const reports = fieldReports.filter(r => r.job_id === j.id);
+    const totalLaborHours = reports.reduce((s, r) => s + (r.labor?.hours || 0), 0);
+    const totalCY = reports.reduce((s, r) => {
+      return s + (r.materials || []).filter(m => m.unit === 'CY').reduce((ms, m) => ms + (m.quantity || 0), 0);
+    }, 0);
+    const latestCrew = reports.length > 0 ? reports[reports.length - 1].labor?.crew_size : null;
+    jobAggregates[j.id] = { totalLaborHours, totalCY, latestCrew };
+  }
+
+  const statusColor = (status) => {
+    if (status === 'active') return { bg: '#edf7f0', text: '#1a6b3c' };
+    if (status === 'mobilizing') return { bg: '#fdf6e8', text: '#b8860b' };
+    return { bg: '#eef3f9', text: '#1e3a5f' };
+  };
+
+  // Estimate progress: if actual_cost and estimated_cost exist, use ratio; otherwise fallback
+  const estimateProgress = (job) => {
+    if (job.actual_cost && job.estimated_cost) {
+      return Math.round((job.actual_cost / job.estimated_cost) * 100);
+    }
+    // Parse from notes if available (e.g., "40% complete")
+    const match = job.notes?.match(/(\d+)%\s*complete/i);
+    if (match) return parseInt(match[1], 10);
+    if (job.start_date && !job.end_date) return 5; // just started
+    return 0;
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-[11px] text-[#9a9a92]">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-y-auto">
       {/* Active Jobs */}
       <div className="border-b border-[#f0eeea]">
         <div className="px-4 py-3 flex items-center justify-between">
           <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.8px]">Active Jobs</span>
-          <span className="text-[10px] text-[#c5c5bc]">3 jobs</span>
+          <span className="text-[10px] text-[#c5c5bc]">{activeJobs.length} job{activeJobs.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="px-4 pb-3.5 space-y-2.5">
-          {/* Westpark Retail */}
-          <div className="p-3 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[12px] font-semibold text-terminal-text">Westpark Retail</span>
-              <span className="text-[9px] font-bold px-2 py-[2px] rounded-[5px] bg-[#edf7f0] text-[#1a6b3c]">J-009</span>
-            </div>
-            <div className="text-[10px] text-[#9a9a92] mb-2">Turner Construction</div>
-            <div className="flex items-center gap-2 mb-2">
-              <ProgressBar percent={40} color="#1e3a5f" />
-              <span className="text-[10px] font-mono font-semibold text-[#6b6b65] shrink-0">40%</span>
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-[11px]">
-                <span className="text-[#9a9a92]">Budget</span>
-                <span className="font-mono text-terminal-text">$118K / $264K</span>
+          {activeJobs.length === 0 && (
+            <div className="text-[11px] text-[#9a9a92] text-center py-4">No active jobs</div>
+          )}
+          {activeJobs.map(job => {
+            const sc = statusColor(job.status);
+            const progress = estimateProgress(job);
+            const agg = jobAggregates[job.id] || {};
+            return (
+              <div key={job.id} className="p-3 bg-terminal-panel border border-[#f0eeea] rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[12px] font-semibold text-terminal-text">{job.project_name}</span>
+                  <span
+                    className="text-[9px] font-bold px-2 py-[2px] rounded-[5px]"
+                    style={{ backgroundColor: sc.bg, color: sc.text }}
+                  >
+                    {job.id}
+                  </span>
+                </div>
+                <div className="text-[10px] text-[#9a9a92] mb-2">{job.gc_name}</div>
+                <div className="flex items-center gap-2 mb-1">
+                  <ProgressBar percent={progress} color={progress < 10 ? '#b8860b' : '#1e3a5f'} />
+                  <span className="text-[10px] font-mono font-semibold text-[#6b6b65] shrink-0">{progress}%</span>
+                </div>
+                <div className="space-y-1">
+                  {job.bid_amount && job.actual_cost != null && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#9a9a92]">Budget</span>
+                      <span className="font-mono text-terminal-text">{fmtMoney(job.actual_cost)} / {fmtMoney(job.bid_amount)}</span>
+                    </div>
+                  )}
+                  {job.bid_amount && job.actual_cost == null && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#9a9a92]">Bid</span>
+                      <span className="font-mono text-terminal-text">{fmtMoney(job.bid_amount)}</span>
+                    </div>
+                  )}
+                  {agg.totalCY > 0 && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#9a9a92]">Concrete</span>
+                      <span className="font-mono text-terminal-text">{agg.totalCY.toLocaleString()} CY</span>
+                    </div>
+                  )}
+                  {agg.latestCrew && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-[#9a9a92]">Crew</span>
+                      <span className="font-mono text-terminal-text">{agg.latestCrew}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-[#9a9a92]">Rebar</span>
-                <span className="font-mono text-[#c0392b] font-semibold">2,400 / 2,000 LF</span>
-              </div>
-              <div className="flex justify-between text-[11px]">
-                <span className="text-[#9a9a92]">Crew today</span>
-                <span className="font-mono text-terminal-text">6 finishers</span>
-              </div>
-            </div>
-          </div>
-
-          {/* St. Luke's */}
-          <div className="p-3 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[12px] font-semibold text-terminal-text">St. Luke's Parking</span>
-              <span className="text-[9px] font-bold px-2 py-[2px] rounded-[5px] bg-[#eef3f9] text-[#1e3a5f]">J-010</span>
-            </div>
-            <div className="text-[10px] text-[#9a9a92] mb-2">DPR Construction</div>
-            <div className="flex items-center gap-2 mb-1">
-              <ProgressBar percent={20} color="#1e3a5f" />
-              <span className="text-[10px] font-mono font-semibold text-[#6b6b65] shrink-0">20%</span>
-            </div>
-            <div className="text-[10px] text-[#b8860b] mt-1">Geotech flag — rock at 22'</div>
-          </div>
-
-          {/* Samsung */}
-          <div className="p-3 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[12px] font-semibold text-terminal-text">Samsung Fab Foundation</span>
-              <span className="text-[9px] font-bold px-2 py-[2px] rounded-[5px] bg-[#fdf6e8] text-[#b8860b]">J-011</span>
-            </div>
-            <div className="text-[10px] text-[#9a9a92] mb-2">Hensel Phelps</div>
-            <div className="flex items-center gap-2">
-              <ProgressBar percent={5} color="#b8860b" />
-              <span className="text-[10px] font-mono font-semibold text-[#6b6b65] shrink-0">5%</span>
-            </div>
-            <div className="text-[10px] text-[#9a9a92] mt-1">Mobilizing</div>
-          </div>
+            );
+          })}
         </div>
       </div>
 
@@ -292,23 +338,26 @@ function ContextPanel() {
       <div className="border-b border-[#f0eeea]">
         <div className="px-4 py-3 flex items-center justify-between">
           <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.8px]">Today's Submissions</span>
-          <span className="text-[10px] text-[#c5c5bc]">2 logs</span>
+          <span className="text-[10px] text-[#c5c5bc]">{todayReports.length} log{todayReports.length !== 1 ? 's' : ''}</span>
         </div>
         <div className="px-4 pb-3.5 space-y-2">
-          <div className="p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-terminal-text">Carlos Mendez</span>
-              <span className="text-[10px] text-[#9a9a92]">9:02 AM</span>
-            </div>
-            <div className="text-[10px] text-[#9a9a92] mt-0.5">Westpark Retail — Daily log</div>
-          </div>
-          <div className="p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-terminal-text">Miguel Torres</span>
-              <span className="text-[10px] text-[#9a9a92]">8:30 AM</span>
-            </div>
-            <div className="text-[10px] text-[#9a9a92] mt-0.5">St. Luke's Parking — Site prep</div>
-          </div>
+          {todayReports.length === 0 && (
+            <div className="text-[11px] text-[#9a9a92] text-center py-3">No submissions today</div>
+          )}
+          {todayReports.map(r => {
+            const job = jobs.find(j => j.id === r.job_id);
+            return (
+              <div key={r.id} className="p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-terminal-text">{r.reported_by || 'Unknown'}</span>
+                  <span className="text-[10px] text-[#9a9a92]">{r.date}</span>
+                </div>
+                <div className="text-[10px] text-[#9a9a92] mt-0.5">
+                  {job ? job.project_name : r.job_id} — {r.weather ? `${r.weather}` : 'Daily log'}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -317,10 +366,30 @@ function ContextPanel() {
 
 // ─── Reports Tab ────────────────────────────────────────────────────────────────
 
-function ReportsTab() {
+function ReportsTab({ fieldReports, jobs, loading }) {
   const [filter, setFilter] = useState('All');
-  const [selectedId, setSelectedId] = useState(1);
-  const filters = ['All', 'Flags', 'Westpark', "St. Luke's"];
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
+  // Build job name map
+  const jobMap = {};
+  for (const j of jobs) jobMap[j.id] = j;
+
+  // Map real field reports to report items
+  const reportItems = fieldReports.map((r, i) => {
+    const job = jobMap[r.job_id];
+    const jobName = job ? job.project_name : r.job_id;
+    const badges = [];
+    if (r.issues && r.issues.length > 0) badges.push('Anomaly');
+    if (r.notes && /change\s*order/i.test(r.notes)) badges.push('Change Order');
+    if (r.weather && /rain|storm|delay|wind/i.test(r.weather)) badges.push('Weather');
+    if (badges.length === 0) badges.push('Normal');
+    const title = r.issues && r.issues.length > 0 ? 'Issue Report' : 'Daily Log';
+    return { idx: i, id: r.id, job: jobName, jobId: r.job_id, title, date: formatRelativeDate(r.date), badges, report: r };
+  });
+
+  // Build dynamic filter list from unique job names
+  const uniqueJobs = [...new Set(reportItems.map(r => r.job))];
+  const filters = ['All', 'Flags', ...uniqueJobs.slice(0, 4)];
 
   const badgeColor = (badge) => {
     if (badge === 'Anomaly') return 'bg-[#fbeae8] text-[#c0392b]';
@@ -329,13 +398,22 @@ function ReportsTab() {
     return 'bg-[#f5f4f0] text-[#6b6b65]';
   };
 
-  const filtered = REPORT_ITEMS.filter(item => {
+  const filtered = reportItems.filter(item => {
     if (filter === 'All') return true;
     if (filter === 'Flags') return item.badges.some(b => b === 'Anomaly' || b === 'Change Order');
-    if (filter === 'Westpark') return item.job === 'Westpark Retail';
-    if (filter === "St. Luke's") return item.job === "St. Luke's Parking";
-    return true;
+    return item.job === filter;
   });
+
+  const selected = filtered.find(f => f.idx === selectedIdx) || filtered[0];
+  const selReport = selected?.report;
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="text-[12px] text-[#9a9a92]">Loading reports...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -346,7 +424,7 @@ function ReportsTab() {
           {filters.map(f => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => { setFilter(f); setSelectedIdx(0); }}
               className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors ${
                 filter === f
                   ? 'text-white border-transparent'
@@ -360,12 +438,15 @@ function ReportsTab() {
         </div>
         {/* Items */}
         <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 && (
+            <div className="text-[12px] text-[#9a9a92] text-center py-8">No reports found</div>
+          )}
           {filtered.map(item => (
             <div
               key={item.id}
-              onClick={() => setSelectedId(item.id)}
+              onClick={() => setSelectedIdx(item.idx)}
               className={`px-5 py-3.5 border-b border-terminal-border cursor-pointer hover:bg-[#f5f4f0] transition-colors ${
-                selectedId === item.id ? 'bg-[#f5f4f0]' : ''
+                selectedIdx === item.idx ? 'bg-[#f5f4f0]' : ''
               }`}
             >
               <div className="flex items-center justify-between mb-1">
@@ -385,62 +466,116 @@ function ReportsTab() {
 
       {/* Detail */}
       <div className="flex-1 min-w-0 overflow-y-auto bg-[#f5f4f0] p-5">
-        <div className="mb-4">
-          <h3 className="text-[15px] font-semibold text-terminal-text">Westpark Retail — Daily Log</h3>
-          <div className="text-[11px] text-[#9a9a92] mt-0.5">Submitted by Carlos Mendez at 9:02 AM</div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-4 gap-3 mb-4">
-          {[
-            { label: 'Concrete', value: '52 CY', icon: '&#9632;' },
-            { label: 'Finishers', value: '6', icon: '&#9632;' },
-            { label: 'Weather', value: 'Clear', icon: '&#9632;' },
-            { label: 'Hours', value: '8 hrs', icon: '&#9632;' },
-          ].map((s, i) => (
-            <div key={i} className="bg-terminal-panel rounded-xl border border-terminal-border p-3 text-center">
-              <div className="text-[18px] font-bold text-terminal-text">{s.value}</div>
-              <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-wider mt-0.5">{s.label}</div>
+        {!selReport ? (
+          <div className="text-[12px] text-[#9a9a92] text-center py-12">Select a report to view details</div>
+        ) : (
+          <>
+            <div className="mb-4">
+              <h3 className="text-[15px] font-semibold text-terminal-text">
+                {selected.job} — {selected.title}
+              </h3>
+              <div className="text-[11px] text-[#9a9a92] mt-0.5">
+                Submitted by {selReport.reported_by || 'Unknown'} on {selReport.date}
+              </div>
             </div>
-          ))}
-        </div>
 
-        {/* Work Performed */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4 mb-4">
-          <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2">Work Performed</div>
-          <div className="text-[12px] text-terminal-text leading-[1.7]">
-            Poured slab section C — 52 CY of 4000 PSI concrete. 6 finishers on site for finishing and curing. Rebar placement for section D prepared and inspected. Pump truck arrived on time at 6:30 AM. No delays or incidents. Weather clear, 72F. Foreman notes: section C cure time started at 2:15 PM.
-          </div>
-        </div>
-
-        {/* Job Cost Tracking */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-terminal-border">
-            <span className="text-[13px] font-semibold text-terminal-text">Job Cost Tracking — Westpark Retail</span>
-          </div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-terminal-border">
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Item</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Budgeted</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Actual</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Variance</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {COST_TRACKING.map((row, i) => (
-                <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
-                  <td className="px-4 py-2.5 font-semibold text-terminal-text">{row.item}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-[#6b6b65]">{row.budgeted}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{row.actual}</td>
-                  <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: row.varianceColor }}>{row.variance}</td>
-                  <td className="px-4 py-2.5 text-right text-[#9a9a92]">{row.note}</td>
-                </tr>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
+              {[
+                { label: 'Materials', value: selReport.materials?.length > 0 ? selReport.materials.map(m => `${m.quantity} ${m.unit}`).join(', ') : '--' },
+                { label: 'Crew', value: selReport.labor?.crew_size || '--' },
+                { label: 'Weather', value: selReport.weather || '--' },
+                { label: 'Hours', value: selReport.labor?.hours ? `${selReport.labor.hours} hrs` : '--' },
+              ].map((s, i) => (
+                <div key={i} className="bg-terminal-panel rounded-xl border border-terminal-border p-3 text-center">
+                  <div className="text-[18px] font-bold text-terminal-text">{s.value}</div>
+                  <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-wider mt-0.5">{s.label}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Work Performed */}
+            {selReport.work && selReport.work.length > 0 && (
+              <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4 mb-4">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2">Work Performed</div>
+                <div className="text-[12px] text-terminal-text leading-[1.7]">
+                  {selReport.work.map((w, i) => (
+                    <div key={i} className="flex items-start gap-1.5 mb-1">
+                      <span className="text-[#9a9a92] mt-0.5">-</span>
+                      <span>{w}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            {selReport.notes && (
+              <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4 mb-4">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2">Notes</div>
+                <div className="text-[12px] text-terminal-text leading-[1.7]">{selReport.notes}</div>
+              </div>
+            )}
+
+            {/* Issues */}
+            {selReport.issues && selReport.issues.length > 0 && (
+              <div className="bg-[#fbeae8] border border-[#f0c0bb] rounded-xl p-4 mb-4">
+                <div className="text-[10px] font-semibold text-[#c0392b] uppercase tracking-wider mb-2">Issues Flagged</div>
+                {selReport.issues.map((issue, i) => (
+                  <div key={i} className="text-[12px] text-[#c0392b] flex items-start gap-1.5 mb-1">
+                    <span className="mt-0.5">!</span>
+                    <span>{issue}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Equipment */}
+            {selReport.equipment && selReport.equipment.length > 0 && (
+              <div className="bg-terminal-panel border border-terminal-border rounded-xl p-4 mb-4">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2">Equipment</div>
+                <div className="text-[12px] text-terminal-text">{selReport.equipment.join(', ')}</div>
+              </div>
+            )}
+
+            {/* Labor Cost Summary */}
+            {selReport.labor?.cost && (
+              <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-terminal-border">
+                  <span className="text-[13px] font-semibold text-terminal-text">Labor Summary</span>
+                </div>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b border-terminal-border">
+                      <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Item</th>
+                      <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-terminal-border/50">
+                      <td className="px-4 py-2.5 font-semibold text-terminal-text">Hours</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{selReport.labor.hours || '--'}</td>
+                    </tr>
+                    {selReport.labor.overtime > 0 && (
+                      <tr className="border-b border-terminal-border/50">
+                        <td className="px-4 py-2.5 font-semibold text-terminal-text">Overtime</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-[#b8860b]">{selReport.labor.overtime} hrs</td>
+                      </tr>
+                    )}
+                    <tr className="border-b border-terminal-border/50">
+                      <td className="px-4 py-2.5 font-semibold text-terminal-text">Cost</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-terminal-text">${selReport.labor.cost.toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-2.5 font-semibold text-terminal-text">Crew Size</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{selReport.labor.crew_size || '--'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -448,7 +583,42 @@ function ReportsTab() {
 
 // ─── History Tab ────────────────────────────────────────────────────────────────
 
-function HistoryTab() {
+function HistoryTab({ fieldReports, jobs, loading }) {
+  const jobMap = {};
+  for (const j of jobs) jobMap[j.id] = j;
+
+  // Compute stats from real data
+  const totalReports = fieldReports.length;
+  const totalIssues = fieldReports.reduce((s, r) => s + (r.issues?.length || 0), 0);
+  const totalLaborCost = fieldReports.reduce((s, r) => s + (r.labor?.cost || 0), 0);
+  const totalCY = fieldReports.reduce((s, r) => {
+    return s + (r.materials || []).filter(m => m.unit === 'CY').reduce((ms, m) => ms + (m.quantity || 0), 0);
+  }, 0);
+
+  // Map field reports to history rows
+  const historyRows = fieldReports.map(r => {
+    const job = jobMap[r.job_id];
+    const jobName = job ? job.project_name : r.job_id;
+    const hasIssues = r.issues && r.issues.length > 0;
+    const isWeather = r.weather && /rain|storm|delay|wind/i.test(r.weather);
+    let type = 'Daily Log';
+    let status = 'Normal';
+    let impact = '--';
+    if (hasIssues) {
+      type = 'Anomaly';
+      status = 'Flagged';
+      impact = r.issues[0]?.slice(0, 40) || 'Issue';
+    } else if (isWeather) {
+      type = 'Daily Log';
+      status = 'Weather Delay';
+      impact = r.weather;
+    }
+    if (r.notes && /change\s*order/i.test(r.notes)) {
+      status = 'Change Order';
+    }
+    return { date: formatShortDate(r.date), job: jobName, type, status, impact };
+  });
+
   const statusBadge = (s) => {
     if (s === 'Normal') return 'bg-[#f5f4f0] text-[#6b6b65]';
     if (s === 'Flagged') return 'bg-[#fbeae8] text-[#c0392b]';
@@ -457,15 +627,23 @@ function HistoryTab() {
     return 'bg-[#f5f4f0] text-[#6b6b65]';
   };
 
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="text-[12px] text-[#9a9a92]">Loading history...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       {/* Stats Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-terminal-border border-b border-terminal-border">
         {[
-          { label: 'Total Reports', value: '127' },
-          { label: 'Anomalies Flagged', value: '8' },
-          { label: 'Change Orders', value: '3' },
-          { label: 'Cost Overruns Caught', value: '$22.4K' },
+          { label: 'Total Reports', value: totalReports.toString() },
+          { label: 'Issues Flagged', value: totalIssues.toString() },
+          { label: 'Total Concrete', value: `${totalCY.toLocaleString()} CY` },
+          { label: 'Total Labor Cost', value: `$${totalLaborCost.toLocaleString()}` },
         ].map((s, i) => (
           <div key={i} className="bg-terminal-panel px-5 py-4 text-center">
             <div className="text-[18px] font-bold text-terminal-text">{s.value}</div>
@@ -477,32 +655,36 @@ function HistoryTab() {
       {/* Table */}
       <div className="px-5 py-4">
         <div className="text-[13px] font-semibold text-terminal-text mb-3">Recent Reports</div>
-        <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-terminal-border">
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Date</th>
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Job</th>
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Type</th>
-                <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Status</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Impact</th>
-              </tr>
-            </thead>
-            <tbody>
-              {HISTORY_DATA.map((h, i) => (
-                <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
-                  <td className="px-4 py-2.5 text-[#9a9a92] font-mono">{h.date}</td>
-                  <td className="px-4 py-2.5 font-semibold text-terminal-text">{h.job}</td>
-                  <td className="px-4 py-2.5 text-[#6b6b65]">{h.type}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusBadge(h.status)}`}>{h.status}</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.impact}</td>
+        {historyRows.length === 0 ? (
+          <div className="text-[12px] text-[#9a9a92] text-center py-8">No reports yet</div>
+        ) : (
+          <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-terminal-border">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Date</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Job</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Type</th>
+                  <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Status</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Impact</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {historyRows.map((h, i) => (
+                  <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
+                    <td className="px-4 py-2.5 text-[#9a9a92] font-mono">{h.date}</td>
+                    <td className="px-4 py-2.5 font-semibold text-terminal-text">{h.job}</td>
+                    <td className="px-4 py-2.5 text-[#6b6b65]">{h.type}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusBadge(h.status)}`}>{h.status}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.impact}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -520,6 +702,43 @@ function ConfigTab() {
   const [chatOn, setChatOn] = useState(true);
   const [whatsappOn, setWhatsappOn] = useState(false);
   const [emailOn, setEmailOn] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/v1/tenant`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          settings: {
+            fieldReporter: {
+              autonomous,
+              autoFlag,
+              materialVariance: parseFloat(materialVariance) || 15,
+              laborVariance: parseFloat(laborVariance) || 20,
+              costImpactMin: parseFloat(costImpactMin) || 2000,
+              trendingWindow: parseInt(trendingWindow) || 3,
+              channels: { chat: chatOn, whatsapp: whatsappOn, email: emailOn },
+            },
+          },
+        }),
+      });
+      if (res.ok) {
+        setSaveMsg('Configuration saved.');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setSaveMsg(err.error || 'Failed to save.');
+      }
+    } catch (e) {
+      setSaveMsg('Network error.');
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(''), 3000);
+    }
+  };
 
   const Toggle = ({ on, setOn }) => (
     <button
@@ -614,12 +833,18 @@ function ConfigTab() {
 
         {/* Save */}
         <button
-          onClick={() => alert('Configuration saved.')}
-          className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           style={{ backgroundColor: ACCENT }}
         >
-          Save Configuration
+          {saving ? 'Saving...' : 'Save Configuration'}
         </button>
+        {saveMsg && (
+          <div className={`text-center text-[12px] ${saveMsg.includes('saved') ? 'text-[#1a6b3c]' : 'text-[#c0392b]'}`}>
+            {saveMsg}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -630,13 +855,114 @@ function ConfigTab() {
 export default function FieldReporterChat() {
   const [activeTab, setActiveTab] = useState('Chat');
   const [input, setInput] = useState('');
+  const [messages, setMessages] = useState(DEMO_MESSAGES);
+  const [sending, setSending] = useState(false);
+  const [threadId, setThreadId] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  // Real data state
+  const [jobs, setJobs] = useState([]);
+  const [fieldReports, setFieldReports] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const tabs = ['Chat', 'Reports', 'History', 'Config'];
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  // Fetch real data on mount
+  useEffect(() => {
+    const headers = authHeaders();
+    Promise.all([
+      fetch(`${API_BASE}/v1/estimates/jobs`, { headers }).then(r => r.json()).catch(() => ({ jobs: [] })),
+      fetch(`${API_BASE}/v1/estimates/field-reports`, { headers }).then(r => r.json()).catch(() => ({ fieldReports: [] })),
+    ]).then(([jobsRes, reportsRes]) => {
+      setJobs(jobsRes.jobs || []);
+      const raw = reportsRes.fieldReports || [];
+      setFieldReports(raw.map(parseReport));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = useCallback(async () => {
+    if (!input.trim() || sending) return;
+    const text = input.trim();
     setInput('');
-  };
+
+    const userMsg = {
+      id: Date.now(),
+      role: 'user',
+      content: text,
+      time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setSending(true);
+
+    try {
+      const token = getAuthToken();
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      // Create thread if we don't have one yet
+      let tid = threadId;
+      if (!tid) {
+        const tRes = await fetch(`${API_BASE}/v1/chat/field/threads`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ title: text.slice(0, 60) }),
+        });
+        if (tRes.ok) {
+          const tData = await tRes.json();
+          tid = tData.thread?.id || tData.id;
+          setThreadId(tid);
+        }
+      }
+
+      const postUrl = tid
+        ? `${API_BASE}/v1/chat/field/threads/${tid}/messages`
+        : `${API_BASE}/v1/chat/field/messages`;
+
+      const res = await fetch(postUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content: text }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const agentContent = data.response || data.message?.content || data.content || 'No response received.';
+        const agentMsg = {
+          id: Date.now() + 1,
+          role: 'agent',
+          content: agentContent,
+          time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        };
+        setMessages(prev => [...prev, agentMsg]);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const agentMsg = {
+          id: Date.now() + 1,
+          role: 'agent',
+          content: `Error: ${errData.error || res.statusText || 'Failed to get response.'}`,
+          time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        };
+        setMessages(prev => [...prev, agentMsg]);
+      }
+    } catch (err) {
+      const agentMsg = {
+        id: Date.now() + 1,
+        role: 'agent',
+        content: `Network error: ${err.message}`,
+        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      };
+      setMessages(prev => [...prev, agentMsg]);
+    } finally {
+      setSending(false);
+    }
+  }, [input, sending, threadId]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -657,7 +983,7 @@ export default function FieldReporterChat() {
             <div className="text-[15px] font-semibold text-terminal-text">Field Reporter</div>
             <div className="text-[11px] text-[#9a9a92] flex items-center gap-[5px]">
               <span className="w-[5px] h-[5px] rounded-full bg-[#2dd478] animate-pulse" />
-              Online — 30 reports this month
+              Online — {fieldReports.length} report{fieldReports.length !== 1 ? 's' : ''} total
             </div>
           </div>
         </div>
@@ -694,9 +1020,16 @@ export default function FieldReporterChat() {
           <div className="flex-1 flex flex-col border-r border-terminal-border min-w-0 min-h-0">
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
-              {DEMO_MESSAGES.map(msg => (
+              {messages.map(msg => (
                 <ChatMessage key={msg.id} msg={msg} />
               ))}
+              {sending && (
+                <div className="self-start flex items-center gap-2 text-[12px] text-[#9a9a92]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#9a9a92] animate-pulse" />
+                  Field Reporter is thinking...
+                </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
@@ -716,7 +1049,7 @@ export default function FieldReporterChat() {
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || sending}
                   className="w-11 h-11 rounded-xl text-white flex items-center justify-center transition-colors disabled:opacity-40 shrink-0"
                   style={{ backgroundColor: ACCENT }}
                 >
@@ -732,16 +1065,16 @@ export default function FieldReporterChat() {
 
           {/* Context panel */}
           <div className="w-[280px] min-w-0 min-h-0 overflow-y-auto bg-[#f5f4f0] shrink-0">
-            <ContextPanel />
+            <ContextPanel jobs={jobs} fieldReports={fieldReports} loading={loading} />
           </div>
         </div>
       )}
 
       {/* ── Reports Tab ──────────────────────────────────────────────────────── */}
-      {activeTab === 'Reports' && <ReportsTab />}
+      {activeTab === 'Reports' && <ReportsTab fieldReports={fieldReports} jobs={jobs} loading={loading} />}
 
       {/* ── History Tab ──────────────────────────────────────────────────────── */}
-      {activeTab === 'History' && <HistoryTab />}
+      {activeTab === 'History' && <HistoryTab fieldReports={fieldReports} jobs={jobs} loading={loading} />}
 
       {/* ── Config Tab ───────────────────────────────────────────────────────── */}
       {activeTab === 'Config' && <ConfigTab />}

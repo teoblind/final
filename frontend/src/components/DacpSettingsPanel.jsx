@@ -1,9 +1,10 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Building2, DollarSign, BarChart3, MessageSquare, FileText,
   Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon
 } from 'lucide-react';
 import SettingsTeamPanel from './SettingsTeamPanel';
+import api from '../lib/hooks/useApi';
 const EmailSecurityPanel = lazy(() => import('./EmailSecurityPanel'));
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -102,21 +103,22 @@ function Select({ value, onChange, options }) {
   );
 }
 
-function Btn({ children, variant = 'primary', onClick }) {
+function Btn({ children, variant = 'primary', onClick, saving, saved: savedProp }) {
   const cls = variant === 'primary'
     ? 'bg-[#1e3a5f] text-white hover:bg-[#2a5080]'
     : variant === 'danger'
       ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
       : 'bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0]';
-  const [saved, setSaved] = useState(false);
+  const [internalSaved, setInternalSaved] = useState(false);
+  const saved = savedProp || internalSaved;
   const handleClick = () => {
     if (onClick) { onClick(); return; }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    setInternalSaved(true);
+    setTimeout(() => setInternalSaved(false), 1500);
   };
   return (
-    <button onClick={handleClick} className={`px-5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${saved && variant === 'primary' ? 'bg-green-700 text-white' : cls}`}>
-      {saved && variant === 'primary' ? '✓ Saved' : children}
+    <button onClick={handleClick} disabled={saving} className={`px-5 py-2.5 rounded-[10px] text-[13px] font-semibold transition-colors flex items-center gap-1.5 ${saving ? 'opacity-60 cursor-wait' : ''} ${saved && variant === 'primary' ? 'bg-green-700 text-white' : cls}`}>
+      {saving ? 'Saving...' : saved && variant === 'primary' ? '✓ Saved' : children}
     </button>
   );
 }
@@ -173,13 +175,48 @@ export default function DacpSettingsPanel() {
   });
 
   // GC contacts
-  const [gcContacts] = useState([
+  const [gcContacts, setGcContacts] = useState([
     { company: 'Turner Construction', contact: 'Mike Rodriguez', domain: '@turner.com', jobs: 8, winRate: 75 },
     { company: 'McCarthy Building', contact: 'Sarah Williams', domain: '@mccarthy.com', jobs: 5, winRate: 60 },
     { company: 'Hensel Phelps', contact: 'James Park', domain: '@henselphelps.com', jobs: 3, winRate: 33 },
     { company: 'DPR Construction', contact: 'Lisa Chen', domain: '@dpr.com', jobs: 4, winRate: 50 },
     { company: 'Skanska', contact: 'Robert Torres', domain: '@skanska.com', jobs: 2, winRate: 50 },
   ]);
+
+  // Persistence state
+  const [saving, setSaving] = useState(false);
+  const [savedSection, setSavedSection] = useState(null);
+  const settingsRef = useRef({});
+
+  // Load existing settings from backend on mount
+  useEffect(() => {
+    api.get('/v1/tenant').then(res => {
+      const s = res.data?.tenant?.settings || {};
+      settingsRef.current = s;
+      if (s.company) setCompany(prev => ({ ...prev, ...s.company }));
+      if (s.markup) setMarkup(prev => ({ ...prev, ...s.markup }));
+      if (s.bot) setBot(prev => ({ ...prev, ...s.bot }));
+      if (s.field) setField(prev => ({ ...prev, ...s.field }));
+      if (s.suppliers) setSuppliers(prev => ({ ...prev, ...s.suppliers }));
+      if (s.gcContacts) setGcContacts(s.gcContacts);
+    }).catch(() => {});
+  }, []);
+
+  // Save a single section — merges with existing settings so other sections aren't lost
+  const saveSettings = async (section, data) => {
+    setSaving(true);
+    try {
+      const merged = { ...settingsRef.current, [section]: data };
+      await api.put('/v1/tenant', { settings: merged });
+      settingsRef.current = merged;
+      setSavedSection(section);
+      setTimeout(() => setSavedSection(null), 2000);
+    } catch (err) {
+      alert('Failed to save: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Load pricing
   useEffect(() => {
@@ -283,7 +320,7 @@ export default function DacpSettingsPanel() {
           </Field>
         </div>
         <div className="flex gap-2.5 mt-4">
-          <Btn>Save Profile</Btn>
+          <Btn onClick={() => saveSettings('company', company)} saving={saving} saved={savedSection === 'company'}>Save Profile</Btn>
         </div>
       </Section>
 
@@ -339,7 +376,7 @@ export default function DacpSettingsPanel() {
         <div className="flex gap-2.5 mt-4">
           <Btn variant="secondary">+ Add Line Item</Btn>
           <Btn variant="secondary">Import from Excel</Btn>
-          <Btn>Save Pricing</Btn>
+          <Btn onClick={() => saveSettings('pricing', pricing)} saving={saving} saved={savedSection === 'pricing'}>Save Pricing</Btn>
         </div>
       </Section>
 
@@ -391,7 +428,7 @@ export default function DacpSettingsPanel() {
         </div>
 
         <div className="flex gap-2.5 mt-4">
-          <Btn>Save Margins</Btn>
+          <Btn onClick={() => saveSettings('markup', markup)} saving={saving} saved={savedSection === 'markup'}>Save Margins</Btn>
         </div>
       </Section>
 
@@ -446,7 +483,7 @@ export default function DacpSettingsPanel() {
         />
 
         <div className="flex gap-2.5 mt-4">
-          <Btn>Save Bot Settings</Btn>
+          <Btn onClick={() => saveSettings('bot', bot)} saving={saving} saved={savedSection === 'bot'}>Save Bot Settings</Btn>
         </div>
       </Section>
 
@@ -501,7 +538,7 @@ export default function DacpSettingsPanel() {
         </div>
 
         <div className="flex gap-2.5 mt-4">
-          <Btn>Save Field Settings</Btn>
+          <Btn onClick={() => saveSettings('field', field)} saving={saving} saved={savedSection === 'field'}>Save Field Settings</Btn>
         </div>
       </Section>
 
@@ -529,7 +566,7 @@ export default function DacpSettingsPanel() {
         </div>
         <div className="flex gap-2.5 mt-4">
           <Btn variant="secondary">+ Add Supplier</Btn>
-          <Btn>Save Suppliers</Btn>
+          <Btn onClick={() => saveSettings('suppliers', suppliers)} saving={saving} saved={savedSection === 'suppliers'}>Save Suppliers</Btn>
         </div>
       </Section>
 
@@ -562,7 +599,7 @@ export default function DacpSettingsPanel() {
         <div className="flex gap-2.5 mt-4">
           <Btn variant="secondary">+ Add GC</Btn>
           <Btn variant="secondary">Import from Contacts</Btn>
-          <Btn>Save GC List</Btn>
+          <Btn onClick={() => saveSettings('gcContacts', gcContacts)} saving={saving} saved={savedSection === 'gcContacts'}>Save GC List</Btn>
         </div>
       </Section>
 

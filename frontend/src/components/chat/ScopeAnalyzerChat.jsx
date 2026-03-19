@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api, { putApi } from '../../lib/hooks/useApi';
 
 // ─── Simple markdown-like formatting ────────────────────────────────────────────
 function formatContent(text) {
@@ -98,7 +99,7 @@ function RFICard({ data }) {
   );
 }
 
-// ─── Demo Messages ──────────────────────────────────────────────────────────────
+// ─── Demo Messages (initial chat context) ────────────────────────────────────
 const DEMO_MESSAGES = [
   {
     id: 1, role: 'user',
@@ -158,63 +159,6 @@ const DEMO_MESSAGES = [
       { label: 'Edit', variant: 'secondary' },
     ],
   },
-];
-
-// ─── Demo Context ───────────────────────────────────────────────────────────────
-const DEMO_CONTEXT = {
-  currentDoc: {
-    title: 'McKinney Town Center',
-    rows: [
-      { label: 'GC', value: 'Austin Commercial' },
-      { label: 'Pages', value: '48' },
-      { label: 'Sections', value: '12 CSI divisions' },
-      { label: 'Flags', value: '2', warn: true },
-      { label: 'RFIs', value: '1 drafted' },
-      { label: 'Bid Due', value: 'Mar 22', danger: true },
-    ],
-  },
-  extractionStatus: {
-    standard: 3,
-    clarification: 2,
-    outsideScope: 1,
-    unpriced: 2,
-  },
-  specSections: [
-    { code: '01 45 00', name: 'Quality Control' },
-    { code: '03 30 00', name: 'Cast-in-Place Concrete' },
-    { code: '03 41 00', name: 'Precast Structural' },
-    { code: '31 63 00', name: 'Bored Piles' },
-    { code: '32 13 00', name: 'Rigid Paving' },
-    { code: '32 16 00', name: 'Curbs & Gutters' },
-  ],
-};
-
-// ─── Demo Documents ─────────────────────────────────────────────────────────────
-const DEMO_DOCUMENTS = [
-  { id: 1, name: 'McKinney Town Center Specs', gc: 'Austin Commercial', pages: 48, date: 'Today', progress: 60, status: 'In Progress' },
-  { id: 2, name: 'I-35 Retaining Walls SOW', gc: 'Hensel Phelps', pages: 12, date: 'Yesterday', progress: 100, status: 'Complete' },
-  { id: 3, name: 'Bishop Arts Mixed-Use SOW', gc: "Rogers-O'Brien", pages: 8, date: 'Today', progress: 100, status: 'Complete' },
-  { id: 4, name: 'Memorial Hermann Ph2 Specs', gc: 'Turner', pages: 24, date: '3 days ago', progress: 100, status: 'Complete' },
-  { id: 5, name: 'Samsung Fab Equipment Pads', gc: 'DPR', pages: 6, date: '5 days ago', progress: 100, status: 'Complete' },
-];
-
-const I35_EXTRACTION = [
-  { item: 'Cantilever retaining wall', qty: '2,400 LF', section: '03 30 00', status: 'Priced' },
-  { item: 'Grade beam (24"x36")', qty: '800 LF', section: '03 30 00', status: 'Priced' },
-  { item: '#5 Rebar @ 12" O.C.', qty: '14,200 LF', section: '03 20 00', status: 'Priced' },
-  { item: 'Form & strip', qty: '9,600 SF', section: '03 10 00', status: 'Priced' },
-  { item: 'Concrete testing (3rd party)', qty: '18 sets', section: '01 45 00', status: 'Priced' },
-  { item: 'Mobilization', qty: '1 LS', section: '01 50 00', status: 'Priced' },
-];
-
-// ─── Demo History ───────────────────────────────────────────────────────────────
-const DEMO_HISTORY = [
-  { date: 'Mar 9', document: 'McKinney Town Center Specs', gc: 'Austin Commercial', items: 8, flags: 2, rfis: 1, result: 'In Progress' },
-  { date: 'Mar 8', document: 'I-35 Retaining Walls SOW', gc: 'Hensel Phelps', items: 6, flags: 0, rfis: 0, result: 'Sent to Estimating' },
-  { date: 'Mar 9', document: 'Bishop Arts Mixed-Use SOW', gc: "Rogers-O'Brien", items: 5, flags: 1, rfis: 0, result: 'Sent to Estimating' },
-  { date: 'Mar 6', document: 'Memorial Hermann Ph2 Specs', gc: 'Turner', items: 12, flags: 3, rfis: 2, result: 'Sent to Estimating' },
-  { date: 'Mar 4', document: 'Samsung Fab Equipment Pads', gc: 'DPR', items: 4, flags: 0, rfis: 0, result: 'Sent to Estimating' },
-  { date: 'Feb 28', document: 'UT Dallas Science Bldg', gc: 'Balfour Beatty', items: 15, flags: 4, rfis: 3, result: 'Sent to Estimating' },
 ];
 
 // ─── Chat Message ───────────────────────────────────────────────────────────────
@@ -294,15 +238,48 @@ function ContextSection({ title, meta, children, defaultOpen = true }) {
   );
 }
 
-function ScopeContextPanel() {
-  const ctx = DEMO_CONTEXT;
-  const es = ctx.extractionStatus;
+function ScopeContextPanel({ inbox, estimates, stats }) {
+  // Build context from the most recent inbox item (or fall back to placeholder)
+  const latestBid = inbox.length > 0 ? inbox[0] : null;
+  const scope = latestBid?.scope || {};
+  const scopeItems = scope.items || scope.lineItems || [];
+
+  // Count extraction statuses from scope items
+  const standard = scopeItems.filter(i => i.status === 'priced' || i.status === 'standard').length;
+  const clarification = scopeItems.filter(i => i.status === 'clarification').length;
+  const outsideScope = scopeItems.filter(i => i.status === 'warning' || i.status === 'outside_scope').length;
+  const unpriced = scopeItems.filter(i => !i.status || i.status === 'none' || i.status === 'unpriced').length;
+  const totalItems = scopeItems.length || (standard + clarification + outsideScope + unpriced);
+
+  const docTitle = latestBid?.subject || latestBid?.gc_name || 'No documents yet';
+  const missingInfo = latestBid?.missing_info || [];
+
+  const rows = latestBid ? [
+    { label: 'GC', value: latestBid.gc_name || latestBid.from_name || '\u2014' },
+    { label: 'Status', value: latestBid.status || 'new' },
+    { label: 'Urgency', value: latestBid.urgency || '\u2014', danger: latestBid.urgency === 'high' },
+    { label: 'Scope Items', value: String(totalItems) },
+    { label: 'Missing Info', value: String(missingInfo.length), warn: missingInfo.length > 0 },
+    { label: 'Bid Due', value: latestBid.due_date ? new Date(latestBid.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '\u2014', danger: true },
+  ] : [
+    { label: 'Status', value: 'No RFQs in inbox' },
+  ];
+
+  // Spec sections from scope data
+  const specSections = [];
+  const sectionSet = new Set();
+  for (const item of scopeItems) {
+    const sec = item.section || item.csi_section;
+    if (sec && !sectionSet.has(sec)) {
+      sectionSet.add(sec);
+      specSections.push({ code: sec, name: item.name || item.description || sec });
+    }
+  }
 
   return (
     <>
-      {/* Current Document */}
-      <ContextSection title="Current Document" meta={ctx.currentDoc.title}>
-        {ctx.currentDoc.rows.map((r, i) => (
+      <ContextSection title="Current Document" meta={docTitle}>
+        {rows.map((r, i) => (
           <div key={i} className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
             <span className="text-[#6b6b65]">{r.label}</span>
             <span className={`font-mono font-semibold text-[11px] ${
@@ -312,14 +289,13 @@ function ScopeContextPanel() {
         ))}
       </ContextSection>
 
-      {/* Extraction Status */}
-      <ContextSection title="Extraction Status" meta={`${es.standard + es.clarification + es.outsideScope + es.unpriced} items`}>
+      <ContextSection title="Extraction Status" meta={`${totalItems} items`}>
         <div className="space-y-1.5">
           {[
-            { label: 'Standard (priceable)', count: es.standard, color: '#1a6b3c', bg: '#edf7f0' },
-            { label: 'Needs clarification', count: es.clarification, color: '#b8860b', bg: '#fdf6e8' },
-            { label: 'Outside scope', count: es.outsideScope, color: '#c0392b', bg: '#fbeae8' },
-            { label: 'Unpriced', count: es.unpriced, color: '#9a9a92', bg: '#f5f4f0' },
+            { label: 'Standard (priceable)', count: standard, color: '#1a6b3c', bg: '#edf7f0' },
+            { label: 'Needs clarification', count: clarification, color: '#b8860b', bg: '#fdf6e8' },
+            { label: 'Outside scope', count: outsideScope, color: '#c0392b', bg: '#fbeae8' },
+            { label: 'Unpriced', count: unpriced, color: '#9a9a92', bg: '#f5f4f0' },
           ].map((s, i) => (
             <div key={i} className="flex items-center justify-between py-[5px] text-[12px]">
               <div className="flex items-center gap-2">
@@ -337,117 +313,207 @@ function ScopeContextPanel() {
         </div>
       </ContextSection>
 
-      {/* Spec Sections Referenced */}
-      <ContextSection title="Spec Sections" meta="Referenced">
-        <div className="space-y-1">
-          {ctx.specSections.map((s, i) => (
-            <div key={i} className="flex items-center gap-2.5 py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0">
-              <span className="font-mono text-[10px] text-[#9a9a92] shrink-0 w-14">{s.code}</span>
-              <span className="text-terminal-text">{s.name}</span>
-            </div>
-          ))}
-        </div>
-      </ContextSection>
+      {specSections.length > 0 && (
+        <ContextSection title="Spec Sections" meta="Referenced">
+          <div className="space-y-1">
+            {specSections.map((s, i) => (
+              <div key={i} className="flex items-center gap-2.5 py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0">
+                <span className="font-mono text-[10px] text-[#9a9a92] shrink-0 w-14">{s.code}</span>
+                <span className="text-terminal-text">{s.name}</span>
+              </div>
+            ))}
+          </div>
+        </ContextSection>
+      )}
+
+      {/* Stats summary if available */}
+      {stats && (
+        <ContextSection title="Pipeline Stats" meta="Live" defaultOpen={false}>
+          <div className="space-y-1.5">
+            {[
+              { label: 'Open RFQs', value: stats.openRfqs },
+              { label: 'Draft Estimates', value: stats.draftEstimates },
+              { label: 'Sent Estimates', value: stats.sentEstimates },
+              { label: 'Active Jobs', value: stats.activeJobs },
+              { label: 'Win Rate', value: `${stats.winRate}%` },
+            ].map((s, i) => (
+              <div key={i} className="flex justify-between py-[5px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
+                <span className="text-[#6b6b65]">{s.label}</span>
+                <span className="font-mono font-semibold text-[11px] text-terminal-text">{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </ContextSection>
+      )}
     </>
   );
 }
 
 // ─── Documents Tab ──────────────────────────────────────────────────────────────
-function DocumentsTab() {
+function DocumentsTab({ inbox, loading }) {
+  // Build document cards from real inbox (bid requests)
+  const documents = inbox.map(bid => ({
+    id: bid.id,
+    name: bid.subject || bid.gc_name || 'Untitled RFQ',
+    gc: bid.gc_name || bid.from_name || '\u2014',
+    pages: bid.attachments?.length ? `${bid.attachments.length} files` : '\u2014',
+    date: bid.received_at ? formatRelativeDate(bid.received_at) : '\u2014',
+    progress: bid.status === 'new' ? 30 : bid.status === 'reviewing' ? 60 : 100,
+    status: bid.status || 'new',
+    scope: bid.scope || {},
+  }));
+
+  // Pick the first document with scope items to show extraction detail
+  const detailDoc = documents.find(d => {
+    const items = d.scope.items || d.scope.lineItems || [];
+    return items.length > 0;
+  });
+  const extractionItems = detailDoc ? (detailDoc.scope.items || detailDoc.scope.lineItems || []) : [];
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="px-5 py-5">
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {DEMO_DOCUMENTS.map(doc => (
-            <div key={doc.id} className="bg-terminal-panel border border-terminal-border rounded-[14px] p-4 hover:border-[#7c3aed33] transition-colors cursor-pointer">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-[10px] bg-[#f3f0ff] flex items-center justify-center">
-                    <span className="text-[12px] font-bold text-[#7c3aed]">S</span>
-                  </div>
-                  <div>
-                    <div className="text-[13px] font-semibold text-terminal-text">{doc.name}</div>
-                    <div className="text-[11px] text-[#9a9a92]">{doc.gc} &middot; {doc.pages} pages</div>
+        {loading ? (
+          <div className="text-center py-12 text-[13px] text-[#9a9a92]">Loading documents...</div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-[13px] text-[#9a9a92] mb-2">No bid requests in inbox yet</div>
+            <div className="text-[11px] text-[#c5c5bc]">Upload a spec document to get started</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            {documents.map(doc => (
+              <div key={doc.id} className="bg-terminal-panel border border-terminal-border rounded-[14px] p-4 hover:border-[#7c3aed33] transition-colors cursor-pointer">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-[10px] bg-[#f3f0ff] flex items-center justify-center">
+                      <span className="text-[12px] font-bold text-[#7c3aed]">S</span>
+                    </div>
+                    <div>
+                      <div className="text-[13px] font-semibold text-terminal-text">{doc.name}</div>
+                      <div className="text-[11px] text-[#9a9a92]">{doc.gc} &middot; {doc.pages}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-[10px] text-[#9a9a92]">{doc.date}</span>
-                {doc.progress < 100 ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-20 h-1.5 rounded-full bg-[#f0eeea] overflow-hidden">
-                      <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${doc.progress}%` }} />
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-[10px] text-[#9a9a92]">{doc.date}</span>
+                  {doc.progress < 100 ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 h-1.5 rounded-full bg-[#f0eeea] overflow-hidden">
+                        <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${doc.progress}%` }} />
+                      </div>
+                      <span className="text-[10px] font-mono text-[#7c3aed] font-semibold">{doc.progress}%</span>
                     </div>
-                    <span className="text-[10px] font-mono text-[#7c3aed] font-semibold">{doc.progress}%</span>
-                  </div>
-                ) : (
-                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#edf7f0] text-[#1a6b3c]">Complete</span>
-                )}
+                  ) : (
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#edf7f0] text-[#1a6b3c]">
+                      {doc.status === 'estimated' ? 'Estimated' : 'Complete'}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
 
-          {/* Upload card */}
-          <div className="border-2 border-dashed border-[#e8e6e1] rounded-[14px] p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#7c3aed] hover:bg-[#f3f0ff]/30 transition-colors min-h-[120px]">
-            <div className="w-10 h-10 rounded-full bg-[#f5f4f0] flex items-center justify-center">
-              <span className="text-[20px] text-[#9a9a92]">+</span>
+            {/* Upload card */}
+            <div className="border-2 border-dashed border-[#e8e6e1] rounded-[14px] p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#7c3aed] hover:bg-[#f3f0ff]/30 transition-colors min-h-[120px]">
+              <div className="w-10 h-10 rounded-full bg-[#f5f4f0] flex items-center justify-center">
+                <span className="text-[20px] text-[#9a9a92]">+</span>
+              </div>
+              <span className="text-[12px] font-semibold text-[#6b6b65]">Upload new spec document</span>
+              <span className="text-[10px] text-[#9a9a92]">PDF, DOCX, TXT, DWG</span>
             </div>
-            <span className="text-[12px] font-semibold text-[#6b6b65]">Upload new spec document</span>
-            <span className="text-[10px] text-[#9a9a92]">PDF, DOCX, TXT, DWG</span>
           </div>
-        </div>
+        )}
 
-        {/* I-35 extraction table */}
-        <div className="mb-2">
-          <div className="text-[13px] font-semibold text-terminal-text mb-3">I-35 Retaining Walls \u2014 Extraction</div>
-          <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-terminal-border">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Item</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Quantity</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Section</th>
-                  <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {I35_EXTRACTION.map((row, i) => (
-                  <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
-                    <td className="px-4 py-2.5 font-semibold text-terminal-text">{row.item}</td>
-                    <td className="px-4 py-2.5 font-mono text-[#6b6b65]">{row.qty}</td>
-                    <td className="px-4 py-2.5 font-mono text-[#9a9a92]">{row.section}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#edf7f0] text-[#1a6b3c]">{row.status}</span>
-                    </td>
+        {/* Extraction table for the first document with scope items */}
+        {extractionItems.length > 0 && (
+          <div className="mb-2">
+            <div className="text-[13px] font-semibold text-terminal-text mb-3">{detailDoc.name} — Extraction</div>
+            <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-terminal-border">
+                    <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Item</th>
+                    <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Quantity</th>
+                    <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Section</th>
+                    <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {extractionItems.map((row, i) => (
+                    <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
+                      <td className="px-4 py-2.5 font-semibold text-terminal-text">{row.name || row.item || row.description || '\u2014'}</td>
+                      <td className="px-4 py-2.5 font-mono text-[#6b6b65]">{row.quantity || row.qty || '\u2014'}</td>
+                      <td className="px-4 py-2.5 font-mono text-[#9a9a92]">{row.section || row.csi_section || '\u2014'}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                          row.status === 'priced' || row.status === 'standard' ? 'bg-[#edf7f0] text-[#1a6b3c]' :
+                          row.status === 'clarification' ? 'bg-[#fdf6e8] text-[#b8860b]' :
+                          row.status === 'warning' || row.status === 'outside_scope' ? 'bg-[#fbeae8] text-[#c0392b]' :
+                          'bg-[#f5f4f0] text-[#6b6b65]'
+                        }`}>
+                          {(row.status || 'unpriced').charAt(0).toUpperCase() + (row.status || 'unpriced').slice(1)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ─── History Tab ────────────────────────────────────────────────────────────────
-function HistoryTab() {
-  const resultBadge = (r) => {
-    if (r === 'Sent to Estimating') return 'bg-[#edf7f0] text-[#1a6b3c]';
-    if (r === 'In Progress') return 'bg-[#fdf6e8] text-[#b8860b]';
+function HistoryTab({ estimates, stats, loading }) {
+  const resultBadge = (status) => {
+    if (status === 'sent') return 'bg-[#edf7f0] text-[#1a6b3c]';
+    if (status === 'draft') return 'bg-[#fdf6e8] text-[#b8860b]';
     return 'bg-[#f5f4f0] text-[#6b6b65]';
   };
+
+  const resultLabel = (status) => {
+    if (status === 'sent') return 'Sent to GC';
+    if (status === 'draft') return 'Draft';
+    if (status === 'approved') return 'Approved';
+    if (status === 'rejected') return 'Rejected';
+    return status ? status.charAt(0).toUpperCase() + status.slice(1) : '\u2014';
+  };
+
+  // Build history rows from real estimates
+  const historyRows = estimates.map(est => {
+    const lineItems = est.line_items || [];
+    return {
+      date: est.created_at ? new Date(est.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '\u2014',
+      document: est.project_name || '\u2014',
+      gc: est.gc_name || '\u2014',
+      items: lineItems.length,
+      flags: lineItems.filter(li => !li.pricingId && !li.pricing_id).length,
+      result: est.status,
+      totalBid: est.total_bid,
+    };
+  });
+
+  // Stats from real API data
+  const statsRow = stats ? [
+    { label: 'Total Bid Requests', value: String(stats.totalBidRequests || 0) },
+    { label: 'Estimates Created', value: String(stats.totalEstimates || 0) },
+    { label: 'Estimates Sent', value: String(stats.sentEstimates || 0) },
+    { label: 'Win Rate', value: `${stats.winRate || 0}%` },
+  ] : [
+    { label: 'Total Bid Requests', value: '0' },
+    { label: 'Estimates Created', value: '0' },
+    { label: 'Estimates Sent', value: '0' },
+    { label: 'Win Rate', value: '0%' },
+  ];
 
   return (
     <div className="flex-1 overflow-y-auto">
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-px bg-terminal-border border-b border-terminal-border">
-        {[
-          { label: 'Documents Analyzed', value: '23' },
-          { label: 'Scope Items Extracted', value: '142' },
-          { label: 'RFIs Generated', value: '11' },
-          { label: 'Out-of-Scope Flags', value: '4' },
-        ].map((s, i) => (
+        {statsRow.map((s, i) => (
           <div key={i} className="bg-terminal-panel px-5 py-4 text-center">
             <div className="text-[18px] font-bold text-terminal-text">{s.value}</div>
             <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-wider">{s.label}</div>
@@ -458,36 +524,44 @@ function HistoryTab() {
       {/* Table */}
       <div className="px-5 py-4">
         <div className="text-[13px] font-semibold text-terminal-text mb-3">Analysis History</div>
-        <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-terminal-border">
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Date</th>
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Document</th>
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">GC</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Items</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Flags</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">RFIs</th>
-                <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DEMO_HISTORY.map((h, i) => (
-                <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
-                  <td className="px-4 py-2.5 font-mono text-[#9a9a92]">{h.date}</td>
-                  <td className="px-4 py-2.5 font-semibold text-terminal-text">{h.document}</td>
-                  <td className="px-4 py-2.5 text-[#6b6b65]">{h.gc}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.items}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.flags > 0 ? h.flags : '\u2014'}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.rfis > 0 ? h.rfis : '\u2014'}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${resultBadge(h.result)}`}>{h.result}</span>
-                  </td>
+        {loading ? (
+          <div className="text-center py-8 text-[13px] text-[#9a9a92]">Loading history...</div>
+        ) : historyRows.length === 0 ? (
+          <div className="text-center py-8 text-[13px] text-[#9a9a92]">No estimates yet</div>
+        ) : (
+          <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-terminal-border">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Date</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Document</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">GC</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Items</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Flags</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Total Bid</th>
+                  <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Result</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {historyRows.map((h, i) => (
+                  <tr key={i} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
+                    <td className="px-4 py-2.5 font-mono text-[#9a9a92]">{h.date}</td>
+                    <td className="px-4 py-2.5 font-semibold text-terminal-text">{h.document}</td>
+                    <td className="px-4 py-2.5 text-[#6b6b65]">{h.gc}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.items}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.flags > 0 ? h.flags : '\u2014'}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-terminal-text">
+                      {h.totalBid ? `$${Number(h.totalBid).toLocaleString()}` : '\u2014'}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${resultBadge(h.result)}`}>{resultLabel(h.result)}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -501,6 +575,8 @@ function ConfigTab() {
   const [competencies, setCompetencies] = useState('SOG, Curb & Gutter, Sidewalk, Retaining Walls, Drilled Piers, Grade Beams');
   const [csiDivisions, setCsiDivisions] = useState('03, 31, 32');
   const [fileTypes, setFileTypes] = useState('PDF, DOCX, TXT, DWG');
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
 
   const accent = '#7c3aed';
 
@@ -509,6 +585,31 @@ function ConfigTab() {
       <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
     </button>
   );
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await putApi('/v1/tenant', {
+        settings: {
+          scopeAnalyzer: {
+            mode,
+            flagThreshold: Number(flagThreshold),
+            autoRFI,
+            competencies: competencies.split(',').map(s => s.trim()).filter(Boolean),
+            csiDivisions: csiDivisions.split(',').map(s => s.trim()).filter(Boolean),
+            fileTypes: fileTypes.split(',').map(s => s.trim()).filter(Boolean),
+          },
+        },
+      });
+      setSaveMsg('Configuration saved.');
+    } catch (err) {
+      console.error('Save config error:', err);
+      setSaveMsg(err?.response?.data?.error || 'Failed to save configuration.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -597,25 +698,83 @@ function ConfigTab() {
         </div>
 
         {/* Save */}
-        <button onClick={() => alert('Configuration saved.')} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: accent }}>
-          Save Configuration
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ backgroundColor: accent }}
+        >
+          {saving ? 'Saving...' : 'Save Configuration'}
         </button>
+        {saveMsg && (
+          <div className={`text-center text-[12px] ${saveMsg.includes('Failed') ? 'text-[#c0392b]' : 'text-[#1a6b3c]'}`}>
+            {saveMsg}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────────
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return '\u2014';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
 export default function ScopeAnalyzerChat() {
   const [activeTab, setActiveTab] = useState('Chat');
   const [input, setInput] = useState('');
+  const [messages, setMessages] = useState(DEMO_MESSAGES);
+
+  // Real API data
+  const [inbox, setInbox] = useState([]);
+  const [estimates, setEstimates] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/v1/estimates/inbox').catch(() => ({ data: {} })),
+      api.get('/v1/estimates/estimates').catch(() => ({ data: {} })),
+      api.get('/v1/estimates/stats').catch(() => ({ data: {} })),
+    ]).then(([inboxRes, estRes, statsRes]) => {
+      setInbox(inboxRes.data.bidRequests || inboxRes.data || []);
+      setEstimates(estRes.data.estimates || estRes.data || []);
+      setStats(statsRes.data.stats || statsRes.data || null);
+    }).finally(() => setLoading(false));
+  }, []);
 
   const tabs = ['Chat', 'Documents', 'History', 'Config'];
   const accent = '#7c3aed';
 
   const handleSend = () => {
     if (!input.trim()) return;
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const newMsg = {
+      id: Date.now(),
+      role: 'user',
+      content: input,
+      time,
+    };
+    setMessages(prev => [...prev, newMsg]);
     setInput('');
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   return (
@@ -664,7 +823,7 @@ export default function ScopeAnalyzerChat() {
           <div className="flex-1 flex flex-col border-r border-terminal-border min-w-0 min-h-0">
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
-              {DEMO_MESSAGES.map(msg => (
+              {messages.map(msg => (
                 <ChatMessage key={msg.id} msg={msg} />
               ))}
             </div>
@@ -676,13 +835,14 @@ export default function ScopeAnalyzerChat() {
                   <textarea
                     value={input}
                     onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
                     placeholder="Upload a spec document or ask about an extraction..."
                     rows={1}
                     className="w-full px-4 py-3 pr-11 border-[1.5px] border-terminal-border rounded-[14px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none resize-none min-h-[44px] max-h-[120px] focus:bg-terminal-panel transition-colors placeholder:text-[#c5c5bc]"
                     onFocus={e => e.target.style.borderColor = accent}
                     onBlur={e => e.target.style.borderColor = ''}
                   />
-                  <button onClick={() => alert('File upload not available in demo mode.')} className="absolute right-3 bottom-2.5 text-[#c5c5bc] hover:text-[#6b6b65] transition-colors">
+                  <button onClick={() => alert('File upload not available yet.')} className="absolute right-3 bottom-2.5 text-[#c5c5bc] hover:text-[#6b6b65] transition-colors">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
                     </svg>
@@ -708,16 +868,16 @@ export default function ScopeAnalyzerChat() {
 
           {/* Context panel */}
           <div className="w-[280px] shrink-0 min-h-0 overflow-y-auto bg-[#f5f4f0]">
-            <ScopeContextPanel />
+            <ScopeContextPanel inbox={inbox} estimates={estimates} stats={stats} />
           </div>
         </div>
       )}
 
       {/* ── Documents Tab ─────────────────────────────────────────────────────── */}
-      {activeTab === 'Documents' && <DocumentsTab />}
+      {activeTab === 'Documents' && <DocumentsTab inbox={inbox} loading={loading} />}
 
       {/* ── History Tab ───────────────────────────────────────────────────────── */}
-      {activeTab === 'History' && <HistoryTab />}
+      {activeTab === 'History' && <HistoryTab estimates={estimates} stats={stats} loading={loading} />}
 
       {/* ── Config Tab ────────────────────────────────────────────────────────── */}
       {activeTab === 'Config' && <ConfigTab />}

@@ -161,18 +161,17 @@ function AuditTrailContent() {
   const [realLoading, setRealLoading] = useState(false);
 
   useEffect(() => {
-    if (!isVenture) return;
     setRealLoading(true);
     api.get('/v1/activity', { params: { limit: 100 } })
       .then(res => {
         const activities = res.data.activities || [];
         const grouped = {};
         for (const a of activities) {
-          const dateKey = getDateGroup(a.createdAt);
+          const dateKey = getDateGroup(a.created_at);
           if (!grouped[dateKey]) grouped[dateKey] = [];
           grouped[dateKey].push({
-            time: formatEventTime(a.createdAt),
-            agent: a.agentId || 'system',
+            time: formatEventTime(a.created_at),
+            agent: a.agent_id || a.source_type || 'system',
             action: a.title,
             target: a.subtitle || '',
             detail: '',
@@ -183,10 +182,11 @@ function AuditTrailContent() {
       })
       .catch(() => setRealEvents({}))
       .finally(() => setRealLoading(false));
-  }, [isVenture]);
+  }, []);
 
   const agents = isVenture ? VENTURE_AGENTS : isConstruction ? DACP_AGENTS : MINING_AGENTS;
-  const allEvents = isVenture ? (realEvents || {}) : isConstruction ? DACP_EVENTS : MINING_EVENTS;
+  const fallbackEvents = isConstruction ? DACP_EVENTS : isVenture ? {} : MINING_EVENTS;
+  const allEvents = realEvents !== null && Object.keys(realEvents).length > 0 ? realEvents : fallbackEvents;
   const agentKeys = Object.keys(agents);
 
   const [period, setPeriod] = useState('All');
