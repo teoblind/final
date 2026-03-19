@@ -92,10 +92,10 @@ function extractMeetingLink(event) {
   // 2. Hangout link
   if (event.hangoutLink) return event.hangoutLink;
 
-  // 3. Regex from description/location
+  // 3. Regex from description/location — supports Meet, Zoom, and Teams
   const text = ((event.description || '') + ' ' + (event.location || '')).trim();
   const match = text.match(
-    /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s]*)/
+    /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s]*|teams\.microsoft\.com\/l\/meetup-join\/[^\s<"]+|teams\.live\.com\/meet\/[^\s<"]+)/
   );
   return match ? match[0] : null;
 }
