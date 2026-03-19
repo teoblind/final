@@ -175,6 +175,13 @@ const SPAM_SUBJECT_PATTERNS = [
   /\bdo-?not-?reply@/i,
 ];
 
+// Whitelisted senders that should never be spam-filtered
+const SPAM_SENDER_WHITELIST = [
+  /.*@google\.com$/i,           // Google Calendar invites, notifications
+  /.*@calendar\.google\.com$/i, // Calendar-specific
+  /.*@coppice\.ai$/i,           // Our own agents
+];
+
 const SPAM_SENDER_PATTERNS = [
   /noreply@/i,
   /no-reply@/i,
@@ -416,10 +423,15 @@ function detectSpam({ senderEmail, senderName, subject, body, headers }) {
     return `Precedence header: ${precedence}`;
   }
 
-  // Check sender patterns
-  for (const pattern of SPAM_SENDER_PATTERNS) {
-    if (pattern.test(senderEmail)) {
-      return `Automated sender pattern: ${senderEmail}`;
+  // Check sender whitelist before spam patterns
+  const isWhitelisted = SPAM_SENDER_WHITELIST.some(p => p.test(senderEmail));
+
+  // Check sender patterns (skip if whitelisted)
+  if (!isWhitelisted) {
+    for (const pattern of SPAM_SENDER_PATTERNS) {
+      if (pattern.test(senderEmail)) {
+        return `Automated sender pattern: ${senderEmail}`;
+      }
     }
   }
 
