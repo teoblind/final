@@ -51,11 +51,11 @@ const MINING_WELCOME = {
 // ─── Construction (DACP) Config ──────────────────────────────────────────────
 
 const DACP_DATA_SOURCES = [
-  { id: 'pricing', Icon: BarChart3, name: 'Pricing Table', desc: 'Material, labor, and equipment unit costs for concrete work' },
-  { id: 'email', Icon: Mail, name: 'Email Inbox', desc: 'Bid request intake, GC correspondence, and follow-ups' },
-  { id: 'jobs', Icon: FileText, name: 'Job History', desc: 'Past projects, actual costs, and margin tracking' },
-  { id: 'docs', Icon: FileText, name: 'Google Docs', desc: 'Meeting notes, submittals, and document sync' },
-  { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling and deadline tracking' },
+  { id: 'pricing', Icon: BarChart3, name: 'Pricing Table', desc: 'Material, labor, and equipment unit costs for concrete work', oauth: false },
+  { id: 'gmail', Icon: Mail, name: 'Email Inbox', desc: 'Bid request intake, GC correspondence, and follow-ups', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
+  { id: 'jobs', Icon: FileText, name: 'Job History', desc: 'Past projects, actual costs, and margin tracking', oauth: false },
+  { id: 'docs', Icon: FileText, name: 'Google Docs & Drive', desc: 'Meeting notes, submittals, and document sync', oauth: 'google', scopes: 'drive.file,drive.readonly' },
+  { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling and deadline tracking', oauth: 'google', scopes: 'calendar.readonly' },
 ];
 
 const DACP_AGENTS = [
@@ -634,10 +634,10 @@ export default function OnboardingWizard({ onComplete }) {
                   <p className={`text-[12px] mb-3 ${dk ? dk.muted : 'text-terminal-muted'}`}>
                     {isConstruction
                       ? {
-                          pricing: 'Import your master pricing table — material, labor, and equipment costs per unit.',
-                          email: 'Connect Gmail to auto-import bid requests and manage GC correspondence.',
-                          jobs: 'Import your job history for cost tracking and estimate benchmarking.',
-                          docs: 'Connect Google Docs to sync meeting notes, submittals, and reports.',
+                          pricing: 'Import your master pricing table — material, labor, and equipment costs per unit. Upload an Excel file or link a Google Sheet.',
+                          gmail: 'Connect Gmail to auto-import bid requests and manage GC correspondence.',
+                          jobs: 'Import your job history for cost tracking and estimate benchmarking. Upload an Excel file or link a Google Sheet.',
+                          docs: 'Connect Google Docs & Drive to sync meeting notes, submittals, and reports.',
                           calendar: 'Connect Google Calendar to track bid deadlines and meeting schedules.',
                         }[src.id]
                       : {
