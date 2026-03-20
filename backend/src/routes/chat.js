@@ -209,7 +209,7 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const { content } = req.body;
+    const { content, helpMode } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ error: 'Message content is required' });
     }
@@ -219,7 +219,7 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
       updateThreadTitle(threadId, content.trim().slice(0, 60));
     }
 
-    const result = await chat(tenantId, agentId, userId, content.trim(), threadId);
+    const result = await chat(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode });
 
     const response = { response: result.response, audio_url: result.audio_url || null };
     if (result.approval_pending) {
@@ -511,7 +511,7 @@ router.post('/:agentId/messages', async (req, res) => {
       return res.status(400).json({ error: `Unknown agent: ${agentId}` });
     }
 
-    const { content } = req.body;
+    const { content, helpMode } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ error: 'Message content is required' });
     }
@@ -526,7 +526,7 @@ router.post('/:agentId/messages', async (req, res) => {
     const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     createThread(threadId, tenantId, agentId, userId, content.trim().slice(0, 60), 'private');
 
-    const result = await chat(tenantId, agentId, userId, content.trim(), threadId);
+    const result = await chat(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode });
 
     // Map tool results to frontend format
     const response = { response: result.response, audio_url: result.audio_url || null, threadId };

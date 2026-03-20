@@ -2615,7 +2615,7 @@ function buildThinkingParam(agentId, userContent) {
   };
 }
 
-export async function chat(tenantId, agentId, userId, userContent, threadId = null) {
+export async function chat(tenantId, agentId, userId, userContent, threadId = null, options = {}) {
   // Auto-create default thread if threadId provided but doesn't exist yet
   // (thread creation is handled by the route layer)
 
@@ -2727,7 +2727,20 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 - Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".
 - When presenting data, use clean tables or simple lists — no decorative formatting.`;
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
+  // Help mode: add strict tenant isolation guard for the help chat widget
+  const HELP_MODE_GUARD = options.helpMode ? `
+
+CRITICAL — HELP ASSISTANT MODE:
+You are the Coppice Assistant, a product support chatbot embedded in the dashboard.
+- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.
+- NEVER mention Sangha, Spencer, Mihir, Colin, Bitcoin mining, renewable energy, or any non-construction topics.
+- NEVER mention Zhan Capital, Volt Charging, or any other Coppice tenant.
+- NEVER mention the name "Teo" or any Coppice internal team member.
+- If asked about contacting support, tell them to click "Send a message to admin" at the bottom of this chat.
+- Keep answers helpful, concise, and focused on the product features available in their dashboard.
+- You can help with: estimating, bid requests, pricing table, job tracking, field reports, document generation, and agent tools.` : '';
+
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];

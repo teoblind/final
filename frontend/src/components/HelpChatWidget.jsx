@@ -96,7 +96,7 @@ export default function HelpChatWidget() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({ content: text, helpMode: true }),
       });
 
       const data = await res.json();
