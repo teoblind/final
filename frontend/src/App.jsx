@@ -93,6 +93,7 @@ const ScopeAnalyzerChat = lazy(() => import('./components/chat/ScopeAnalyzerChat
 const PortfolioOverview = lazy(() => import('./components/dashboards/PortfolioOverview'));
 const CompanyDetail = lazy(() => import('./components/dashboards/CompanyDetail'));
 const OfficeDashboard = lazy(() => import('./components/dashboards/OfficeDashboard'));
+const HelpChatWidget = lazy(() => import('./components/HelpChatWidget'));
 
 // Non-lazy supporting components
 import ManualEntryModal from './components/ManualEntryModal';
@@ -602,6 +603,7 @@ function AppContent() {
             <PartnerDashboard />
           </Suspense>
         </div>
+        <Suspense fallback={null}><HelpChatWidget /></Suspense>
       </div>
     );
   }
@@ -624,6 +626,7 @@ function AppContent() {
             <LPDashboard />
           </Suspense>
         </div>
+        <Suspense fallback={null}><HelpChatWidget /></Suspense>
       </div>
     );
   }
@@ -809,6 +812,11 @@ function AppContent() {
         </Suspense>
       )}
       {changePasswordOverlay}
+
+      {/* Help Chat Widget — floating on all authenticated pages */}
+      <Suspense fallback={null}>
+        <HelpChatWidget />
+      </Suspense>
     </div>
   );
 }

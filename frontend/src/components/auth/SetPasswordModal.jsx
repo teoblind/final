@@ -97,7 +97,7 @@ export default function SetPasswordModal({ onSuccess, onSkip }) {
           </div>
 
           <button type="submit" disabled={loading} style={{
-            width: '100%', padding: 13, borderRadius: 12, background: '#1a6b3c',
+            width: '100%', padding: 13, borderRadius: 12, background: document.documentElement.style.getPropertyValue('--t-accent')?.trim() || '#1e3a5f',
             color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 600,
             border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
             opacity: loading ? 0.5 : 1, transition: 'all 0.2s',
