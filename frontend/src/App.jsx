@@ -79,6 +79,7 @@ const ReportingDashboard = lazy(() => import('./components/dashboards/ReportingD
 const MeetingsDashboard = lazy(() => import('./components/dashboards/MeetingsDashboard'));
 const DacpCommandDashboard = lazy(() => import('./components/dashboards/DacpCommandDashboard'));
 const DacpEstimatingDashboard = lazy(() => import('./components/dashboards/DacpEstimatingDashboard'));
+const DacpPricingDashboard = lazy(() => import('./components/dashboards/DacpPricingDashboard'));
 const DacpJobsDashboard = lazy(() => import('./components/dashboards/DacpJobsDashboard'));
 const TaskTrackerDashboard = lazy(() => import('./components/dashboards/TaskTrackerDashboard'));
 const DacpFieldReportsDashboard = lazy(() => import('./components/dashboards/DacpFieldReportsDashboard'));
@@ -395,6 +396,7 @@ function AppContent() {
       { id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 },
       { id: 'office', label: 'Office', icon: Building, live: true },
       { id: 'estimating', label: 'Estimating', icon: ClipboardList },
+      { id: 'pricing', label: 'Pricing Table', icon: DollarSign },
       { id: 'jobs', label: 'Jobs', icon: HardHat },
       { id: 'field-reports', label: 'Field Reports', icon: FileCheck },
       { id: 'agent-tasks', label: 'Agent Tasks', icon: ListChecks },
@@ -641,6 +643,8 @@ function AppContent() {
         return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
       case 'estimating':
         return <DacpEstimatingDashboard />;
+      case 'pricing':
+        return <DacpPricingDashboard />;
       case 'jobs':
         return <DacpJobsDashboard />;
       case 'agent-tasks':

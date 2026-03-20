@@ -863,16 +863,13 @@ router.get('/google/callback', async (req, res) => {
 
 // ─── Google Integration OAuth Config ────────────────────────────────────────
 // Reuse the same "Coppice Web" OAuth client for integrations
-const INTEGRATE_REDIRECT_URI = '/api/v1/auth/google/integrate/callback';
+// IMPORTANT: Always route through the main coppice.ai domain so we only need
+// one redirect URI registered in Google Cloud Console (not one per subdomain).
+const INTEGRATION_OAUTH_BASE = process.env.OAUTH_BASE_URL || 'https://coppice.ai';
+const INTEGRATE_REDIRECT_URI = `${INTEGRATION_OAUTH_BASE}/api/v1/auth/google/integrate/callback`;
 
-function getIntegrationOAuth2Client(req) {
-  let redirectUri = INTEGRATE_REDIRECT_URI;
-  if (redirectUri.startsWith('/')) {
-    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    redirectUri = `${proto}://${host}${redirectUri}`;
-  }
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
+function getIntegrationOAuth2Client() {
+  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, INTEGRATE_REDIRECT_URI);
 }
 
 // ─── GET /google/integrate — Start integration OAuth flow ────────────────────
@@ -904,13 +901,15 @@ router.get('/google/integrate', (req, res) => {
     const tenantId = decoded.tenantId;
     const userId = decoded.userId;
 
-    // Build state payload
-    const state = Buffer.from(JSON.stringify({ tenantId, userId, source })).toString('base64url');
+    // Build state payload — include origin host so callback can postMessage back
+    const originHost = req.headers['x-forwarded-host'] || req.get('host');
+    const originProto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+    const state = Buffer.from(JSON.stringify({ tenantId, userId, source, origin: `${originProto}://${originHost}` })).toString('base64url');
 
     // Build full scope URLs
     const scopeList = scopes.split(',').map(s => `https://www.googleapis.com/auth/${s.trim()}`);
 
-    const oauth2Client = getIntegrationOAuth2Client(req);
+    const oauth2Client = getIntegrationOAuth2Client();
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
@@ -950,7 +949,7 @@ router.get('/google/integrate/callback', async (req, res) => {
       ));
     }
 
-    const { tenantId, userId, source } = stateData;
+    const { tenantId, userId, source, origin } = stateData;
 
     if (!tenantId || !userId || !source) {
       return res.status(400).send(renderIntegrationErrorPage(
@@ -960,7 +959,7 @@ router.get('/google/integrate/callback', async (req, res) => {
     }
 
     // Exchange code for tokens
-    const oauth2Client = getIntegrationOAuth2Client(req);
+    const oauth2Client = getIntegrationOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
 
     // Determine which services to store tokens for
@@ -1003,6 +1002,8 @@ router.get('/google/integrate/callback', async (req, res) => {
     });
 
     // Send success message to opener and close popup
+    // Use stored origin for postMessage target (popup opened from subdomain, callback on main domain)
+    const postMessageOrigin = origin || '*';
     res.send(`<!DOCTYPE html>
 <html>
 <head><title>Integration Connected</title></head>
@@ -1012,7 +1013,7 @@ router.get('/google/integrate/callback', async (req, res) => {
   </p>
   <script>
     if (window.opener) {
-      window.opener.postMessage({ type: 'oauth-integration-success', source: ${JSON.stringify(source)} }, '*');
+      window.opener.postMessage({ type: 'oauth-integration-success', source: ${JSON.stringify(source)} }, ${JSON.stringify(postMessageOrigin)});
     }
     window.close();
   </script>

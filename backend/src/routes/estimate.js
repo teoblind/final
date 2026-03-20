@@ -16,6 +16,9 @@ import {
   getDacpFieldReports,
   createDacpFieldReport,
   getDacpPricing,
+  createDacpPricing,
+  updateDacpPricing,
+  deleteDacpPricing,
   getDacpStats,
 } from '../cache/database.js';
 import {
@@ -208,6 +211,52 @@ router.get('/pricing', (req, res) => {
     res.json({ pricing });
   } catch (error) {
     console.error('Get pricing error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/pricing', (req, res) => {
+  try {
+    const { id, category, item, unit, material_cost, labor_cost, equipment_cost, unit_price, notes } = req.body;
+    if (!id || !category || !item || !unit) {
+      return res.status(400).json({ error: 'id, category, item, and unit are required' });
+    }
+    createDacpPricing(req.user.tenantId, { id, category, item, unit, material_cost, labor_cost, equipment_cost, unit_price, notes });
+    const pricing = getDacpPricing(req.user.tenantId, null);
+    res.status(201).json({ message: 'Pricing item created', pricing });
+  } catch (error) {
+    console.error('Create pricing error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.put('/pricing/:id', (req, res) => {
+  try {
+    const { material_cost, labor_cost, equipment_cost, unit_price, notes, category, item, unit } = req.body;
+    const updates = {};
+    if (material_cost !== undefined) updates.material_cost = material_cost;
+    if (labor_cost !== undefined) updates.labor_cost = labor_cost;
+    if (equipment_cost !== undefined) updates.equipment_cost = equipment_cost;
+    if (unit_price !== undefined) updates.unit_price = unit_price;
+    if (notes !== undefined) updates.notes = notes;
+    if (category !== undefined) updates.category = category;
+    if (item !== undefined) updates.item = item;
+    if (unit !== undefined) updates.unit = unit;
+    updateDacpPricing(req.user.tenantId, req.params.id, updates);
+    const pricing = getDacpPricing(req.user.tenantId, null);
+    res.json({ message: 'Pricing item updated', pricing });
+  } catch (error) {
+    console.error('Update pricing error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/pricing/:id', (req, res) => {
+  try {
+    deleteDacpPricing(req.user.tenantId, req.params.id);
+    res.json({ message: 'Pricing item deleted' });
+  } catch (error) {
+    console.error('Delete pricing error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

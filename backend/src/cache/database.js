@@ -4307,6 +4307,32 @@ export function getDacpPricing(tenantId, category) {
   return db.prepare('SELECT * FROM dacp_pricing WHERE tenant_id = ? ORDER BY category, id').all(tenantId);
 }
 
+export function createDacpPricing(tenantId, data) {
+  return db.prepare(
+    `INSERT INTO dacp_pricing (id, tenant_id, category, item, unit, material_cost, labor_cost, equipment_cost, unit_price, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(data.id, tenantId, data.category, data.item, data.unit, data.material_cost ?? 0, data.labor_cost ?? 0, data.equipment_cost ?? 0, data.unit_price ?? 0, data.notes ?? '');
+}
+
+export function updateDacpPricing(tenantId, id, updates) {
+  const allowed = ['category', 'item', 'unit', 'material_cost', 'labor_cost', 'equipment_cost', 'unit_price', 'notes'];
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    if (allowed.includes(k)) {
+      fields.push(`${k} = ?`);
+      values.push(v);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_pricing SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function deleteDacpPricing(tenantId, id) {
+  return db.prepare('DELETE FROM dacp_pricing WHERE tenant_id = ? AND id = ?').run(tenantId, id);
+}
+
 export function getDacpBidRequests(tenantId, status) {
   if (status) {
     return db.prepare('SELECT * FROM dacp_bid_requests WHERE tenant_id = ? AND status = ? ORDER BY due_date ASC').all(tenantId, status);
