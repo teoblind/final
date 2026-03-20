@@ -394,22 +394,20 @@ function AppContent() {
 
   if (isConstruction) {
     platformItems = [
-      { id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 },
-      { id: 'office', label: 'Office', icon: Building, live: true },
-      { id: 'estimating', label: 'Estimating', icon: ClipboardList },
-      { id: 'pricing', label: 'Pricing Table', icon: DollarSign },
-      { id: 'jobs', label: 'Jobs', icon: HardHat },
-      { id: 'field-reports', label: 'Field Reports', icon: FileCheck },
-      { id: 'agent-tasks', label: 'Agent Tasks', icon: ListChecks },
-      { id: 'audit-trail', label: 'Audit Trail', icon: FileText },
+      { id: 'command', label: 'Command', icon: LayoutDashboard },
+      { id: 'office', label: 'Office', icon: Building },
       { id: 'files', label: 'Files', icon: FolderOpen },
-      { id: 'accounting', label: 'Accounting', icon: DollarSign },
     ];
     agentItems = [
       { id: 'hivemind-chat', label: 'DACP Agent', icon: Bot, hivemind: true },
-      { id: 'estimating-chat', label: 'Estimating Bot', icon: ClipboardList },
+      { id: 'estimating', label: 'Estimating', icon: ClipboardList },
+      { id: 'pricing', label: 'Pricing Table', icon: DollarSign },
+      { id: 'jobs', label: 'Jobs', icon: HardHat },
       { id: 'email-chat', label: 'Email Agent', icon: Mail },
       { id: 'meetings-chat', label: 'Meetings', icon: Mic },
+    ];
+    infraItems = [
+      { id: 'accounting', label: 'Accounting', icon: DollarSign },
     ];
   } else if (isVenture) {
     platformItems = [
