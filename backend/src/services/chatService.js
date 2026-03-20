@@ -919,6 +919,163 @@ const DACP_TOOLS = [
     description: 'Get DACP Construction business statistics: bid request counts, estimate counts, job win/loss rates, average margins, total revenue, and field report counts.',
     input_schema: { type: 'object', properties: {} },
   },
+  // ── Construction Copilot Tools (Steps 1, 5, 8) ──
+  {
+    name: 'analyze_itb',
+    description: 'Deep-analyze an Invitation to Bid (ITB). Extracts project summary, scope breakdown by CSI division, specification requirements (concrete psi, rebar grade, special mixes), compliance requirements (DBE, Buy America, prevailing wage), flags missing critical information, identifies risk factors, and provides a bid/no-bid recommendation. Use when a new bid request comes in and the estimator needs a comprehensive analysis before deciding to bid.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        bid_request_id: { type: 'string', description: 'The bid request ID to analyze (e.g. "BR-001")' },
+      },
+      required: ['bid_request_id'],
+    },
+  },
+  {
+    name: 'draft_supplier_quotes',
+    description: 'Draft email quote requests to material suppliers (concrete, rebar, masonry, formwork). Takes material specifications and quantities from a bid request and generates professionally formatted emails to preferred suppliers requesting pricing. Use after analyzing an ITB when the estimator needs material pricing from suppliers.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        bid_request_id: { type: 'string', description: 'The bid request ID to generate quotes for' },
+        project_name: { type: 'string', description: 'Project name for the quote request' },
+        gc_name: { type: 'string', description: 'General contractor name' },
+        project_location: { type: 'string', description: 'Project location (city, state)' },
+        bid_due_date: { type: 'string', description: 'Bid due date' },
+        materials: {
+          type: 'array',
+          description: 'Array of materials to request quotes for',
+          items: {
+            type: 'object',
+            properties: {
+              category: { type: 'string', enum: ['concrete', 'rebar', 'masonry', 'formwork'], description: 'Material category' },
+              type: { type: 'string', description: 'Specific material type (e.g. "4000 psi concrete", "Grade 60 rebar")' },
+              specifications: { type: 'array', items: { type: 'string' }, description: 'Spec requirements (ASTM standards, mix design, etc.)' },
+              quantities: { type: 'array', items: { type: 'string' }, description: 'Quantity descriptions (e.g. "~2,400 CY total", "Foundations: 800 CY at 4000 psi")' },
+              special_requirements: { type: 'string', description: 'Any special requirements' },
+              delivery_notes: { type: 'string', description: 'Delivery requirements or schedule notes' },
+            },
+            required: ['category', 'type'],
+          },
+        },
+      },
+      required: ['project_name', 'materials'],
+    },
+  },
+  {
+    name: 'compare_contract',
+    description: 'Compare a GC subcontract against DACP\'s submitted proposal. Performs line-by-line comparison of scope items, exclusions, financial terms, insurance requirements, and legal clauses. Flags scope additions not in original bid, missing exclusions that expose DACP to cost, unfavorable terms, and generates recommended redlines. Use when DACP receives a contract from a GC and needs to verify it matches the proposal before signing.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        proposal_text: { type: 'string', description: 'Full text of DACP\'s submitted proposal' },
+        contract_text: { type: 'string', description: 'Full text of the GC\'s subcontract' },
+        bid_request_id: { type: 'string', description: 'Associated bid request ID (optional)' },
+      },
+      required: ['proposal_text', 'contract_text'],
+    },
+  },
+  // ── Construction Copilot V2 Tools (Steps 2-4, 6-7 + extras) ──
+  {
+    name: 'generate_proposal',
+    description: 'Generate a professional Word proposal document for a DACP bid. Includes company letterhead, project details, scope breakdown (concrete, masonry, site work), material specs, exclusions, clarifications, total bid, and signature block. Returns a downloadable .docx file. Use after the estimate is finalized and ready to submit to the GC.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_name: { type: 'string', description: 'Project name' },
+        gc_name: { type: 'string', description: 'General contractor name' },
+        owner: { type: 'string', description: 'Project owner' },
+        architect: { type: 'string', description: 'Architect of record' },
+        plan_date: { type: 'string', description: 'Plan/drawing date' },
+        addenda: { type: 'string', description: 'Addenda acknowledged' },
+        location: { type: 'string', description: 'Project location' },
+        bid_due_date: { type: 'string', description: 'Bid due date' },
+        concrete_scope: { type: 'array', items: { type: 'string' }, description: 'Concrete scope items' },
+        masonry_scope: { type: 'array', items: { type: 'string' }, description: 'Masonry scope items' },
+        site_work_scope: { type: 'array', items: { type: 'string' }, description: 'Site work scope items' },
+        material_specs: { type: 'array', items: { type: 'string' }, description: 'Material specifications' },
+        equipment: { type: 'array', items: { type: 'string' }, description: 'Equipment list' },
+        exclusions: { type: 'array', items: { type: 'string' }, description: 'Exclusions from bid' },
+        clarifications: { type: 'array', items: { type: 'string' }, description: 'Clarifications and assumptions' },
+        total_bid: { type: 'number', description: 'Total bid amount in dollars' },
+        estimated_duration: { type: 'string', description: 'Estimated project duration' },
+      },
+      required: ['project_name', 'gc_name', 'total_bid'],
+    },
+  },
+  {
+    name: 'run_bid_checks',
+    description: 'Run sanity checks on an estimate to flag cost outliers and potential issues. Checks: $/CY range ($700-$1,300), SOG $/SF range ($6.80-$10.14), 50% labor stress test, effective margin (20%+ target), and labor percentage of field cost. Returns pass/warn/fail for each check with an overall verdict. Use before finalizing any estimate.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        estimate_id: { type: 'string', description: 'The estimate ID to check' },
+      },
+      required: ['estimate_id'],
+    },
+  },
+  {
+    name: 'generate_takeoff_template',
+    description: 'Generate a pre-populated Excel takeoff template with 4 sheets: Takeoff (with quantity formulas), Pricing (linked to takeoff), Masonry (common block types), and Equipment. Configured for the specific project and assemblies. Use at Step 3-4 when the estimator is about to start the quantity takeoff in PlanSwift.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_name: { type: 'string', description: 'Project name' },
+        gc_name: { type: 'string', description: 'General contractor name' },
+        assemblies: {
+          type: 'array',
+          description: 'Assembly categories for this project',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Assembly name (e.g. "Footings", "SOG", "Walls")' },
+              csi_division: { type: 'string', description: 'CSI division (e.g. "03 30 00")' },
+              unit: { type: 'string', description: 'Unit of measure (CY, SF, LF, EA)' },
+            },
+          },
+        },
+      },
+      required: ['project_name'],
+    },
+  },
+  {
+    name: 'generate_compliance_forms',
+    description: 'Generate pre-filled compliance forms as a Word document. Includes: DBE Participation Form, Buy America Certificate, Non-Collusion Affidavit, and Certificate on Primary Debarment. All pre-filled with DACP company data. Use when submitting a bid that requires compliance documentation.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project_name: { type: 'string', description: 'Project name' },
+        gc_name: { type: 'string', description: 'General contractor name' },
+        bid_date: { type: 'string', description: 'Bid submission date' },
+      },
+      required: ['project_name'],
+    },
+  },
+  {
+    name: 'generate_contract_redline',
+    description: 'Generate a Word document with color-coded redlines from a contract comparison. Red strikethrough for removals, green underline for additions, amber for discussion items. Organizes findings by: scope additions, missing exclusions, recommended redlines, legal concerns, and action items. Use after compare_contract to create a shareable redline document.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        comparison: { type: 'object', description: 'The comparison result from compare_contract tool' },
+        project_name: { type: 'string', description: 'Project name' },
+      },
+      required: ['comparison', 'project_name'],
+    },
+  },
+  {
+    name: 'parse_supplier_quote',
+    description: 'Parse an incoming supplier quote email to extract pricing, materials, quantities, delivery info, and validity dates. Use when a supplier responds to a quote request and the estimator needs to update pricing in the estimate.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        email_body: { type: 'string', description: 'Full text of the supplier quote email' },
+        from_name: { type: 'string', description: 'Sender name' },
+        from_email: { type: 'string', description: 'Sender email address' },
+      },
+      required: ['email_body'],
+    },
+  },
 ];
 
 async function callDacpTool(toolName, toolInput, tenantId) {
@@ -967,6 +1124,94 @@ async function callDacpTool(toolName, toolInput, tenantId) {
       return getDacpJobs(tid, toolInput.status || null);
     case 'get_dacp_stats':
       return getDacpStats(tid);
+
+    // ── Construction Copilot Tools ──
+    case 'analyze_itb': {
+      const { analyzeItb, DEMO_ITB } = await import('./constructionCopilot.js');
+      let bidReq;
+      if (toolInput.bid_request_id === 'BR-DEMO-001') {
+        bidReq = DEMO_ITB;
+      } else {
+        bidReq = getDacpBidRequest(tid, toolInput.bid_request_id);
+      }
+      if (!bidReq) throw new Error(`Bid request ${toolInput.bid_request_id} not found`);
+      const analysis = await analyzeItb(bidReq);
+      return { bid_request_id: toolInput.bid_request_id, analysis };
+    }
+
+    case 'draft_supplier_quotes': {
+      const { draftSupplierQuotes } = await import('./constructionCopilot.js');
+      const quotes = draftSupplierQuotes(
+        toolInput.project_name,
+        toolInput.gc_name || '',
+        toolInput.bid_due_date || '',
+        toolInput.materials || [],
+        toolInput.project_location || '',
+      );
+      return { project_name: toolInput.project_name, quotes };
+    }
+
+    case 'compare_contract': {
+      const { compareContractProposal, DEMO_PROPOSAL, DEMO_CONTRACT } = await import('./constructionCopilot.js');
+      const proposalText = toolInput.proposal_text || DEMO_PROPOSAL;
+      const contractText = toolInput.contract_text || DEMO_CONTRACT;
+      const comparison = await compareContractProposal(proposalText, contractText);
+      return { bid_request_id: toolInput.bid_request_id || null, comparison };
+    }
+
+    // ── V2 Tools ──
+    case 'generate_proposal': {
+      const { generateProposal } = await import('./constructionCopilotV2.js');
+      const result = await generateProposal({
+        projectName: toolInput.project_name,
+        gcName: toolInput.gc_name,
+        owner: toolInput.owner || '',
+        architect: toolInput.architect || '',
+        planDate: toolInput.plan_date || '',
+        addenda: toolInput.addenda || '',
+        location: toolInput.location || '',
+        bidDueDate: toolInput.bid_due_date || '',
+        concreteScope: toolInput.concrete_scope || [],
+        masonryScope: toolInput.masonry_scope || [],
+        siteWorkScope: toolInput.site_work_scope || [],
+        materialSpecs: toolInput.material_specs || [],
+        equipment: toolInput.equipment || [],
+        exclusions: toolInput.exclusions || [],
+        clarifications: toolInput.clarifications || [],
+        totalBid: toolInput.total_bid,
+        estimatedDuration: toolInput.estimated_duration || '',
+      });
+      return result;
+    }
+
+    case 'run_bid_checks': {
+      const { runBidSanityChecks } = await import('./constructionCopilotV2.js');
+      const estimate = getDacpEstimate(tid, toolInput.estimate_id);
+      if (!estimate) throw new Error(`Estimate ${toolInput.estimate_id} not found`);
+      if (estimate.line_items_json) estimate.line_items = JSON.parse(estimate.line_items_json);
+      return runBidSanityChecks(estimate);
+    }
+
+    case 'generate_takeoff_template': {
+      const { generateTakeoffTemplate } = await import('./constructionCopilotV2.js');
+      return await generateTakeoffTemplate(toolInput.project_name, toolInput.gc_name || '', toolInput.assemblies || []);
+    }
+
+    case 'generate_compliance_forms': {
+      const { generateComplianceForms } = await import('./constructionCopilotV2.js');
+      return await generateComplianceForms(toolInput.project_name, toolInput.gc_name || '', toolInput.bid_date || '');
+    }
+
+    case 'generate_contract_redline': {
+      const { generateContractRedline } = await import('./constructionCopilotV2.js');
+      return await generateContractRedline(toolInput.comparison, toolInput.project_name);
+    }
+
+    case 'parse_supplier_quote': {
+      const { parseSupplierQuote } = await import('./constructionCopilotV2.js');
+      return parseSupplierQuote(toolInput.email_body, toolInput.from_name || '', toolInput.from_email || '');
+    }
+
     default:
       throw new Error(`Unknown DACP tool: ${toolName}`);
   }
@@ -981,6 +1226,31 @@ You have access to DACP Construction's estimating and project database:
 - create_estimate: Build a new estimate with line items, overhead, profit, and mobilization
 - get_jobs: View project history (active, complete, won/lost, margins)
 - get_dacp_stats: Get overall business statistics (win rates, revenue, pipeline)
+
+CONSTRUCTION COPILOT TOOLS (8-Step Estimating Workflow):
+- analyze_itb: Deep-analyze an ITB — extracts scope by CSI division, spec requirements, compliance needs, flags missing info, recommends bid/no-bid. Use on any new bid request. (Step 1)
+- generate_takeoff_template: Generate pre-populated Excel takeoff template with Takeoff, Pricing, Masonry, and Equipment sheets. (Steps 3-4)
+- draft_supplier_quotes: Draft emails to material suppliers requesting pricing. Requires approval before sending. (Step 5)
+- run_bid_checks: Run sanity checks on an estimate — $/CY range, SOG $/SF, labor stress test, margin check. (Step 6)
+- parse_supplier_quote: Parse incoming supplier quote emails to extract pricing and delivery info. (Step 5 follow-up)
+- create_estimate: Build the formal estimate with line items, overhead, profit, mobilization. (Step 6)
+- generate_proposal: Generate professional Word proposal with DACP letterhead, scope, exclusions, total bid. Requires approval. (Step 7)
+- generate_compliance_forms: Generate pre-filled DBE, Buy America, Non-Collusion, and Debarment forms. Requires approval. (Step 7)
+- compare_contract: Compare GC subcontract against DACP's proposal — flags scope additions, missing exclusions, unfavorable terms. (Step 8)
+- generate_contract_redline: Generate color-coded Word redline document from contract comparison. Requires approval. (Step 8)
+
+COPILOT WORKFLOW:
+When walking the estimator through the 8-step process:
+1. RECEIVE ITB → Use analyze_itb to parse the bid request and present findings
+2. ORGANIZE DOCUMENTS → List what documents are available and what's missing
+3. CONFIGURE TAKEOFF → Use generate_takeoff_template to create a pre-populated Excel sheet for PlanSwift
+4. QUANTITY TAKEOFF → This is the estimator's manual step (PlanSwift). Assist with questions but don't try to do the takeoff.
+5. SUPPLIER PRICING → Use draft_supplier_quotes to email suppliers. When quotes come back, use parse_supplier_quote to extract pricing.
+6. BID SUMMARY → Use create_estimate to build the bid, then run_bid_checks to validate ($/CY $700-$1,300, SOG $/SF $6.80-$10.14, 20%+ margin).
+7. PROPOSAL → Use generate_proposal to create the Word doc, then generate_compliance_forms for DBE/Buy America docs. Present for approval.
+8. CONTRACT REVIEW → Use compare_contract to analyze, then generate_contract_redline to create a shareable marked-up document.
+
+For the demo ITB (BR-DEMO-001 — Riverside Commerce Center), you can walk through all 8 steps.
 
 When asked to estimate concrete work, ALWAYS use lookup_pricing first to get current rates, then create_estimate with proper line items. Be precise with quantities and units.`;
 
@@ -2278,7 +2548,7 @@ const TOOL_CATEGORIES = {
   web: ['browse_url', 'web_research'],
   legal: ['generate_legal_doc'],
   document: ['generate_document'],
-  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats'],
+  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote'],
 };
 
 async function routeToolCall(toolName, toolInput, tenantId) {
@@ -2554,7 +2824,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
         'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
         'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
         'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
-        'get_estimates', 'get_jobs', 'get_dacp_stats',
+        'get_estimates', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'compare_contract',
+        'run_bid_checks', 'parse_supplier_quote',
       ]);
 
       const agentMode = getAgentMode(agentId);
@@ -2569,6 +2840,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
           generate_legal_doc: () => `Generate legal document: "${toolInput.title || toolInput.doc_type || 'untitled'}"`,
           generate_mine_specs: () => `Generate mine specifications`,
           create_estimate: () => `Create estimate for ${toolInput.project || toolInput.client || 'project'}`,
+          draft_supplier_quotes: () => `Send quote requests to material suppliers for ${toolInput.project_name || 'project'}`,
+          generate_proposal: () => `Generate proposal document for ${toolInput.project_name || 'project'}`,
+          generate_takeoff_template: () => `Generate takeoff Excel template for ${toolInput.project_name || 'project'}`,
+          generate_compliance_forms: () => `Generate compliance forms for ${toolInput.project_name || 'project'}`,
+          generate_contract_redline: () => `Generate contract redline document for ${toolInput.project_name || 'project'}`,
           create_hubspot_contact: () => `Create HubSpot contact: ${toolInput.email || toolInput.name || 'contact'}`,
           add_trusted_sender: () => `Add trusted sender: ${toolInput.email}`,
           remove_trusted_sender: () => `Remove trusted sender: ${toolInput.email}`,

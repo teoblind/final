@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -35,6 +35,12 @@ export default function DacpEstimatingDashboard() {
   const [filterTab, setFilterTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [itbAnalysis, setItbAnalysis] = useState(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [sanityResult, setSanityResult] = useState(null);
+  const [checkingBid, setCheckingBid] = useState(false);
+  const [generatingDoc, setGeneratingDoc] = useState(null);
 
   const token = localStorage.getItem('auth_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -89,6 +95,72 @@ export default function DacpEstimatingDashboard() {
     { label: 'Hit Rate', value: `${stats.winRate}%`, delta: `${stats.wonJobs}W/${stats.lostJobs}L`, type: stats.winRate > 50 ? 'up' : 'warn' },
     { label: 'Pipeline $', value: `$${((estimates.reduce((s, e) => s + (e.total_bid || 0), 0)) / 1000).toFixed(0)}K`, delta: `${estimates.length} bids`, type: 'up' },
   ] : [];
+
+  const handleAnalyzeItb = useCallback(async () => {
+    if (!selected) return;
+    setAnalyzing(true);
+    setItbAnalysis(null);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/inbox/${selected.id}/analyze`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.analysis) {
+        setItbAnalysis(data.analysis);
+        setShowAnalysis(true);
+      }
+    } catch (e) { console.error(e); }
+    setAnalyzing(false);
+  }, [selected]);
+
+  const handleSanityCheck = useCallback(async () => {
+    if (!selectedEstimate) return;
+    setCheckingBid(true);
+    setSanityResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/estimates/${selectedEstimate.id}/sanity-check`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      setSanityResult(data);
+    } catch (e) { console.error(e); }
+    setCheckingBid(false);
+  }, [selectedEstimate]);
+
+  const handleGenerateDoc = useCallback(async (type) => {
+    if (!selected) return;
+    setGeneratingDoc(type);
+    try {
+      let url, body;
+      if (type === 'takeoff') {
+        url = `${API_BASE}/v1/estimates/generate-takeoff-template`;
+        body = { project_name: selected.project, gc_name: selected.gc_name || selected.from_company };
+      } else if (type === 'compliance') {
+        url = `${API_BASE}/v1/estimates/generate-compliance-forms`;
+        body = { project_name: selected.project, gc_name: selected.gc_name || selected.from_company, bid_date: selected.due_date };
+      } else if (type === 'proposal') {
+        url = `${API_BASE}/v1/estimates/generate-proposal`;
+        body = {
+          projectName: selected.project, gcName: selected.gc_name || selected.from_company,
+          location: selected.location || '', bidDueDate: selected.due_date,
+          totalBid: selectedEstimate?.total_bid || 0,
+        };
+      }
+      const res = await fetch(url, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.file_path) {
+        alert(`Document generated: ${data.file_path.split('/').pop()}`);
+      } else if (data.error) {
+        alert(`Error: ${data.error}`);
+      } else {
+        alert('Document generated successfully');
+      }
+    } catch (e) { console.error(e); alert('Failed to generate document'); }
+    setGeneratingDoc(null);
+  }, [selected, selectedEstimate]);
 
   if (loading) {
     return <div className="flex items-center justify-center py-24"><div className="spinner w-10 h-10" /></div>;
@@ -285,13 +357,135 @@ export default function DacpEstimatingDashboard() {
                 </div>
               )}
 
+              {/* ITB Analysis Panel */}
+              {showAnalysis && itbAnalysis && (
+                <div className="px-[18px] py-3 border-b border-[#f0eeea] bg-blue-50/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-[1px]">ITB Analysis</div>
+                    <button onClick={() => setShowAnalysis(false)} className="text-[10px] text-terminal-muted hover:text-terminal-text">Close</button>
+                  </div>
+
+                  {/* Bid Recommendation */}
+                  {itbAnalysis.bid_recommendation && (
+                    <div className={`mb-3 p-2.5 rounded-lg border ${
+                      itbAnalysis.bid_recommendation.recommend === 'bid' ? 'bg-green-50 border-green-200' :
+                      itbAnalysis.bid_recommendation.recommend === 'no-bid' ? 'bg-red-50 border-red-200' :
+                      'bg-amber-50 border-amber-200'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[11px] font-bold uppercase ${
+                          itbAnalysis.bid_recommendation.recommend === 'bid' ? 'text-green-700' :
+                          itbAnalysis.bid_recommendation.recommend === 'no-bid' ? 'text-red-700' : 'text-amber-700'
+                        }`}>
+                          {itbAnalysis.bid_recommendation.recommend === 'bid' ? 'Recommend: BID' :
+                           itbAnalysis.bid_recommendation.recommend === 'no-bid' ? 'Recommend: NO BID' :
+                           'Recommend: CONDITIONAL'}
+                        </span>
+                        <span className="text-[10px] text-terminal-muted">({itbAnalysis.bid_recommendation.confidence} confidence)</span>
+                      </div>
+                      <div className="text-[11px] text-[#555]">{itbAnalysis.bid_recommendation.reasoning}</div>
+                    </div>
+                  )}
+
+                  {/* Project Summary */}
+                  {itbAnalysis.project_summary && (
+                    <div className="mb-2">
+                      <div className="text-[10px] font-semibold text-terminal-muted mb-1">Project</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px]">
+                        {itbAnalysis.project_summary.name && <div><span className="text-terminal-muted">Name:</span> <span className="text-terminal-text font-medium">{itbAnalysis.project_summary.name}</span></div>}
+                        {itbAnalysis.project_summary.location && <div><span className="text-terminal-muted">Location:</span> <span className="text-terminal-text">{itbAnalysis.project_summary.location}</span></div>}
+                        {itbAnalysis.project_summary.project_type && <div><span className="text-terminal-muted">Type:</span> <span className="text-terminal-text capitalize">{itbAnalysis.project_summary.project_type}</span></div>}
+                        {itbAnalysis.project_summary.pre_bid_meeting && <div><span className="text-terminal-muted">Pre-bid:</span> <span className="text-terminal-text">{itbAnalysis.project_summary.pre_bid_meeting}</span></div>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Scope Analysis */}
+                  {itbAnalysis.scope_analysis && (
+                    <div className="mb-2">
+                      <div className="text-[10px] font-semibold text-terminal-muted mb-1">Scope ({itbAnalysis.scope_analysis.complexity} complexity)</div>
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {(itbAnalysis.scope_analysis.csi_divisions || []).map((div, i) => (
+                          <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1e3a5f]/10 text-[#1e3a5f] font-medium">{div}</span>
+                        ))}
+                      </div>
+                      {itbAnalysis.scope_analysis.estimated_total_cy && (
+                        <div className="text-[11px] text-terminal-text">Est. Volume: <span className="font-semibold">{itbAnalysis.scope_analysis.estimated_total_cy}</span></div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Compliance */}
+                  {itbAnalysis.compliance_requirements && (
+                    <div className="mb-2">
+                      <div className="text-[10px] font-semibold text-terminal-muted mb-1">Compliance</div>
+                      <div className="flex flex-wrap gap-1">
+                        {itbAnalysis.compliance_requirements.dbe_required && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">DBE {itbAnalysis.compliance_requirements.dbe_percentage || ''}</span>}
+                        {itbAnalysis.compliance_requirements.buy_america && <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">Buy America</span>}
+                        {itbAnalysis.compliance_requirements.prevailing_wage && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">Prevailing Wage</span>}
+                        {itbAnalysis.compliance_requirements.night_work && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">Night Work</span>}
+                        {itbAnalysis.compliance_requirements.prequalification_required && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">Pre-Qual Required</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Missing Critical */}
+                  {itbAnalysis.missing_critical?.length > 0 && (
+                    <div className="mb-2">
+                      <div className="text-[10px] font-semibold text-terminal-amber mb-1">Missing / Action Required</div>
+                      {itbAnalysis.missing_critical.map((m, i) => (
+                        <div key={i} className="text-[11px] text-[#555] mb-0.5">
+                          <span className="text-amber-600 font-medium">{m.item}</span> — {m.action}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Risk Factors */}
+                  {itbAnalysis.risk_factors?.length > 0 && (
+                    <div className="mb-2">
+                      <div className="text-[10px] font-semibold text-terminal-muted mb-1">Risks</div>
+                      {itbAnalysis.risk_factors.map((r, i) => (
+                        <div key={i} className="text-[11px] flex items-start gap-1.5 mb-0.5">
+                          <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${
+                            r.severity === 'high' ? 'bg-red-100 text-red-700' :
+                            r.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                          }`}>{r.severity}</span>
+                          <span className="text-[#555]">{r.risk}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Next Steps */}
+                  {itbAnalysis.next_steps?.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-terminal-muted mb-1">Next Steps</div>
+                      {itbAnalysis.next_steps.map((s, i) => (
+                        <div key={i} className="text-[11px] text-[#555] flex items-start gap-1.5 mb-0.5">
+                          <span className="text-[#1e3a5f] font-bold">{i + 1}.</span>
+                          <span>{s.step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Actions */}
-              <div className="px-[18px] py-3 flex gap-2">
+              <div className="px-[18px] py-3 flex gap-2 flex-wrap">
+                <button
+                  onClick={handleAnalyzeItb}
+                  disabled={analyzing}
+                  className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
+                >
+                  {analyzing ? 'Analyzing...' : showAnalysis ? 'Re-Analyze' : 'Analyze ITB'}
+                </button>
                 {!selectedEstimate && (
                   <button
                     onClick={handleGenerate}
                     disabled={generating}
-                    className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-50"
+                    className="px-3 py-1.5 bg-terminal-panel border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-[12px] font-semibold hover:bg-[#e8eef5] disabled:opacity-50"
                   >
                     {generating ? 'Generating...' : 'Generate Estimate'}
                   </button>
@@ -301,12 +495,76 @@ export default function DacpEstimatingDashboard() {
                     <button onClick={() => alert('Opening estimate editor...')} className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] font-semibold text-terminal-text hover:bg-[#f5f4f0]">
                       Edit
                     </button>
+                    <button
+                      onClick={handleSanityCheck}
+                      disabled={checkingBid}
+                      className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] font-semibold text-terminal-text hover:bg-[#f5f4f0] disabled:opacity-50"
+                    >
+                      {checkingBid ? 'Checking...' : 'Sanity Check'}
+                    </button>
                     <button onClick={() => alert('Quote sent to GC.')} className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a]">
                       Send Quote
                     </button>
                   </>
                 )}
               </div>
+
+              {/* Document Generation Toolbar */}
+              <div className="px-[18px] py-2 border-t border-[#f0eeea] flex gap-2 flex-wrap">
+                <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] self-center mr-1">Generate</span>
+                <button
+                  onClick={() => handleGenerateDoc('takeoff')}
+                  disabled={generatingDoc === 'takeoff'}
+                  className="px-2.5 py-1 bg-[#f5f4f0] border border-terminal-border rounded text-[11px] font-medium text-[#555] hover:bg-[#eeedea] disabled:opacity-50"
+                >
+                  {generatingDoc === 'takeoff' ? '...' : 'Takeoff Template'}
+                </button>
+                <button
+                  onClick={() => handleGenerateDoc('compliance')}
+                  disabled={generatingDoc === 'compliance'}
+                  className="px-2.5 py-1 bg-[#f5f4f0] border border-terminal-border rounded text-[11px] font-medium text-[#555] hover:bg-[#eeedea] disabled:opacity-50"
+                >
+                  {generatingDoc === 'compliance' ? '...' : 'Compliance Forms'}
+                </button>
+                {selectedEstimate && (
+                  <button
+                    onClick={() => handleGenerateDoc('proposal')}
+                    disabled={generatingDoc === 'proposal'}
+                    className="px-2.5 py-1 bg-[#f5f4f0] border border-terminal-border rounded text-[11px] font-medium text-[#555] hover:bg-[#eeedea] disabled:opacity-50"
+                  >
+                    {generatingDoc === 'proposal' ? '...' : 'Proposal Doc'}
+                  </button>
+                )}
+              </div>
+
+              {/* Bid Sanity Check Results */}
+              {sanityResult && (
+                <div className="px-[18px] py-3 border-t border-[#f0eeea]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Sanity Check</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      sanityResult.verdict === 'pass' ? 'bg-green-100 text-green-700' :
+                      sanityResult.verdict === 'warn' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>{sanityResult.verdict?.toUpperCase()}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {sanityResult.checks?.map((c, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px]">
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                          c.status === 'pass' ? 'bg-green-100 text-green-700' :
+                          c.status === 'warn' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {c.status === 'pass' ? '✓' : c.status === 'warn' ? '!' : '✗'}
+                        </span>
+                        <span className="text-[#333] font-medium">{c.label}</span>
+                        <span className="text-terminal-muted">{c.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex items-center justify-center py-24 text-terminal-muted text-sm">

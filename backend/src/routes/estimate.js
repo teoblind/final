@@ -212,6 +212,146 @@ router.get('/pricing', (req, res) => {
   }
 });
 
+// ─── Construction Copilot (Steps 1, 5, 8) ─────────────────────────────────
+
+router.post('/inbox/:id/analyze', async (req, res) => {
+  try {
+    const { analyzeItb, DEMO_ITB } = await import('../services/constructionCopilot.js');
+    let bidReq;
+    if (req.params.id === 'BR-DEMO-001') {
+      bidReq = DEMO_ITB;
+    } else {
+      bidReq = getDacpBidRequest(req.user.tenantId, req.params.id);
+      if (!bidReq) return res.status(404).json({ error: 'Bid request not found' });
+      if (typeof bidReq.scope_json === 'string') bidReq.scope = JSON.parse(bidReq.scope_json);
+      if (typeof bidReq.missing_info_json === 'string') bidReq.missing_info = JSON.parse(bidReq.missing_info_json);
+      if (typeof bidReq.attachments_json === 'string') bidReq.attachments = JSON.parse(bidReq.attachments_json);
+    }
+    const analysis = await analyzeItb(bidReq);
+    res.json({ bid_request_id: req.params.id, analysis });
+  } catch (error) {
+    console.error('Analyze ITB error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/supplier-quotes', async (req, res) => {
+  try {
+    const { draftSupplierQuotes } = await import('../services/constructionCopilot.js');
+    const { project_name, gc_name, bid_due_date, materials, project_location } = req.body;
+    if (!project_name || !materials?.length) {
+      return res.status(400).json({ error: 'project_name and materials are required' });
+    }
+    const quotes = draftSupplierQuotes(project_name, gc_name, bid_due_date, materials, project_location);
+    res.json({ project_name, quotes });
+  } catch (error) {
+    console.error('Supplier quotes error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/compare-contract', async (req, res) => {
+  try {
+    const { compareContractProposal, DEMO_PROPOSAL, DEMO_CONTRACT } = await import('../services/constructionCopilot.js');
+    const proposalText = req.body.proposal_text || DEMO_PROPOSAL;
+    const contractText = req.body.contract_text || DEMO_CONTRACT;
+    const comparison = await compareContractProposal(proposalText, contractText);
+    res.json({ comparison });
+  } catch (error) {
+    console.error('Compare contract error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/demo/proposal', async (req, res) => {
+  const { DEMO_PROPOSAL } = await import('../services/constructionCopilot.js');
+  res.json({ proposal: DEMO_PROPOSAL });
+});
+
+router.get('/demo/contract', async (req, res) => {
+  const { DEMO_CONTRACT } = await import('../services/constructionCopilot.js');
+  res.json({ contract: DEMO_CONTRACT });
+});
+
+// ─── Construction Copilot V2 (Steps 2-4, 6-7 + extras) ─────────────────────
+
+router.post('/estimates/:id/sanity-check', async (req, res) => {
+  try {
+    const { runBidSanityChecks } = await import('../services/constructionCopilotV2.js');
+    const estimate = getDacpEstimate(req.user.tenantId, req.params.id);
+    if (!estimate) return res.status(404).json({ error: 'Estimate not found' });
+    if (estimate.line_items_json) estimate.line_items = JSON.parse(estimate.line_items_json);
+    const result = runBidSanityChecks(estimate);
+    res.json({ estimate_id: req.params.id, ...result });
+  } catch (error) {
+    console.error('Sanity check error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/generate-proposal', async (req, res) => {
+  try {
+    const { generateProposal } = await import('../services/constructionCopilotV2.js');
+    const result = await generateProposal(req.body);
+    res.json(result);
+  } catch (error) {
+    console.error('Generate proposal error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/generate-takeoff-template', async (req, res) => {
+  try {
+    const { generateTakeoffTemplate } = await import('../services/constructionCopilotV2.js');
+    const { project_name, gc_name, assemblies } = req.body;
+    if (!project_name) return res.status(400).json({ error: 'project_name is required' });
+    const result = await generateTakeoffTemplate(project_name, gc_name || '', assemblies || []);
+    res.json(result);
+  } catch (error) {
+    console.error('Generate takeoff template error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/generate-compliance-forms', async (req, res) => {
+  try {
+    const { generateComplianceForms } = await import('../services/constructionCopilotV2.js');
+    const { project_name, gc_name, bid_date } = req.body;
+    if (!project_name) return res.status(400).json({ error: 'project_name is required' });
+    const result = await generateComplianceForms(project_name, gc_name || '', bid_date || '');
+    res.json(result);
+  } catch (error) {
+    console.error('Generate compliance forms error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/generate-contract-redline', async (req, res) => {
+  try {
+    const { generateContractRedline } = await import('../services/constructionCopilotV2.js');
+    const { comparison, project_name } = req.body;
+    if (!comparison) return res.status(400).json({ error: 'comparison data is required' });
+    const result = await generateContractRedline(comparison, project_name || '');
+    res.json(result);
+  } catch (error) {
+    console.error('Generate contract redline error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/parse-supplier-quote', async (req, res) => {
+  try {
+    const { parseSupplierQuote } = await import('../services/constructionCopilotV2.js');
+    const { email_body, from_name, from_email } = req.body;
+    if (!email_body) return res.status(400).json({ error: 'email_body is required' });
+    const result = parseSupplierQuote(email_body, from_name || '', from_email || '');
+    res.json(result);
+  } catch (error) {
+    console.error('Parse supplier quote error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
 router.get('/stats', (req, res) => {
