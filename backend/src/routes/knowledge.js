@@ -6,6 +6,8 @@
  * GET    /api/v1/knowledge/entity/:name   — Get everything linked to an entity
  * GET    /api/v1/knowledge/action-items   — Get open action items
  * GET    /api/v1/knowledge/recent         — Get recent entries
+ * GET    /api/v1/knowledge/entries/:id    — Get full entry detail (transcript, actions, entities)
+ * GET    /api/v1/knowledge/entities       — List all entities for a tenant
  */
 
 import express from 'express';
@@ -217,6 +219,73 @@ router.get('/recent', async (req, res) => {
 });
 
 /**
+ * GET /entries/:id — Full entry detail with transcript, action items, and linked entities
+ */
+router.get('/entries/:id', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+
+    const entry = db.prepare(`
+      SELECT * FROM knowledge_entries WHERE id = ? AND tenant_id = ?
+    `).get(id, tenantId);
+
+    if (!entry) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+
+    const actionItems = db.prepare(`
+      SELECT * FROM action_items WHERE entry_id = ? AND tenant_id = ?
+      ORDER BY status ASC, due_date ASC
+    `).all(id, tenantId);
+
+    const entities = db.prepare(`
+      SELECT ke.* FROM knowledge_entities ke
+      JOIN knowledge_links kl ON kl.entity_id = ke.id
+      WHERE kl.entry_id = ?
+    `).all(id);
+
+    res.json({ ...entry, action_items: actionItems, entities });
+  } catch (error) {
+    console.error('Knowledge entry detail error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /entities — List all entities for the tenant (people, companies, projects)
+ */
+router.get('/entities', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const type = req.query.type; // optional filter: person, company, project
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+
+    let query = `
+      SELECT ke.*, COUNT(kl.id) as mention_count
+      FROM knowledge_entities ke
+      LEFT JOIN knowledge_links kl ON kl.entity_id = ke.id
+      WHERE ke.tenant_id = ?
+    `;
+    const params = [tenantId];
+
+    if (type) {
+      query += ' AND ke.entity_type = ?';
+      params.push(type);
+    }
+
+    query += ' GROUP BY ke.id ORDER BY mention_count DESC LIMIT ?';
+    params.push(limit);
+
+    const entities = db.prepare(query).all(...params);
+    res.json(entities);
+  } catch (error) {
+    console.error('Knowledge entities error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /meeting-complete — Process a completed meeting: extract per-person tasks + send emails
  *
  * Called by MeetingBot after transcription + summarization.
@@ -224,8 +293,10 @@ router.get('/recent', async (req, res) => {
  */
 router.post('/meeting-complete', async (req, res) => {
   try {
-    const { tenantId } = resolveIds(req);
-    const { title, transcript, summary, attendees } = req.body;
+    // Allow tenant override for machine-to-machine calls (local recorder)
+    const { tenantId: defaultTenantId } = resolveIds(req);
+    const tenantId = req.body.tenant_id || defaultTenantId;
+    const { title, transcript, summary, attendees, duration_seconds, recorded_at } = req.body;
 
     if (!transcript || !attendees?.length) {
       return res.status(400).json({ error: 'transcript and attendees are required' });
@@ -234,14 +305,15 @@ router.post('/meeting-complete', async (req, res) => {
     // 1. Ingest into knowledge base
     const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     db.prepare(`
-      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at)
-      VALUES (?, ?, 'meeting', ?, ?, ?, 'meetingbot', 'coppice', ?)
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, duration_seconds, recorded_at)
+      VALUES (?, ?, 'meeting', ?, ?, ?, 'local-recorder', 'coppice', ?, ?)
     `).run(
       entryId, tenantId,
       title || 'Untitled Meeting',
       transcript,
       summary || null,
-      new Date().toISOString(),
+      duration_seconds || null,
+      recorded_at || new Date().toISOString(),
     );
 
     // 2. Run standard knowledge processing (entities, Drive upload, etc.)

@@ -166,9 +166,27 @@ export async function processKnowledgeEntry(entryId, tenantId) {
 
       const analysis = await anthropic.messages.create({
         model,
-        max_tokens: 2000,
+        max_tokens: 3000,
         system: `You are a knowledge extraction agent. Given a transcript or document, output JSON with:
-- summary: 2-3 sentence summary
+
+- summary: A structured Fireflies-style meeting summary in markdown. Use these exact section headers:
+
+  ## Overview
+  2-3 sentence high-level summary of what was discussed and the outcome.
+
+  ## Topics Discussed
+  - **Topic Name** — one sentence on what was covered
+  (list all major topics, 3-8 items)
+
+  ## Key Decisions
+  - Decision with context (only if decisions were actually made; omit section if none)
+
+  ## Notable Quotes
+  - "Exact quote or close paraphrase" — Speaker Name (only 2-4 most important; omit if none)
+
+  ## Next Steps
+  - Brief description of what happens next — Owner (if known)
+
 - title: a descriptive title if the provided title is generic
 - people: array of full names mentioned
 - companies: array of company names mentioned
@@ -177,7 +195,7 @@ export async function processKnowledgeEntry(entryId, tenantId) {
 - decisions: array of key decisions made
 - topics: array of topic tags (e.g. "pricing", "timeline", "legal", "technical")
 
-Output ONLY valid JSON.`,
+Output ONLY valid JSON. The summary field should be the full structured markdown.`,
         messages: [{ role: 'user', content: textContent }],
       });
 
