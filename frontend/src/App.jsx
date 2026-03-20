@@ -407,12 +407,9 @@ function AppContent() {
     ];
     agentItems = [
       { id: 'hivemind-chat', label: 'DACP Agent', icon: Bot, hivemind: true },
-      { id: 'estimating-chat', label: 'Estimating Bot', icon: ClipboardList, count: 8 },
-      { id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 12 },
-      { id: 'meetings-chat', label: 'Meetings', icon: Mic, live: true },
-      { id: 'email-chat', label: 'Email', icon: Mail },
-      { id: 'pitch-deck-chat', label: 'Pitch Deck', icon: Presentation },
-      { id: 'sales-chat', label: 'Sales Agent', icon: Phone },
+      { id: 'estimating-chat', label: 'Estimating Bot', icon: ClipboardList },
+      { id: 'email-chat', label: 'Email Agent', icon: Mail },
+      { id: 'meetings-chat', label: 'Meetings', icon: Mic },
     ];
   } else if (isVenture) {
     platformItems = [
