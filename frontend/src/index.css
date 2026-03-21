@@ -196,6 +196,35 @@ table {
   50% { transform: translateY(-3px); }
 }
 
+/* OpenClaw Office 2D animations */
+@keyframes agent-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+@keyframes agent-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes agent-spawn {
+  from { transform: scale(0); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@keyframes agent-despawn {
+  from { transform: scale(1); opacity: 1; }
+  to { transform: scale(0); opacity: 0; }
+}
+@keyframes thinking-dots {
+  0%, 80%, 100% { opacity: 0.3; }
+  40% { opacity: 1; }
+}
+@keyframes connection-pulse {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes dash-flow {
+  to { stroke-dashoffset: -20; }
+}
+
 /* Chart container */
 .chart-container {
   position: relative;
