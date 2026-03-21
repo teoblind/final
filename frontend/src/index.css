@@ -110,6 +110,13 @@ table {
   .text-shadow {
     text-shadow: 0 0 10px currentColor;
   }
+
+  /* Tenant-aware accent colors (derived from branding primaryColor) */
+  .text-ui-accent { color: var(--t-ui-accent); }
+  .bg-ui-accent { background-color: var(--t-ui-accent); }
+  .border-ui-accent { border-color: var(--t-ui-accent); }
+  .bg-ui-accent-light { background-color: var(--t-ui-accent-bg); }
+  .border-ui-accent-light { border-color: var(--t-ui-accent-border); }
 }
 
 /* Loading spinner */
@@ -162,6 +169,19 @@ table {
 @keyframes emoji-bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-2px); }
+}
+@keyframes agent-walk {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  15% { transform: translateY(-4px) rotate(-3deg); }
+  30% { transform: translateY(0) rotate(0deg); }
+  45% { transform: translateY(-4px) rotate(3deg); }
+  60% { transform: translateY(0) rotate(0deg); }
+  75% { transform: translateY(-4px) rotate(-3deg); }
+  90% { transform: translateY(0) rotate(0deg); }
+}
+@keyframes agent-idle-sway {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-1px) rotate(1deg); }
 }
 
 /* Chart container */

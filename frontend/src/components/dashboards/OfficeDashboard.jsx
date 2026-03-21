@@ -1,11 +1,11 @@
 /**
- * OfficeDashboard — 3D Isometric office visualization
+ * OfficeDashboard — 3D Isometric office simulation
  *
- * Shows AI agents as animated characters working in an isometric office grid.
- * Fetches live status from /api/v1/office/status.
+ * Agents walk around an isometric office grid, working at desks,
+ * heading to meetings, and interacting with each other.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../lib/hooks/useApi';
 import { useTenant } from '../../contexts/TenantContext';
 
@@ -21,6 +21,7 @@ const ROLE_CONFIG = {
 
 const STATUS_STYLES = {
   idle:         { dot: '#9ca3af', label: 'Idle', pulse: false },
+  walking:      { dot: '#60a5fa', label: 'Walking', pulse: true },
   processing:   { dot: '#2563eb', label: 'Working', pulse: true },
   running:      { dot: '#1a6b3c', label: 'Active', pulse: true },
   observing:    { dot: '#f59e0b', label: 'Observing', pulse: true },
@@ -29,123 +30,134 @@ const STATUS_STYLES = {
   error:        { dot: '#ef4444', label: 'Error', pulse: false },
 };
 
-// ─── 3D Isometric Tile ─────────────────────────────────────────────────────
+// Office "rooms" / points of interest
+const OFFICE_LOCATIONS = [
+  { id: 'desk-1', label: 'Desk', x: 0, y: 0 },
+  { id: 'desk-2', label: 'Desk', x: 1, y: 0 },
+  { id: 'desk-3', label: 'Desk', x: 2, y: 0 },
+  { id: 'desk-4', label: 'Desk', x: 3, y: 0 },
+  { id: 'desk-5', label: 'Desk', x: 0, y: 1 },
+  { id: 'desk-6', label: 'Desk', x: 1, y: 1 },
+  { id: 'meeting', label: 'Meeting Room', x: 2, y: 1 },
+  { id: 'kitchen', label: 'Break Room', x: 3, y: 1 },
+  { id: 'server', label: 'Server Room', x: 0, y: 2 },
+  { id: 'lounge', label: 'Lounge', x: 1, y: 2 },
+  { id: 'printer', label: 'Printer', x: 2, y: 2 },
+  { id: 'entrance', label: 'Entrance', x: 3, y: 2 },
+];
 
-function IsoTile({ x, y, children, onClick, highlighted, className = '' }) {
-  // Isometric projection: x goes right-down, y goes left-down
-  const px = (x - y) * 120;
-  const py = (x + y) * 60;
+// ─── Isometric helpers ──────────────────────────────────────────────────────
+
+function isoProject(gridX, gridY) {
+  // Isometric projection
+  const px = (gridX - gridY) * 110;
+  const py = (gridX + gridY) * 55;
+  return { px, py };
+}
+
+// ─── Floor Tile ─────────────────────────────────────────────────────────────
+
+function FloorTile({ x, y, label, highlighted }) {
+  const { px, py } = isoProject(x, y);
+  const isSpecial = label === 'Meeting Room' || label === 'Break Room' || label === 'Server Room';
 
   return (
     <div
-      className={`absolute transition-all duration-300 cursor-pointer ${className}`}
-      style={{
-        left: `${px}px`,
-        top: `${py}px`,
-        width: '220px',
-        zIndex: x + y,
-      }}
-      onClick={onClick}
+      className="absolute"
+      style={{ left: `${px}px`, top: `${py}px`, width: '200px', zIndex: x + y }}
     >
-      {/* Floor tile — isometric diamond */}
-      <svg viewBox="0 0 220 130" className="w-full" style={{ filter: highlighted ? 'brightness(1.05)' : undefined }}>
+      <svg viewBox="0 0 200 120" className="w-full">
         <defs>
           <linearGradient id={`floor-${x}-${y}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={highlighted ? '#edf7f0' : '#fafaf8'} />
-            <stop offset="100%" stopColor={highlighted ? '#d4edda' : '#f0eeea'} />
+            <stop offset="0%" stopColor={highlighted ? '#edf7f0' : isSpecial ? '#f0f0f8' : '#fafaf8'} />
+            <stop offset="100%" stopColor={highlighted ? '#d4edda' : isSpecial ? '#e4e4f0' : '#f0eeea'} />
           </linearGradient>
         </defs>
-        {/* Top face */}
-        <polygon
-          points="110,10 210,60 110,110 10,60"
-          fill={`url(#floor-${x}-${y})`}
-          stroke={highlighted ? '#1a6b3c' : '#e0ddd8'}
-          strokeWidth="1.5"
-        />
-        {/* Left face */}
-        <polygon
-          points="10,60 110,110 110,125 10,75"
-          fill={highlighted ? '#c3ddc8' : '#e8e6e1'}
-          stroke={highlighted ? '#1a6b3c' : '#ddd9d3'}
-          strokeWidth="0.5"
-        />
-        {/* Right face */}
-        <polygon
-          points="210,60 110,110 110,125 210,75"
-          fill={highlighted ? '#b5d4bb' : '#dddbd5'}
-          stroke={highlighted ? '#1a6b3c' : '#d0cec8'}
-          strokeWidth="0.5"
-        />
+        <polygon points="100,8 192,56 100,104 8,56" fill={`url(#floor-${x}-${y})`} stroke={highlighted ? '#1e3a5f' : '#e0ddd8'} strokeWidth="1.5" />
+        <polygon points="8,56 100,104 100,116 8,68" fill={isSpecial ? '#d8d8e8' : '#e8e6e1'} stroke="#ddd9d3" strokeWidth="0.5" />
+        <polygon points="192,56 100,104 100,116 192,68" fill={isSpecial ? '#ccccdd' : '#dddbd5'} stroke="#d0cec8" strokeWidth="0.5" />
       </svg>
-      {/* Content positioned on tile */}
-      <div className="absolute inset-0 flex items-center justify-center" style={{ top: '-20px' }}>
-        {children}
+      {/* Room label */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ top: '15px' }}>
+        <span className="text-[8px] font-semibold uppercase tracking-[1px] text-[#b0b0a8]">{label}</span>
       </div>
     </div>
   );
 }
 
-// ─── Agent Character (3D-ish) ───────────────────────────────────────────────
+// ─── Walking Agent Character ────────────────────────────────────────────────
 
-function AgentCharacter({ agent, selected, onClick }) {
+function WalkingAgent({ agent, gridX, gridY, isWalking, onClick, selected }) {
   const role = ROLE_CONFIG[agent.role] || ROLE_CONFIG.clawbot;
-  const status = STATUS_STYLES[agent.status] || STATUS_STYLES.idle;
-  const isActive = agent.status === 'processing' || agent.status === 'running' || agent.status === 'transcribing' || agent.status === 'observing' || agent.status === 'analyzing';
+  const status = STATUS_STYLES[agent.displayStatus || agent.status] || STATUS_STYLES.idle;
+  const isActive = ['processing', 'running', 'transcribing', 'observing', 'analyzing'].includes(agent.status);
+  const { px, py } = isoProject(gridX, gridY);
 
   return (
     <div
-      className={`flex flex-col items-center transition-transform duration-300 ${selected ? 'scale-110' : 'hover:scale-105'}`}
+      className="absolute cursor-pointer"
+      style={{
+        left: `${px + 60}px`,
+        top: `${py - 10}px`,
+        zIndex: Math.round((gridX + gridY) * 10) + 5,
+        transition: isWalking ? 'left 2s ease-in-out, top 2s ease-in-out' : 'left 0.5s ease-out, top 0.5s ease-out',
+      }}
       onClick={onClick}
-      style={isActive ? { animation: 'agent-work 2s ease-in-out infinite' } : undefined}
     >
-      {/* Task bubble */}
-      {agent.currentTask && (
-        <div className="mb-1 px-2.5 py-1 bg-white rounded-lg shadow-md border border-[#e0ddd8] max-w-[170px]" style={{ animation: 'bubble-in 0.3s ease-out' }}>
-          <p className="text-[8px] text-[#6b6b65] truncate font-medium">{agent.currentTask.name}</p>
-          {agent.currentTask.detail && <p className="text-[7px] text-[#999] truncate">{agent.currentTask.detail}</p>}
-        </div>
-      )}
-
-      {/* Character body — 3D cube-ish */}
-      <div className="relative">
-        {/* Shadow — expands when active */}
-        <div
-          className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 rounded-full bg-black/10 blur-[2px] transition-all duration-500"
-          style={{ width: isActive ? '48px' : '40px', height: isActive ? '10px' : '8px' }}
-        />
-
-        {/* Glow ring when active */}
-        {isActive && (
-          <div
-            className="absolute inset-[-4px] rounded-2xl"
-            style={{ animation: 'glow-ring 1.5s ease-in-out infinite', boxShadow: `0 0 12px ${role.color}40` }}
-          />
+      <div
+        className="flex flex-col items-center"
+        style={{
+          animation: isWalking
+            ? 'agent-walk 0.8s ease-in-out infinite'
+            : isActive
+              ? 'agent-work 2s ease-in-out infinite'
+              : 'agent-idle-sway 3s ease-in-out infinite',
+        }}
+      >
+        {/* Task bubble */}
+        {agent.currentTask && (
+          <div className="mb-1 px-2 py-0.5 bg-white rounded-lg shadow-md border border-[#e0ddd8] max-w-[140px]" style={{ animation: 'bubble-in 0.3s ease-out' }}>
+            <p className="text-[7px] text-[#6b6b65] truncate font-medium">{agent.currentTask.name}</p>
+          </div>
         )}
 
-        {/* Body */}
-        <div
-          className="w-12 h-14 rounded-xl flex items-center justify-center relative shadow-lg transition-all duration-300"
-          style={{
-            background: isActive
-              ? `linear-gradient(135deg, ${role.color}, ${role.color}dd)`
-              : `linear-gradient(135deg, ${role.color}99, ${role.color}77)`,
-            transform: 'perspective(200px) rotateX(5deg)',
-          }}
-        >
-          <span className="text-xl" style={isActive ? { animation: 'emoji-bounce 1s ease-in-out infinite' } : undefined}>{role.emoji}</span>
-
-          {/* Status dot */}
+        {/* Character body */}
+        <div className="relative">
+          {/* Shadow */}
           <div
-            className={`absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${status.pulse ? 'animate-pulse' : ''}`}
-            style={{ backgroundColor: status.dot }}
+            className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 rounded-full bg-black/10 blur-[2px]"
+            style={{ width: isWalking ? '44px' : '36px', height: isWalking ? '12px' : '8px', transition: 'all 0.3s' }}
           />
-        </div>
-      </div>
 
-      {/* Name plate */}
-      <div className="mt-1.5 px-2 py-0.5 bg-white/90 rounded-md shadow-sm border border-[#e0ddd8]">
-        <p className="text-[9px] font-bold text-[#333] text-center whitespace-nowrap">{agent.name.replace(/ (Email|Chat|Meeting|Research) Agent/, '')}</p>
-        <p className="text-[8px] text-center font-medium" style={{ color: status.dot }}>{status.label}</p>
+          {/* Glow ring */}
+          {isActive && (
+            <div className="absolute inset-[-4px] rounded-2xl" style={{ animation: 'glow-ring 1.5s ease-in-out infinite', boxShadow: `0 0 12px ${role.color}40` }} />
+          )}
+
+          {/* Body */}
+          <div
+            className={`w-11 h-13 rounded-xl flex items-center justify-center shadow-lg ${selected ? 'ring-2 ring-[#1e3a5f]' : ''}`}
+            style={{
+              background: isActive
+                ? `linear-gradient(135deg, ${role.color}, ${role.color}dd)`
+                : `linear-gradient(135deg, ${role.color}99, ${role.color}77)`,
+              width: '44px', height: '52px',
+              transform: 'perspective(200px) rotateX(5deg)',
+            }}
+          >
+            <span className="text-lg">{role.emoji}</span>
+            <div
+              className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${status.pulse ? 'animate-pulse' : ''}`}
+              style={{ backgroundColor: status.dot }}
+            />
+          </div>
+        </div>
+
+        {/* Name plate */}
+        <div className="mt-1 px-1.5 py-px bg-white/90 rounded-md shadow-sm border border-[#e0ddd8]">
+          <p className="text-[8px] font-bold text-[#333] text-center whitespace-nowrap">{agent.name.replace(/ (Email|Chat|Meeting|Research) Agent/, '')}</p>
+          <p className="text-[7px] text-center font-medium" style={{ color: status.dot }}>{isWalking ? 'Walking' : status.label}</p>
+        </div>
       </div>
     </div>
   );
@@ -159,9 +171,9 @@ function ActivityFeed({ activities }) {
       <div className="px-4 py-3 border-b border-[#f0eeea]">
         <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Activity Feed</span>
       </div>
-      <div className="max-h-[360px] overflow-y-auto">
+      <div className="max-h-[400px] overflow-y-auto">
         {activities.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-terminal-muted">No recent activity.</div>
+          <div className="px-4 py-8 text-center text-sm text-terminal-muted">No recent activity</div>
         )}
         {activities.slice(0, 30).map((act, i) => (
           <div key={act.id || i} className="flex items-start gap-3 px-4 py-2.5 border-b border-[#f0eeea] last:border-b-0">
@@ -172,35 +184,7 @@ function ActivityFeed({ activities }) {
               <p className="text-[12px] font-medium text-terminal-text truncate">{act.title}</p>
               {act.subtitle && <p className="text-[10px] text-terminal-muted truncate mt-px">{act.subtitle}</p>}
             </div>
-            <div className="text-[10px] text-terminal-muted whitespace-nowrap shrink-0">
-              {act.tenant && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-[#6b6b65]">{act.tenant}</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Meeting Status ─────────────────────────────────────────────────────────
-
-function MeetingStatus({ meetings }) {
-  if (!meetings || meetings.length === 0) return null;
-
-  return (
-    <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-[#1a6b3c] animate-pulse" />
-        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Live Meetings</span>
-      </div>
-      <div className="divide-y divide-[#f0eeea]">
-        {meetings.map((m, i) => (
-          <div key={i} className="px-4 py-3 flex items-center gap-3">
-            <div className="text-lg">🎙️</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-semibold text-terminal-text truncate">{m.meetingName || 'Meeting'}</p>
-              <p className="text-[10px] text-terminal-muted">{m.status} — {m.tenantId}</p>
-            </div>
+            {act.tenant && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-[#6b6b65] shrink-0">{act.tenant}</span>}
           </div>
         ))}
       </div>
@@ -215,7 +199,8 @@ export default function OfficeDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
-  const [realtimeFlash, setRealtimeFlash] = useState({}); // agentId -> timestamp for animation triggers
+  const [agentPositions, setAgentPositions] = useState({}); // agentId -> { x, y, walking }
+  const moveTimers = useRef({});
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -233,173 +218,111 @@ export default function OfficeDashboard() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000); // Poll every 30s (WebSocket handles real-time)
+    const interval = setInterval(fetchStatus, 30000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  // Map activity type → which agent role should animate
-  const ACTIVITY_ROLE_MAP = {
-    'out': 'email', 'in': 'email', 'email': 'email',
-    'meet': 'meeting', 'calendar': 'meeting',
-    'doc': 'research', 'research': 'research',
-    'chat': 'chat', 'call': 'chat',
-  };
+  // Filter agents by tenant
+  const tenantSlug = tenant?.slug;
+  const tenantId = tenant?.id;
+  const isSuperAdmin = !tenantSlug || tenantSlug === 'default' || tenantSlug === 'sangha';
 
-  // Listen for real-time WebSocket events to animate agents
+  const allAgents = data?.agents || [];
+  const agents = isSuperAdmin
+    ? allAgents
+    : allAgents.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === tenant?.name);
+
+  const allActivities = data?.activities || [];
+  const activities = isSuperAdmin
+    ? allActivities
+    : allActivities.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === 'dacp');
+
+  // Initialize agent positions and start movement
   useEffect(() => {
-    const idleTimers = new Map();
+    if (agents.length === 0) return;
 
-    const setAgentActive = (agentMatcher, status, task) => {
-      setData(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          agents: prev.agents.map(a => {
-            if (!agentMatcher(a)) return a;
-            return { ...a, status, currentTask: task, lastActivityAt: Date.now() };
-          }),
-        };
+    // Assign initial positions
+    setAgentPositions(prev => {
+      const next = { ...prev };
+      agents.forEach((agent, i) => {
+        if (!next[agent.id]) {
+          const loc = OFFICE_LOCATIONS[i % OFFICE_LOCATIONS.length];
+          next[agent.id] = { x: loc.x, y: loc.y, walking: false, targetLoc: loc.label };
+        }
       });
-    };
+      return next;
+    });
 
-    // Auto-revert an agent to idle after a delay
-    const scheduleIdle = (key, agentMatcher, delayMs = 15000) => {
-      if (idleTimers.has(key)) clearTimeout(idleTimers.get(key));
-      idleTimers.set(key, setTimeout(() => {
-        setData(prev => {
-          if (!prev) return prev;
-          return {
+    // Set up random movement for each agent
+    agents.forEach((agent) => {
+      if (moveTimers.current[agent.id]) return; // already has a timer
+
+      const scheduleMove = () => {
+        // Random delay between 4-12 seconds
+        const delay = 4000 + Math.random() * 8000;
+        moveTimers.current[agent.id] = setTimeout(() => {
+          // Pick a random destination
+          const dest = OFFICE_LOCATIONS[Math.floor(Math.random() * OFFICE_LOCATIONS.length)];
+
+          // Start walking
+          setAgentPositions(prev => ({
             ...prev,
-            agents: prev.agents.map(a => {
-              if (!agentMatcher(a)) return a;
-              // Only revert if still in an active state
-              if (a.status === 'idle') return a;
-              return { ...a, status: 'idle', currentTask: null };
-            }),
-          };
-        });
-        idleTimers.delete(key);
-      }, delayMs));
-    };
+            [agent.id]: { ...prev[agent.id], walking: true },
+          }));
 
-    const handleWsUpdate = (e) => {
-      const msg = e.detail;
-      if (!msg) return;
+          // After a brief moment, move to new position
+          setTimeout(() => {
+            setAgentPositions(prev => ({
+              ...prev,
+              [agent.id]: { x: dest.x, y: dest.y, walking: true, targetLoc: dest.label },
+            }));
+          }, 100);
 
-      if (msg.type === 'office:activity') {
-        const activity = msg.data;
-        const role = ACTIVITY_ROLE_MAP[activity.type] || 'email';
-        const status = activity.type === 'meet' ? 'transcribing' : 'processing';
+          // Stop walking after arrival
+          setTimeout(() => {
+            setAgentPositions(prev => ({
+              ...prev,
+              [agent.id]: { ...prev[agent.id], walking: false },
+            }));
+          }, 2200);
 
-        // Add to activity feed
-        setData(prev => {
-          if (!prev) return prev;
-          const newActivity = {
-            id: activity.id,
-            agentId: activity.agentId,
-            type: activity.type,
-            title: activity.title,
-            subtitle: activity.subtitle,
-            tenant: activity.tenantId,
-            createdAt: new Date().toISOString(),
-          };
-          return { ...prev, activities: [newActivity, ...prev.activities].slice(0, 50) };
-        });
+          scheduleMove(); // schedule next move
+        }, delay);
+      };
 
-        // Animate the correct agent
-        const matcher = (a) => a.tenant === activity.tenantId && a.role === role;
-        setAgentActive(matcher, status, { name: activity.title, detail: activity.subtitle });
+      scheduleMove();
+    });
 
-        // Revert to idle after 15s (or 60s for meetings)
-        const idleDelay = activity.type === 'meet' ? 60000 : 15000;
-        scheduleIdle(`${activity.tenantId}-${role}`, matcher, idleDelay);
-
-        // Flash the tenant row
-        if (activity.tenantId) {
-          setRealtimeFlash(prev => ({ ...prev, [activity.tenantId]: Date.now() }));
-          setTimeout(() => setRealtimeFlash(prev => { const next = { ...prev }; delete next[activity.tenantId]; return next; }), 3000);
-        }
-      }
-
-      if (msg.type === 'office:agent-event') {
-        const { event, agentId, name } = msg.data;
-        const matcher = (a) => a.id === agentId || a.name === name;
-
-        if (event === 'agent:started' || event === 'agent:action') {
-          setAgentActive(matcher, 'running', null);
-          scheduleIdle(agentId || name, matcher, 30000);
-        } else if (event === 'agent:stopped' || event === 'agent:auto_stopped') {
-          setAgentActive(matcher, 'idle', null);
-        } else if (event === 'agent:error') {
-          setAgentActive(matcher, 'error', null);
-          scheduleIdle(agentId || name, matcher, 10000);
-        }
-      }
-    };
-
-    window.addEventListener('ws-update', handleWsUpdate);
     return () => {
-      window.removeEventListener('ws-update', handleWsUpdate);
-      for (const timer of idleTimers.values()) clearTimeout(timer);
+      Object.values(moveTimers.current).forEach(clearTimeout);
+      moveTimers.current = {};
     };
-  }, []);
+  }, [agents.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activeCount = agents.filter(a => a.status !== 'idle').length;
 
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[500px]">
         <div className="text-center">
-          <div className="text-4xl mb-3">🏢</div>
+          <div className="spinner w-10 h-10 mx-auto mb-3" />
           <div className="text-sm text-terminal-muted">Loading office...</div>
         </div>
       </div>
     );
   }
 
-  const allAgents = data?.agents || [];
-  const allActivities = data?.activities || [];
-  const allMeetings = data?.meetings || [];
-
-  // Filter to current tenant only — no cross-tenant data leakage
-  const tenantSlug = tenant?.slug;
-  const tenantId = tenant?.id;
-  const isSuperAdmin = !tenantSlug || tenantSlug === 'default' || tenantSlug === 'sangha';
-
-  const agents = isSuperAdmin
-    ? allAgents
-    : allAgents.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === tenant?.name);
-  const activities = isSuperAdmin
-    ? allActivities
-    : allActivities.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === 'dacp');
-  const meetings = isSuperAdmin
-    ? allMeetings
-    : allMeetings.filter(m => m.tenantId === tenantSlug || m.tenantId === tenantId);
-
-  // Group agents by tenant for office layout
-  const tenantGroups = {};
-  agents.forEach(a => {
-    const t = a.tenant || 'system';
-    if (!tenantGroups[t]) tenantGroups[t] = [];
-    tenantGroups[t].push(a);
-  });
-
-  const tenantKeys = Object.keys(tenantGroups).filter(t => t !== 'system');
-  const systemAgents = isSuperAdmin ? (tenantGroups.system || []) : [];
-  const activeCount = agents.filter(a => a.status !== 'idle').length;
-
   return (
     <div className="p-6 lg:px-7 lg:py-6 min-h-screen">
       {/* Stats bar */}
       <div className="flex items-center gap-6 mb-6">
-        <div className="flex items-center gap-2">
-          <div className="text-2xl">🏢</div>
-          <div>
-            <p className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Coppice Office</p>
-            <p className="text-xs text-terminal-text font-semibold">{agents.length} agents — {activeCount} active</p>
-          </div>
+        <div>
+          <p className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">{tenant?.name || 'Coppice'} Office</p>
+          <p className="text-xs text-terminal-text font-semibold">{agents.length} agents — {activeCount} active</p>
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-4">
-          {Object.entries(STATUS_STYLES).slice(0, 3).map(([key, s]) => (
+          {[['idle', STATUS_STYLES.idle], ['walking', STATUS_STYLES.walking], ['processing', STATUS_STYLES.processing]].map(([key, s]) => (
             <div key={key} className="flex items-center gap-1.5">
               <div className={`w-2 h-2 rounded-full ${s.pulse ? 'animate-pulse' : ''}`} style={{ backgroundColor: s.dot }} />
               <span className="text-[10px] text-terminal-muted font-medium">{s.label}</span>
@@ -409,87 +332,37 @@ export default function OfficeDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
-        {/* Isometric office view */}
+        {/* Isometric office */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center justify-between">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agent Office</span>
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Office Floor</span>
             <span className="text-[10px] text-terminal-muted">{data?.fetchedAt ? `Updated ${new Date(data.fetchedAt).toLocaleTimeString()}` : ''}</span>
           </div>
 
-          <div className="p-6 overflow-auto" style={{ minHeight: '500px' }}>
-            <div className="relative" style={{ width: '900px', height: '600px', margin: '0 auto' }}>
-              {/* Origin offset to center the grid */}
-              <div className="absolute" style={{ left: '350px', top: '20px' }}>
-                {/* Tenant rooms */}
-                {tenantKeys.map((tenantKey, tIdx) => {
-                  const tenantAgents = tenantGroups[tenantKey];
-                  const row = tIdx;
+          <div className="p-6 overflow-auto" style={{ minHeight: '460px' }}>
+            <div className="relative" style={{ width: '900px', height: '500px', margin: '0 auto' }}>
+              <div className="absolute" style={{ left: '380px', top: '20px' }}>
+                {/* Floor tiles */}
+                {OFFICE_LOCATIONS.map(loc => (
+                  <FloorTile key={loc.id} x={loc.x} y={loc.y} label={loc.label} />
+                ))}
 
+                {/* Walking agents */}
+                {agents.map(agent => {
+                  const pos = agentPositions[agent.id];
+                  if (!pos) return null;
                   return (
-                    <React.Fragment key={tenantKey}>
-                      {/* Room label */}
-                      <div
-                        className="absolute text-[10px] font-bold uppercase tracking-[1.5px] text-terminal-muted"
-                        style={{
-                          left: `${(0 - row) * 120 - 80}px`,
-                          top: `${(0 + row) * 60 + 25}px`,
-                          transform: 'rotate(-26deg)',
-                          transformOrigin: 'left center',
-                        }}
-                      >
-                        {tenantKey}
-                      </div>
-
-                      {tenantAgents.map((agent, aIdx) => (
-                        <IsoTile
-                          key={agent.id}
-                          x={aIdx}
-                          y={row}
-                          highlighted={selectedAgent?.id === agent.id}
-                          onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-                        >
-                          <AgentCharacter
-                            agent={agent}
-                            selected={selectedAgent?.id === agent.id}
-                            onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-                          />
-                        </IsoTile>
-                      ))}
-                    </React.Fragment>
+                    <WalkingAgent
+                      key={agent.id}
+                      agent={agent}
+                      gridX={pos.x}
+                      gridY={pos.y}
+                      isWalking={pos.walking}
+                      selected={selectedAgent?.id === agent.id}
+                      onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
+                    />
                   );
                 })}
-
-                {/* System agents at the bottom */}
-                {systemAgents.length > 0 && (
-                  <>
-                    <div
-                      className="absolute text-[10px] font-bold uppercase tracking-[1.5px] text-terminal-muted"
-                      style={{
-                        left: `${(0 - tenantKeys.length) * 120 - 80}px`,
-                        top: `${(0 + tenantKeys.length) * 60 + 25}px`,
-                        transform: 'rotate(-26deg)',
-                        transformOrigin: 'left center',
-                      }}
-                    >
-                      system
-                    </div>
-                    {systemAgents.map((agent, aIdx) => (
-                      <IsoTile
-                        key={agent.id}
-                        x={aIdx}
-                        y={tenantKeys.length}
-                        highlighted={selectedAgent?.id === agent.id}
-                        onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-                      >
-                        <AgentCharacter
-                          agent={agent}
-                          selected={selectedAgent?.id === agent.id}
-                          onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-                        />
-                      </IsoTile>
-                    ))}
-                  </>
-                )}
               </div>
             </div>
           </div>
@@ -513,42 +386,33 @@ export default function OfficeDashboard() {
                   </div>
                   <div>
                     <p className="text-sm font-bold text-terminal-text">{selectedAgent.name}</p>
-                    <p className="text-[10px] text-terminal-muted">{selectedAgent.tenant || 'System'} — {(ROLE_CONFIG[selectedAgent.role] || ROLE_CONFIG.clawbot).label}</p>
+                    <p className="text-[10px] text-terminal-muted">{(ROLE_CONFIG[selectedAgent.role] || ROLE_CONFIG.clawbot).label}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-[12px]">
                     <span className="text-terminal-muted">Status</span>
                     <div className="flex items-center gap-1.5">
-                      <div className={`w-2 h-2 rounded-full ${(STATUS_STYLES[selectedAgent.status] || STATUS_STYLES.idle).pulse ? 'animate-pulse' : ''}`} style={{ backgroundColor: (STATUS_STYLES[selectedAgent.status] || STATUS_STYLES.idle).dot }} />
+                      <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: (STATUS_STYLES[selectedAgent.status] || STATUS_STYLES.idle).dot }} />
                       <span className="font-medium text-terminal-text">{(STATUS_STYLES[selectedAgent.status] || STATUS_STYLES.idle).label}</span>
                     </div>
                   </div>
+                  {agentPositions[selectedAgent.id] && (
+                    <div className="flex justify-between text-[12px]">
+                      <span className="text-terminal-muted">Location</span>
+                      <span className="font-medium text-terminal-text">{agentPositions[selectedAgent.id].targetLoc}</span>
+                    </div>
+                  )}
                   {selectedAgent.currentTask && (
                     <div className="flex justify-between text-[12px]">
                       <span className="text-terminal-muted">Task</span>
                       <span className="font-medium text-terminal-text truncate ml-3">{selectedAgent.currentTask.name}</span>
                     </div>
                   )}
-                  {selectedAgent.lastActivityAt && (
-                    <div className="flex justify-between text-[12px]">
-                      <span className="text-terminal-muted">Last active</span>
-                      <span className="font-medium text-terminal-text">{new Date(selectedAgent.lastActivityAt).toLocaleTimeString()}</span>
-                    </div>
-                  )}
-                  {selectedAgent.senderEmail && (
-                    <div className="flex justify-between text-[12px]">
-                      <span className="text-terminal-muted">Email</span>
-                      <span className="font-mono text-[11px] text-terminal-text">{selectedAgent.senderEmail}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
           )}
-
-          {/* Live meetings */}
-          <MeetingStatus meetings={meetings} />
 
           {/* Activity feed */}
           <ActivityFeed activities={activities} />
