@@ -1798,6 +1798,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
   const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const userScrolledUpRef = useRef(false);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const autoVoiceRef = useRef(false);
@@ -1971,10 +1973,21 @@ export default function AgentChat({ agentId = 'estimating' }) {
   // Keep ref in sync with state (so callbacks see latest value)
   useEffect(() => { autoVoiceRef.current = autoVoice; }, [autoVoice]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages — only if user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!userScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
+
+  // Track user scroll position
+  const handleChatScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    // Consider "at bottom" if within 80px of the bottom
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    userScrolledUpRef.current = !atBottom;
+  }, []);
 
   // Handle copilot approval/rejection inline in chat
   const handleApproval = useCallback(async (approvalId, action) => {
@@ -2104,6 +2117,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
     const text = input.trim();
     if (!text && pendingFiles.length === 0) return;
     if (sending) return;
+    // Reset scroll lock so we follow the new response
+    userScrolledUpRef.current = false;
 
     const filesToSend = [...pendingFiles];
     const fileNames = filesToSend.map(f => f.name);
@@ -2364,9 +2379,24 @@ export default function AgentChat({ agentId = 'estimating' }) {
         )}
 
         {/* Chat area */}
-        <div className="flex-[3] flex flex-col border-r border-terminal-border min-w-0 min-h-0">
+        <div
+          className={`flex-[3] flex flex-col border-r border-terminal-border min-w-0 min-h-0 relative ${dragging ? 'ring-2 ring-inset' : ''}`}
+          style={dragging ? { ringColor: agent.accentColor } : {}}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Drop overlay */}
+          {dragging && (
+            <div className="absolute inset-0 z-50 bg-white/80 flex items-center justify-center pointer-events-none">
+              <div className="flex flex-col items-center gap-2 px-8 py-6 rounded-2xl border-2 border-dashed" style={{ borderColor: agent.accentColor }}>
+                <Paperclip size={24} style={{ color: agent.accentColor }} />
+                <span className="text-sm font-semibold" style={{ color: agent.accentColor }}>Drop files here</span>
+              </div>
+            </div>
+          )}
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
+          <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
             {messages.map(msg => (
               <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} />
             ))}
@@ -2389,13 +2419,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
           </div>
 
           {/* Input */}
-          <div
-            className={`px-5 py-3.5 border-t bg-terminal-panel shrink-0 transition-colors ${dragging ? 'border-2 border-dashed' : 'border-terminal-border'}`}
-            style={dragging ? { borderColor: agent.accentColor, backgroundColor: agent.bgColor } : {}}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
+          <div className="px-5 py-3.5 border-t bg-terminal-panel shrink-0 border-terminal-border">
+
             <input
               ref={fileInputRef}
               type="file"

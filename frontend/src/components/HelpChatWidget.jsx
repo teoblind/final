@@ -35,15 +35,26 @@ export default function HelpChatWidget() {
   const [supportSending, setSupportSending] = useState(false);
   const [supportSent, setSupportSent] = useState(false);
   const messagesEndRef = useRef(null);
+  const helpContainerRef = useRef(null);
+  const helpScrolledUpRef = useRef(false);
   const inputRef = useRef(null);
 
   const accentColor = tenant?.branding?.primaryColor || '#1a6b3c';
   const agentId = getHelpAgentId(tenant);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages — only if user hasn't scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!helpScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
+
+  const handleHelpScroll = () => {
+    const el = helpContainerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    helpScrolledUpRef.current = !atBottom;
+  };
 
   // Focus input when panel opens
   useEffect(() => {
@@ -75,6 +86,7 @@ export default function HelpChatWidget() {
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || sending) return;
+    helpScrolledUpRef.current = false;
 
     const userMsg = { id: Date.now(), role: 'user', content: text };
     const assistantMsgId = Date.now() + 1;
@@ -244,7 +256,7 @@ export default function HelpChatWidget() {
         {view === 'chat' ? (
           <>
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-[#fafaf8]">
+            <div ref={helpContainerRef} onScroll={handleHelpScroll} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-[#fafaf8]">
               {messages.length === 0 && !sending && (
                 <div className="text-center py-10">
                   <div
