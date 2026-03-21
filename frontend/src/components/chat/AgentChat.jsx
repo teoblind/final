@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+
+// Lazy-load dashboard panels for Workflow agent tabs
+const DacpEstimatingDashboard = lazy(() => import('../dashboards/DacpEstimatingDashboard'));
+const DacpPricingDashboard = lazy(() => import('../dashboards/DacpPricingDashboard'));
+const DacpJobsDashboard = lazy(() => import('../dashboards/DacpJobsDashboard'));
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const FILE_BASE = window.location.hostname.includes('localhost') ? 'http://localhost:3002' : '';
@@ -20,15 +25,17 @@ function getAuthToken() {
 // ─── Agent Definitions ──────────────────────────────────────────────────────────
 const AGENTS = {
   // DACP Construction agents
-  hivemind: { name: 'DACP Agent', initial: 'D', color: '#3b82f6', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Hivemind — always on', placeholder: 'Ask the DACP Agent anything...', hint: 'The DACP Agent can route tasks to any sub-agent, search your knowledge base, and manage email.', userInitial: 'A', userName: 'Admin' },
+  hivemind: { name: 'DACP Agent', initial: 'D', color: '#3b82f6', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Hivemind — always on', placeholder: 'Ask the DACP Agent anything...', hint: 'The DACP Agent can route tasks to any sub-agent, search your knowledge base, and manage email.', userInitial: 'A', userName: 'Admin', multiInstance: true },
   estimating: { name: 'Estimating Bot', initial: 'E', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online — 8 open RFQs', placeholder: 'Message Estimating Bot...', hint: 'Estimating Bot can read bid requests, generate estimates, draft emails, and reference your pricing table and job history.', tabs: ['Chat', 'Inbox', 'History', 'Config'], userInitial: 'A', userName: 'Admin' },
   documents: { name: 'Documents', initial: 'D', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Upload a document or ask about your files...', hint: 'Documents agent processes PDFs, extracts data from drawings, and searches your file library.', userInitial: 'A', userName: 'Admin' },
   meetings: { name: 'Meeting Bot', initial: 'M', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Ask about any past meeting...', hint: 'Meeting Bot searches transcripts, summarizes calls, and tracks action items.', userInitial: 'A', userName: 'Admin' },
   email: { name: 'Email Agent', initial: 'E', color: '#f59e0b', bgColor: '#fdf6e8', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Draft an email or search your inbox...', hint: 'Email Agent drafts professional emails, searches your inbox, and manages correspondence.', userInitial: 'A', userName: 'Admin' },
+  workflow: { name: 'Workflow', initial: 'W', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Ask about estimates, pricing, or jobs...', hint: 'Workflow handles estimating, pricing table, and job management in one place.', tabs: ['Chat', 'Estimating', 'Pricing', 'Jobs', 'Config'], userInitial: 'A', userName: 'Admin' },
+  comms: { name: 'Comms', initial: 'C', color: '#f59e0b', bgColor: '#fdf6e8', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Draft an email, search inbox, or ask about meetings...', hint: 'Comms handles email correspondence, meeting summaries, and action items.', tabs: ['Chat', 'Config'], userInitial: 'A', userName: 'Admin' },
   // Lead Engine
   'lead-engine': { name: 'Lead Engine', initial: 'L', useTheme: true, status: 'Online', placeholder: 'Ask about leads, pipeline, outreach, follow-ups...', hint: 'Lead Engine can discover leads, manage outreach campaigns, track replies, and handle follow-ups.', userInitial: 'SP', userName: 'Spencer' },
   // Coppice / Mining agents
-  sangha: { name: 'Sangha Agent', initial: 'S', useTheme: true, status: 'Hivemind — always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer' },
+  sangha: { name: 'Sangha Agent', initial: 'S', useTheme: true, status: 'Hivemind — always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer', multiInstance: true },
   curtailment: { name: 'Curtailment Agent', initial: 'C', useTheme: true, status: 'Online — monitoring ERCOT', placeholder: 'Ask about curtailment, pricing, fleet status...', hint: 'Curtailment Agent monitors ERCOT real-time pricing, manages fleet power states, and optimizes pool routing for maximum revenue.', tabs: ['Chat', 'Fleet', 'Market', 'Config'], userInitial: 'SP', userName: 'Spencer' },
   pools: { name: 'Pool Routing', initial: 'P', color: '#2563eb', bgColor: '#eef3f9', useTheme: true, status: 'Online — 3 pools active', placeholder: 'Ask about pool performance, hashrate allocation...', hint: 'Pool Routing agent optimizes hashrate distribution across mining pools for maximum yield.', userInitial: 'SP', userName: 'Spencer' },
   'pitch-deck': { name: 'Pitch Deck Agent', initial: 'P', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#7c3aed', status: 'Online', placeholder: 'Describe a deck you need or paste a brief...', hint: 'Pitch Deck Agent creates investor-grade HTML presentations. It will ask about detail level, slide count, and backgrounds before building.', userInitial: 'A', userName: 'Admin' },
@@ -1085,7 +1092,27 @@ function CopilotApprovalCard({ msg, accentColor, onApproval }) {
 }
 
 // ─── Chat Message ───────────────────────────────────────────────────────────────
-function ChatMessage({ msg, agentDef, onAction, onApproval }) {
+// Detect confirmation questions at end of agent messages
+const CONFIRM_PATTERNS = [
+  /should I send (this|it|the email)/i,
+  /shall I send (this|it|the email)/i,
+  /want me to send (this|it|the email)/i,
+  /ready to send/i,
+  /go ahead and send/i,
+  /send (this|it) now\??$/i,
+  /would you like me to (send|proceed|go ahead)/i,
+  /do you (want|approve|confirm)/i,
+  /shall I (proceed|go ahead)/i,
+];
+
+function detectConfirmation(content) {
+  if (!content) return false;
+  // Check last 100 chars for confirmation patterns
+  const tail = content.slice(-150);
+  return CONFIRM_PATTERNS.some(p => p.test(tail));
+}
+
+function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
   const accent = agentDef?.accentColor || '#1e3a5f';
 
   if (msg.type === 'invoke') {
@@ -1093,6 +1120,8 @@ function ChatMessage({ msg, agentDef, onAction, onApproval }) {
   }
 
   const isUser = msg.role === 'user';
+  // Auto-detect confirmation prompts on the last agent message
+  const showConfirmButtons = !isUser && isLastAgent && !msg.actions && !msg.actionDone && detectConfirmation(msg.content);
 
   return (
     <div className={`flex gap-2.5 max-w-[85%] ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}>
@@ -1162,6 +1191,26 @@ function ChatMessage({ msg, agentDef, onAction, onApproval }) {
 
         {/* Actions */}
         <ActionButtons actions={msg.actions} accentColor={accent} onAction={(label, variant) => onAction?.(label, msg, variant)} disabled={msg.actionDone} />
+
+        {/* Auto-detected confirmation buttons */}
+        {showConfirmButtons && (
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => onAction?.('Yes, send it', msg, 'quick_reply')}
+              className="px-4 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: accent }}
+            >
+              Yes, send it
+            </button>
+            <button
+              onClick={() => onAction?.('No, don\'t send it', msg, 'quick_reply')}
+              className="px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors hover:bg-[#f5f4f0]"
+              style={{ borderColor: '#e0ddd8', color: '#6b6b65' }}
+            >
+              No
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1906,6 +1955,89 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const autoVoiceRef = useRef(false);
   const isAdmin = ['owner', 'admin'].includes(authUser?.role);
 
+  // ── Multi-instance state (Hivemind agents only) ──────────────────────────
+  const isMultiInstance = !!agent.multiInstance;
+  const [instances, setInstances] = useState([]); // [{ id, threadId, title }]
+  const [activeInstanceId, setActiveInstanceId] = useState(null);
+
+  const addInstance = useCallback((threadId, title) => {
+    const id = `inst_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setInstances(prev => [...prev, { id, threadId, title: title || 'New chat' }]);
+    setActiveInstanceId(id);
+    setActiveThreadId(threadId);
+  }, []);
+
+  const closeInstance = useCallback((instId) => {
+    setInstances(prev => {
+      const filtered = prev.filter(i => i.id !== instId);
+      if (filtered.length === 0) return prev; // don't close last instance
+      if (activeInstanceId === instId) {
+        const idx = prev.findIndex(i => i.id === instId);
+        const nextIdx = Math.min(idx, filtered.length - 1);
+        setActiveInstanceId(filtered[nextIdx].id);
+        setActiveThreadId(filtered[nextIdx].threadId);
+      }
+      return filtered;
+    });
+  }, [activeInstanceId]);
+
+  const switchInstance = useCallback((instId) => {
+    setActiveInstanceId(instId);
+    setInstances(prev => {
+      const inst = prev.find(i => i.id === instId);
+      if (inst) setActiveThreadId(inst.threadId);
+      return prev;
+    });
+  }, []);
+
+  const handleNewInstance = useCallback(async () => {
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE}/v1/chat/${agentId}/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ title: null, visibility: 'private' }),
+      });
+      const data = await res.json();
+      if (data.id) {
+        setThreads(prev => [{ id: data.id, title: data.title, visibility: data.visibility, createdAt: data.createdAt, updatedAt: data.updatedAt }, ...prev]);
+        addInstance(data.id, null);
+      }
+    } catch {}
+  }, [agentId, addInstance]);
+
+  // Sync instance titles from thread titles
+  useEffect(() => {
+    if (!isMultiInstance || instances.length === 0) return;
+    setInstances(prev => prev.map(inst => {
+      const thread = threads.find(t => t.id === inst.threadId);
+      if (thread && thread.title && thread.title !== inst.title) {
+        return { ...inst, title: thread.title };
+      }
+      return inst;
+    }));
+  }, [threads, isMultiInstance]);
+
+  // Keyboard shortcuts for multi-instance
+  useEffect(() => {
+    if (!isMultiInstance) return;
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+        e.preventDefault();
+        handleNewInstance();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeInstanceId && instances.length > 1) closeInstance(activeInstanceId);
+      } else if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const idx = parseInt(e.key) - 1;
+        if (instances[idx]) switchInstance(instances[idx].id);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isMultiInstance, handleNewInstance, closeInstance, switchInstance, activeInstanceId, instances]);
+
   // Load threads on mount / agent change
   useEffect(() => {
     setActiveTab('Chat');
@@ -1913,6 +2045,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
     setThreads([]);
     setActiveThreadId(null);
     setMessages([]);
+    setInstances([]);
+    setActiveInstanceId(null);
 
     const token = getAuthToken();
 
@@ -1931,6 +2065,13 @@ export default function AgentChat({ agentId = 'estimating' }) {
             ? pendingThreadId
             : data.threads[0].id;
           setActiveThreadId(targetId);
+          // Initialize multi-instance with first thread
+          if (isMultiInstance) {
+            const t = data.threads.find(t => t.id === targetId);
+            const id = `inst_${Date.now()}`;
+            setInstances([{ id, threadId: targetId, title: t?.title || 'Chat' }]);
+            setActiveInstanceId(id);
+          }
         } else {
           // No threads — fall back to demo messages (only for agents that have them)
           const demo = DEMO_MESSAGES[agentId];
@@ -2466,6 +2607,40 @@ export default function AgentChat({ agentId = 'estimating' }) {
       {/* ── Call Panel ──────────────────────────────────────────────────────── */}
       {showCallPanel && <CallPanel agentDef={agent} onClose={() => setShowCallPanel(false)} />}
 
+      {/* ── Multi-Instance Tab Bar (Hivemind only) ───────────────────────────── */}
+      {isMultiInstance && instances.length > 0 && activeTab === 'Chat' && (
+        <div className="flex items-center gap-0 px-3 py-1.5 border-b border-terminal-border bg-[#f5f4f0] shrink-0 overflow-x-auto">
+          {instances.map((inst, idx) => (
+            <button
+              key={inst.id}
+              onClick={() => switchInstance(inst.id)}
+              className={`group flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium rounded-t-lg border border-b-0 transition-colors whitespace-nowrap ${
+                activeInstanceId === inst.id
+                  ? 'bg-terminal-panel text-terminal-text border-terminal-border -mb-px z-10'
+                  : 'bg-transparent text-[#9a9a92] border-transparent hover:bg-white/60 hover:text-[#6b6b65]'
+              }`}
+            >
+              <span className="max-w-[140px] truncate">{inst.title || `Chat ${idx + 1}`}</span>
+              {instances.length > 1 && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); closeInstance(inst.id); }}
+                  className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-opacity cursor-pointer"
+                >
+                  <X size={10} />
+                </span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={handleNewInstance}
+            className="ml-1 p-1 text-[#9a9a92] hover:text-[#6b6b65] hover:bg-white/60 rounded transition-colors"
+            title="New instance (Cmd+T)"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      )}
+
       {/* ── Content Split ────────────────────────────────────────────────────── */}
       {activeTab === 'Chat' && (
       <div className="flex flex-1 min-h-0">
@@ -2474,7 +2649,12 @@ export default function AgentChat({ agentId = 'estimating' }) {
           <ThreadSidebar
             threads={threads}
             activeThreadId={activeThreadId}
-            onSelectThread={setActiveThreadId}
+            onSelectThread={(threadId) => {
+              setActiveThreadId(threadId);
+              if (isMultiInstance && activeInstanceId) {
+                setInstances(prev => prev.map(i => i.id === activeInstanceId ? { ...i, threadId } : i));
+              }
+            }}
             onNewThread={handleNewThread}
             onUpdateVisibility={handleUpdateVisibility}
             onRenameThread={handleRenameThread}
@@ -2598,6 +2778,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
       {/* ── Config Tab ─────────────────────────────────────────────────────── */}
       {activeTab === 'Config' && <ConfigTab accent={agent.accentColor} />}
+
+      {/* ── Workflow Dashboard Tabs ─────────────────────────────────────────── */}
+      {activeTab === 'Estimating' && <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="spinner w-10 h-10" /></div>}><DacpEstimatingDashboard /></Suspense>}
+      {activeTab === 'Pricing' && <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="spinner w-10 h-10" /></div>}><DacpPricingDashboard /></Suspense>}
+      {activeTab === 'Jobs' && <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="spinner w-10 h-10" /></div>}><DacpJobsDashboard /></Suspense>}
 
       {/* Typing animation keyframes */}
       <style>{`

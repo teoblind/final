@@ -3,11 +3,17 @@
  */
 
 import express from 'express';
+import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
+import { join, extname } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { authenticate } from '../middleware/auth.js';
 import {
   getDacpBidRequests,
   getDacpBidRequest,
+  updateDacpBidRequest,
   getDacpEstimates,
   getDacpEstimate,
   updateDacpEstimate,
@@ -20,6 +26,11 @@ import {
   updateDacpPricing,
   deleteDacpPricing,
   getDacpStats,
+  getDacpBidDocuments,
+  createDacpBidDocument,
+  getDacpPlanAnalyses,
+  createDacpPlanAnalysis,
+  updateDacpPlanAnalysis,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -27,6 +38,13 @@ import {
   draftClarificationEmail,
   draftQuoteEmail,
 } from '../services/estimateBot.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const uploadDir = join(__dirname, '../../data/uploads');
+if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 const router = express.Router();
 router.use(authenticate);
@@ -267,7 +285,8 @@ router.post('/inbox/:id/analyze', async (req, res) => {
   try {
     const { analyzeItb, DEMO_ITB } = await import('../services/constructionCopilot.js');
     let bidReq;
-    if (req.params.id === 'BR-DEMO-001') {
+    const isDemo = req.params.id === 'BR-DEMO-001';
+    if (isDemo) {
       bidReq = DEMO_ITB;
     } else {
       bidReq = getDacpBidRequest(req.user.tenantId, req.params.id);
@@ -277,6 +296,15 @@ router.post('/inbox/:id/analyze', async (req, res) => {
       if (typeof bidReq.attachments_json === 'string') bidReq.attachments = JSON.parse(bidReq.attachments_json);
     }
     const analysis = await analyzeItb(bidReq);
+
+    // Save analysis to bid request and advance workflow
+    if (!isDemo) {
+      updateDacpBidRequest(req.user.tenantId, req.params.id, {
+        itb_analysis_json: JSON.stringify(analysis),
+        workflow_step: 1,
+      });
+    }
+
     res.json({ bid_request_id: req.params.id, analysis });
   } catch (error) {
     console.error('Analyze ITB error:', error);
@@ -398,6 +426,393 @@ router.post('/parse-supplier-quote', async (req, res) => {
   } catch (error) {
     console.error('Parse supplier quote error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Feature 1: Bid/Pass Decision ────────────────────────────────────────────
+
+router.post('/inbox/:id/bid-decision', (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const { decision, reason } = req.body;
+    if (!decision || !['bid', 'pass'].includes(decision)) {
+      return res.status(400).json({ error: 'decision must be "bid" or "pass"' });
+    }
+
+    if (decision === 'bid') {
+      updateDacpBidRequest(req.user.tenantId, req.params.id, {
+        status: 'bidding',
+        workflow_step: 2,
+      });
+    } else {
+      updateDacpBidRequest(req.user.tenantId, req.params.id, {
+        status: 'passed',
+        pass_reason: reason || null,
+      });
+    }
+
+    const updated = getDacpBidRequest(req.user.tenantId, req.params.id);
+    res.json({ bidRequest: updated, message: `Bid request marked as ${decision === 'bid' ? 'bidding' : 'passed'}` });
+  } catch (error) {
+    console.error('Bid decision error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Feature 2: Document Organization ────────────────────────────────────────
+
+router.post('/inbox/:id/upload-documents', upload.array('files', 20), async (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const { parseFile } = await import('../services/fileParserService.js');
+    const docs = [];
+
+    for (const file of req.files) {
+      const docId = `DOC-${uuidv4().slice(0, 8).toUpperCase()}`;
+      const ext = extname(file.originalname).toLowerCase();
+      const filePath = join(uploadDir, `${docId}${ext}`);
+
+      // Write buffer to disk for parsing
+      writeFileSync(filePath, file.buffer);
+
+      // Parse the file to extract text
+      let parsedText = '';
+      let pageCount = null;
+      try {
+        const parsed = await parseFile(filePath, file.mimetype, file.originalname);
+        parsedText = parsed.text || '';
+        pageCount = parsed.pageCount || null;
+      } catch (parseErr) {
+        console.warn(`Could not parse ${file.originalname}:`, parseErr.message);
+      }
+
+      // Determine file type category
+      let fileType = 'other';
+      const nameLower = file.originalname.toLowerCase();
+      if (nameLower.includes('spec') || nameLower.includes('division')) fileType = 'spec';
+      else if (nameLower.includes('structural') || nameLower.match(/s\d{3}/)) fileType = 'structural';
+      else if (nameLower.includes('architectural') || nameLower.match(/a\d{3}/)) fileType = 'architectural';
+      else if (nameLower.includes('addendum') || nameLower.includes('addenda')) fileType = 'addendum';
+      else if (nameLower.includes('geotech') || nameLower.includes('soil')) fileType = 'geotech';
+      else if (ext === '.pdf') fileType = 'pdf';
+      else if (['.xlsx', '.xls', '.csv'].includes(ext)) fileType = 'spreadsheet';
+
+      createDacpBidDocument({
+        id: docId,
+        tenantId: req.user.tenantId,
+        bidRequestId: req.params.id,
+        filename: file.originalname,
+        fileType,
+        filePath,
+        parsedText,
+        pageCount,
+      });
+
+      docs.push({ id: docId, filename: file.originalname, fileType, pageCount, parsedTextLength: parsedText.length });
+    }
+
+    res.status(201).json({ documents: docs, message: `${docs.length} document(s) uploaded and parsed` });
+  } catch (error) {
+    console.error('Upload documents error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/inbox/:id/analyze-documents', async (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const documents = getDacpBidDocuments(req.user.tenantId, req.params.id);
+    if (!documents || documents.length === 0) {
+      return res.status(400).json({ error: 'No documents uploaded for this bid request. Upload documents first.' });
+    }
+
+    const { analyzeDocuments } = await import('../services/constructionCopilot.js');
+    const analysis = await analyzeDocuments(bid, documents);
+
+    // Save scope breakdown to bid request
+    updateDacpBidRequest(req.user.tenantId, req.params.id, {
+      scope_breakdown_json: JSON.stringify(analysis),
+    });
+
+    // Update individual document CSI divisions
+    if (analysis.divisions) {
+      for (const doc of documents) {
+        const relevantDivisions = analysis.divisions.map(d => d.code);
+        const { updateDacpBidDocument } = await import('../cache/database.js');
+        updateDacpBidDocument(req.user.tenantId, doc.id, {
+          csi_divisions_json: JSON.stringify(relevantDivisions),
+        });
+      }
+    }
+
+    res.json({ bid_request_id: req.params.id, analysis });
+  } catch (error) {
+    console.error('Analyze documents error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/inbox/:id/confirm-scope', (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const { divisions } = req.body;
+    if (!divisions || !Array.isArray(divisions)) {
+      return res.status(400).json({ error: 'divisions array is required' });
+    }
+
+    // Merge confirmed divisions into scope breakdown
+    let existingBreakdown = {};
+    if (bid.scope_breakdown_json) {
+      try { existingBreakdown = JSON.parse(bid.scope_breakdown_json); } catch (e) {}
+    }
+    existingBreakdown.confirmed_divisions = divisions;
+    existingBreakdown.confirmed_at = new Date().toISOString();
+
+    updateDacpBidRequest(req.user.tenantId, req.params.id, {
+      scope_breakdown_json: JSON.stringify(existingBreakdown),
+      workflow_step: 3,
+    });
+
+    const updated = getDacpBidRequest(req.user.tenantId, req.params.id);
+    res.json({ bidRequest: updated, message: 'Scope confirmed, workflow advanced to step 3' });
+  } catch (error) {
+    console.error('Confirm scope error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.get('/inbox/:id/documents', (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const documents = getDacpBidDocuments(req.user.tenantId, req.params.id);
+    const parsed = documents.map(d => ({
+      ...d,
+      csi_divisions: d.csi_divisions_json ? JSON.parse(d.csi_divisions_json) : [],
+      // Don't send full parsed_text in list view
+      parsed_text: undefined,
+      has_text: !!(d.parsed_text && d.parsed_text.length > 0),
+      text_length: d.parsed_text ? d.parsed_text.length : 0,
+    }));
+
+    res.json({ documents: parsed });
+  } catch (error) {
+    console.error('Get documents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Feature 3: Plan Analysis ────────────────────────────────────────────────
+
+router.post('/inbox/:id/upload-plans', upload.array('files', 20), async (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    const plans = [];
+
+    for (const file of req.files) {
+      const planId = `PLAN-${uuidv4().slice(0, 8).toUpperCase()}`;
+      const ext = extname(file.originalname).toLowerCase();
+      const filePath = join(uploadDir, `${planId}${ext}`);
+
+      // Write buffer to disk
+      writeFileSync(filePath, file.buffer);
+
+      // Determine file type
+      const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.tiff', '.tif', '.bmp'].includes(ext);
+      const isSpreadsheet = ['.xlsx', '.xls', '.csv'].includes(ext);
+      const fileType = isImage ? 'plan_image' : isSpreadsheet ? 'planswift_export' : 'other';
+
+      createDacpPlanAnalysis({
+        id: planId,
+        tenantId: req.user.tenantId,
+        bidRequestId: req.params.id,
+        filename: file.originalname,
+        fileType,
+        filePath,
+      });
+
+      plans.push({ id: planId, filename: file.originalname, fileType });
+    }
+
+    res.status(201).json({ plans, message: `${plans.length} plan file(s) uploaded` });
+  } catch (error) {
+    console.error('Upload plans error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/inbox/:id/analyze-plans', async (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const allPlans = getDacpPlanAnalyses(req.user.tenantId, req.params.id);
+    const imagePlans = allPlans.filter(p => p.file_type === 'plan_image');
+
+    if (imagePlans.length === 0) {
+      return res.status(400).json({ error: 'No plan images uploaded. Upload plan images first.' });
+    }
+
+    // Read images and convert to base64
+    const images = [];
+    for (const plan of imagePlans) {
+      try {
+        const buffer = readFileSync(plan.file_path);
+        const ext = extname(plan.filename).toLowerCase();
+        const mediaMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+        images.push({
+          base64: buffer.toString('base64'),
+          mediaType: mediaMap[ext] || 'image/png',
+          filename: plan.filename,
+        });
+      } catch (readErr) {
+        console.warn(`Could not read plan image ${plan.filename}:`, readErr.message);
+      }
+    }
+
+    if (images.length === 0) {
+      return res.status(400).json({ error: 'Could not read any plan images' });
+    }
+
+    const { analyzePlanImages } = await import('../services/constructionCopilot.js');
+    const analysis = await analyzePlanImages(images);
+
+    // Save analysis to each plan record
+    for (const sheet of analysis.sheets) {
+      const matchingPlan = imagePlans.find(p => p.filename === sheet.filename);
+      if (matchingPlan) {
+        updateDacpPlanAnalysis(req.user.tenantId, matchingPlan.id, {
+          analysis_json: JSON.stringify(sheet),
+        });
+      }
+    }
+
+    // Save checklist to bid request
+    updateDacpBidRequest(req.user.tenantId, req.params.id, {
+      plan_checklist_json: JSON.stringify(analysis.checklist),
+    });
+
+    res.json({ bid_request_id: req.params.id, analysis });
+  } catch (error) {
+    console.error('Analyze plans error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/inbox/:id/import-quantities', async (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const allPlans = getDacpPlanAnalyses(req.user.tenantId, req.params.id);
+    const exports = allPlans.filter(p => p.file_type === 'planswift_export');
+
+    if (exports.length === 0) {
+      return res.status(400).json({ error: 'No PlanSwift exports uploaded. Upload XLSX/CSV exports first.' });
+    }
+
+    const { parsePlanSwiftExport } = await import('../services/constructionCopilot.js');
+    const allQuantities = [];
+
+    for (const exp of exports) {
+      const ext = extname(exp.filename).toLowerCase();
+
+      let rows = [];
+      if (ext === '.xlsx' || ext === '.xls') {
+        const ExcelJS = (await import('exceljs')).default;
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(exp.file_path);
+
+        const sheet = workbook.worksheets[0];
+        if (sheet) {
+          const headers = [];
+          sheet.getRow(1).eachCell((cell, colNumber) => {
+            headers[colNumber] = cell.text || cell.value?.toString() || `col_${colNumber}`;
+          });
+
+          sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber === 1) return; // skip header
+            const rowObj = {};
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+              if (headers[colNumber]) {
+                rowObj[headers[colNumber]] = cell.text || cell.value?.toString() || '';
+              }
+            });
+            rows.push(rowObj);
+          });
+        }
+      } else if (ext === '.csv') {
+        const text = readFileSync(exp.file_path, 'utf-8');
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length > 1) {
+          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+          for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+            const rowObj = {};
+            headers.forEach((h, idx) => { rowObj[h] = values[idx] || ''; });
+            rows.push(rowObj);
+          }
+        }
+      }
+
+      const items = parsePlanSwiftExport(rows);
+
+      // Save quantities to plan analysis record
+      updateDacpPlanAnalysis(req.user.tenantId, exp.id, {
+        quantities_json: JSON.stringify(items),
+      });
+
+      allQuantities.push({ filename: exp.filename, id: exp.id, items });
+    }
+
+    res.json({
+      bid_request_id: req.params.id,
+      exports: allQuantities,
+      total_items: allQuantities.reduce((sum, e) => sum + e.items.length, 0),
+    });
+  } catch (error) {
+    console.error('Import quantities error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/inbox/:id/plan-analysis', (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const plans = getDacpPlanAnalyses(req.user.tenantId, req.params.id);
+    const parsed = plans.map(p => ({
+      ...p,
+      analysis: p.analysis_json ? JSON.parse(p.analysis_json) : null,
+      quantities: p.quantities_json ? JSON.parse(p.quantities_json) : null,
+    }));
+
+    const checklist = bid.plan_checklist_json ? JSON.parse(bid.plan_checklist_json) : [];
+
+    res.json({ plans: parsed, checklist });
+  } catch (error) {
+    console.error('Get plan analysis error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

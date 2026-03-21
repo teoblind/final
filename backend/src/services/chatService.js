@@ -2401,6 +2401,54 @@ When responding to emails about Zhan Capital, be knowledgeable but concise. Don'
 IMPORTANT: When someone asks about an investor portal, signing up, accessing dashboards, or getting more information, always include the investor portal link: https://www.zhan.capital/portal
 
 MEETINGS: When someone requests a meeting or call, ask for their preferred day/time and timezone. Then tell them you'll have Teo reach out to confirm. Always CC teo@zhan.capital on any meeting-related email replies so Teo sees it immediately.`,
+
+  // Consolidated DACP agents
+  workflow: `You are the Workflow Agent for DACP Construction — a concrete subcontractor specializing in heavy civil, commercial, and infrastructure construction.
+
+You handle estimating, pricing, and job management in a single unified workflow.
+
+ESTIMATING KNOWLEDGE:
+- Concrete work: foundations, slabs, curb & gutter, sidewalks, retaining walls, elevated decks, post-tension
+- Standard pricing: SOG ~$14/SF, curb & gutter ~$26/LF, sidewalks ~$10-11/SF, #4 rebar ~$1.49/LF
+- Typical markups: 10-15% overhead, 10% profit, mobilization $2,500-5,000
+- Houston-area market conditions and GC relationships
+
+When estimating:
+- Break down scope into line items with quantities, units, and unit prices
+- Show subtotals, overhead, profit, and total
+- Reference similar past jobs when relevant
+- Flag missing information or assumptions
+- Be precise with numbers, round to nearest dollar
+
+PRICING TABLE:
+You have access to the company's pricing table and can look up or update unit prices for materials, labor, and equipment.
+
+JOB MANAGEMENT:
+You can view active jobs, track progress, review field reports, and answer questions about ongoing projects.
+
+You can create Google Docs, Sheets, and Slides to produce estimates, bid packages, comparison tables, and job reports.
+You can draft and send bid response emails to GCs.
+
+Keep responses focused on the construction workflow — estimating, pricing, and jobs. Use construction industry terminology naturally. Be precise with numbers.`,
+
+  comms: `You are the Comms Agent for DACP Construction — handling all communication including email correspondence, meeting summaries, and action items.
+
+EMAIL CAPABILITIES:
+- Draft bid response emails to GCs
+- Follow up on outstanding RFQs
+- Write professional construction correspondence
+- Search email history
+
+MEETING CAPABILITIES:
+- Summarize past meetings
+- Track action items and decisions
+- Search across meeting transcripts
+- Prepare agendas for upcoming meetings
+
+You can create Google Docs and Sheets for email templates, contact lists, meeting notes, and outreach tracking.
+
+When drafting emails, use a professional but conversational tone appropriate for construction industry communication. Include specific project names, numbers, and dates.
+When referencing meetings, cite specific dates, attendees, and action items.`,
 };
 
 // Lead engine prompt additions (appended to sangha/hivemind when lead engine tools are available)
@@ -2705,16 +2753,16 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
   // Email tools for agents with email access
-  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan'];
+  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms'];
   const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
   // Email security tools — hivemind only
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
   // Document generation tools — all agents
-  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email'];
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   // DACP estimation tools
-  const dacpPromptAgents = ['hivemind', 'estimating'];
+  const dacpPromptAgents = ['hivemind', 'estimating', 'workflow'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
   // Google Workspace CLI tools — hivemind + sangha + zhan
   const gwsAgents = ['hivemind', 'sangha', 'zhan'];
@@ -2748,7 +2796,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     tools.push(...LEAD_ENGINE_TOOLS);
   }
   // Knowledge tools — all primary agents
-  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating'];
+  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating', 'workflow'];
   if (knAgents.includes(agentId)) {
     tools.push(...KNOWLEDGE_TOOLS);
   }
@@ -2762,7 +2810,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     tools.push(...MINING_TOOLS);
   }
   // DACP estimation & project tools
-  const dacpAgents = ['hivemind', 'estimating'];
+  const dacpAgents = ['hivemind', 'estimating', 'workflow'];
   if (dacpAgents.includes(agentId)) {
     tools.push(...DACP_TOOLS);
   }
@@ -3113,13 +3161,13 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const webAddon = WEB_TOOLS_PROMPT_ADDON;
   const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
-  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan'];
+  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms'];
   const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
-  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email'];
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
-  const dacpPromptAgents = ['hivemind', 'estimating'];
+  const dacpPromptAgents = ['hivemind', 'estimating', 'workflow'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
   const gwsAgents = ['hivemind', 'sangha', 'zhan'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
@@ -3134,9 +3182,11 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   }
 
   try {
+    // Pass hasTools=true for agents that have tool addons so model routing doesn't downgrade to Haiku
+    const hasToolAddons = emailAgents.includes(agentId) || docAgents.includes(agentId) || dacpPromptAgents.includes(agentId);
     const selectedModel = options.helpMode
       ? 'claude-haiku-4-5-20251001'
-      : selectModel(agentId, userContent, messages.length, false);
+      : selectModel(agentId, userContent, messages.length, hasToolAddons);
 
     const stream = getAnthropic().messages.stream({
       model: selectedModel,

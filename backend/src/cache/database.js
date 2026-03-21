@@ -3763,7 +3763,12 @@ function initDacpTablesSchema(targetDb) {
       status TEXT DEFAULT 'new',
       urgency TEXT DEFAULT 'medium',
       missing_info_json TEXT,
-      received_at TEXT
+      received_at TEXT,
+      workflow_step INTEGER DEFAULT 0,
+      pass_reason TEXT,
+      itb_analysis_json TEXT,
+      scope_breakdown_json TEXT,
+      plan_checklist_json TEXT
     )
   `);
 
@@ -3821,6 +3826,39 @@ function initDacpTablesSchema(targetDb) {
       weather TEXT,
       notes TEXT,
       issues_json TEXT
+    )
+  `);
+
+  // ─── Bid Documents (uploaded ITB attachments, specs, plans) ─────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_bid_documents (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      bid_request_id TEXT NOT NULL,
+      filename TEXT,
+      file_type TEXT,
+      file_path TEXT,
+      drive_file_id TEXT,
+      drive_url TEXT,
+      parsed_text TEXT,
+      page_count INTEGER,
+      csi_divisions_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // ─── Plan Analyses (plan images + PlanSwift quantity exports) ──────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_plan_analyses (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      bid_request_id TEXT NOT NULL,
+      filename TEXT,
+      file_type TEXT,
+      file_path TEXT,
+      analysis_json TEXT,
+      quantities_json TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -3904,6 +3942,15 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_estimates_tenant ON dacp_estimates(tenant_id)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_jobs_tenant ON dacp_jobs(tenant_id, status)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_reports_tenant ON dacp_field_reports(tenant_id, job_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bid_docs_tenant ON dacp_bid_documents(tenant_id, bid_request_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_plan_analyses_tenant ON dacp_plan_analyses(tenant_id, bid_request_id)'); } catch (e) {}
+
+  // Migrate dacp_bid_requests — add workflow columns (idempotent)
+  try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN workflow_step INTEGER DEFAULT 0"); } catch (e) { /* already exists */ }
+  try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN pass_reason TEXT"); } catch (e) { /* already exists */ }
+  try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN itb_analysis_json TEXT"); } catch (e) { /* already exists */ }
+  try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN scope_breakdown_json TEXT"); } catch (e) { /* already exists */ }
+  try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN plan_checklist_json TEXT"); } catch (e) { /* already exists */ }
 
   // ─── Knowledge Graph Tables ─────────────────────────────────────────────
   targetDb.exec(`
@@ -4476,6 +4523,82 @@ export function getDacpStats(tenantId) {
     totalRevenue: wonJobs.total_revenue || 0,
     totalFieldReports: fieldReports.total || 0,
   };
+}
+
+// ─── Bid Documents CRUD ─────────────────────────────────────────────────────
+
+export function getDacpBidDocuments(tenantId, bidRequestId) {
+  return db.prepare('SELECT * FROM dacp_bid_documents WHERE tenant_id = ? AND bid_request_id = ? ORDER BY created_at ASC').all(tenantId, bidRequestId);
+}
+
+export function getDacpBidDocument(tenantId, id) {
+  return db.prepare('SELECT * FROM dacp_bid_documents WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function createDacpBidDocument(doc) {
+  return db.prepare(
+    `INSERT INTO dacp_bid_documents (id, tenant_id, bid_request_id, filename, file_type, file_path, drive_file_id, drive_url, parsed_text, page_count, csi_divisions_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    doc.id, doc.tenantId, doc.bidRequestId, doc.filename, doc.fileType,
+    doc.filePath || null, doc.driveFileId || null, doc.driveUrl || null,
+    doc.parsedText || null, doc.pageCount || null,
+    doc.csiDivisionsJson || null, doc.createdAt || new Date().toISOString()
+  );
+}
+
+export function updateDacpBidDocument(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_bid_documents SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function deleteDacpBidDocument(tenantId, id) {
+  return db.prepare('DELETE FROM dacp_bid_documents WHERE tenant_id = ? AND id = ?').run(tenantId, id);
+}
+
+// ─── Plan Analyses CRUD ─────────────────────────────────────────────────────
+
+export function getDacpPlanAnalyses(tenantId, bidRequestId) {
+  return db.prepare('SELECT * FROM dacp_plan_analyses WHERE tenant_id = ? AND bid_request_id = ? ORDER BY created_at ASC').all(tenantId, bidRequestId);
+}
+
+export function getDacpPlanAnalysis(tenantId, id) {
+  return db.prepare('SELECT * FROM dacp_plan_analyses WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function createDacpPlanAnalysis(analysis) {
+  return db.prepare(
+    `INSERT INTO dacp_plan_analyses (id, tenant_id, bid_request_id, filename, file_type, file_path, analysis_json, quantities_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    analysis.id, analysis.tenantId, analysis.bidRequestId, analysis.filename,
+    analysis.fileType, analysis.filePath || null,
+    analysis.analysisJson || null, analysis.quantitiesJson || null,
+    analysis.createdAt || new Date().toISOString()
+  );
+}
+
+export function updateDacpPlanAnalysis(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_plan_analyses SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+export function deleteDacpPlanAnalysis(tenantId, id) {
+  return db.prepare('DELETE FROM dacp_plan_analyses WHERE tenant_id = ? AND id = ?').run(tenantId, id);
 }
 
 // ─── Lead Engine CRUD Helpers ────────────────────────────────────────────────

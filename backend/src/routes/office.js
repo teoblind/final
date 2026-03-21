@@ -111,12 +111,12 @@ router.get('/status', async (req, res) => {
       };
       const tenantName = TENANT_DISPLAY_NAMES[tenantSlug] || TENANT_DISPLAY_NAMES[tenant.id] || tenant.name || tenant.slug;
 
-      // Email Agent
+      // Comms Agent (email + meetings combined)
       agents.push({
-        id: agentId,
-        name: `${tenantName} Email Agent`,
+        id: `comms-${tenantSlug}`,
+        name: `${tenantName} Comms Agent`,
         tenant: tenantSlug,
-        role: 'email',
+        role: 'comms',
         status: emailStatus,
         lastActivityAt,
         currentTask,
@@ -134,12 +134,12 @@ router.get('/status', async (req, res) => {
         currentTask: null,
       });
 
-      // Meeting Agent (transcription + follow-ups)
+      // Workflow Agent (estimating + pricing + jobs)
       agents.push({
-        id: `meeting-${tenantSlug}`,
-        name: `${tenantName} Meeting Agent`,
+        id: `workflow-${tenantSlug}`,
+        name: `${tenantName} Workflow Agent`,
         tenant: tenantSlug,
-        role: 'meeting',
+        role: 'workflow',
         status: 'idle',
         lastActivityAt: null,
         currentTask: null,

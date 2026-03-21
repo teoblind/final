@@ -621,3 +621,297 @@ Subcontractor shall furnish all necessary labor, materials, tools, and equipment
 
 Subcontractor Initial: ______     Renegade Initial: ______
 Page 1 of 4`;
+
+
+// ─── Document Analysis (CSI Division Extraction) ────────────────────────────
+
+const DOCUMENT_ANALYSIS_PROMPT = `You are DACP Construction's document analyst. You specialize in analyzing construction bid documents for a concrete and masonry subcontractor.
+
+Given the following documents from a bid request, analyze each document and extract:
+1. Which CSI divisions are covered
+2. Specification sections relevant to DACP's scope (Division 03 Concrete, Division 04 Masonry)
+3. Requirements, exclusions, and special conditions
+4. Anything that could affect DACP's bid pricing
+
+BID REQUEST CONTEXT:
+Project: {project_name}
+GC: {gc_name}
+Due Date: {due_date}
+
+DOCUMENTS:
+{documents_text}
+
+Return a JSON object:
+{
+  "divisions": [
+    {
+      "code": "03",
+      "name": "Concrete",
+      "sections": [
+        {"number": "03 10 00", "title": "Concrete Formwork", "relevant": true, "requirements": ["list of requirements"], "notes": "any important notes"}
+      ]
+    }
+  ],
+  "dacp_relevant_sections": [
+    {"section": "section number and title", "requirements": ["key requirements"], "spec_references": ["spec page/section refs"]}
+  ],
+  "compliance_items": [
+    {"item": "description", "source_document": "filename", "impact": "how it affects DACP"}
+  ],
+  "special_conditions": [
+    {"condition": "description", "source_document": "filename", "risk_level": "high|medium|low"}
+  ],
+  "missing_from_documents": [
+    {"item": "what's missing", "impact": "why it matters for DACP's bid"}
+  ]
+}
+
+Focus ONLY on items relevant to concrete and masonry work. Return ONLY the JSON.`;
+
+/**
+ * Analyze bid documents and extract CSI divisions / spec requirements.
+ * @param {Object} bidRequest - The bid request record
+ * @param {Array<{filename: string, parsed_text: string}>} documents - Parsed document objects
+ * @returns {Promise<Object>} Structured analysis with divisions, requirements, etc.
+ */
+export async function analyzeDocuments(bidRequest, documents) {
+  const documentsText = documents.map((d, i) =>
+    `--- Document ${i + 1}: ${d.filename} ---\n${d.parsed_text || '(no text extracted)'}`
+  ).join('\n\n');
+
+  const prompt = DOCUMENT_ANALYSIS_PROMPT
+    .replace('{project_name}', bidRequest.subject || bidRequest.gc_name || '')
+    .replace('{gc_name}', bidRequest.gc_name || '')
+    .replace('{due_date}', bidRequest.due_date || 'Not specified')
+    .replace('{documents_text}', documentsText);
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const text = response.content[0]?.text || '{}';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Failed to parse document analysis response');
+
+  return JSON.parse(jsonMatch[0]);
+}
+
+
+// ─── Plan Image Analysis (Claude Vision) ────────────────────────────────────
+
+const PLAN_ANALYSIS_PROMPT = `You are DACP Construction's plan analysis specialist. You analyze construction drawings (structural plans, architectural plans, sections, details) to identify concrete and masonry elements.
+
+Examine the provided construction drawing(s) and identify ALL concrete and masonry elements visible. For each element, estimate quantities where possible.
+
+Return a JSON object:
+{
+  "drawing_info": {
+    "sheet_number": "if visible",
+    "title": "drawing title if visible",
+    "scale": "if visible",
+    "drawing_type": "plan|section|detail|elevation|schedule"
+  },
+  "elements": [
+    {
+      "type": "footing|column|slab|wall|beam|stair|pier|grade_beam|curb|sidewalk|other",
+      "description": "specific description (e.g., '24x24 spread footing', '16\" CMU wall')",
+      "count": null,
+      "dimensions": {
+        "width": "value with unit if visible",
+        "height": "value with unit if visible",
+        "length": "value with unit if visible",
+        "thickness": "value with unit if visible",
+        "depth": "value with unit if visible"
+      },
+      "material": "concrete|cmu|brick|masonry",
+      "specifications": ["4000 psi", "Grade 60 rebar", etc.],
+      "reinforcement": "rebar details if visible",
+      "estimated_quantity": {
+        "value": null,
+        "unit": "CY|SF|LF|EA",
+        "basis": "how quantity was estimated"
+      },
+      "confidence": "high|medium|low",
+      "notes": "any special requirements, callouts, or details visible"
+    }
+  ],
+  "general_notes": ["any general concrete/masonry notes visible on the drawing"],
+  "references": ["referenced details, sections, or other sheets mentioned"]
+}
+
+Focus ONLY on concrete and masonry elements. Ignore structural steel, MEP, etc. unless they interface with concrete work (e.g., embeds, sleeves). Return ONLY the JSON.`;
+
+/**
+ * Analyze construction plan images using Claude vision.
+ * @param {Array<{base64: string, mediaType: string, filename: string}>} images
+ * @returns {Promise<Object>} Combined analysis with elements checklist
+ */
+export async function analyzePlanImages(images) {
+  const results = [];
+
+  for (const img of images) {
+    const content = [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.mediaType,
+          data: img.base64,
+        },
+      },
+      {
+        type: 'text',
+        text: PLAN_ANALYSIS_PROMPT,
+      },
+    ];
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content }],
+    });
+
+    const text = response.content[0]?.text || '{}';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const analysis = JSON.parse(jsonMatch[0]);
+      results.push({ filename: img.filename, ...analysis });
+    }
+  }
+
+  // Merge all elements into a combined checklist
+  const allElements = [];
+  const generalNotes = [];
+  const references = [];
+
+  for (const r of results) {
+    if (r.elements) {
+      for (const el of r.elements) {
+        allElements.push({ ...el, source_sheet: r.drawing_info?.sheet_number || r.filename });
+      }
+    }
+    if (r.general_notes) generalNotes.push(...r.general_notes);
+    if (r.references) references.push(...r.references);
+  }
+
+  return {
+    sheets: results,
+    checklist: allElements,
+    general_notes: [...new Set(generalNotes)],
+    references: [...new Set(references)],
+    total_elements: allElements.length,
+  };
+}
+
+
+// ─── PlanSwift Export Parser ────────────────────────────────────────────────
+
+/**
+ * Known PlanSwift column header variations mapped to normalized names.
+ */
+const PLANSWIFT_HEADER_MAP = {
+  // Item / description
+  'item': 'item',
+  'item name': 'item',
+  'description': 'item',
+  'desc': 'item',
+  'name': 'item',
+  'takeoff item': 'item',
+  'assembly': 'item',
+  // Quantity
+  'quantity': 'quantity',
+  'qty': 'quantity',
+  'count': 'quantity',
+  'total qty': 'quantity',
+  'amount': 'quantity',
+  // Unit
+  'unit': 'unit',
+  'uom': 'unit',
+  'units': 'unit',
+  'unit of measure': 'unit',
+  // Length
+  'length': 'length',
+  'len': 'length',
+  'total length': 'length',
+  'linear feet': 'length',
+  'lf': 'length',
+  // Area
+  'area': 'area',
+  'total area': 'area',
+  'square feet': 'area',
+  'sf': 'area',
+  'sq ft': 'area',
+  // Volume
+  'volume': 'volume',
+  'total volume': 'volume',
+  'cubic yards': 'volume',
+  'cy': 'volume',
+  'cu yd': 'volume',
+  // Width / height / depth / thickness
+  'width': 'width',
+  'height': 'height',
+  'depth': 'depth',
+  'thickness': 'thickness',
+  // Category / section
+  'category': 'category',
+  'section': 'category',
+  'csi': 'category',
+  'division': 'category',
+  // Notes
+  'notes': 'notes',
+  'remarks': 'notes',
+  'comment': 'notes',
+  'comments': 'notes',
+};
+
+/**
+ * Parse PlanSwift XLSX/CSV export rows into structured quantity items.
+ * Normalizes column names to a standard schema compatible with estimateBot.
+ *
+ * @param {Array<Object>} rows - Raw parsed rows (array of {colName: value} objects)
+ * @returns {Array<Object>} Normalized quantity items
+ */
+export function parsePlanSwiftExport(rows) {
+  if (!rows || rows.length === 0) return [];
+
+  // Detect and normalize column headers from the first row's keys
+  const sampleKeys = Object.keys(rows[0]);
+  const headerMapping = {};
+  for (const key of sampleKeys) {
+    const normalized = PLANSWIFT_HEADER_MAP[key.toLowerCase().trim()];
+    if (normalized) {
+      headerMapping[key] = normalized;
+    } else {
+      // Keep unknown columns as-is (lowercased, underscored)
+      headerMapping[key] = key.toLowerCase().replace(/\s+/g, '_');
+    }
+  }
+
+  const items = [];
+  for (const row of rows) {
+    const normalized = {};
+    for (const [origKey, normKey] of Object.entries(headerMapping)) {
+      const val = row[origKey];
+      if (val !== undefined && val !== null && val !== '') {
+        normalized[normKey] = val;
+      }
+    }
+
+    // Skip empty rows (no item name and no quantity)
+    if (!normalized.item && !normalized.quantity) continue;
+
+    // Coerce numeric fields
+    for (const numField of ['quantity', 'length', 'area', 'volume', 'width', 'height', 'depth', 'thickness']) {
+      if (normalized[numField] !== undefined) {
+        const parsed = parseFloat(normalized[numField]);
+        if (!isNaN(parsed)) normalized[numField] = parsed;
+      }
+    }
+
+    items.push(normalized);
+  }
+
+  return items;
+}

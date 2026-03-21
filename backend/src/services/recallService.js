@@ -10,10 +10,21 @@
  * Pricing: $0.50/hr, first 5 hours free.
  */
 
+const fs = require('fs');
+const path = require('path');
+
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';
 const RECALL_BASE = `https://${RECALL_REGION}.recall.ai/api/v1`;
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3002';
+
+// Load bot avatar image as base64
+let BOT_AVATAR_B64 = '';
+try {
+  BOT_AVATAR_B64 = fs.readFileSync(path.join(__dirname, '../../assets/coppice-bot-avatar.b64'), 'utf8').trim();
+} catch (e) {
+  console.warn('[Recall] Bot avatar not found — bot will show default black tile');
+}
 
 // In-memory bot registry — tracks active bots and their state
 const activeBots = new Map();
@@ -73,6 +84,14 @@ export async function createBot(meetingUrl, opts = {}) {
       everyone_left_timeout: 5,
     },
   };
+
+  // Set branded avatar as the bot's video tile
+  if (BOT_AVATAR_B64) {
+    body.automatic_video_output = {
+      in_call_not_recording: { kind: 'jpeg', b64_data: BOT_AVATAR_B64 },
+      in_call_recording: { kind: 'jpeg', b64_data: BOT_AVATAR_B64 },
+    };
+  }
 
   // Enable real-time transcription + webhook delivery for voice-enabled bots
   if (enableVoice) {

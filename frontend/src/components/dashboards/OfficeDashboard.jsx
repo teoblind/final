@@ -10,6 +10,8 @@ const ROLE_CONFIG = {
   meeting:  { emoji: '🎙️', color: '#1a6b3c', label: 'Meeting' },
   research: { emoji: '🔬', color: '#b8860b', label: 'Research' },
   clawbot:  { emoji: '🤖', color: '#64748b', label: 'System' },
+  comms:    { emoji: '📨', color: '#2563eb', label: 'Comms' },
+  workflow: { emoji: '📋', color: '#1e3a5f', label: 'Workflow' },
 };
 
 const STATUS_LABELS = {

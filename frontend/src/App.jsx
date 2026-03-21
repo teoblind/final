@@ -400,11 +400,8 @@ function AppContent() {
     ];
     agentItems = [
       { id: 'hivemind-chat', label: 'DACP Agent', icon: Bot, hivemind: true },
-      { id: 'estimating', label: 'Estimating', icon: ClipboardList },
-      { id: 'pricing', label: 'Pricing Table', icon: DollarSign },
-      { id: 'jobs', label: 'Jobs', icon: HardHat },
-      { id: 'email-chat', label: 'Email Agent', icon: Mail },
-      { id: 'meetings-chat', label: 'Meetings', icon: Mic },
+      { id: 'workflow-chat', label: 'Workflow', icon: ClipboardList },
+      { id: 'comms-chat', label: 'Comms', icon: Mail },
     ];
     infraItems = [
       { id: 'accounting', label: 'Accounting', icon: DollarSign },
@@ -479,8 +476,6 @@ function AppContent() {
     reporting: 'Reporting',
     settings: 'Settings',
     admin: 'Admin Console',
-    estimating: 'Estimating',
-    jobs: 'Jobs',
     'agent-tasks': 'Agent Tasks',
     'field-reports': 'Field Reports',
     'audit-trail': 'Audit Trail',
@@ -639,12 +634,6 @@ function AppContent() {
     switch (activeTab) {
       case 'command':
         return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
-      case 'estimating':
-        return <DacpEstimatingDashboard />;
-      case 'pricing':
-        return <DacpPricingDashboard />;
-      case 'jobs':
-        return <DacpJobsDashboard />;
       case 'agent-tasks':
         return <TaskTrackerDashboard />;
       case 'field-reports':
@@ -719,6 +708,8 @@ function AppContent() {
       case 'pools-chat':
       case 'pitch-deck-chat':
       case 'sales-chat':
+      case 'workflow-chat':
+      case 'comms-chat':
         return <AgentChat agentId={activeTab.replace('-chat', '')} />;
       default:
         return <CommandDashboard onNavigate={handleSetActiveTab} />;
