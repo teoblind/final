@@ -653,89 +653,178 @@ function CallPanel({ agentDef, onClose }) {
 
   const accent = agentDef?.accentColor || '#1e3a5f';
 
-  // ── Voice Chat (in-browser via ElevenLabs Conversational AI) ──
+  // ── Voice Chat (browser Speech Recognition → Claude streaming → Speech Synthesis) ──
+  const recognitionRef = useRef(null);
+  const [voicePhase, setVoicePhase] = useState('listening'); // listening | thinking | speaking
+
   const startVoiceChat = async () => {
     setCallState('connecting');
     setDuration(0);
     setTranscript('');
     setErrorMsg('');
 
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setErrorMsg('Speech recognition not supported in this browser. Use Chrome.');
+      setCallState('error');
+      return;
+    }
+
     try {
-      // Dynamically import the ElevenLabs SDK
-      const { VoiceConversation } = await import('@elevenlabs/client');
+      // Request mic access
+      await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Try to get a signed URL from our backend first (keeps API key server-side)
-      let sessionConfig;
-      const token = getAuthToken();
-      try {
-        const res = await fetch(`${API_BASE}/v1/voice/conversation/signed-url`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const data = await res.json();
-        if (data.signed_url) {
-          sessionConfig = { signedUrl: data.signed_url };
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setCallState('connected');
+        setVoicePhase('listening');
+      };
+
+      recognition.onresult = (event) => {
+        const results = Array.from(event.results);
+        const text = results.map(r => r[0].transcript).join('');
+        setTranscript(text);
+
+        // Check if final result
+        if (results.some(r => r.isFinal)) {
+          setVoicePhase('thinking');
+          sendToAgent(text);
         }
-      } catch {
-        // Backend not available — fall back to public agent ID
-      }
+      };
 
-      // Fall back: try to get agent ID from config endpoint
-      if (!sessionConfig) {
-        const res = await fetch(`${API_BASE}/v1/voice/conversation/config`);
-        const data = await res.json();
-        if (data.agent_id) {
-          sessionConfig = { agentId: data.agent_id };
-        } else {
-          throw new Error('No ElevenLabs agent configured. Set ELEVENLABS_AGENT_ID in backend .env');
+      recognition.onerror = (event) => {
+        if (event.error === 'no-speech') {
+          // Restart listening
+          try { recognition.start(); } catch {}
+          return;
         }
-      }
+        console.error('Speech recognition error:', event.error);
+        setErrorMsg(`Mic error: ${event.error}`);
+        setCallState('error');
+      };
 
-      const conversation = await VoiceConversation.startSession({
-        ...sessionConfig,
-        onConnect: () => {
-          setCallState('connected');
-        },
-        onDisconnect: () => {
-          setCallState('ended');
-          conversationRef.current = null;
-          setTimeout(() => {
-            setCallState('idle');
-            setDuration(0);
-          }, 2000);
-        },
-        onError: (error) => {
-          console.error('Voice chat error:', error);
-          setErrorMsg(typeof error === 'string' ? error : error?.message || 'Connection error');
-          setCallState('error');
-        },
-        onModeChange: ({ mode }) => {
-          // mode is 'speaking' | 'listening'
-          // Could use this for visual feedback
-        },
-        onMessage: (message) => {
-          // Show live transcription
-          if (message.type === 'user_transcript' && message.user_transcription_event?.user_transcript) {
-            setTranscript(message.user_transcription_event.user_transcript);
-          } else if (message.type === 'agent_response' && message.agent_response_event?.agent_response) {
-            setTranscript(message.agent_response_event.agent_response);
-          }
-        },
-      });
+      recognition.onend = () => {
+        // Only restart if still in listening phase
+        if (voicePhase === 'listening' && callState === 'connected') {
+          try { recognition.start(); } catch {}
+        }
+      };
 
-      conversationRef.current = conversation;
+      recognitionRef.current = recognition;
+      recognition.start();
+      conversationRef.current = { type: 'browser-voice' };
     } catch (err) {
       console.error('Voice chat start failed:', err);
-      setErrorMsg(err.message || 'Failed to start voice chat');
+      setErrorMsg(err.message || 'Microphone access denied');
       setCallState('error');
     }
   };
 
-  const endVoiceChat = async () => {
-    if (conversationRef.current) {
-      await conversationRef.current.endSession();
-      conversationRef.current = null;
+  const sendToAgent = async (userText) => {
+    if (!userText.trim()) {
+      setVoicePhase('listening');
+      restartListening();
+      return;
     }
+
+    setTranscript(`You: ${userText}`);
+    const token = getAuthToken();
+    let agentResponse = '';
+
+    try {
+      // Use streaming endpoint
+      const agentId = agentDef?.name?.toLowerCase().includes('estimat') ? 'estimating'
+        : agentDef?.name?.toLowerCase().includes('email') ? 'email'
+        : agentDef?.name?.toLowerCase().includes('meeting') ? 'meetings'
+        : 'hivemind';
+
+      const res = await fetch(`${API_BASE}/v1/chat/${agentId}/messages/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ content: userText }),
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'text') {
+              agentResponse += data.text;
+              setTranscript(agentResponse);
+            }
+          } catch {}
+        }
+      }
+
+      // Speak the response
+      if (agentResponse && callState === 'connected') {
+        setVoicePhase('speaking');
+        await speakText(agentResponse);
+      }
+    } catch (err) {
+      console.error('Agent response failed:', err);
+      agentResponse = 'Sorry, I had trouble processing that. Could you try again?';
+      setTranscript(agentResponse);
+    }
+
+    // Resume listening
+    if (callState === 'connected') {
+      setVoicePhase('listening');
+      setTranscript('');
+      restartListening();
+    }
+  };
+
+  const speakText = (text) => {
+    return new Promise((resolve) => {
+      // Strip markdown formatting for speech
+      const clean = text
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/#{1,6}\s/g, '')
+        .replace(/[-•]\s/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/`([^`]+)`/g, '$1');
+
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
+      window.speechSynthesis.speak(utterance);
+    });
+  };
+
+  const restartListening = () => {
+    if (recognitionRef.current && callState === 'connected') {
+      try { recognitionRef.current.start(); } catch {}
+    }
+  };
+
+  const endVoiceChat = async () => {
+    window.speechSynthesis.cancel();
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.abort();
+      recognitionRef.current = null;
+    }
+    conversationRef.current = null;
     setCallState('ended');
+    setVoicePhase('listening');
     setTimeout(() => {
       setCallState('idle');
       setDuration(0);
@@ -744,10 +833,12 @@ function CallPanel({ agentDef, onClose }) {
   };
 
   const toggleMute = () => {
-    if (conversationRef.current) {
-      conversationRef.current.setMicMuted(!muted);
-      setMuted(!muted);
+    if (muted) {
+      restartListening();
+    } else if (recognitionRef.current) {
+      recognitionRef.current.abort();
     }
+    setMuted(!muted);
   };
 
   // ── Phone Call (Twilio) ──
@@ -857,20 +948,30 @@ function CallPanel({ agentDef, onClose }) {
       {/* ── Connected State ── */}
       {callState === 'connected' && (
         <div className="p-5 flex flex-col items-center gap-3">
-          {/* Animated listening indicator */}
-          <div className="w-14 h-14 rounded-full flex items-center justify-center relative" style={{ backgroundColor: '#edf7f0' }}>
-            <Mic size={24} className="text-[#1a6b3c]" />
-            <div className="absolute inset-0 rounded-full border-2 border-[#1a6b3c] animate-ping opacity-20" />
+          {/* Phase indicator */}
+          <div className="w-14 h-14 rounded-full flex items-center justify-center relative" style={{
+            backgroundColor: voicePhase === 'listening' ? '#edf7f0' : voicePhase === 'thinking' ? '#fdf6e8' : '#e8eef5'
+          }}>
+            {voicePhase === 'thinking' ? (
+              <div className="spinner w-6 h-6" />
+            ) : voicePhase === 'speaking' ? (
+              <Volume2 size={24} className="text-[#2c5282]" />
+            ) : (
+              <Mic size={24} className="text-[#1a6b3c]" />
+            )}
+            {voicePhase === 'listening' && !muted && (
+              <div className="absolute inset-0 rounded-full border-2 border-[#1a6b3c] animate-ping opacity-20" />
+            )}
           </div>
           <div className="text-[13px] font-semibold text-terminal-text">
-            {muted ? 'Muted' : 'Listening...'}
+            {muted ? 'Muted' : voicePhase === 'listening' ? 'Listening...' : voicePhase === 'thinking' ? 'Thinking...' : 'Speaking...'}
           </div>
           <div className="text-[18px] font-mono text-terminal-text">{formatDuration(duration)}</div>
 
           {/* Live transcript */}
           {transcript && (
-            <div className="w-full px-3 py-2 rounded-[8px] bg-[#f5f4f0] border border-terminal-border">
-              <div className="text-[11px] text-[#9a9a92] italic truncate">{transcript}</div>
+            <div className="w-full px-3 py-2 rounded-[8px] bg-[#f5f4f0] border border-terminal-border max-h-[120px] overflow-y-auto">
+              <div className="text-[11px] text-[#6b6b65] leading-relaxed whitespace-pre-wrap">{transcript}</div>
             </div>
           )}
 
