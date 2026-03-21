@@ -3,6 +3,7 @@ import api from '../../lib/hooks/useApi';
 import { useTenant } from '../../contexts/TenantContext';
 import { FloorPlan } from './office-2d/FloorPlan';
 import { STATUS_COLORS } from './office-2d/constants';
+import MeetingRoom from './MeetingRoom';
 
 const ROLE_CONFIG = {
   email:    { emoji: '📧', color: '#2563eb', label: 'Email' },
@@ -49,6 +50,8 @@ export default function OfficeDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
+  const [activeMeeting, setActiveMeeting] = useState(null);
+  const [startingMeeting, setStartingMeeting] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -103,6 +106,23 @@ export default function OfficeDashboard() {
   const activeCount = filteredAgents.filter(a => a.status !== 'idle').length;
   const selectedAgent = filteredAgents.find(a => a.id === selectedAgentId);
 
+  const startMeeting = useCallback(async () => {
+    if (startingMeeting) return;
+    setStartingMeeting(true);
+    try {
+      const res = await api.post('/v1/meetings/start', {
+        title: `${tenant?.name || 'Coppice'} Team Meeting`,
+        agents: ['comms', 'chat', 'workflow', 'research'],
+      });
+      setActiveMeeting(res.data);
+    } catch (err) {
+      console.error('Start meeting error:', err);
+      alert('Failed to start meeting: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setStartingMeeting(false);
+    }
+  }, [startingMeeting, tenant]);
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[500px]">
@@ -123,6 +143,14 @@ export default function OfficeDashboard() {
           <p className="text-xs text-terminal-text font-semibold">{filteredAgents.length} agents — {activeCount} active</p>
         </div>
         <div className="flex-1" />
+        <button
+          onClick={startMeeting}
+          disabled={startingMeeting || !!activeMeeting}
+          className="px-4 py-2 text-[11px] font-semibold text-white rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: '#1a6b3c' }}
+        >
+          {startingMeeting ? 'Starting...' : activeMeeting ? 'Meeting Active' : 'Start Meeting'}
+        </button>
         <div className="flex items-center gap-4">
           {[
             ['Idle', STATUS_COLORS.idle, false],
@@ -136,6 +164,19 @@ export default function OfficeDashboard() {
           ))}
         </div>
       </div>
+
+      {/* Active meeting room */}
+      {activeMeeting && (
+        <div className="mb-6">
+          <MeetingRoom
+            meetingId={activeMeeting.meetingId}
+            meetLink={activeMeeting.meetLink}
+            title={activeMeeting.title}
+            agents={activeMeeting.agents}
+            onEnd={() => setActiveMeeting(null)}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
         {/* Office floor plan */}

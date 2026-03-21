@@ -24,6 +24,7 @@ import {
 } from '../services/recallService.js';
 import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
 import { handleTranscriptEvent, startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
+import { getMeetingRoomByBot, addTranscript } from '../services/meetingRoomService.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -101,6 +102,16 @@ router.post('/transcript-event', async (req, res) => {
       const text = words.map(w => w.text || w).join(' ').trim() || transcriptPayload.text || '';
       if (text) {
         appendTranscript(botId, {
+          speaker: transcriptPayload.speaker || transcriptPayload.participant?.name || 'Unknown',
+          text,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Route to meeting room if this bot is part of one
+      const meetingRoom = getMeetingRoomByBot(botId);
+      if (meetingRoom) {
+        addTranscript(meetingRoom.id, {
           speaker: transcriptPayload.speaker || transcriptPayload.participant?.name || 'Unknown',
           text,
           timestamp: new Date().toISOString(),
