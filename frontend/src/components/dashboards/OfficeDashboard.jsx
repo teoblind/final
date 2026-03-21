@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../lib/hooks/useApi';
+import { useTenant } from '../../contexts/TenantContext';
 
 // ─── Agent avatar configs ───────────────────────────────────────────────────
 
@@ -210,6 +211,7 @@ function MeetingStatus({ meetings }) {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function OfficeDashboard() {
+  const { tenant } = useTenant();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -353,9 +355,24 @@ export default function OfficeDashboard() {
     );
   }
 
-  const agents = data?.agents || [];
-  const activities = data?.activities || [];
-  const meetings = data?.meetings || [];
+  const allAgents = data?.agents || [];
+  const allActivities = data?.activities || [];
+  const allMeetings = data?.meetings || [];
+
+  // Filter to current tenant only — no cross-tenant data leakage
+  const tenantSlug = tenant?.slug;
+  const tenantId = tenant?.id;
+  const isSuperAdmin = !tenantSlug || tenantSlug === 'default' || tenantSlug === 'sangha';
+
+  const agents = isSuperAdmin
+    ? allAgents
+    : allAgents.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === tenant?.name);
+  const activities = isSuperAdmin
+    ? allActivities
+    : allActivities.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === 'dacp');
+  const meetings = isSuperAdmin
+    ? allMeetings
+    : allMeetings.filter(m => m.tenantId === tenantSlug || m.tenantId === tenantId);
 
   // Group agents by tenant for office layout
   const tenantGroups = {};
@@ -366,7 +383,7 @@ export default function OfficeDashboard() {
   });
 
   const tenantKeys = Object.keys(tenantGroups).filter(t => t !== 'system');
-  const systemAgents = tenantGroups.system || [];
+  const systemAgents = isSuperAdmin ? (tenantGroups.system || []) : [];
   const activeCount = agents.filter(a => a.status !== 'idle').length;
 
   return (
