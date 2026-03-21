@@ -23,7 +23,7 @@ import {
   listActiveBots,
 } from '../services/recallService.js';
 import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
-import { handleTranscriptEvent } from '../services/meetingVoiceLoop.js';
+import { handleTranscriptEvent, startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -117,6 +117,27 @@ router.post('/transcript-event', async (req, res) => {
   } catch (error) {
     console.error('[Recall] Transcript event error:', error.message);
     res.sendStatus(200);
+  }
+});
+
+/**
+ * POST /start-voice-loop — Start voice loop for a manually-created bot (e.g. from menu bar app)
+ * No auth — called by local menu bar app.
+ * Body: { botId, tenantId?, meetingTitle? }
+ */
+router.post('/start-voice-loop', (req, res) => {
+  try {
+    const { botId, tenantId = 'zhan-capital', meetingTitle } = req.body;
+    if (!botId) return res.status(400).json({ error: 'botId is required' });
+
+    startVoiceLoop(botId, tenantId);
+    startChatLoop(botId);
+    console.log(`[Recall] Voice loop started for bot ${botId} (tenant: ${tenantId}, title: ${meetingTitle || 'unknown'})`);
+
+    res.json({ botId, voiceLoop: true, chatLoop: true });
+  } catch (error) {
+    console.error('[Recall] Start voice loop error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
