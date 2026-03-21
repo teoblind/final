@@ -77,6 +77,7 @@ export default function HelpChatWidget() {
     if (!text || sending) return;
 
     const userMsg = { id: Date.now(), role: 'user', content: text };
+    const assistantMsgId = Date.now() + 1;
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setSending(true);
@@ -84,11 +85,12 @@ export default function HelpChatWidget() {
     const token = getAuthToken();
 
     try {
+      // Use streaming endpoint
       let postUrl;
       if (threadId) {
-        postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages`;
+        postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/stream`;
       } else {
-        postUrl = `${API_BASE}/v1/chat/${agentId}/messages`;
+        postUrl = `${API_BASE}/v1/chat/${agentId}/messages/stream`;
       }
 
       const res = await fetch(postUrl, {
@@ -100,33 +102,59 @@ export default function HelpChatWidget() {
         body: JSON.stringify({ content: text, helpMode: true }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        throw new Error(data.error || `Error (${res.status})`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error (${res.status})`);
       }
 
-      if (data.response) {
-        setMessages(prev => [...prev, {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content: data.response,
-        }]);
-      }
+      // Add empty assistant message that we'll stream into
+      setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '' }]);
 
-      // Capture auto-created thread ID
-      if (data.threadId && !threadId) {
-        setThreadId(data.threadId);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'text') {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantMsgId ? { ...m, content: m.content + event.text } : m
+              ));
+            } else if (event.type === 'thread' && event.threadId && !threadId) {
+              setThreadId(event.threadId);
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (parseErr) {
+            if (parseErr.message !== 'Unexpected end of JSON input') {
+              console.warn('SSE parse error:', parseErr);
+            }
+          }
+        }
       }
     } catch (err) {
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: err?.message === 'Unauthorized'
-          ? 'Session expired. Please refresh the page.'
-          : `Something went wrong. Please try again.`,
-        error: true,
-      }]);
+      setMessages(prev => {
+        // Remove empty streaming message if it exists
+        const filtered = prev.filter(m => !(m.id === assistantMsgId && !m.content));
+        return [...filtered, {
+          id: Date.now() + 2,
+          role: 'assistant',
+          content: err?.message === 'Unauthorized'
+            ? 'Session expired. Please refresh the page.'
+            : 'Something went wrong. Please try again.',
+          error: true,
+        }];
+      });
     } finally {
       setSending(false);
     }

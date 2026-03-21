@@ -3078,3 +3078,79 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     throw error;
   }
 }
+
+/**
+ * Streaming version of chat() — streams text tokens via onChunk callback.
+ * For tool use scenarios, falls back to non-streaming chat().
+ *
+ * @param {Function} onChunk - Called with each text chunk: onChunk(text)
+ * @returns {Promise<Object>} Final result (same shape as chat())
+ */
+export async function chatStream(tenantId, agentId, userId, userContent, threadId = null, options = {}, onChunk) {
+  // Save user message
+  saveMessage(tenantId, agentId, userId, 'user', userContent, null, threadId);
+
+  const rows = db.prepare(SQL.getRecentHistory).all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
+  const history = rows.reverse();
+  const messages = history.map(row => ({
+    role: row.role === 'assistant' ? 'assistant' : 'user',
+    content: row.content,
+  }));
+
+  // Build system prompt (same as chat() but without tool addons for speed)
+  const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
+  const knowledgeContext = buildKnowledgeContext(tenantId, userContent);
+
+  const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists — no decorative formatting.`;
+
+  const HELP_MODE_GUARD = options.helpMode ? `\n\nCRITICAL — HELP ASSISTANT MODE:\nYou are the Coppice Assistant, a product support chatbot embedded in the dashboard.\n- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.\n- NEVER mention Sangha, Spencer, Mihir, Colin, Bitcoin mining, renewable energy, or any non-construction topics.\n- NEVER mention Zhan Capital, Volt Charging, or any other Coppice tenant.\n- NEVER mention the name "Teo" or any Coppice internal team member.\n- If asked about contacting support, tell them to click "Send a message to admin" at the bottom of this chat.\n- Keep answers helpful, concise, and focused on the product features available in their dashboard.\n- You can help with: estimating, bid requests, pricing table, job tracking, field reports, document generation, and agent tools.` : '';
+
+  // For help mode: lightweight prompt, no tools, Haiku model
+  // For agents: full prompt with DACP addon, no tools (streaming doesn't support tool use)
+  const dacpPromptAgents = ['hivemind', 'estimating'];
+  const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + dacpAddon + knowledgeContext;
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    const fallback = 'I\'m currently running in demo mode (no API key configured).';
+    saveMessage(tenantId, agentId, userId, 'assistant', fallback, null, threadId);
+    onChunk(fallback);
+    return { response: fallback };
+  }
+
+  try {
+    const selectedModel = options.helpMode
+      ? 'claude-haiku-4-5-20251001'
+      : selectModel(agentId, userContent, messages.length, false);
+
+    const stream = getAnthropic().messages.stream({
+      model: selectedModel,
+      max_tokens: options.helpMode ? 1024 : 4096,
+      system: systemPrompt,
+      messages,
+    });
+
+    let fullText = '';
+
+    stream.on('text', (text) => {
+      fullText += text;
+      onChunk(text);
+    });
+
+    const finalMessage = await stream.finalMessage();
+
+    saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
+      model: finalMessage.model,
+      input_tokens: finalMessage.usage?.input_tokens,
+      output_tokens: finalMessage.usage?.output_tokens,
+      stop_reason: finalMessage.stop_reason,
+      streamed: true,
+    }, threadId);
+
+    return { response: fullText };
+  } catch (error) {
+    console.error(`ChatStream error (agent=${agentId}):`, error.message);
+    saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
+    throw error;
+  }
+}

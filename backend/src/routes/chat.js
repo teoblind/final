@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { unlinkSync, mkdirSync, copyFileSync, existsSync } from 'fs';
 import { authenticate } from '../middleware/auth.js';
-import { getMessages, getThreadMessages, chat, saveMessage } from '../services/chatService.js';
+import { getMessages, getThreadMessages, chat, chatStream, saveMessage } from '../services/chatService.js';
 import { sendEmail, sendEstimateEmail } from '../services/emailService.js';
 import { getOpusModel } from '../services/modelRouter.js';
 import {
@@ -464,6 +464,108 @@ router.delete('/:agentId/threads/:threadId', async (req, res) => {
   } catch (error) {
     console.error('Thread DELETE error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Streaming Endpoints (SSE) ───────────────────────────────────────────────
+
+/**
+ * POST /:agentId/threads/:threadId/messages/stream — Stream response via SSE
+ */
+router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
+  try {
+    const { tenantId, userId, agentId } = resolveIds(req);
+    const { threadId } = req.params;
+    const isAdmin = ['owner', 'admin'].includes(req.user?.role);
+
+    if (!VALID_AGENTS.has(agentId)) {
+      return res.status(400).json({ error: `Unknown agent: ${agentId}` });
+    }
+
+    const thread = getThread(threadId);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    if (thread.tenant_id !== tenantId) return res.status(404).json({ error: 'Thread not found' });
+    if (thread.visibility === 'private' && thread.user_id !== userId && !isAdmin) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { content, helpMode } = req.body;
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    if (!thread.title) {
+      updateThreadTitle(threadId, content.trim().slice(0, 60));
+    }
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    await chatStream(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
+      res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Stream POST error:', error);
+    // If headers already sent, try writing error as SSE
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: 'Failed to stream response', details: error.message });
+    }
+  }
+});
+
+/**
+ * POST /:agentId/messages/stream — Stream response via SSE (auto-creates thread)
+ */
+router.post('/:agentId/messages/stream', async (req, res) => {
+  try {
+    const { tenantId, userId, agentId } = resolveIds(req);
+
+    if (!VALID_AGENTS.has(agentId)) {
+      return res.status(400).json({ error: `Unknown agent: ${agentId}` });
+    }
+
+    const { content, helpMode } = req.body;
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    createThread(threadId, tenantId, agentId, userId, content.trim().slice(0, 60), 'private');
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // Send threadId first so frontend can track it
+    res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
+
+    await chatStream(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
+      res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('Stream POST error:', error);
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: 'Failed to stream response', details: error.message });
+    }
   }
 });
 

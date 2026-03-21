@@ -23,14 +23,14 @@ const AGENTS = {
   hivemind: { name: 'DACP Agent', initial: 'D', color: '#3b82f6', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Hivemind — always on', placeholder: 'Ask the DACP Agent anything...', hint: 'The DACP Agent can route tasks to any sub-agent, search your knowledge base, and manage email.', userInitial: 'A', userName: 'Admin' },
   estimating: { name: 'Estimating Bot', initial: 'E', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online — 8 open RFQs', placeholder: 'Message Estimating Bot...', hint: 'Estimating Bot can read bid requests, generate estimates, draft emails, and reference your pricing table and job history.', tabs: ['Chat', 'Inbox', 'History', 'Config'], userInitial: 'A', userName: 'Admin' },
   documents: { name: 'Documents', initial: 'D', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Upload a document or ask about your files...', hint: 'Documents agent processes PDFs, extracts data from drawings, and searches your file library.', userInitial: 'A', userName: 'Admin' },
-  meetings: { name: 'Meeting Bot', initial: 'M', color: '#1a6b3c', bgColor: '#edf7f0', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Ask about any past meeting...', hint: 'Meeting Bot searches transcripts, summarizes calls, and tracks action items.', userInitial: 'A', userName: 'Admin' },
+  meetings: { name: 'Meeting Bot', initial: 'M', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Ask about any past meeting...', hint: 'Meeting Bot searches transcripts, summarizes calls, and tracks action items.', userInitial: 'A', userName: 'Admin' },
   email: { name: 'Email Agent', initial: 'E', color: '#f59e0b', bgColor: '#fdf6e8', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Draft an email or search your inbox...', hint: 'Email Agent drafts professional emails, searches your inbox, and manages correspondence.', userInitial: 'A', userName: 'Admin' },
   // Lead Engine
-  'lead-engine': { name: 'Lead Engine', initial: 'L', color: '#1a6b3c', bgColor: '#edf7f0', accentColor: '#1a6b3c', status: 'Online', placeholder: 'Ask about leads, pipeline, outreach, follow-ups...', hint: 'Lead Engine can discover leads, manage outreach campaigns, track replies, and handle follow-ups.', userInitial: 'SP', userName: 'Spencer' },
+  'lead-engine': { name: 'Lead Engine', initial: 'L', useTheme: true, status: 'Online', placeholder: 'Ask about leads, pipeline, outreach, follow-ups...', hint: 'Lead Engine can discover leads, manage outreach campaigns, track replies, and handle follow-ups.', userInitial: 'SP', userName: 'Spencer' },
   // Coppice / Mining agents
-  sangha: { name: 'Sangha Agent', initial: 'S', color: '#1a6b3c', bgColor: '#edf7f0', accentColor: '#1a6b3c', status: 'Hivemind — always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer' },
-  curtailment: { name: 'Curtailment Agent', initial: 'C', color: '#1a6b3c', bgColor: '#edf7f0', accentColor: '#1a6b3c', status: 'Online — monitoring ERCOT', placeholder: 'Ask about curtailment, pricing, fleet status...', hint: 'Curtailment Agent monitors ERCOT real-time pricing, manages fleet power states, and optimizes pool routing for maximum revenue.', tabs: ['Chat', 'Fleet', 'Market', 'Config'], userInitial: 'SP', userName: 'Spencer' },
-  pools: { name: 'Pool Routing', initial: 'P', color: '#2563eb', bgColor: '#eef3f9', accentColor: '#1a6b3c', status: 'Online — 3 pools active', placeholder: 'Ask about pool performance, hashrate allocation...', hint: 'Pool Routing agent optimizes hashrate distribution across mining pools for maximum yield.', userInitial: 'SP', userName: 'Spencer' },
+  sangha: { name: 'Sangha Agent', initial: 'S', useTheme: true, status: 'Hivemind — always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer' },
+  curtailment: { name: 'Curtailment Agent', initial: 'C', useTheme: true, status: 'Online — monitoring ERCOT', placeholder: 'Ask about curtailment, pricing, fleet status...', hint: 'Curtailment Agent monitors ERCOT real-time pricing, manages fleet power states, and optimizes pool routing for maximum revenue.', tabs: ['Chat', 'Fleet', 'Market', 'Config'], userInitial: 'SP', userName: 'Spencer' },
+  pools: { name: 'Pool Routing', initial: 'P', color: '#2563eb', bgColor: '#eef3f9', useTheme: true, status: 'Online — 3 pools active', placeholder: 'Ask about pool performance, hashrate allocation...', hint: 'Pool Routing agent optimizes hashrate distribution across mining pools for maximum yield.', userInitial: 'SP', userName: 'Spencer' },
   'pitch-deck': { name: 'Pitch Deck Agent', initial: 'P', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#7c3aed', status: 'Online', placeholder: 'Describe a deck you need or paste a brief...', hint: 'Pitch Deck Agent creates investor-grade HTML presentations. It will ask about detail level, slide count, and backgrounds before building.', userInitial: 'A', userName: 'Admin' },
   sales: { name: 'Sales Agent', initial: 'S', color: '#dc2626', bgColor: '#fef2f2', accentColor: '#991b1b', status: 'Online — Triple Aikido', placeholder: 'Practice a sales call, prep for a meeting, or ask for objection handling...', hint: 'Sales Agent uses the Triple Aikido technique. It can roleplay sales calls, prep you for meetings, and generate question playbooks for specific prospects.', userInitial: 'A', userName: 'Admin' },
 };
@@ -1778,7 +1778,14 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const firstName = authUser?.name?.split(' ')[0] || 'there';
   const userInitials = authUser?.name ? authUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'U';
   const rawAgent = AGENTS[agentId] || AGENTS.estimating;
-  const agent = { ...rawAgent, userName: authUser?.name || rawAgent.userName, userInitial: userInitials };
+  // For theme-aware agents, resolve colors from CSS variables (tenant branding)
+  const themeResolved = rawAgent.useTheme ? (() => {
+    const s = getComputedStyle(document.documentElement);
+    const c = s.getPropertyValue('--t-ui-accent').trim() || '#1a6b3c';
+    const bg = s.getPropertyValue('--t-ui-accent-bg').trim() || '#edf7f0';
+    return { color: c, bgColor: bg, accentColor: c };
+  })() : {};
+  const agent = { ...rawAgent, ...themeResolved, userName: authUser?.name || rawAgent.userName, userInitial: userInitials };
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -2137,71 +2144,107 @@ export default function AgentChat({ agentId = 'estimating' }) {
       } catch {}
     }
 
-    let postUrl;
-    if (hasFiles && threadId) {
-      postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/upload`;
-    } else if (threadId) {
-      postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages`;
-    } else {
-      postUrl = `${API_BASE}/v1/chat/${agentId}/messages`;
-    }
+    const agentMsgId = Date.now() + 1;
+
     try {
-      let res;
       if (hasFiles) {
+        // File upload — non-streaming
+        let postUrl;
+        if (threadId) {
+          postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/upload`;
+        } else {
+          postUrl = `${API_BASE}/v1/chat/${agentId}/messages`;
+        }
         const formData = new FormData();
         filesToSend.forEach(f => formData.append('files', f));
         if (text) formData.append('content', text);
-        res = await fetch(postUrl, {
+        const res = await fetch(postUrl, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
+        if (data.response) {
+          const agentMsg = {
+            id: agentMsgId, role: 'agent', content: data.response,
+            time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          };
+          if (data.workspace) agentMsg.workspace = data.workspace;
+          if (data.approval_pending) {
+            agentMsg.approval_pending = true;
+            agentMsg.approval_id = data.approval_id;
+            agentMsg.tool_proposed = data.tool_proposed;
+            agentMsg.action_description = data.action_description;
+          }
+          setMessages(prev => [...prev, agentMsg]);
+        }
+        if (data.threadId && !activeThreadId) {
+          const newThread = { id: data.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          setThreads(prev => [newThread, ...prev]);
+          setActiveThreadId(data.threadId);
+        }
       } else {
-        res = await fetch(postUrl, {
+        // Text-only — use streaming SSE
+        let postUrl;
+        if (threadId) {
+          postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/stream`;
+        } else {
+          postUrl = `${API_BASE}/v1/chat/${agentId}/messages/stream`;
+        }
+
+        const res = await fetch(postUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ content: text }),
         });
-      }
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || `Server error (${res.status})`);
-      }
-      if (data.response) {
-        const agentMsg = {
-          id: Date.now() + 1,
-          role: 'agent',
-          content: data.response,
-          time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        };
-        if (data.workspace) agentMsg.workspace = data.workspace;
-        if (data.estimate) agentMsg.estimate = data.estimate;
-        if (data.email) agentMsg.email = data.email;
-        if (data.alert) agentMsg.alert = data.alert;
-        if (data.dataCard) agentMsg.dataCard = data.dataCard;
-        if (data.afterContent) agentMsg.afterContent = data.afterContent;
-        if (data.actions) agentMsg.actions = data.actions;
-        if (data.approval_pending) {
-          agentMsg.approval_pending = true;
-          agentMsg.approval_id = data.approval_id;
-          agentMsg.tool_proposed = data.tool_proposed;
-          agentMsg.action_description = data.action_description;
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Server error (${res.status})`);
         }
-        if (data.audio_url) {
-          agentMsg.audio_url = data.audio_url;
-          if (autoVoiceRef.current) {
-            try { new Audio(data.audio_url).play(); } catch {}
+
+        // Add empty agent message to stream into
+        setMessages(prev => [...prev, {
+          id: agentMsgId, role: 'agent', content: '',
+          time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        }]);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const event = JSON.parse(line.slice(6));
+              if (event.type === 'text') {
+                setMessages(prev => prev.map(m =>
+                  m.id === agentMsgId ? { ...m, content: m.content + event.text } : m
+                ));
+              } else if (event.type === 'thread' && event.threadId && !activeThreadId) {
+                const newThread = { id: event.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+                setThreads(prev => [newThread, ...prev]);
+                setActiveThreadId(event.threadId);
+              } else if (event.type === 'error') {
+                throw new Error(event.error);
+              }
+            } catch (parseErr) {
+              if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+            }
           }
         }
-        setMessages(prev => [...prev, agentMsg]);
       }
-      // If backend auto-created a thread, add it to sidebar
-      if (data.threadId && !activeThreadId) {
-        const newThread = { id: data.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        setThreads(prev => [newThread, ...prev]);
-        setActiveThreadId(data.threadId);
-      }
-      // Update thread title in sidebar if this was the first message
+
+      // Update thread title in sidebar
       if (activeThreadId) {
         setThreads(prev => prev.map(t =>
           t.id === activeThreadId && !t.title
@@ -2212,18 +2255,17 @@ export default function AgentChat({ agentId = 'estimating' }) {
         ));
       }
     } catch (err) {
-      // Show error in chat
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: Date.now() + 1,
-          role: 'agent',
+      setMessages(prev => {
+        const filtered = prev.filter(m => !(m.id === agentMsgId && !m.content));
+        return [...filtered, {
+          id: Date.now() + 2, role: 'agent',
           content: err?.message === 'Unauthorized'
             ? 'Session expired — please refresh the page and log in again.'
             : `Error: ${err?.message || 'Connection failed. Please try again.'}`,
           error: true,
           time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        }]);
-      }, 800);
+        }];
+      });
     } finally {
       setSending(false);
     }
