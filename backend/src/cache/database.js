@@ -1157,7 +1157,7 @@ function seedTenantData(targetDb, tenantId) {
 
   // Seed DACP admin user
   if (tenantId === 'dacp-construction-001') {
-    const dacpAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacpconstruction.com');
+    const dacpAdmin = targetDb.prepare('SELECT id FROM users WHERE id = ?').get('dacp-admin-001');
     if (!dacpAdmin) {
       const salt = bcryptPkg.genSaltSync(12);
       const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(24).toString('base64'), salt);
