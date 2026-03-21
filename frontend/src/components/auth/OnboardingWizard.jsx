@@ -336,6 +336,7 @@ export default function OnboardingWizard({ onComplete }) {
 
     const config = isConstruction
       ? {
+          industry: 'construction',
           companyName,
           specialties,
           serviceArea,
@@ -347,6 +348,7 @@ export default function OnboardingWizard({ onComplete }) {
           ),
         }
       : {
+          industry: isVenture ? 'venture' : undefined,
           energy: {
             iso: sources.energy?.iso,
             settlementNode: sources.energy?.node,
