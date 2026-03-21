@@ -183,6 +183,18 @@ table {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   50% { transform: translateY(-1px) rotate(1deg); }
 }
+@keyframes person-arm-swing {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(15deg); }
+}
+@keyframes person-arm-swing-alt {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-15deg); }
+}
+@keyframes person-leg-alt {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
 
 /* Chart container */
 .chart-container {

@@ -24,7 +24,7 @@ export default function ContactsTab() {
           <input
             value={search}
             onChange={e => handleSearch(e.target.value)}
-            className="flex-1 px-[14px] py-2 border-[1.5px] border-terminal-border rounded-[10px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none focus:border-[#1a6b3c] focus:bg-white transition-colors placeholder:text-[#c5c5bc]"
+            className="flex-1 px-[14px] py-2 border-[1.5px] border-terminal-border rounded-[10px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none focus:border-ui-accent focus:bg-white transition-colors placeholder:text-[#c5c5bc]"
             placeholder="Search by name, email, title, company..."
           />
           <span className="text-[11px] text-terminal-muted whitespace-nowrap">{contacts.length} results</span>
@@ -56,7 +56,7 @@ export default function ContactsTab() {
             <div className="text-xs text-[#6b6b65]">{c.region || '—'}</div>
             <div>
               {c.mx_valid ? (
-                <span className="text-[10px] font-semibold px-[9px] py-[3px] rounded-md bg-[#edf7f0] text-[#1a6b3c]">Valid</span>
+                <span className="text-[10px] font-semibold px-[9px] py-[3px] rounded-md bg-ui-accent-light text-ui-accent">Valid</span>
               ) : (
                 <span className="text-[10px] font-semibold px-[9px] py-[3px] rounded-md bg-[#f5f4f0] text-[#9a9a92]">—</span>
               )}

@@ -30,7 +30,7 @@ export default function LeadEngineWorkspace() {
       {/* Tab bar */}
       <div className="flex items-center gap-1 px-5 py-2 border-b border-terminal-border bg-terminal-panel shrink-0">
         <div className="flex items-center gap-1.5 mr-4">
-          <div className="w-6 h-6 rounded-lg bg-[#1a6b3c] flex items-center justify-center text-[11px] font-bold text-white">L</div>
+          <div className="w-6 h-6 rounded-lg bg-ui-accent flex items-center justify-center text-[11px] font-bold text-white">L</div>
           <span className="text-[13px] font-semibold text-terminal-text">Lead Engine</span>
         </div>
         {TABS.map(tab => (
@@ -39,7 +39,7 @@ export default function LeadEngineWorkspace() {
             onClick={() => setActiveTab(tab.id)}
             className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
               activeTab === tab.id
-                ? 'bg-[#1a6b3c] text-white'
+                ? 'bg-ui-accent text-white'
                 : 'text-terminal-muted hover:bg-[#f5f4f0] hover:text-terminal-text'
             }`}
           >

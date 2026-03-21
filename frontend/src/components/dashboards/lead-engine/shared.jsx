@@ -5,9 +5,9 @@ export const STAGE_CLS = {
   enriched: 'bg-[#f0f0ff] text-[#6366f1]',
   contacted: 'bg-[#eff6ff] text-[#2563eb]',
   responded: 'bg-[#fdf6e8] text-[#b8860b]',
-  meeting: 'bg-[#edf7f0] text-[#1a6b3c]',
+  meeting: 'bg-ui-accent-light text-ui-accent',
   qualified: 'bg-[#f3f0ff] text-[#7c3aed]',
-  closed: 'bg-[#edf7f0] text-[#1a6b3c]',
+  closed: 'bg-ui-accent-light text-ui-accent',
   declined: 'bg-[#fef2f2] text-[#c0392b]',
 };
 
@@ -15,12 +15,12 @@ export const OUTREACH_STATUS_CLS = {
   draft: 'bg-[#f5f4f0] text-[#9a9a92]',
   pending_approval: 'bg-[#fdf6e8] text-[#b8860b]',
   approved: 'bg-[#eff6ff] text-[#2563eb]',
-  sent: 'bg-[#edf7f0] text-[#1a6b3c]',
+  sent: 'bg-ui-accent-light text-ui-accent',
   bounced: 'bg-[#fef2f2] text-[#c0392b]',
   responded: 'bg-[#f3f0ff] text-[#7c3aed]',
 };
 
-export const SUB_CLS = { green: 'text-[#1a6b3c]', warn: 'text-[#b8860b]', danger: 'text-[#c0392b]', flat: 'text-terminal-muted' };
+export const SUB_CLS = { green: 'text-ui-accent', accent: 'text-ui-accent', warn: 'text-[#b8860b]', danger: 'text-[#c0392b]', flat: 'text-terminal-muted' };
 
 export function Card({ title, meta, children }) {
   return (
@@ -36,8 +36,8 @@ export function Card({ title, meta, children }) {
 
 export function KVRow({ label, value, cls = '' }) {
   const valStyle = {
-    accent: 'font-sans text-[#1a6b3c]',
-    green: 'text-[#1a6b3c]',
+    accent: 'font-sans text-ui-accent',
+    green: 'text-ui-accent',
     sans: 'font-sans text-terminal-text',
     muted: 'font-sans text-[#9a9a92]',
     '': 'text-terminal-text',

@@ -5,7 +5,7 @@
  * heading to meetings, and interacting with each other.
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../lib/hooks/useApi';
 import { useTenant } from '../../contexts/TenantContext';
 
@@ -85,6 +85,77 @@ function FloorTile({ x, y, label, highlighted }) {
   );
 }
 
+// ─── Person SVG Avatar ──────────────────────────────────────────────────────
+
+function PersonSVG({ color, isActive, isWalking, role }) {
+  const skinTone = '#f5deb3';
+  const hairColor = '#3d2b1f';
+  return (
+    <svg viewBox="0 0 60 80" width="48" height="64" className="block">
+      {/* Legs */}
+      <g style={isWalking ? { animation: 'person-legs 0.6s ease-in-out infinite' } : {}}>
+        <rect x="18" y="58" width="8" height="16" rx="3" fill={isActive ? color : `${color}99`} />
+        <rect x="34" y="58" width="8" height="16" rx="3" fill={isActive ? color : `${color}99`}
+          style={isWalking ? { animation: 'person-leg-alt 0.6s ease-in-out infinite' } : {}} />
+        {/* Shoes */}
+        <ellipse cx="22" cy="74" rx="5.5" ry="3" fill="#333" />
+        <ellipse cx="38" cy="74" rx="5.5" ry="3" fill="#333"
+          style={isWalking ? { animation: 'person-leg-alt 0.6s ease-in-out infinite' } : {}} />
+      </g>
+
+      {/* Body / torso */}
+      <rect x="14" y="32" width="32" height="28" rx="8" fill={isActive ? color : `${color}99`} />
+
+      {/* Arms */}
+      <g style={isWalking ? { animation: 'person-arms 0.6s ease-in-out infinite' } : {}}>
+        <rect x="6" y="34" width="8" height="20" rx="4" fill={isActive ? color : `${color}99`}
+          style={isWalking ? { transformOrigin: '10px 34px', animation: 'person-arm-swing 0.6s ease-in-out infinite' } : {}} />
+        <rect x="46" y="34" width="8" height="20" rx="4" fill={isActive ? color : `${color}99`}
+          style={isWalking ? { transformOrigin: '50px 34px', animation: 'person-arm-swing-alt 0.6s ease-in-out infinite' } : {}} />
+        {/* Hands */}
+        <circle cx="10" cy="54" r="3.5" fill={skinTone}
+          style={isWalking ? { animation: 'person-arm-swing 0.6s ease-in-out infinite' } : {}} />
+        <circle cx="50" cy="54" r="3.5" fill={skinTone}
+          style={isWalking ? { animation: 'person-arm-swing-alt 0.6s ease-in-out infinite' } : {}} />
+      </g>
+
+      {/* Role badge on torso */}
+      <circle cx="30" cy="44" r="8" fill="white" opacity="0.9" />
+      <text x="30" y="48" textAnchor="middle" fontSize="11" fontFamily="system-ui">{role.emoji}</text>
+
+      {/* Neck */}
+      <rect x="25" y="26" width="10" height="8" rx="3" fill={skinTone} />
+
+      {/* Head */}
+      <circle cx="30" cy="18" r="14" fill={skinTone} />
+
+      {/* Hair */}
+      <ellipse cx="30" cy="12" rx="14" ry="10" fill={hairColor} />
+      <rect x="16" y="8" width="28" height="8" rx="6" fill={hairColor} />
+
+      {/* Eyes */}
+      <circle cx="24" cy="18" r="2" fill="#333" />
+      <circle cx="36" cy="18" r="2" fill="#333" />
+      {/* Eye shine */}
+      <circle cx="24.8" cy="17.2" r="0.7" fill="white" />
+      <circle cx="36.8" cy="17.2" r="0.7" fill="white" />
+
+      {/* Mouth - smile if active */}
+      {isActive ? (
+        <path d="M25 23 Q30 27 35 23" fill="none" stroke="#333" strokeWidth="1.2" strokeLinecap="round" />
+      ) : (
+        <line x1="26" y1="24" x2="34" y2="24" stroke="#333" strokeWidth="1.2" strokeLinecap="round" />
+      )}
+
+      {/* Active glow */}
+      {isActive && (
+        <circle cx="30" cy="40" r="28" fill="none" stroke={color} strokeWidth="1.5" opacity="0.3"
+          style={{ animation: 'glow-ring 1.5s ease-in-out infinite' }} />
+      )}
+    </svg>
+  );
+}
+
 // ─── Walking Agent Character ────────────────────────────────────────────────
 
 function WalkingAgent({ agent, gridX, gridY, isWalking, onClick, selected }) {
@@ -97,8 +168,8 @@ function WalkingAgent({ agent, gridX, gridY, isWalking, onClick, selected }) {
     <div
       className="absolute cursor-pointer"
       style={{
-        left: `${px + 60}px`,
-        top: `${py - 10}px`,
+        left: `${px + 55}px`,
+        top: `${py - 30}px`,
         zIndex: Math.round((gridX + gridY) * 10) + 5,
         transition: isWalking ? 'left 2s ease-in-out, top 2s ease-in-out' : 'left 0.5s ease-out, top 0.5s ease-out',
       }}
@@ -121,40 +192,29 @@ function WalkingAgent({ agent, gridX, gridY, isWalking, onClick, selected }) {
           </div>
         )}
 
-        {/* Character body */}
-        <div className="relative">
-          {/* Shadow */}
+        {/* Person character */}
+        <div className={`relative ${selected ? 'drop-shadow-lg' : ''}`}>
+          {/* Shadow on ground */}
           <div
-            className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 rounded-full bg-black/10 blur-[2px]"
-            style={{ width: isWalking ? '44px' : '36px', height: isWalking ? '12px' : '8px', transition: 'all 0.3s' }}
+            className="absolute bottom-[-2px] left-1/2 -translate-x-1/2 rounded-full bg-black/15 blur-[3px]"
+            style={{ width: isWalking ? '40px' : '32px', height: isWalking ? '10px' : '6px', transition: 'all 0.3s' }}
           />
 
-          {/* Glow ring */}
-          {isActive && (
-            <div className="absolute inset-[-4px] rounded-2xl" style={{ animation: 'glow-ring 1.5s ease-in-out infinite', boxShadow: `0 0 12px ${role.color}40` }} />
+          {selected && (
+            <div className="absolute inset-[-3px] rounded-2xl border-2 border-[#1e3a5f] pointer-events-none" />
           )}
 
-          {/* Body */}
+          <PersonSVG color={role.color} isActive={isActive} isWalking={isWalking} role={role} />
+
+          {/* Status dot */}
           <div
-            className={`w-11 h-13 rounded-xl flex items-center justify-center shadow-lg ${selected ? 'ring-2 ring-[#1e3a5f]' : ''}`}
-            style={{
-              background: isActive
-                ? `linear-gradient(135deg, ${role.color}, ${role.color}dd)`
-                : `linear-gradient(135deg, ${role.color}99, ${role.color}77)`,
-              width: '44px', height: '52px',
-              transform: 'perspective(200px) rotateX(5deg)',
-            }}
-          >
-            <span className="text-lg">{role.emoji}</span>
-            <div
-              className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${status.pulse ? 'animate-pulse' : ''}`}
-              style={{ backgroundColor: status.dot }}
-            />
-          </div>
+            className={`absolute top-0 right-0 w-3 h-3 rounded-full border-2 border-white ${status.pulse ? 'animate-pulse' : ''}`}
+            style={{ backgroundColor: status.dot }}
+          />
         </div>
 
         {/* Name plate */}
-        <div className="mt-1 px-1.5 py-px bg-white/90 rounded-md shadow-sm border border-[#e0ddd8]">
+        <div className="mt-0.5 px-1.5 py-px bg-white/90 rounded-md shadow-sm border border-[#e0ddd8]">
           <p className="text-[8px] font-bold text-[#333] text-center whitespace-nowrap">{agent.name.replace(/ (Email|Chat|Meeting|Research) Agent/, '')}</p>
           <p className="text-[7px] text-center font-medium" style={{ color: status.dot }}>{isWalking ? 'Walking' : status.label}</p>
         </div>
@@ -199,8 +259,6 @@ export default function OfficeDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState(null);
-  const [agentPositions, setAgentPositions] = useState({}); // agentId -> { x, y, walking }
-  const moveTimers = useRef({});
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -236,68 +294,6 @@ export default function OfficeDashboard() {
   const activities = isSuperAdmin
     ? allActivities
     : allActivities.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === 'dacp');
-
-  // Initialize agent positions and start movement
-  useEffect(() => {
-    if (agents.length === 0) return;
-
-    // Assign initial positions
-    setAgentPositions(prev => {
-      const next = { ...prev };
-      agents.forEach((agent, i) => {
-        if (!next[agent.id]) {
-          const loc = OFFICE_LOCATIONS[i % OFFICE_LOCATIONS.length];
-          next[agent.id] = { x: loc.x, y: loc.y, walking: false, targetLoc: loc.label };
-        }
-      });
-      return next;
-    });
-
-    // Set up random movement for each agent
-    agents.forEach((agent) => {
-      if (moveTimers.current[agent.id]) return; // already has a timer
-
-      const scheduleMove = () => {
-        // Random delay between 4-12 seconds
-        const delay = 4000 + Math.random() * 8000;
-        moveTimers.current[agent.id] = setTimeout(() => {
-          // Pick a random destination
-          const dest = OFFICE_LOCATIONS[Math.floor(Math.random() * OFFICE_LOCATIONS.length)];
-
-          // Start walking
-          setAgentPositions(prev => ({
-            ...prev,
-            [agent.id]: { ...prev[agent.id], walking: true },
-          }));
-
-          // After a brief moment, move to new position
-          setTimeout(() => {
-            setAgentPositions(prev => ({
-              ...prev,
-              [agent.id]: { x: dest.x, y: dest.y, walking: true, targetLoc: dest.label },
-            }));
-          }, 100);
-
-          // Stop walking after arrival
-          setTimeout(() => {
-            setAgentPositions(prev => ({
-              ...prev,
-              [agent.id]: { ...prev[agent.id], walking: false },
-            }));
-          }, 2200);
-
-          scheduleMove(); // schedule next move
-        }, delay);
-      };
-
-      scheduleMove();
-    });
-
-    return () => {
-      Object.values(moveTimers.current).forEach(clearTimeout);
-      moveTimers.current = {};
-    };
-  }, [agents.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeCount = agents.filter(a => a.status !== 'idle').length;
 
@@ -347,17 +343,17 @@ export default function OfficeDashboard() {
                   <FloorTile key={loc.id} x={loc.x} y={loc.y} label={loc.label} />
                 ))}
 
-                {/* Walking agents */}
-                {agents.map(agent => {
-                  const pos = agentPositions[agent.id];
-                  if (!pos) return null;
+                {/* Agents at fixed desk positions */}
+                {agents.map((agent, i) => {
+                  const loc = OFFICE_LOCATIONS[i % OFFICE_LOCATIONS.length];
+                  const isActive = ['processing', 'running', 'transcribing', 'observing', 'analyzing'].includes(agent.status);
                   return (
                     <WalkingAgent
                       key={agent.id}
                       agent={agent}
-                      gridX={pos.x}
-                      gridY={pos.y}
-                      isWalking={pos.walking}
+                      gridX={loc.x}
+                      gridY={loc.y}
+                      isWalking={false}
                       selected={selectedAgent?.id === agent.id}
                       onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
                     />
@@ -397,12 +393,6 @@ export default function OfficeDashboard() {
                       <span className="font-medium text-terminal-text">{(STATUS_STYLES[selectedAgent.status] || STATUS_STYLES.idle).label}</span>
                     </div>
                   </div>
-                  {agentPositions[selectedAgent.id] && (
-                    <div className="flex justify-between text-[12px]">
-                      <span className="text-terminal-muted">Location</span>
-                      <span className="font-medium text-terminal-text">{agentPositions[selectedAgent.id].targetLoc}</span>
-                    </div>
-                  )}
                   {selectedAgent.currentTask && (
                     <div className="flex justify-between text-[12px]">
                       <span className="text-terminal-muted">Task</span>

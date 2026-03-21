@@ -24,10 +24,117 @@ const DEMO_OUTREACH = [
   { id: 'lo-s-002', venue_name: 'GridScale Partners', contact_name: 'Mark Liu', contact_email: 'mliu@gridscalepartners.com', email_type: 'initial', subject: 'Hashrate co-location for underperforming wind assets', status: 'sent', sent_at: '2026-03-03T10:22:00', responded_at: '2026-03-05T14:18:00', body: 'Hi Mark,\n\nGridScale\'s PJM wind portfolio caught our attention...' },
 ];
 
+function LeadDetailModal({ lead, onClose }) {
+  if (!lead) return null;
+  const name = lead.venue_name || lead.company_name || '—';
+  const contacts = lead.contacts || [];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[640px] max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()} style={{ animation: 'modalIn 0.2s ease-out' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#f0eeea]">
+          <div>
+            <h2 className="text-lg font-bold text-terminal-text">{name}</h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`text-[10px] font-semibold px-2 py-[2px] rounded-md uppercase ${STAGE_CLS[lead.status] || STAGE_CLS.new}`}>{lead.status}</span>
+              {lead.source && <span className="text-[11px] text-[#9a9a92]">{lead.source}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-terminal-muted hover:bg-[#f5f4f0] transition-colors text-lg">&times;</button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto p-6" style={{ maxHeight: 'calc(80vh - 70px)' }}>
+          {/* Company info grid */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-5">
+            {lead.hq_location && <InfoField label="HQ Location" value={lead.hq_location} />}
+            {lead.size_scale && <InfoField label="Size / Scale" value={lead.size_scale} />}
+            {(lead.industry || lead.region) && <InfoField label="Industry" value={lead.industry || '—'} />}
+            {lead.region && <InfoField label="Region" value={lead.region} />}
+            {lead.website && (
+              <div className="col-span-2">
+                <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] mb-0.5">Website</div>
+                <a href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`} target="_blank" rel="noopener noreferrer" className="text-[13px] text-ui-accent hover:opacity-70 transition-opacity break-all">{lead.website}</a>
+              </div>
+            )}
+          </div>
+
+          {/* Why Prospect */}
+          {lead.why_prospect && (
+            <div className="mb-5">
+              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] mb-1.5">Why This Prospect</div>
+              <div className="text-[13px] text-terminal-text leading-relaxed bg-ui-accent-light rounded-xl p-4 border border-ui-accent-light">{lead.why_prospect}</div>
+            </div>
+          )}
+
+          {/* Notes / Description */}
+          {lead.notes && (
+            <div className="mb-5">
+              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] mb-1.5">Description</div>
+              <div className="text-[13px] text-terminal-text leading-relaxed">{lead.notes}</div>
+            </div>
+          )}
+
+          {/* Contacts */}
+          {contacts.length > 0 && (
+            <div>
+              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] mb-2">Contacts ({contacts.length})</div>
+              <div className="space-y-2">
+                {contacts.map((c, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-[#f5f4f0] border border-[#f0eeea]">
+                    <div className="w-9 h-9 rounded-full bg-ui-accent flex items-center justify-center text-white text-[13px] font-bold shrink-0">{(c.name || '?')[0]}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-terminal-text">{c.name || '—'}</div>
+                      {c.title && <div className="text-[11px] text-[#6b6b65]">{c.title}</div>}
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                        {c.email && <a href={`mailto:${c.email}`} className="text-[12px] text-ui-accent hover:opacity-70">{c.email}</a>}
+                        {c.phone && <span className="text-[12px] text-[#6b6b65]">{c.phone}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {contacts.length === 0 && !lead.contact_email && (
+            <div className="text-center py-4 text-sm text-terminal-muted">No contacts found for this lead yet</div>
+          )}
+
+          {/* Single contact fallback (if no contacts array but has contact fields) */}
+          {contacts.length === 0 && lead.contact_email && (
+            <div>
+              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] mb-2">Contact</div>
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-[#f5f4f0] border border-[#f0eeea]">
+                <div className="w-9 h-9 rounded-full bg-ui-accent flex items-center justify-center text-white text-[13px] font-bold shrink-0">{(lead.contact_name || '?')[0]}</div>
+                <div>
+                  <div className="text-[13px] font-semibold text-terminal-text">{lead.contact_name || '—'}</div>
+                  {lead.contact_title && <div className="text-[11px] text-[#6b6b65]">{lead.contact_title}</div>}
+                  <a href={`mailto:${lead.contact_email}`} className="text-[12px] text-ui-accent hover:opacity-70">{lead.contact_email}</a>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoField({ label, value }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] mb-0.5">{label}</div>
+      <div className="text-[13px] text-terminal-text">{value}</div>
+    </div>
+  );
+}
+
 export default function PipelineTab() {
   const [filter, setFilter] = useState('all');
   const [leadSearch, setLeadSearch] = useState('');
   const [selectedLeadId, setSelectedLeadId] = useState(null);
+  const [viewingLead, setViewingLead] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
   const searchRef = useRef(null);
 
@@ -75,7 +182,7 @@ export default function PipelineTab() {
     { label: 'New', count: pipelineCounts.new, gradient: 'from-[#9a9a92] to-[#b5b5ad]' },
     { label: 'Contacted', count: pipelineCounts.contacted, gradient: 'from-[#2563eb] to-[#3b82f6]' },
     { label: 'Responded', count: pipelineCounts.responded, gradient: 'from-[#b8860b] to-[#d4a00a]' },
-    { label: 'Meeting', count: pipelineCounts.meeting, gradient: 'from-[#1a6b3c] to-[#22884d]' },
+    { label: 'Meeting', count: pipelineCounts.meeting, useAccent: true },
     { label: 'Qualified', count: pipelineCounts.qualified, gradient: 'from-[#7c3aed] to-[#8b5cf6]' },
   ];
 
@@ -137,7 +244,7 @@ export default function PipelineTab() {
           <button onClick={() => handleAction('generate-outreach')} disabled={actionLoading === 'generate-outreach'} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-panel text-terminal-text border border-terminal-border hover:bg-[#f5f4f0] transition-all disabled:opacity-50">
             {actionLoading === 'generate-outreach' ? 'Generating...' : 'Generate Outreach'}
           </button>
-          <button onClick={() => handleAction('run-cycle')} disabled={actionLoading === 'run-cycle'} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all disabled:opacity-50">
+          <button onClick={() => handleAction('run-cycle')} disabled={actionLoading === 'run-cycle'} className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-ui-accent text-white border border-ui-accent hover:opacity-90 transition-all disabled:opacity-50">
             {actionLoading === 'run-cycle' ? 'Running...' : 'Full Cycle'}
           </button>
           {stats.sheetUrl && (
@@ -155,7 +262,7 @@ export default function PipelineTab() {
       {/* Stats ticker */}
       <div className="flex gap-[1px] bg-terminal-border border border-terminal-border rounded-[14px] overflow-hidden mb-4">
         {STAT_CELLS.map((s, i) => (
-          <div key={i} className="bg-terminal-panel p-[14px_18px] flex-1" style={s.highlight ? { background: 'linear-gradient(135deg, var(--t-panel, #fff), #edf7f0)' } : undefined}>
+          <div key={i} className="bg-terminal-panel p-[14px_18px] flex-1" style={s.highlight ? { background: 'linear-gradient(135deg, var(--t-panel, #fff), var(--t-ui-accent-bg))' } : undefined}>
             <div className="text-[9px] font-bold text-terminal-muted uppercase tracking-[1px] mb-[3px]">{s.label}</div>
             <div className="text-xl font-bold tabular-nums font-mono leading-none text-terminal-text">
               {s.val}{s.unit && <span className="text-[11px] font-medium text-terminal-muted">{s.unit}</span>}
@@ -175,7 +282,7 @@ export default function PipelineTab() {
                 <div key={i} className="flex items-center gap-3">
                   <div className="text-xs font-medium text-[#6b6b65] w-[90px] text-right shrink-0">{f.label}</div>
                   <div className="flex-1 h-7 bg-[#f5f4f0] rounded-md overflow-hidden">
-                    <div className={`h-full rounded-md bg-gradient-to-r ${f.gradient} flex items-center pl-[10px]`} style={{ width: `${pct}%` }}>
+                    <div className={`h-full rounded-md flex items-center pl-[10px] ${f.gradient ? `bg-gradient-to-r ${f.gradient}` : 'bg-ui-accent'}`} style={{ width: `${pct}%` }}>
                       {pct > 15 && <span className="text-[11px] font-bold text-white whitespace-nowrap">{f.count}</span>}
                     </div>
                   </div>
@@ -210,7 +317,7 @@ export default function PipelineTab() {
       <div className="grid grid-cols-1 lg:grid-cols-[5fr_3fr] gap-4">
         <Card title="Lead Database" meta={`${stats.totalLeads} leads`}>
           <div className="flex items-center gap-[10px] px-[18px] py-3 border-b border-[#f0eeea]">
-            <input ref={searchRef} value={leadSearch} onChange={e => setLeadSearch(e.target.value)} className="flex-1 px-[14px] py-2 border-[1.5px] border-terminal-border rounded-[10px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none focus:border-[#1a6b3c] focus:bg-white transition-colors placeholder:text-[#c5c5bc]" placeholder="Search by name, industry, region..." />
+            <input ref={searchRef} value={leadSearch} onChange={e => setLeadSearch(e.target.value)} className="flex-1 px-[14px] py-2 border-[1.5px] border-terminal-border rounded-[10px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none focus:border-ui-accent focus:bg-white transition-colors placeholder:text-[#c5c5bc]" placeholder="Search by name, industry, region..." />
             <span className="text-[11px] text-terminal-muted whitespace-nowrap">{filteredLeads.length} leads</span>
           </div>
           <div className="grid px-[18px] py-[10px] text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] border-b border-terminal-border" style={{ gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 80px' }}>
@@ -220,9 +327,9 @@ export default function PipelineTab() {
             <div className="px-[18px] py-6 text-center text-sm text-terminal-muted">No leads match your search.</div>
           )}
           {filteredLeads.map(l => (
-            <div key={l.id} onClick={() => setSelectedLeadId(l.id)} className={`grid px-[18px] py-[12px] border-b border-[#f0eeea] last:border-b-0 items-center text-[13px] hover:bg-[#f5f4f0] transition-colors cursor-pointer ${selectedLeadId === l.id ? 'bg-[#edf7f0]' : ''} ${l.status === 'responded' ? 'border-l-[3px] border-l-[#b8860b]' : ''}`} style={{ gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 80px' }}>
+            <div key={l.id} onClick={() => setSelectedLeadId(l.id)} className={`grid px-[18px] py-[12px] border-b border-[#f0eeea] last:border-b-0 items-center text-[13px] hover:bg-[#f5f4f0] transition-colors cursor-pointer ${selectedLeadId === l.id ? 'bg-ui-accent-light' : ''} ${l.status === 'responded' ? 'border-l-[3px] border-l-[#b8860b]' : ''}`} style={{ gridTemplateColumns: '2.5fr 1.5fr 1fr 1fr 80px' }}>
               <div>
-                <div className="font-semibold text-terminal-text">{l.venue_name}</div>
+                <div className="font-semibold text-terminal-text">{l.venue_name || l.company_name}</div>
                 <div className="text-[11px] text-[#9a9a92]">{l.contactCount || 0} contact{l.contactCount !== 1 ? 's' : ''}</div>
               </div>
               <div className="text-xs text-[#6b6b65]">{l.industry || '—'}</div>
@@ -231,7 +338,7 @@ export default function PipelineTab() {
                 <span className={`text-[10px] font-semibold px-[9px] py-[3px] rounded-md uppercase tracking-[0.3px] ${STAGE_CLS[l.status] || STAGE_CLS.new}`}>{l.status}</span>
               </div>
               <div>
-                <span className="text-[11px] font-semibold text-[#1a6b3c] hover:opacity-70 transition-opacity">View</span>
+                <button onClick={(e) => { e.stopPropagation(); setViewingLead(l); }} className="text-[11px] font-semibold text-ui-accent hover:opacity-70 transition-opacity">View</button>
               </div>
             </div>
           ))}
@@ -245,7 +352,7 @@ export default function PipelineTab() {
               </div>
             )}
             {selectedOutreach.map((msg, i) => (
-              <div key={i} className={`border rounded-[10px] p-[14px_16px] mb-[10px] last:mb-0 ${msg.status === 'sent' ? 'border-[#f0eeea] border-l-[3px] border-l-[#1a6b3c] bg-terminal-panel' : msg.status === 'draft' ? 'border-dashed border-[#c5c5bc] border-l-[3px] border-l-[#c5c5bc] bg-[#f5f4f0]' : 'border-[#f0eeea]'}`}>
+              <div key={i} className={`border rounded-[10px] p-[14px_16px] mb-[10px] last:mb-0 ${msg.status === 'sent' ? 'border-[#f0eeea] border-l-[3px] border-l-ui-accent bg-terminal-panel' : msg.status === 'draft' ? 'border-dashed border-[#c5c5bc] border-l-[3px] border-l-[#c5c5bc] bg-[#f5f4f0]' : 'border-[#f0eeea]'}`}>
                 <div className="flex items-center justify-between mb-[2px]">
                   <div className="text-xs font-semibold text-terminal-text">
                     {msg.status === 'draft' ? 'Draft — Pending Approval' : `To: ${msg.contact_name || msg.contact_email}`}
@@ -261,7 +368,7 @@ export default function PipelineTab() {
                 <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-line">{msg.body}</div>
                 {msg.status === 'draft' && (
                   <div className="flex gap-2 mt-[10px]">
-                    <button onClick={() => handleApprove(msg.id)} className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-[#1a6b3c] text-white border border-[#1a6b3c] hover:bg-[#22884d] transition-colors">Approve & Send</button>
+                    <button onClick={() => handleApprove(msg.id)} className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-ui-accent text-white border border-ui-accent hover:opacity-90 transition-colors">Approve & Send</button>
                     <button className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-terminal-panel text-[#6b6b65] border border-terminal-border hover:bg-[#f5f4f0] transition-colors">Edit Draft</button>
                   </div>
                 )}
@@ -270,6 +377,9 @@ export default function PipelineTab() {
           </div>
         </Card>
       </div>
+
+      {/* Lead Detail Modal */}
+      {viewingLead && <LeadDetailModal lead={viewingLead} onClose={() => setViewingLead(null)} />}
     </div>
   );
 }

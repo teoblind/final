@@ -35,7 +35,7 @@ export default function ConfigTab() {
       {/* Config */}
       {!editing ? (
         <Card title="Agent Configuration" meta={
-          <button onClick={() => setEditing(true)} className="text-[11px] font-semibold text-[#1a6b3c] hover:opacity-70">Edit</button>
+          <button onClick={() => setEditing(true)} className="text-[11px] font-semibold text-ui-accent hover:opacity-70">Edit</button>
         }>
           <KVRow label="Mode" value={config.mode === 'autonomous' ? 'Autonomous' : 'Copilot'} cls="accent" />
           <KVRow label="Status" value={config.enabled ? 'Active' : 'Paused'} cls={config.enabled ? 'green' : 'muted'} />
@@ -103,7 +103,7 @@ function ConfigEditor({ config, onSave, onClose }) {
           </div>
           <div>
             <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] block mb-1">Status</label>
-            <button onClick={() => setEnabled(!enabled)} className={`px-4 py-2 rounded-lg text-[13px] font-semibold border transition-all ${enabled ? 'bg-[#edf7f0] text-[#1a6b3c] border-[#1a6b3c]/30' : 'bg-[#f5f4f0] text-[#9a9a92] border-terminal-border'}`}>
+            <button onClick={() => setEnabled(!enabled)} className={`px-4 py-2 rounded-lg text-[13px] font-semibold border transition-all ${enabled ? 'bg-ui-accent-light text-ui-accent border-ui-accent-light' : 'bg-[#f5f4f0] text-[#9a9a92] border-terminal-border'}`}>
               {enabled ? 'Active' : 'Paused'}
             </button>
           </div>
@@ -138,7 +138,7 @@ function ConfigEditor({ config, onSave, onClose }) {
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-terminal-panel text-[#6b6b65] border border-terminal-border hover:bg-[#f5f4f0] transition-colors">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#1a6b3c] text-white border border-[#1a6b3c] hover:bg-[#22884d] transition-colors">Save Configuration</button>
+          <button onClick={handleSave} className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-ui-accent text-white border border-ui-accent hover:opacity-90 transition-colors">Save Configuration</button>
         </div>
       </div>
     </Card>

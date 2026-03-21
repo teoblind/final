@@ -234,27 +234,53 @@ router.get('/calendar/events', async (req, res) => {
     const now = new Date();
     const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const result = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin: now.toISOString(),
-      timeMax: weekFromNow.toISOString(),
-      maxResults: 15,
-      singleEvents: true,
-      orderBy: 'startTime',
-    });
+    // Fetch all visible calendars (agent's own + shared calendars)
+    let calendarIds = ['primary'];
+    try {
+      const calList = await calendar.calendarList.list();
+      calendarIds = (calList.data.items || []).map(c => c.id);
+      if (calendarIds.length === 0) calendarIds = ['primary'];
+    } catch { /* fallback to primary only */ }
 
-    const events = (result.data.items || []).map(e => ({
-      id: e.id,
-      title: e.summary || '(No title)',
-      start: e.start?.dateTime || e.start?.date,
-      end: e.end?.dateTime || e.end?.date,
-      location: e.location || null,
-      meetLink: e.hangoutLink || null,
-      attendees: (e.attendees || []).length,
-      allDay: !e.start?.dateTime,
-    }));
+    // Fetch events from all calendars in parallel
+    const allResults = await Promise.allSettled(
+      calendarIds.map(calId =>
+        calendar.events.list({
+          calendarId: calId,
+          timeMin: now.toISOString(),
+          timeMax: weekFromNow.toISOString(),
+          maxResults: 15,
+          singleEvents: true,
+          orderBy: 'startTime',
+        })
+      )
+    );
 
-    res.json({ events, configured: true });
+    // Merge and deduplicate events by ID
+    const seen = new Set();
+    const events = [];
+    for (const result of allResults) {
+      if (result.status !== 'fulfilled') continue;
+      for (const e of (result.value.data.items || [])) {
+        if (seen.has(e.id)) continue;
+        seen.add(e.id);
+        events.push({
+          id: e.id,
+          title: e.summary || '(No title)',
+          start: e.start?.dateTime || e.start?.date,
+          end: e.end?.dateTime || e.end?.date,
+          location: e.location || null,
+          meetLink: e.hangoutLink || null,
+          attendees: (e.attendees || []).length,
+          allDay: !e.start?.dateTime,
+        });
+      }
+    }
+
+    // Sort by start time
+    events.sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    res.json({ events: events.slice(0, 20), configured: true });
   } catch (error) {
     console.error('Calendar events error:', error);
     res.json({ events: [], configured: false, error: error.message });

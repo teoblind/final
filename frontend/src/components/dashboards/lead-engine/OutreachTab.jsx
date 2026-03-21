@@ -51,7 +51,7 @@ export default function OutreachTab() {
       {/* Stats ticker */}
       <div className="flex gap-[1px] bg-terminal-border border border-terminal-border rounded-[14px] overflow-hidden mb-4">
         {STAT_CELLS.map((s, i) => (
-          <div key={i} className="bg-terminal-panel p-[14px_18px] flex-1" style={s.highlight ? { background: 'linear-gradient(135deg, var(--t-panel, #fff), #edf7f0)' } : undefined}>
+          <div key={i} className="bg-terminal-panel p-[14px_18px] flex-1" style={s.highlight ? { background: 'linear-gradient(135deg, var(--t-panel, #fff), var(--t-ui-accent-bg))' } : undefined}>
             <div className="text-[9px] font-bold text-terminal-muted uppercase tracking-[1px] mb-[3px]">{s.label}</div>
             <div className="text-xl font-bold tabular-nums font-mono leading-none text-terminal-text">
               {s.val}{s.unit && <span className="text-[11px] font-medium text-terminal-muted">{s.unit}</span>}
@@ -71,7 +71,7 @@ export default function OutreachTab() {
             <div className="px-[18px] py-6 text-center text-sm text-terminal-muted">No outreach yet</div>
           )}
           {outreach.slice(0, 20).map((o, i) => (
-            <div key={i} onClick={() => setSelectedOutreachId(o.id)} className={`grid px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 items-center text-[13px] hover:bg-[#f5f4f0] transition-colors cursor-pointer ${selectedOutreachId === o.id ? 'bg-[#edf7f0]' : ''}`} style={{ gridTemplateColumns: '2fr 1.5fr 1fr 1fr 100px' }}>
+            <div key={i} onClick={() => setSelectedOutreachId(o.id)} className={`grid px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 items-center text-[13px] hover:bg-[#f5f4f0] transition-colors cursor-pointer ${selectedOutreachId === o.id ? 'bg-ui-accent-light' : ''}`} style={{ gridTemplateColumns: '2fr 1.5fr 1fr 1fr 100px' }}>
               <div>
                 <div className="font-semibold text-terminal-text">{o.contact_name || '—'}</div>
                 <div className="text-[11px] text-[#9a9a92]">{o.venue_name}</div>
@@ -93,7 +93,7 @@ export default function OutreachTab() {
               <div className="text-center py-8 text-sm text-terminal-muted">Select an email to view</div>
             )}
             {selectedEmail && (
-              <div className={`border rounded-[10px] p-[14px_16px] ${selectedEmail.status === 'sent' ? 'border-[#f0eeea] border-l-[3px] border-l-[#1a6b3c] bg-terminal-panel' : selectedEmail.status === 'draft' ? 'border-dashed border-[#c5c5bc] border-l-[3px] border-l-[#c5c5bc] bg-[#f5f4f0]' : 'border-[#f0eeea]'}`}>
+              <div className={`border rounded-[10px] p-[14px_16px] ${selectedEmail.status === 'sent' ? 'border-[#f0eeea] border-l-[3px] border-l-ui-accent bg-terminal-panel' : selectedEmail.status === 'draft' ? 'border-dashed border-[#c5c5bc] border-l-[3px] border-l-[#c5c5bc] bg-[#f5f4f0]' : 'border-[#f0eeea]'}`}>
                 <div className="flex items-center justify-between mb-[2px]">
                   <div className="text-xs font-semibold text-terminal-text">
                     {selectedEmail.status === 'draft' ? 'Draft — Pending Approval' : `To: ${selectedEmail.contact_name || selectedEmail.contact_email}`}
@@ -109,7 +109,7 @@ export default function OutreachTab() {
                 <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-line">{selectedEmail.body}</div>
                 {selectedEmail.status === 'draft' && (
                   <div className="flex gap-2 mt-[10px]">
-                    <button onClick={() => handleApprove(selectedEmail.id)} className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-[#1a6b3c] text-white border border-[#1a6b3c] hover:bg-[#22884d] transition-colors">Approve & Send</button>
+                    <button onClick={() => handleApprove(selectedEmail.id)} className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-ui-accent text-white border border-ui-accent hover:opacity-90 transition-colors">Approve & Send</button>
                     <button className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-terminal-panel text-[#6b6b65] border border-terminal-border hover:bg-[#f5f4f0] transition-colors">Edit Draft</button>
                     <button className="text-[11px] font-semibold px-[14px] py-[5px] rounded-lg bg-terminal-panel text-[#6b6b65] border border-terminal-border hover:bg-[#f5f4f0] transition-colors">Dismiss</button>
                   </div>
@@ -171,7 +171,7 @@ export default function OutreachTab() {
               <div key={i} className="flex items-center gap-3 px-[18px] py-[10px] border-b border-[#f0eeea] last:border-b-0">
                 <div className="text-[13px] font-medium text-terminal-text w-[80px] shrink-0">{region}</div>
                 <div className="flex-1 h-2 bg-[#f5f4f0] rounded overflow-hidden">
-                  <div className="h-full rounded bg-[#1a6b3c]" style={{ width: `${(count / geoMax) * 100}%` }} />
+                  <div className="h-full rounded bg-ui-accent" style={{ width: `${(count / geoMax) * 100}%` }} />
                 </div>
                 <div className="font-mono text-xs font-semibold text-terminal-text min-w-[30px] text-right">{count}</div>
                 <div className="font-mono text-[11px] text-[#9a9a92] min-w-[36px] text-right">{leads.length > 0 ? `${((count / leads.length) * 100).toFixed(1)}%` : '—'}</div>
