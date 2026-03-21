@@ -2358,6 +2358,13 @@ export default function AgentChat({ agentId = 'estimating' }) {
             }
           }
         }
+
+        // Safeguard: if stream ended with empty content, show fallback
+        setMessages(prev => prev.map(m =>
+          m.id === agentMsgId && !m.content?.trim()
+            ? { ...m, content: 'No response received. Please try again.' }
+            : m
+        ));
       }
 
       // Update thread title in sidebar

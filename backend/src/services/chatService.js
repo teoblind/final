@@ -3097,7 +3097,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     content: row.content,
   }));
 
-  // Build system prompt (same as chat() but without tool addons for speed)
+  // Build system prompt — must match chat() so agents have full context when streaming
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
   const knowledgeContext = buildKnowledgeContext(tenantId, userContent);
 
@@ -3105,11 +3105,26 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
   const HELP_MODE_GUARD = options.helpMode ? `\n\nCRITICAL — HELP ASSISTANT MODE:\nYou are the Coppice Assistant, a product support chatbot embedded in the dashboard.\n- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.\n- NEVER mention Sangha, Spencer, Mihir, Colin, Bitcoin mining, renewable energy, or any non-construction topics.\n- NEVER mention Zhan Capital, Volt Charging, or any other Coppice tenant.\n- NEVER mention the name "Teo" or any Coppice internal team member.\n- If asked about contacting support, tell them to click "Send a message to admin" at the bottom of this chat.\n- Keep answers helpful, concise, and focused on the product features available in their dashboard.\n- You can help with: estimating, bid requests, pricing table, job tracking, field reports, document generation, and agent tools.` : '';
 
-  // For help mode: lightweight prompt, no tools, Haiku model
-  // For agents: full prompt with DACP addon, no tools (streaming doesn't support tool use)
+  // Include same addons as chat() so streaming agents have full capability context
+  const leAgents = ['sangha', 'hivemind', 'email', 'lead-engine', 'zhan'];
+  const leadEngineAddon = leAgents.includes(agentId) ? LEAD_ENGINE_PROMPT_ADDON : '';
+  const hsAgents = ['sangha', 'hivemind'];
+  const hubspotAddon = (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) ? HUBSPOT_PROMPT_ADDON : '';
+  const webAddon = WEB_TOOLS_PROMPT_ADDON;
+  const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
+  const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
+  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan'];
+  const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
+  const esAgents = ['sangha', 'hivemind', 'zhan'];
+  const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email'];
+  const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   const dacpPromptAgents = ['hivemind', 'estimating'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + dacpAddon + knowledgeContext;
+  const gwsAgents = ['hivemind', 'sangha', 'zhan'];
+  const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
+
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';
@@ -3139,6 +3154,13 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
     const finalMessage = await stream.finalMessage();
 
+    // If model produced no text (rare), send a fallback so the frontend isn't empty
+    if (!fullText.trim()) {
+      const fallback = 'I wasn\'t able to generate a response. Please try rephrasing your question.';
+      onChunk(fallback);
+      fullText = fallback;
+    }
+
     saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
       model: finalMessage.model,
       input_tokens: finalMessage.usage?.input_tokens,
@@ -3149,7 +3171,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
     return { response: fullText };
   } catch (error) {
-    console.error(`ChatStream error (agent=${agentId}):`, error.message);
+    console.error(`ChatStream error (agent=${agentId}, tenant=${tenantId}):`, error.message, error.stack?.split('\n').slice(0, 3).join(' | '));
     saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
     throw error;
   }
