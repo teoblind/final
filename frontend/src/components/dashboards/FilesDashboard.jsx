@@ -1935,113 +1935,9 @@ function ReportViewerModal({ file, onClose }) {
   );
 }
 
-// ─── Demo Data ──────────────────────────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────────────────────
 
-const MINING_FOLDERS = {
-  'Reports': {
-    path: '/Sangha/Reports/',
-    files: [
-      { name: 'Week 10 Operations Report', type: 'doc', owner: 'Workspace Agent', modified: 'Mar 7, 2026', agent: true },
-      { name: 'Daily Curtailment Summary — Mar 6', type: 'doc', owner: 'Workspace Agent', modified: 'Mar 6, 2026', agent: true },
-      { name: 'February P&L Review', type: 'sheet', owner: 'Spencer Marr', modified: 'Mar 3, 2026', agent: false },
-      { name: 'Q1 Insurance Progress', type: 'doc', owner: 'Spencer Marr', modified: 'Feb 28, 2026', agent: false },
-    ],
-  },
-  'Presentations': {
-    path: '/Sangha/Presentations/',
-    files: [
-      { name: 'Weekly Executive Briefing — W10', type: 'slides', owner: 'Workspace Agent', modified: 'Mar 7, 2026', agent: true },
-      { name: 'Total Energies Meeting Deck', type: 'slides', owner: 'Spencer Marr', modified: 'Mar 5, 2026', agent: false },
-      { name: 'Investor Update — February', type: 'slides', owner: 'Workspace Agent', modified: 'Mar 1, 2026', agent: true },
-    ],
-  },
-  'Deals': {
-    path: '/Sangha/Deals/',
-    files: [
-      { name: 'SunPeak Energy — Prospect Brief', type: 'doc', owner: 'Workspace Agent', modified: 'Mar 6, 2026', agent: true },
-      { name: 'GridScale Partners — Term Sheet Draft', type: 'doc', owner: 'Spencer Marr', modified: 'Mar 4, 2026', agent: false },
-      { name: 'Lead Pipeline Tracker', type: 'sheet', owner: 'Workspace Agent', modified: 'Mar 7, 2026', agent: true },
-    ],
-  },
-  'Fleet': {
-    path: '/Sangha/Fleet/',
-    files: [
-      { name: 'Fleet Inventory — March 2026', type: 'sheet', owner: 'Workspace Agent', modified: 'Mar 7, 2026', agent: true },
-      { name: 'S19 Viability Analysis', type: 'sheet', owner: 'Workspace Agent', modified: 'Mar 6, 2026', agent: true },
-      { name: 'Crane County Site Review', type: 'slides', owner: 'Spencer Marr', modified: 'Feb 25, 2026', agent: false },
-      { name: 'Hardware Procurement Quotes', type: 'pdf', owner: 'Miguel Torres', modified: 'Feb 20, 2026', agent: false },
-    ],
-  },
-  'Contacts': {
-    path: '/Sangha/Contacts/',
-    files: [
-      { name: 'Sangha Lead Pipeline', type: 'sheet', owner: 'Workspace Agent', modified: 'Mar 10, 2026', agent: true, url: 'https://docs.google.com/spreadsheets/d/1ksDEJ6a5-sp_GaA0f6CKTzFW77np2rXsbevh0RZcuj0/edit' },
-      { name: 'Sangha IPP Contact Report', type: 'doc', owner: 'Workspace Agent', modified: 'Mar 10, 2026', agent: true },
-      { name: 'Lead Pipeline Tracker (Excel)', type: 'sheet', owner: 'Workspace Agent', modified: 'Mar 10, 2026', agent: true },
-    ],
-  },
-  'Intelligence Agent': {
-    path: '/Sangha/Intelligence Agent/',
-    files: [
-      { name: 'Weekly Intel 2026-02-06 — Mining Market Dynamics', type: 'doc', owner: 'Intelligence Agent', modified: 'Feb 6, 2026', agent: true, url: 'https://docs.google.com/document/d/19AFV6iWmX1GkrQ_lMMyx-WPspvL_EFCi0qLvTNho9kk/edit', isIntelReport: true },
-      { name: 'Weekly Intel 2026-02-02 — Mining Market Dynamics', type: 'doc', owner: 'Intelligence Agent', modified: 'Feb 2, 2026', agent: true, url: 'https://docs.google.com/document/d/1b87WDk9l2ur82fHxC9LLPo62CXhV5aKbIP33EGFIrDE/edit', isIntelReport: true },
-      { name: 'Weekly Intel 2026-01-29 — Mining Market Dynamics', type: 'doc', owner: 'Intelligence Agent', modified: 'Jan 29, 2026', agent: true, url: 'https://docs.google.com/document/d/1-ImCGM1hMK1g2cJtzhaRVa5-g9bf6dgv408cgXcL5nA/edit', isIntelReport: true },
-    ],
-  },
-};
-
-const DACP_FOLDERS = {
-  'Estimates': {
-    path: '/DACP/Estimates/',
-    files: [
-      { name: 'DACP_Estimate_BishopArts.xlsx', type: 'sheet', owner: 'Estimating Bot', modified: 'Mar 9, 2026', agent: true },
-      { name: 'DACP_Estimate_MemorialHermann_Ph2.xlsx', type: 'sheet', owner: 'Estimating Bot', modified: 'Mar 6, 2026', agent: true },
-      { name: 'DACP_Estimate_I35RetainingWalls.xlsx', type: 'sheet', owner: 'Estimating Bot', modified: 'Mar 8, 2026', agent: true },
-      { name: 'DACP_Estimate_SamsungFab_Revised.xlsx', type: 'sheet', owner: 'Estimating Bot', modified: 'Mar 6, 2026', agent: true },
-      { name: 'DACP_Estimate_McKinneyTC_Draft.xlsx', type: 'sheet', owner: 'Estimating Bot', modified: 'Mar 8, 2026', agent: true },
-    ],
-  },
-  'Meeting Notes': {
-    path: '/DACP/Meeting Notes/',
-    files: [
-      { name: 'Turner_CoordinationCall_Mar6.pdf', type: 'pdf', owner: 'Meeting Bot', modified: 'Mar 6, 2026', agent: true },
-      { name: 'WeeklyStandup_Mar5.pdf', type: 'pdf', owner: 'Meeting Bot', modified: 'Mar 5, 2026', agent: true },
-      { name: 'DPR_SamsungFab_ScopeReview_Mar3.pdf', type: 'pdf', owner: 'Meeting Bot', modified: 'Mar 3, 2026', agent: true },
-    ],
-  },
-  'Daily Reports': {
-    path: '/DACP/Daily Reports/',
-    files: [
-      { name: 'DailyOps_Mar9.pdf', type: 'pdf', owner: 'Reporting Engine', modified: 'Mar 9, 2026', agent: true },
-      { name: 'DailyOps_Mar8.pdf', type: 'pdf', owner: 'Reporting Engine', modified: 'Mar 8, 2026', agent: true },
-      { name: 'DailyOps_Mar7.pdf', type: 'pdf', owner: 'Reporting Engine', modified: 'Mar 7, 2026', agent: true },
-      { name: 'DailyOps_Mar6.pdf', type: 'pdf', owner: 'Reporting Engine', modified: 'Mar 6, 2026', agent: true },
-    ],
-  },
-  'Field Reports': {
-    path: '/DACP/Field Reports/',
-    files: [
-      { name: 'Westpark_DailyLog_Mar8.pdf', type: 'pdf', owner: 'Carlos Mendez', modified: 'Mar 8, 2026', agent: false },
-      { name: 'Westpark_DailyLog_Mar7.pdf', type: 'pdf', owner: 'Carlos Mendez', modified: 'Mar 7, 2026', agent: false },
-      { name: 'FriscoStation_RockFlag_Mar7.pdf', type: 'pdf', owner: 'Carlos Mendez', modified: 'Mar 7, 2026', agent: false },
-    ],
-  },
-  'GC Correspondence': {
-    path: '/DACP/GC Correspondence/',
-    files: [
-      { name: 'Turner_MemorialHermann_Ph2_Bid.pdf', type: 'pdf', owner: 'Email Agent', modified: 'Mar 6, 2026', agent: true },
-      { name: 'HenselPhelps_I35_RFQ.pdf', type: 'pdf', owner: 'Email Agent', modified: 'Mar 8, 2026', agent: true },
-      { name: 'DPR_SamsungFab_RevisedScope.pdf', type: 'pdf', owner: 'Email Agent', modified: 'Mar 6, 2026', agent: true },
-    ],
-  },
-  'Pricing': {
-    path: '/DACP/Pricing/',
-    files: [
-      { name: 'DACP_MasterPricingTable_2026.xlsx', type: 'sheet', owner: 'David Castillo', modified: 'Mar 1, 2026', agent: false },
-      { name: 'TXI_PriceLetter_Mar2026.pdf', type: 'pdf', owner: 'Marcel Pineda', modified: 'Mar 1, 2026', agent: false },
-    ],
-  },
-};
+// No demo/sample files — only show real uploaded files
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -2049,14 +1945,13 @@ export default function FilesDashboard() {
   const { tenant } = useTenant();
   const isConstruction = tenant?.settings?.industry === 'construction';
   const isVenture = tenant?.settings?.industry === 'venture';
-  const demoFolders = isVenture ? {} : (isConstruction ? DACP_FOLDERS : MINING_FOLDERS);
   const driveRoot = isConstruction ? '/DACP/' : isVenture ? '/Drive/' : '/Sangha/';
 
-  const [folders, setFolders] = useState(demoFolders);
+  const [folders, setFolders] = useState({});
   const [liveMode, setLiveMode] = useState(false);
-  const [loading, setLoading] = useState(isVenture);
-  const [expandedFolders, setExpandedFolders] = useState(() => new Set(Object.keys(demoFolders)));
-  const [selectedFolder, setSelectedFolder] = useState(Object.keys(demoFolders)[0]);
+  const [loading, setLoading] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState(() => new Set());
+  const [selectedFolder, setSelectedFolder] = useState(null);
   const [search, setSearch] = useState('');
   const [totalFiles, setTotalFiles] = useState(0);
   const [viewingReport, setViewingReport] = useState(null);
@@ -2224,7 +2119,7 @@ export default function FilesDashboard() {
             }
           }
         } catch {
-          // Silently fall back to demo data
+          // No workspace agent available
         }
       }
       if (!cancelled) setLoading(false);
@@ -2300,13 +2195,11 @@ export default function FilesDashboard() {
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <h2 className="text-sm font-bold text-terminal-text tracking-[0.3px]">Files</h2>
-        {liveMode ? (
+        {liveMode && (
           <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-full bg-[#edf7f0] text-[#1a6b3c] border border-[#d0e8d8]">
             <span className="w-[5px] h-[5px] rounded-full bg-[#1a6b3c] animate-pulse" />
             Live
           </span>
-        ) : (
-          <span className="text-[9px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-full bg-[#f5f4f0] text-terminal-muted border border-terminal-border">Demo</span>
         )}
         {totalFiles > 0 && (
           <span className="text-[11px] text-terminal-muted">{totalFiles} files</span>
@@ -2341,6 +2234,13 @@ export default function FilesDashboard() {
         </div>
       </div>
 
+      {Object.keys(folders).length === 0 && !loading ? (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-12 text-center">
+          <div className="text-3xl mb-3 opacity-40">📁</div>
+          <p className="text-sm font-semibold text-terminal-text mb-1">No files yet</p>
+          <p className="text-[12px] text-terminal-muted">Upload files using the button above to get started.</p>
+        </div>
+      ) : (
       <div className="flex gap-5">
         {/* Folder tree sidebar */}
         <div className="w-52 shrink-0">
@@ -2537,6 +2437,7 @@ export default function FilesDashboard() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
