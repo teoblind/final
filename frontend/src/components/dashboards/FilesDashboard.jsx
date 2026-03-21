@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle } from 'lucide-react';
+import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload } from 'lucide-react';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../auth/AuthContext';
 
@@ -2061,6 +2061,36 @@ export default function FilesDashboard() {
   const [totalFiles, setTotalFiles] = useState(0);
   const [viewingReport, setViewingReport] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
+  const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const showToast = (msg, type = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (selectedFolder) formData.append('folder', selectedFolder);
+      const res = await fetch(`${API_BASE}/v1/files/upload`, { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+      showToast(`Uploaded ${file.name}`, 'success');
+      refreshFiles();
+    } catch (err) {
+      showToast(err.message || 'Upload failed', 'error');
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   // Fetch comment counts for intel reports
   useEffect(() => {
@@ -2248,6 +2278,17 @@ export default function FilesDashboard() {
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2.5 rounded-lg text-[13px] font-medium shadow-lg border transition-all ${
+          toast.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' :
+          toast.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' :
+          'bg-blue-50 text-blue-700 border-blue-200'
+        }`}>
+          {toast.msg}
+        </div>
+      )}
+
       {/* Report Viewer Modal */}
       {viewingReport && (
         <ReportViewerModal
@@ -2278,6 +2319,15 @@ export default function FilesDashboard() {
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-[#2c5282] border border-[#1e3a5f] hover:bg-[#1e3a5f] transition-colors disabled:opacity-50"
+        >
+          <Upload size={12} className={uploading ? 'animate-spin' : ''} />
+          {uploading ? 'Uploading...' : 'Upload'}
+        </button>
+        <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
         <div className="flex-1" />
         <div className="relative w-56">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-terminal-muted" />
@@ -2380,6 +2430,8 @@ export default function FilesDashboard() {
                           window.open(file.url, '_blank', 'noopener,noreferrer');
                         } else if (file.url) {
                           window.open(`${FILE_BASE}${file.url}`, '_blank');
+                        } else {
+                          showToast('Sample file — upload real files with the Upload button above');
                         }
                       }}
                     >
@@ -2468,6 +2520,8 @@ export default function FilesDashboard() {
                               window.open(file.url, '_blank', 'noopener,noreferrer');
                             } else if (file.url) {
                               window.open(`${FILE_BASE}${file.url}`, '_blank');
+                            } else {
+                              showToast('Sample file — upload real files with the Upload button above');
                             }
                           }}
                           className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] hover:bg-[#e8eef5] transition-colors"

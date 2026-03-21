@@ -1,14 +1,19 @@
 /**
  * Files Routes — Tenant file browser with Google Drive links
  *
- * GET /api/v1/files           — List files (with category/search filters)
- * GET /api/v1/files/categories — Get category list with counts
+ * GET    /api/v1/files            — List files (with category/search filters)
+ * GET    /api/v1/files/categories — Get category list with counts
+ * POST   /api/v1/files/upload     — Upload file to Google Drive
  */
 
 import express from 'express';
+import multer from 'multer';
 import { google } from 'googleapis';
+import { Readable } from 'stream';
 import { authenticate } from '../middleware/auth.js';
 import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue } from '../cache/database.js';
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -145,6 +150,75 @@ router.get('/categories', (req, res) => {
   } catch (err) {
     console.error('Files categories error:', err);
     res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+/**
+ * POST /upload — Upload a file to the tenant's Google Drive
+ */
+router.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    let refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
+    if (!refreshToken) {
+      const emailConfig = getTenantEmailConfig(tenantId);
+      refreshToken = emailConfig?.gmail_refresh_token;
+    }
+    if (!refreshToken) return res.status(400).json({ error: 'Google Drive not connected for this tenant' });
+
+    const drive = makeDriveClient(refreshToken);
+    if (!drive) return res.status(500).json({ error: 'Failed to create Drive client' });
+
+    const folder = req.body.folder || null;
+    let folderId = null;
+
+    // If a folder name is specified, find or create it
+    if (folder) {
+      const folderRes = await drive.files.list({
+        q: `name = '${folder.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        fields: 'files(id)',
+        pageSize: 1,
+      });
+      if (folderRes.data.files?.length > 0) {
+        folderId = folderRes.data.files[0].id;
+      } else {
+        const created = await drive.files.create({
+          requestBody: { name: folder, mimeType: 'application/vnd.google-apps.folder' },
+          fields: 'id',
+        });
+        folderId = created.data.id;
+      }
+    }
+
+    const fileMetadata = { name: req.file.originalname };
+    if (folderId) fileMetadata.parents = [folderId];
+
+    const media = {
+      mimeType: req.file.mimetype,
+      body: Readable.from(req.file.buffer),
+    };
+
+    const uploaded = await drive.files.create({
+      requestBody: fileMetadata,
+      media,
+      fields: 'id, name, mimeType, modifiedTime, size, webViewLink',
+    });
+
+    const f = uploaded.data;
+    res.json({
+      name: f.name,
+      file_type: MIME_TO_TYPE[f.mimeType] || 'other',
+      category: MIME_TO_CATEGORY[f.mimeType] || 'Other',
+      modified_at: f.modifiedTime,
+      size_bytes: f.size ? parseInt(f.size) : 0,
+      drive_file_id: f.id,
+      drive_url: f.webViewLink,
+    });
+  } catch (err) {
+    console.error('File upload error:', err);
+    res.status(500).json({ error: err.message || 'Upload failed' });
   }
 });
 
