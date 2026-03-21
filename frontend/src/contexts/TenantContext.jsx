@@ -77,25 +77,41 @@ export function useTenant() {
   return useContext(TenantContext);
 }
 
+function lightenColor(hex, amount = 0.4) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return {
+    r: Math.round(r + (255 - r) * amount),
+    g: Math.round(g + (255 - g) * amount),
+    b: Math.round(b + (255 - b) * amount),
+  };
+}
+
 function applyBranding(branding) {
   if (!branding) return;
   const root = document.documentElement.style;
   if (branding.primaryColor) {
-    root.setProperty('--t-accent', branding.primaryColor);
-    root.setProperty('--t-sidebar', branding.sidebarColor || branding.primaryColor);
+    const pc = branding.primaryColor;
+    root.setProperty('--t-accent', pc);
+    root.setProperty('--t-sidebar', branding.sidebarColor || pc);
+    // Derive UI accent colors from primary color
+    const r = parseInt(pc.slice(1, 3), 16);
+    const g = parseInt(pc.slice(3, 5), 16);
+    const b = parseInt(pc.slice(5, 7), 16);
+    root.setProperty('--t-ui-accent', pc);
+    root.setProperty('--t-ui-accent-rgb', `${r}, ${g}, ${b}`);
+    root.setProperty('--t-ui-accent-bg', `rgba(${r}, ${g}, ${b}, 0.08)`);
+    root.setProperty('--t-ui-accent-border', `rgba(${r}, ${g}, ${b}, 0.2)`);
   }
-  // Monochrome tenants (e.g. Zhan Capital) get grey accents instead of green
-  if (branding.hideSanghaBranding) {
-    root.setProperty('--t-sidebar-accent', '#888888');
-    root.setProperty('--t-sidebar-accent-rgb', '136,136,136');
-    root.setProperty('--t-ui-accent', '#555555');
-    root.setProperty('--t-ui-accent-bg', '#f0f0f0');
-    root.setProperty('--t-ui-accent-border', '#e0e0e0');
+  // Sidebar accent: use tenant's own color (lightened for visibility) or Coppice green
+  if (branding.hideSanghaBranding && branding.primaryColor) {
+    const light = lightenColor(branding.primaryColor, 0.45);
+    const hex = `#${light.r.toString(16).padStart(2,'0')}${light.g.toString(16).padStart(2,'0')}${light.b.toString(16).padStart(2,'0')}`;
+    root.setProperty('--t-sidebar-accent', hex);
+    root.setProperty('--t-sidebar-accent-rgb', `${light.r}, ${light.g}, ${light.b}`);
   } else {
     root.setProperty('--t-sidebar-accent', '#2dd478');
     root.setProperty('--t-sidebar-accent-rgb', '45,212,120');
-    root.setProperty('--t-ui-accent', '#1a6b3c');
-    root.setProperty('--t-ui-accent-bg', '#edf7f0');
-    root.setProperty('--t-ui-accent-border', '#c5e8d0');
   }
 }
