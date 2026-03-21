@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { MessageCircle, X, Send, ArrowLeft, Mail } from 'lucide-react';
 import { useTenant } from '../contexts/TenantContext';
 
@@ -237,14 +238,27 @@ export default function HelpChatWidget() {
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] px-3.5 py-2.5 text-[13px] leading-[1.5] whitespace-pre-wrap ${
+                    className={`max-w-[85%] px-3.5 py-2.5 text-[13px] leading-[1.5] ${
                       msg.role === 'user'
-                        ? 'rounded-2xl rounded-br-md text-white'
+                        ? 'rounded-2xl rounded-br-md text-white whitespace-pre-wrap'
                         : `rounded-2xl rounded-bl-md ${msg.error ? 'bg-red-50 text-terminal-red' : 'bg-white text-terminal-text border border-terminal-border'}`
                     }`}
                     style={msg.role === 'user' ? { backgroundColor: accentColor } : undefined}
                   >
-                    {msg.content}
+                    {msg.role === 'user' ? msg.content : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+                          li: ({ children }) => <li>{children}</li>,
+                          a: ({ href, children }) => <a href={href} className="underline" target="_blank" rel="noopener noreferrer">{children}</a>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </div>
               ))}
