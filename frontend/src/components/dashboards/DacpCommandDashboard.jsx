@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, ClipboardList, DollarSign, HardHat, TrendingUp } from 'lucide-react';
+import { Calendar, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -29,6 +29,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [bids, setBids] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  const [invitedMeetings, setInvitedMeetings] = useState(new Set());
+  const [invitingId, setInvitingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,29 +68,50 @@ export default function DacpCommandDashboard({ onNavigate }) {
     return d >= now && d <= endOfWeek;
   });
 
+  const handleInviteCoppice = async (meeting) => {
+    setInvitingId(meeting.id);
+    try {
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+      const res = await fetch(`${API_BASE}/v1/meetings/${encodeURIComponent(meeting.id)}/invite`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ meetLink: meeting.meetLink, title: meeting.title }),
+      });
+      if (res.ok) {
+        setInvitedMeetings(prev => new Set([...prev, meeting.id]));
+      }
+    } catch (err) {
+      console.error('Failed to invite Coppice:', err);
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
+  const formatMeetingTime = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const formatMeetingDay = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-24"><div className="spinner w-10 h-10" /></div>;
   }
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
-      {/* This Week Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-        <div
-          className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
-          onClick={() => onNavigate?.('meetings-chat')}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#e8eef5] flex items-center justify-center">
-              <Calendar size={18} className="text-[#1e3a5f]" />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Meetings This Week</div>
-              <div className="text-xl font-bold text-terminal-text tabular-nums">{meetings.length}</div>
-            </div>
-          </div>
-        </div>
-
+      {/* Top row: Bids Due + Active Jobs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <div
           className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
           onClick={() => onNavigate?.('estimating')}
@@ -118,6 +141,85 @@ export default function DacpCommandDashboard({ onNavigate }) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Meetings This Week — expanded */}
+      <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+        <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-[#1e3a5f]" />
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Meetings This Week</span>
+          </div>
+          <span className="text-[11px] text-terminal-muted">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+        </div>
+        {meetings.length === 0 ? (
+          <div className="px-[18px] py-8 text-center text-[13px] text-terminal-muted">No meetings this week</div>
+        ) : (
+          <div>
+            {meetings.map((m) => {
+              const isInvited = invitedMeetings.has(m.id);
+              const isInviting = invitingId === m.id;
+              const hasMeetLink = !!m.meetLink;
+              const isPast = new Date(m.end || m.start) < new Date();
+              return (
+                <div key={m.id} className="flex items-center gap-4 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] transition-colors">
+                  {/* Time */}
+                  <div className="w-[72px] shrink-0">
+                    <div className="text-[11px] font-semibold text-[#1e3a5f]">{formatMeetingDay(m.start)}</div>
+                    <div className="text-[11px] text-terminal-muted tabular-nums">
+                      {formatMeetingTime(m.start)}
+                    </div>
+                  </div>
+
+                  {/* Title + attendees */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-terminal-text truncate">{m.title}</div>
+                    {m.attendees && m.attendees.length > 0 && (
+                      <div className="text-[10px] text-terminal-muted truncate mt-px">
+                        {m.attendees.slice(0, 3).map(a => a.name || a.email.split('@')[0]).join(', ')}
+                        {m.attendees.length > 3 && ` +${m.attendees.length - 3}`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Meet link indicator */}
+                  {hasMeetLink && (
+                    <a
+                      href={m.meetLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] bg-[#e8eef5] border border-[#c5d5e8] hover:bg-[#dce6f0] transition-colors shrink-0"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Video size={10} /> Join
+                    </a>
+                  )}
+
+                  {/* Invite Coppice button */}
+                  {!isPast && (
+                    isInvited ? (
+                      <div className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] shrink-0">
+                        <Check size={10} /> Coppice Invited
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleInviteCoppice(m)}
+                        disabled={isInviting}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-white bg-[#1e3a5f] hover:bg-[#162d4a] transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {isInviting ? (
+                          <><div className="spinner w-3 h-3 border-white" /> Inviting...</>
+                        ) : (
+                          <><Mic size={10} /> Invite Coppice</>
+                        )}
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Metrics Strip */}

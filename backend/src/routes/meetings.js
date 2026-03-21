@@ -95,4 +95,54 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * POST /:eventId/invite — Invite Coppice (agent) to a calendar event
+ *
+ * Adds the tenant's agent email as an attendee to the event,
+ * so the CalendarPoll job will auto-join with Recall.ai.
+ */
+router.post('/:eventId/invite', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const emailConfig = getTenantEmailConfig(tenantId);
+
+    if (!emailConfig?.gmailRefreshToken) {
+      return res.status(400).json({ error: 'No email connected' });
+    }
+
+    const cal = makeCalendarClient(emailConfig.gmailRefreshToken);
+    if (!cal) {
+      return res.status(400).json({ error: 'Calendar client unavailable' });
+    }
+
+    const { eventId } = req.params;
+    const agentEmail = emailConfig.senderEmail;
+
+    // Get the current event
+    const event = await cal.events.get({ calendarId: 'primary', eventId });
+    const existingAttendees = event.data.attendees || [];
+
+    // Check if agent is already invited
+    if (existingAttendees.some(a => a.email === agentEmail)) {
+      return res.json({ success: true, message: 'Coppice is already invited' });
+    }
+
+    // Add agent as attendee
+    await cal.events.patch({
+      calendarId: 'primary',
+      eventId,
+      sendUpdates: 'none',
+      requestBody: {
+        attendees: [...existingAttendees, { email: agentEmail, responseStatus: 'accepted' }],
+      },
+    });
+
+    console.log(`[Meetings] Invited ${agentEmail} to event ${eventId} for tenant ${tenantId}`);
+    res.json({ success: true, agentEmail });
+  } catch (error) {
+    console.error('[Meetings] Error inviting to meeting:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
