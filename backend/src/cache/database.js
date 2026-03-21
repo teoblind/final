@@ -1157,15 +1157,15 @@ function seedTenantData(targetDb, tenantId) {
 
   // Seed DACP admin user
   if (tenantId === 'dacp-construction-001') {
-    const dacpAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacp.localhost');
+    const dacpAdmin = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('admin@dacpconstruction.com');
     if (!dacpAdmin) {
       const salt = bcryptPkg.genSaltSync(12);
       const hash = bcryptPkg.hashSync(process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(24).toString('base64'), salt);
       targetDb.prepare(`
         INSERT INTO users (id, email, name, password_hash, tenant_id, role, status)
-        VALUES ('dacp-admin-001', 'admin@dacp.localhost', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
+        VALUES ('dacp-admin-001', 'admin@dacpconstruction.com', 'DACP Admin', ?, 'dacp-construction-001', 'owner', 'active')
       `).run(hash);
-      console.log('[DB] DACP admin user created: admin@dacp.localhost');
+      console.log('[DB] DACP admin user created: admin@dacpconstruction.com');
     }
   }
 
@@ -1235,7 +1235,7 @@ function initEmailTrustSeedData(targetDb, tenantId) {
     insert.run('dacp-construction-001', null, 'mccarthy.com', null, 'trusted', 'McCarthy Building — prospective GC');
     insert.run('dacp-construction-001', null, 'henselphelps.com', null, 'trusted', 'Hensel Phelps — prospective GC');
     insert.run('dacp-construction-001', null, 'usa.skanska.com', null, 'trusted', 'Skanska USA — prospective GC');
-    insert.run('dacp-construction-001', 'admin@dacp.localhost', null, 'DACP Admin', 'trusted', 'Internal admin account');
+    insert.run('dacp-construction-001', 'admin@dacpconstruction.com', null, 'DACP Admin', 'trusted', 'Internal admin account');
     console.log('Email trust: Seeded DACP trusted senders');
   }
 }

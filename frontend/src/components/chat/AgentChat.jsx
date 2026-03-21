@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -1947,6 +1947,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
+  const [contextPanelOpen, setContextPanelOpen] = useState(true);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const userScrolledUpRef = useRef(false);
@@ -2668,7 +2669,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
         {/* Chat area */}
         <div
-          className={`flex-[3] flex flex-col border-r border-terminal-border min-w-0 min-h-0 relative ${dragging ? 'ring-2 ring-inset' : ''}`}
+          className={`${contextPanelOpen ? 'flex-[3]' : 'flex-1'} flex flex-col border-r border-terminal-border min-w-0 min-h-0 relative transition-all duration-300 ${dragging ? 'ring-2 ring-inset' : ''}`}
           style={dragging ? { ringColor: agent.accentColor } : {}}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -2685,9 +2686,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
           )}
           {/* Messages */}
           <div ref={chatContainerRef} onScroll={handleChatScroll} className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
-            {messages.map(msg => (
-              <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} />
-            ))}
+            {messages.map((msg, idx) => {
+              // Find if this is the last agent message (for auto-confirm buttons)
+              const isLastAgent = !sending && msg.role === 'agent' && !messages.slice(idx + 1).some(m => m.role === 'agent');
+              return <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} isLastAgent={isLastAgent} />;
+            })}
 
             {/* Typing indicator */}
             {sending && (
@@ -2763,9 +2766,21 @@ export default function AgentChat({ agentId = 'estimating' }) {
           </div>
         </div>
 
-        {/* Context panel — independent scroll */}
-        <div className="flex-[2] min-w-0 min-h-0 overflow-y-auto bg-[#f5f4f0]">
-          <ContextPanel agentId={agentId} />
+        {/* Context panel toggle + panel */}
+        <div className="relative flex">
+          {/* Toggle button */}
+          <button
+            onClick={() => setContextPanelOpen(prev => !prev)}
+            className="absolute -left-3 top-4 z-10 w-6 h-6 rounded-full bg-white border border-[#e0ddd8] shadow-sm flex items-center justify-center hover:bg-[#f5f4f0] transition-colors"
+            title={contextPanelOpen ? 'Collapse context panel' : 'Expand context panel'}
+          >
+            {contextPanelOpen ? <ChevronRight size={13} className="text-[#9a9a92]" /> : <ChevronLeft size={13} className="text-[#9a9a92]" />}
+          </button>
+          <div
+            className={`min-h-0 overflow-y-auto bg-[#f5f4f0] transition-all duration-300 ease-in-out ${contextPanelOpen ? 'flex-[2] min-w-0 opacity-100' : 'w-0 min-w-0 opacity-0 overflow-hidden'}`}
+          >
+            {contextPanelOpen && <ContextPanel agentId={agentId} />}
+          </div>
         </div>
       </div>
       )}

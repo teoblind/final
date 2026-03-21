@@ -10,8 +10,8 @@
  * Pricing: $0.50/hr, first 5 hours free.
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';
