@@ -79,6 +79,7 @@ import intuitRoutes from './routes/intuit.js';
 import accountingRoutes from './routes/accounting.js';
 import priceMonitorRoutes from './routes/priceMonitor.js';
 import portfolioRoutes from './routes/portfolio.js';
+import schedulerRoutes from './routes/scheduler.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -276,6 +277,14 @@ try {
   startLeadDiscoveryJob({ runAtHour: 2, intervalHours: 24 });
 } catch (err) {
   console.warn('Lead discovery job not started:', err.message);
+}
+
+// Start scheduled task runner (every 60s)
+try {
+  const { startScheduledTaskRunner } = await import('./jobs/scheduledTaskRunner.js');
+  startScheduledTaskRunner(60000);
+} catch (err) {
+  console.warn('Scheduled task runner not started:', err.message);
 }
 
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
@@ -479,6 +488,7 @@ app.use('/api/v1/auth/intuit', intuitRoutes);
 app.use('/api/v1/accounting', accountingRoutes);
 app.use('/api/v1/price-monitor', priceMonitorRoutes);
 app.use('/api/v1/portfolio', portfolioRoutes);
+app.use('/api/v1/scheduler', schedulerRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/

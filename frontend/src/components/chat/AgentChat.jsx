@@ -51,6 +51,7 @@ const DEMO_CONTEXT = {};
 // ─── Simple markdown-like formatting ────────────────────────────────────────────
 // Tool tag display names
 const TOOL_LABELS = {
+  // Google Workspace
   gws_drive_search: 'Searching Drive',
   gws_gmail_search: 'Searching Email',
   gws_gmail_read: 'Reading Email',
@@ -58,15 +59,74 @@ const TOOL_LABELS = {
   gws_sheets_read: 'Reading Spreadsheet',
   gws_sheets_append: 'Updating Spreadsheet',
   gws_workspace_command: 'Workspace Action',
-  send_email: 'Drafting Email',
+  gws_sheets_update: 'Updating Spreadsheet',
+  gws_docs_update: 'Updating Document',
+  gws_drive_create: 'Creating Document',
+  // Email
+  send_email: 'Sending Email',
+  list_emails: 'Searching Inbox',
+  read_email: 'Reading Email',
+  // Knowledge
   search_knowledge: 'Searching Knowledge Base',
+  // Web
+  browse_url: 'Browsing Page',
   web_research: 'Researching',
-  create_estimate: 'Creating Estimate',
+  // Calendar
   create_meeting: 'Scheduling Meeting',
+  // HubSpot
   search_hubspot_contacts: 'Searching Contacts',
   search_hubspot_companies: 'Searching Companies',
   search_hubspot_deals: 'Searching Deals',
+  get_hubspot_pipeline: 'Loading Pipeline',
   create_hubspot_contact: 'Creating Contact',
+  // Lead Engine
+  discover_leads: 'Discovering Leads',
+  get_leads: 'Loading Leads',
+  get_lead_stats: 'Loading Stats',
+  generate_outreach: 'Generating Outreach',
+  get_outreach_log: 'Loading Outreach Log',
+  get_reply_inbox: 'Loading Replies',
+  get_followup_queue: 'Loading Follow-ups',
+  run_full_cycle: 'Running Full Cycle',
+  update_lead: 'Updating Lead',
+  setup_crm_sheet: 'Setting Up CRM Sheet',
+  // DACP / Construction
+  lookup_pricing: 'Looking Up Pricing',
+  get_bid_requests: 'Loading Bid Requests',
+  get_estimates: 'Loading Estimates',
+  create_estimate: 'Creating Estimate',
+  get_jobs: 'Loading Jobs',
+  get_dacp_stats: 'Loading Stats',
+  analyze_itb: 'Analyzing ITB',
+  draft_supplier_quotes: 'Drafting Supplier Quotes',
+  compare_contract: 'Comparing Contract',
+  generate_proposal: 'Generating Proposal',
+  run_bid_checks: 'Running Bid Checks',
+  generate_takeoff_template: 'Generating Takeoff Template',
+  generate_compliance_forms: 'Generating Compliance Forms',
+  generate_contract_redline: 'Generating Contract Redline',
+  parse_supplier_quote: 'Parsing Supplier Quote',
+  // Document / Legal
+  generate_document: 'Generating Document',
+  generate_legal_doc: 'Generating Legal Document',
+  // Mining
+  generate_mine_specs: 'Generating Mine Specs',
+  // Workspace file ops
+  workspace_create_doc: 'Creating Document',
+  workspace_create_sheet: 'Creating Spreadsheet',
+  workspace_create_slides: 'Creating Presentation',
+  workspace_search_drive: 'Searching Drive',
+  workspace_read_file: 'Reading File',
+  workspace_export_pdf: 'Exporting PDF',
+  workspace_add_comment: 'Adding Comment',
+  // Pitch deck
+  plan_content: 'Planning Content',
+  generate_presentation: 'Building Presentation',
+  generate_backgrounds: 'Generating Backgrounds',
+  // Email security
+  add_trusted_sender: 'Adding Trusted Sender',
+  remove_trusted_sender: 'Removing Trusted Sender',
+  list_trusted_senders: 'Loading Trusted Senders',
 };
 
 function formatContent(text) {

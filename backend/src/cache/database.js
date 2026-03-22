@@ -929,6 +929,30 @@ function initSchemaForDb(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_pw_reset_hash ON password_resets(token_hash)'); } catch (e) {}
 
+  // Scheduled tasks (cron-based automation)
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL DEFAULT 'hivemind',
+      title TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      cron_expression TEXT NOT NULL,
+      timezone TEXT DEFAULT 'America/Chicago',
+      enabled INTEGER DEFAULT 1,
+      last_run_at TEXT,
+      next_run_at TEXT,
+      run_count INTEGER DEFAULT 0,
+      max_runs INTEGER,
+      thread_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_tenant ON scheduled_tasks(tenant_id, enabled)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at, enabled)'); } catch (e) {}
+
   // Add tenant_id to ALL existing tables (idempotent) — kept for defense-in-depth
   const tablesToMigrate = [
     'cache', 'manual_data', 'alerts', 'alert_history', 'notes', 'imec_milestones',
@@ -6056,6 +6080,66 @@ export function getCompanyEmailStats(companyId, tenantId, days = 30) {
     WHERE company_id = ? AND tenant_id = ? AND date >= date('now', '-' || ? || ' days')
     ORDER BY date DESC
   `).all(companyId, tenantId, days);
+}
+
+// ─── Scheduled Task CRUD ─────────────────────────────────────────────────────
+
+export function createScheduledTask(task) {
+  const id = task.id || `sched_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO scheduled_tasks (id, tenant_id, user_id, agent_id, title, prompt, cron_expression, timezone, enabled, next_run_at, max_runs, thread_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    task.tenant_id,
+    task.user_id,
+    task.agent_id || 'hivemind',
+    task.title,
+    task.prompt,
+    task.cron_expression,
+    task.timezone || 'America/Chicago',
+    task.enabled !== undefined ? (task.enabled ? 1 : 0) : 1,
+    task.next_run_at || null,
+    task.max_runs || null,
+    task.thread_id || null,
+  );
+  return db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id);
+}
+
+export function getScheduledTasks(tenantId) {
+  return db.prepare('SELECT * FROM scheduled_tasks WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getScheduledTask(id) {
+  return db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id);
+}
+
+export function updateScheduledTask(id, updates) {
+  const allowedFields = ['title', 'prompt', 'cron_expression', 'timezone', 'enabled', 'last_run_at', 'next_run_at', 'run_count', 'max_runs', 'thread_id', 'agent_id'];
+  const setClauses = [];
+  const values = [];
+  for (const [key, value] of Object.entries(updates)) {
+    if (allowedFields.includes(key)) {
+      setClauses.push(`${key} = ?`);
+      values.push(value);
+    }
+  }
+  if (setClauses.length === 0) return null;
+  setClauses.push("updated_at = datetime('now')");
+  values.push(id);
+  db.prepare(`UPDATE scheduled_tasks SET ${setClauses.join(', ')} WHERE id = ?`).run(...values);
+  return db.prepare('SELECT * FROM scheduled_tasks WHERE id = ?').get(id);
+}
+
+export function deleteScheduledTask(id, tenantId) {
+  return db.prepare('DELETE FROM scheduled_tasks WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+}
+
+export function getDueScheduledTasks() {
+  return db.prepare(`
+    SELECT * FROM scheduled_tasks
+    WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= datetime('now')
+  `).all();
 }
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────

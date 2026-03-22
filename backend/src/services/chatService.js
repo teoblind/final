@@ -6,6 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { google } from 'googleapis';
 import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
@@ -744,6 +745,129 @@ You can generate formatted documents on request:
 - generate_document: Create DOCX or PDF files (reports, memos, proposals, summaries, letters, any document)
 Write the full content in markdown format. The document will be generated and attached to your email reply or available for download.`;
 
+// ─── Scheduler Tools ─────────────────────────────────────────────────────────
+
+const SCHEDULER_TOOLS = [
+  {
+    name: 'create_scheduled_task',
+    description: 'Create a recurring scheduled task that runs automatically on a cron schedule. The task will execute the given prompt as if a user sent it to the agent. Use for daily reports, weekly summaries, periodic checks, recurring emails, or any repeated task.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short human-readable title for the task (e.g. "Weekly Pipeline Report")' },
+        prompt: { type: 'string', description: 'The full prompt to execute on each run — write it exactly as a user would type it' },
+        schedule: { type: 'string', description: 'Cron expression for the schedule. Examples: "0 9 * * 1" (Mon 9AM), "0 8 * * *" (daily 8AM), "0 */4 * * *" (every 4h), "0 9 * * 1-5" (weekdays 9AM)' },
+        timezone: { type: 'string', description: 'IANA timezone (default: America/Chicago). Examples: America/New_York, America/Los_Angeles, UTC' },
+        max_runs: { type: 'integer', description: 'Optional: stop after this many runs. Omit for unlimited.' },
+      },
+      required: ['title', 'prompt', 'schedule'],
+    },
+  },
+  {
+    name: 'list_scheduled_tasks',
+    description: 'List all scheduled tasks for the current tenant. Shows title, schedule, next run time, run count, and enabled status.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'delete_scheduled_task',
+    description: 'Delete a scheduled task by its ID. Use list_scheduled_tasks first to find the task ID.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string', description: 'The ID of the scheduled task to delete' },
+      },
+      required: ['task_id'],
+    },
+  },
+];
+
+async function callSchedulerTool(toolName, toolInput, tenantId) {
+  const { createScheduledTask, getScheduledTasks, deleteScheduledTask } = await import('../cache/database.js');
+  const { computeNextRun, isValidCron } = await import('../jobs/scheduledTaskRunner.js');
+
+  switch (toolName) {
+    case 'create_scheduled_task': {
+      const { title, prompt, schedule, timezone, max_runs } = toolInput;
+      if (!isValidCron(schedule)) {
+        return { error: `Invalid cron expression: "${schedule}". Use standard 5-field cron format: minute hour day-of-month month day-of-week` };
+      }
+      const tz = timezone || 'America/Chicago';
+      const nextRun = computeNextRun(schedule, tz);
+      // Use the current tenant context's user — fallback to 'system'
+      const userId = toolInput._userId || 'system';
+      const task = createScheduledTask({
+        tenant_id: tenantId,
+        user_id: userId,
+        agent_id: toolInput._agentId || 'hivemind',
+        title,
+        prompt,
+        cron_expression: schedule,
+        timezone: tz,
+        next_run_at: nextRun,
+        max_runs: max_runs || null,
+      });
+      return {
+        message: `Scheduled task "${title}" created successfully.`,
+        task_id: task.id,
+        schedule,
+        timezone: tz,
+        next_run_at: nextRun,
+        max_runs: max_runs || 'unlimited',
+      };
+    }
+    case 'list_scheduled_tasks': {
+      const tasks = getScheduledTasks(tenantId);
+      if (tasks.length === 0) {
+        return { message: 'No scheduled tasks found.', tasks: [] };
+      }
+      return {
+        count: tasks.length,
+        tasks: tasks.map(t => ({
+          id: t.id,
+          title: t.title,
+          prompt: t.prompt.slice(0, 100) + (t.prompt.length > 100 ? '...' : ''),
+          schedule: t.cron_expression,
+          timezone: t.timezone,
+          enabled: !!t.enabled,
+          next_run_at: t.next_run_at,
+          last_run_at: t.last_run_at,
+          run_count: t.run_count,
+          max_runs: t.max_runs,
+        })),
+      };
+    }
+    case 'delete_scheduled_task': {
+      const { task_id } = toolInput;
+      const { getScheduledTask } = await import('../cache/database.js');
+      const existing = getScheduledTask(task_id);
+      if (!existing || existing.tenant_id !== tenantId) {
+        return { error: `Task not found: "${task_id}"` };
+      }
+      deleteScheduledTask(task_id, tenantId);
+      return { message: `Scheduled task "${existing.title}" deleted.`, deleted_id: task_id };
+    }
+    default:
+      throw new Error(`Unknown scheduler tool: ${toolName}`);
+  }
+}
+
+const SCHEDULER_TOOLS_PROMPT_ADDON = `
+
+You can create and manage recurring scheduled tasks:
+- create_scheduled_task: Set up automated recurring tasks that run on a cron schedule (daily reports, weekly emails, periodic checks). The prompt runs as if a user sent it.
+- list_scheduled_tasks: View all scheduled tasks with their status, schedule, and run history.
+- delete_scheduled_task: Remove a scheduled task by ID.
+
+Common cron patterns:
+- "0 9 * * *" = daily at 9 AM
+- "0 9 * * 1" = every Monday at 9 AM
+- "0 9 * * 1-5" = weekdays at 9 AM
+- "0 */4 * * *" = every 4 hours
+- "30 8 1 * *" = 1st of each month at 8:30 AM`;
+
 // ─── Calendar Tools ──────────────────────────────────────────────────────────
 
 const CALENDAR_TOOLS = [
@@ -1433,6 +1557,50 @@ const GWS_TOOLS = [
       required: ['service', 'resource', 'method'],
     },
   },
+  {
+    name: 'gws_sheets_update',
+    description: 'Update specific cells in a Google Sheets spreadsheet. Overwrites the values in the given range.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        spreadsheet_id: { type: 'string', description: 'Google Sheets spreadsheet ID (from the URL)' },
+        range: { type: 'string', description: 'Target range in A1 notation (e.g., "Sheet1!A1:C3", "Sheet1!B2")' },
+        values: {
+          type: 'array',
+          items: { type: 'array' },
+          description: 'Grid of values to write. Each inner array is a row (e.g., [["Name","Score"],["Alice",95],["Bob",87]])',
+        },
+      },
+      required: ['spreadsheet_id', 'range', 'values'],
+    },
+  },
+  {
+    name: 'gws_docs_update',
+    description: 'Update the content of a Google Doc. Can replace all content or append to the end. Content is plain text or simple text with newlines.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        document_id: { type: 'string', description: 'Google Docs document ID (from the URL)' },
+        content: { type: 'string', description: 'Text content to write (plain text with newlines)' },
+        mode: { type: 'string', enum: ['replace', 'append'], description: 'Write mode: "replace" clears the doc and writes new content, "append" adds to the end. Default: "append"' },
+      },
+      required: ['document_id', 'content'],
+    },
+  },
+  {
+    name: 'gws_drive_create',
+    description: 'Create a new Google Doc or Google Sheet in Drive. Optionally place it in a specific folder and set initial content.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Name of the new file' },
+        type: { type: 'string', enum: ['doc', 'sheet'], description: 'File type: "doc" for Google Doc, "sheet" for Google Sheet' },
+        folder_id: { type: 'string', description: 'Optional Google Drive folder ID to place the file in' },
+        content: { type: 'string', description: 'Optional initial text content (for docs). For sheets, use gws_sheets_update after creation.' },
+      },
+      required: ['title', 'type'],
+    },
+  },
 ];
 
 const GWS_TOOLS_PROMPT_ADDON = `
@@ -1447,13 +1615,43 @@ Available tools:
 - gws_drive_search: Search Google Drive files
 - gws_sheets_read: Read spreadsheet data
 - gws_sheets_append: Append rows to a spreadsheet
+- gws_sheets_update: Overwrite specific cells in a spreadsheet (A1 notation range + 2D values array)
+- gws_docs_update: Replace or append text content to a Google Doc
+- gws_drive_create: Create a new Google Doc or Sheet (optionally in a folder with initial content)
 - gws_workspace_command: Run any Workspace API command (for Docs, Slides, Tasks, etc.)
 
 Notes:
 - Gmail search supports full Gmail syntax: from:, to:, subject:, has:attachment, newer_than:, etc.
 - Drive search uses Drive query syntax: name contains 'x', mimeType='...', etc.
+- For gws_sheets_update, provide a 2D array matching the target range dimensions.
+- For gws_docs_update, mode "replace" clears the document first; "append" adds to the end.
+- For gws_drive_create, use type "doc" or "sheet". After creating a sheet, use gws_sheets_update to populate cells.
 - For gws_workspace_command, use the service/resource/method pattern (e.g., service:"docs", resource:"documents", method:"get", params:{documentId:"..."})
 - Drive operations may fail if the agent's token lacks Drive scopes — use the existing generate_document tool for file creation instead.`;
+
+/**
+ * Create an OAuth2 client for a tenant's Google API calls (Sheets, Docs, Drive).
+ * Mirrors the pattern from driveSync.js — resolves refresh token from key vault or email config.
+ */
+async function makeGoogleAuth(tenantId) {
+  const { getKeyVaultValue, getTenantEmailConfig } = await import('../cache/database.js');
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+
+  let refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
+  if (!refreshToken) {
+    const emailConfig = getTenantEmailConfig(tenantId);
+    refreshToken = emailConfig?.gmailRefreshToken || emailConfig?.gmail_refresh_token;
+  }
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(`No Google OAuth credentials available for tenant "${tenantId}"`);
+  }
+
+  const auth = new google.auth.OAuth2(clientId, clientSecret, 'http://localhost:8099');
+  auth.setCredentials({ refresh_token: refreshToken });
+  return auth;
+}
 
 async function callGwsTool(toolName, toolInput, tenantId) {
   const gws = await import('./gwsService.js');
@@ -1486,6 +1684,123 @@ async function callGwsTool(toolName, toolInput, tenantId) {
       if (toolInput.params) args.push('--params', JSON.stringify(toolInput.params));
       if (toolInput.body) args.push('--json', JSON.stringify(toolInput.body));
       return await gws.execGws(args, tenantId);
+    }
+
+    case 'gws_sheets_update': {
+      const auth = await makeGoogleAuth(tenantId);
+      const sheets = google.sheets({ version: 'v4', auth });
+      const res = await sheets.spreadsheets.values.update({
+        spreadsheetId: toolInput.spreadsheet_id,
+        range: toolInput.range,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: toolInput.values },
+      });
+      return {
+        updatedRange: res.data.updatedRange,
+        updatedRows: res.data.updatedRows,
+        updatedColumns: res.data.updatedColumns,
+        updatedCells: res.data.updatedCells,
+      };
+    }
+
+    case 'gws_docs_update': {
+      const auth = await makeGoogleAuth(tenantId);
+      const docs = google.docs({ version: 'v1', auth });
+      const mode = toolInput.mode || 'append';
+
+      if (mode === 'replace') {
+        // Get current document to find content length
+        const doc = await docs.documents.get({ documentId: toolInput.document_id });
+        const body = doc.data.body;
+        const endIndex = body.content[body.content.length - 1].endIndex;
+
+        const requests = [];
+        // Delete all existing content (keep the trailing newline at index 1)
+        if (endIndex > 2) {
+          requests.push({
+            deleteContentRange: {
+              range: { startIndex: 1, endIndex: endIndex - 1 },
+            },
+          });
+        }
+        // Insert new content at position 1
+        requests.push({
+          insertText: {
+            location: { index: 1 },
+            text: toolInput.content,
+          },
+        });
+
+        await docs.documents.batchUpdate({
+          documentId: toolInput.document_id,
+          requestBody: { requests },
+        });
+        return { success: true, mode: 'replace', document_id: toolInput.document_id, characters_written: toolInput.content.length };
+      } else {
+        // Append mode — insert at end of document
+        const doc = await docs.documents.get({ documentId: toolInput.document_id });
+        const body = doc.data.body;
+        const endIndex = body.content[body.content.length - 1].endIndex;
+
+        await docs.documents.batchUpdate({
+          documentId: toolInput.document_id,
+          requestBody: {
+            requests: [{
+              insertText: {
+                location: { index: endIndex - 1 },
+                text: toolInput.content,
+              },
+            }],
+          },
+        });
+        return { success: true, mode: 'append', document_id: toolInput.document_id, characters_written: toolInput.content.length };
+      }
+    }
+
+    case 'gws_drive_create': {
+      const auth = await makeGoogleAuth(tenantId);
+      const drive = google.drive({ version: 'v3', auth });
+
+      const mimeTypes = {
+        doc: 'application/vnd.google-apps.document',
+        sheet: 'application/vnd.google-apps.spreadsheet',
+      };
+      const mimeType = mimeTypes[toolInput.type];
+      if (!mimeType) throw new Error(`Invalid type "${toolInput.type}". Use "doc" or "sheet".`);
+
+      const fileMetadata = { name: toolInput.title, mimeType };
+      if (toolInput.folder_id) fileMetadata.parents = [toolInput.folder_id];
+
+      const created = await drive.files.create({
+        requestBody: fileMetadata,
+        fields: 'id, name, mimeType, webViewLink',
+      });
+
+      const result = {
+        id: created.data.id,
+        name: created.data.name,
+        type: toolInput.type,
+        url: created.data.webViewLink,
+      };
+
+      // If initial content provided for a doc, write it
+      if (toolInput.content && toolInput.type === 'doc') {
+        const docs = google.docs({ version: 'v1', auth });
+        await docs.documents.batchUpdate({
+          documentId: created.data.id,
+          requestBody: {
+            requests: [{
+              insertText: {
+                location: { index: 1 },
+                text: toolInput.content,
+              },
+            }],
+          },
+        });
+        result.content_written = true;
+      }
+
+      return result;
     }
 
     default:
@@ -2628,7 +2943,7 @@ CONVERSATION STYLE — TRIPLE AIKIDO:
 // ─── Tool Router Helper ─────────────────────────────────────────────────────
 // Centralised dispatch — used by both first-call and loop iterations.
 const TOOL_CATEGORIES = {
-  gws: ['gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read', 'gws_sheets_append', 'gws_workspace_command'],
+  gws: ['gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read', 'gws_sheets_append', 'gws_workspace_command', 'gws_sheets_update', 'gws_docs_update', 'gws_drive_create'],
   emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
   email: ['send_email', 'list_emails', 'read_email'],
   calendar: ['create_meeting'],
@@ -2640,6 +2955,7 @@ const TOOL_CATEGORIES = {
   legal: ['generate_legal_doc'],
   document: ['generate_document'],
   dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote'],
+  scheduler: ['create_scheduled_task', 'list_scheduled_tasks', 'delete_scheduled_task'],
 };
 
 async function routeToolCall(toolName, toolInput, tenantId) {
@@ -2655,6 +2971,7 @@ async function routeToolCall(toolName, toolInput, tenantId) {
   if (TOOL_CATEGORIES.legal.includes(toolName)) return await callLegalTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.document.includes(toolName)) return await callDocumentTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.dacp.includes(toolName)) return await callDacpTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.scheduler.includes(toolName)) return await callSchedulerTool(toolName, toolInput, tenantId);
   return await callWorkspaceTool(toolName, toolInput, tenantId);
 }
 
@@ -2810,6 +3127,9 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Google Workspace CLI tools — hivemind + sangha + zhan
   const gwsAgents = ['hivemind', 'sangha', 'zhan'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
+  // Scheduler tools — hivemind, workflow, comms, zhan, sangha
+  const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
+  const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
   const FORMATTING_RULES = `
 
 ═══ FORMATTING RULES ═══
@@ -2847,7 +3167,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext + siblingContext;
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + knowledgeContext + siblingContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -2900,6 +3220,10 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   if (gwsAgents.includes(agentId)) {
     tools.push(...GWS_TOOLS);
   }
+  // Scheduler tools — recurring task automation
+  if (schedulerAgents.includes(agentId)) {
+    tools.push(...SCHEDULER_TOOLS);
+  }
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -2946,6 +3270,8 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
         'get_estimates', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'compare_contract',
         'run_bid_checks', 'parse_supplier_quote',
+        'gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read',
+        'list_scheduled_tasks',
       ]);
 
       const agentMode = getAgentMode(agentId);
@@ -2972,6 +3298,12 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           workspace_create_sheet: () => `Create spreadsheet: "${toolInput.title || 'untitled'}"`,
           setup_crm_sheet: () => 'Create CRM pipeline sheet and connect to dashboard',
           workspace_create_slides: () => `Create presentation: "${toolInput.title || 'untitled'}"`,
+          gws_sheets_update: () => `Update spreadsheet cells: ${toolInput.range} in ${toolInput.spreadsheet_id}`,
+          gws_docs_update: () => `${toolInput.mode === 'replace' ? 'Replace' : 'Append to'} document: ${toolInput.document_id}`,
+          gws_drive_create: () => `Create new ${toolInput.type === 'sheet' ? 'spreadsheet' : 'document'}: "${toolInput.title || 'untitled'}"`,
+          gws_sheets_append: () => `Append rows to spreadsheet: ${toolInput.range} in ${toolInput.spreadsheet_id}`,
+          create_scheduled_task: () => `Create scheduled task: "${toolInput.title || 'untitled'}" (${toolInput.schedule})`,
+          delete_scheduled_task: () => `Delete scheduled task: ${toolInput.task_id}`,
         };
         const descFn = actionDescriptions[toolName];
         const actionDesc = descFn ? descFn() : `Execute tool: ${toolName}`;
@@ -3010,6 +3342,11 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       // ─── End Copilot Interceptor ───────────────────────────────────────
 
       // Call the tool — route to appropriate handler (autonomous mode or safe tool)
+      // Inject caller context for scheduler tools (needed to set task owner)
+      if (TOOL_CATEGORIES.scheduler.includes(toolName)) {
+        toolInput._userId = userId;
+        toolInput._agentId = agentId;
+      }
       let toolResult;
       let toolIsError = false;
       try {
@@ -3085,6 +3422,11 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           return { response: copilotPause, approval_pending: true, approval_id: Number(loopApprovalId), tool_proposed: nextToolName, tool_input: nextToolInput, action_description: actionDesc, all_tool_results: allToolResults };
         }
 
+        // Inject caller context for scheduler tools (needed to set task owner)
+        if (TOOL_CATEGORIES.scheduler.includes(nextToolName)) {
+          nextToolInput._userId = userId;
+          nextToolInput._agentId = agentId;
+        }
         try {
           nextToolResult = await routeToolCall(nextToolName, nextToolInput, tenantId);
         } catch (toolError) {
@@ -3198,7 +3540,12 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
 /**
  * Streaming version of chat() — streams text tokens via onChunk callback.
- * For tool use scenarios, falls back to non-streaming chat().
+ * Supports multi-step tool use: when Claude requests a tool, we execute it
+ * and continue the conversation (streaming each follow-up response).
+ *
+ * Tool invocations are communicated to the frontend via inline XML markers
+ * in the text stream: `<tool_name>` (opens spinner) and `</tool_name>` (closes it).
+ * The frontend's formatContent() already parses these tags.
  *
  * @param {Function} onChunk - Called with each text chunk: onChunk(text)
  * @returns {Promise<Object>} Final result (same shape as chat())
@@ -3240,6 +3587,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
   const gwsAgents = ['hivemind', 'sangha', 'zhan'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
+  const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
+  const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
 
   // Inject sibling thread context for cross-thread awareness
   let siblingContext = '';
@@ -3257,7 +3606,28 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext + siblingContext;
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + knowledgeContext + siblingContext;
+
+  // ─── Build tools list (must match chat()) ───────────────────────────────
+  const tools = [...WORKSPACE_TOOLS];
+  if (leAgents.includes(agentId)) tools.push(...LEAD_ENGINE_TOOLS);
+  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating', 'workflow'];
+  if (knAgents.includes(agentId)) tools.push(...KNOWLEDGE_TOOLS);
+  if (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) tools.push(...HUBSPOT_TOOLS);
+  const miningAgents = ['sangha', 'curtailment'];
+  if (miningAgents.includes(agentId)) tools.push(...MINING_TOOLS);
+  const dacpAgents = ['hivemind', 'estimating', 'workflow'];
+  if (dacpAgents.includes(agentId)) tools.push(...DACP_TOOLS);
+  if (emailAgents.includes(agentId)) tools.push(...EMAIL_TOOLS);
+  if (esAgents.includes(agentId)) tools.push(...EMAIL_SECURITY_TOOLS);
+  tools.push(...WEB_TOOLS);
+  if (legalAgents.includes(agentId)) tools.push(...LEGAL_TOOLS);
+  if (docAgents.includes(agentId)) tools.push(...DOCUMENT_TOOLS);
+  const calendarAgents = ['hivemind', 'sangha', 'zhan'];
+  if (calendarAgents.includes(agentId)) tools.push(...CALENDAR_TOOLS);
+  if (gwsAgents.includes(agentId)) tools.push(...GWS_TOOLS);
+  // Scheduler tools — recurring task automation
+  if (schedulerAgents.includes(agentId)) tools.push(...SCHEDULER_TOOLS);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';
@@ -3273,22 +3643,152 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       ? 'claude-haiku-4-5-20251001'
       : selectModel(agentId, userContent, messages.length, hasToolAddons);
 
-    const stream = getAnthropic().messages.stream({
-      model: selectedModel,
-      max_tokens: options.helpMode ? 1024 : 4096,
-      system: systemPrompt,
-      messages,
-    });
+    const maxTokens = options.helpMode ? 1024 : 4096;
 
-    let fullText = '';
+    // ─── Helper: run one streaming API call, collecting text + tool_use blocks ─
+    async function streamOneRound(roundMessages) {
+      const stream = getAnthropic().messages.stream({
+        model: selectedModel,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: roundMessages,
+        tools,
+      });
 
-    stream.on('text', (text) => {
-      fullText += text;
-      onChunk(text);
-    });
+      let roundText = '';
 
-    const finalMessage = await stream.finalMessage();
+      stream.on('text', (text) => {
+        roundText += text;
+        onChunk(text);
+      });
 
+      const finalMessage = await stream.finalMessage();
+      return { finalMessage, roundText };
+    }
+
+    // ─── First streaming round ──────────────────────────────────────────────
+    let { finalMessage, roundText } = await streamOneRound(messages);
+    let fullText = roundText;
+    let totalInputTokens = finalMessage.usage?.input_tokens || 0;
+    let totalOutputTokens = finalMessage.usage?.output_tokens || 0;
+
+    // ─── Agentic tool loop ──────────────────────────────────────────────────
+    // If the model wants to call a tool, execute it and continue streaming.
+    // Loop up to maxTurns times (same limit as non-streaming chat()).
+    if (finalMessage.stop_reason === 'tool_use') {
+      const allToolResults = [];
+      let loopMessages = [...messages, { role: 'assistant', content: finalMessage.content }];
+      let lastToolName = null;
+      let lastToolInput = null;
+      let lastToolResult = null;
+      let currentStopReason = finalMessage.stop_reason;
+      let currentContent = finalMessage.content;
+      const maxTurns = getMaxTurns(agentId);
+      let iteration = 0;
+
+      // TODO: Copilot mode approval in streaming is complex — the SSE connection
+      // would need to pause while waiting for user approval via a separate HTTP call.
+      // For now, streaming tool use executes tools freely (matching autonomous mode).
+      // Non-streaming chat() already handles copilot approval correctly.
+
+      while (currentStopReason === 'tool_use' && iteration < maxTurns) {
+        iteration++;
+
+        // Find all tool_use blocks in this response (Claude can request multiple tools)
+        const toolBlocks = currentContent.filter(block => block.type === 'tool_use');
+        if (toolBlocks.length === 0) break;
+
+        // Build tool_result messages for all requested tools
+        const toolResultContents = [];
+
+        for (const toolBlock of toolBlocks) {
+          const { id: toolUseId, name: toolName, input: toolInput } = toolBlock;
+
+          // Send open tag to frontend — shows spinner widget
+          onChunk(`\n<${toolName}>`);
+
+          let toolResult;
+          let toolIsError = false;
+          try {
+            toolResult = await routeToolCall(toolName, toolInput, tenantId);
+          } catch (toolError) {
+            toolResult = { error: toolError.message };
+            toolIsError = true;
+          }
+
+          // Send close tag to frontend — shows checkmark widget
+          onChunk(`</${toolName}>\n`);
+
+          allToolResults.push({ tool_used: toolName, tool_input: toolInput, tool_result: toolResult, is_error: toolIsError });
+          lastToolName = toolName;
+          lastToolInput = toolInput;
+          lastToolResult = toolResult;
+
+          // Append the tool result to the tool_result content array
+          toolResultContents.push({
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: JSON.stringify(toolResult),
+            is_error: toolIsError,
+          });
+        }
+
+        // Add tool results to conversation and stream next response
+        loopMessages = [
+          ...loopMessages,
+          { role: 'user', content: toolResultContents },
+        ];
+
+        const nextRound = await streamOneRound(loopMessages);
+        fullText += nextRound.roundText;
+        totalInputTokens += nextRound.finalMessage.usage?.input_tokens || 0;
+        totalOutputTokens += nextRound.finalMessage.usage?.output_tokens || 0;
+
+        currentStopReason = nextRound.finalMessage.stop_reason;
+        currentContent = nextRound.finalMessage.content;
+
+        // Append assistant content for next iteration's context
+        loopMessages = [...loopMessages, { role: 'assistant', content: nextRound.finalMessage.content }];
+      }
+
+      if (iteration >= maxTurns) {
+        console.warn(`[ChatStream] Agent ${agentId} hit max_turns limit (${maxTurns})`);
+      }
+
+      // If no text was streamed across all rounds (rare), send a fallback
+      if (!fullText.trim()) {
+        const fallback = 'I wasn\'t able to generate a response. Please try rephrasing your question.';
+        onChunk(fallback);
+        fullText = fallback;
+      }
+
+      // Save assistant response with tool metadata (matches chat() save format)
+      saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
+        model: selectedModel,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        stop_reason: currentStopReason,
+        tool_used: lastToolName,
+        tool_input: lastToolInput,
+        tool_result: lastToolResult,
+        streamed: true,
+      }, threadId);
+
+      // Save thread summary for cross-thread awareness
+      if (threadId) {
+        try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${fullText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
+      }
+
+      return {
+        response: fullText,
+        tool_used: lastToolName,
+        tool_input: lastToolInput,
+        tool_result: lastToolResult,
+        all_tool_results: allToolResults,
+      };
+    }
+
+    // ─── No tool use — standard text response ─────────────────────────────
     // If model produced no text (rare), send a fallback so the frontend isn't empty
     if (!fullText.trim()) {
       const fallback = 'I wasn\'t able to generate a response. Please try rephrasing your question.';
@@ -3298,8 +3798,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
     saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
       model: finalMessage.model,
-      input_tokens: finalMessage.usage?.input_tokens,
-      output_tokens: finalMessage.usage?.output_tokens,
+      input_tokens: totalInputTokens,
+      output_tokens: totalOutputTokens,
       stop_reason: finalMessage.stop_reason,
       streamed: true,
     }, threadId);
