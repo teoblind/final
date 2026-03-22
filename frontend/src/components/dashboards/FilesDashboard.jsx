@@ -1958,6 +1958,8 @@ export default function FilesDashboard() {
   const [commentCounts, setCommentCounts] = useState({});
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [syncing, setSyncing] = useState(false);
   const fileInputRef = useRef(null);
 
   const showToast = (msg, type = 'info') => {
@@ -2145,6 +2147,64 @@ export default function FilesDashboard() {
     setLoading(false);
   };
 
+  // ─── Drive Sync ────────────────────────────────────────────────────────
+  const fetchSyncStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/files/sync-status`);
+      if (res.ok) {
+        const data = await res.json();
+        setSyncStatus(data.syncStatus || null);
+        if (data.syncStatus?.status === 'running') {
+          setSyncing(true);
+        } else {
+          setSyncing(false);
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleSyncDrive = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/files/sync-drive`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'already_running') {
+          showToast('Drive sync already running...', 'info');
+        } else {
+          showToast('Drive sync started', 'success');
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Sync failed', 'error');
+        setSyncing(false);
+      }
+    } catch (err) {
+      showToast('Failed to start sync', 'error');
+      setSyncing(false);
+    }
+  };
+
+  // Poll sync status while syncing
+  useEffect(() => {
+    fetchSyncStatus();
+    if (!syncing) return;
+    const interval = setInterval(async () => {
+      await fetchSyncStatus();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [syncing, fetchSyncStatus]);
+
+  // When sync completes, refresh file list
+  const prevSyncRef = useRef(null);
+  useEffect(() => {
+    if (prevSyncRef.current === 'running' && syncStatus?.status === 'completed') {
+      refreshFiles();
+      showToast(`Drive sync complete — ${syncStatus.files_indexed || 0} files indexed`, 'success');
+    }
+    prevSyncRef.current = syncStatus?.status || null;
+  }, [syncStatus?.status]);
+
   const toggleFolder = (name) => {
     setExpandedFolders(prev => {
       const next = new Set(prev);
@@ -2221,6 +2281,33 @@ export default function FilesDashboard() {
           {uploading ? 'Uploading...' : 'Upload'}
         </button>
         <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
+        <button
+          onClick={handleSyncDrive}
+          disabled={syncing}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-terminal-muted bg-[#f5f4f0] border border-terminal-border hover:bg-[#eeede8] transition-colors disabled:opacity-50"
+          title="Scan your connected Google Drive and index all files for AI context"
+        >
+          <DriveIcon />
+          {syncing ? (
+            <>
+              <div className="w-3 h-3 rounded-full border-2 border-[#9ca3af] border-t-transparent animate-spin" />
+              {syncStatus?.files_found > 0
+                ? `${syncStatus.files_indexed || 0}/${syncStatus.files_found}`
+                : 'Scanning...'}
+            </>
+          ) : 'Sync Drive'}
+        </button>
+        {syncStatus?.last_successful_sync && !syncing && (
+          <span className="text-[10px] text-terminal-muted" title={new Date(syncStatus.last_successful_sync).toLocaleString()}>
+            Last synced {(() => {
+              const mins = Math.round((Date.now() - new Date(syncStatus.last_successful_sync).getTime()) / 60000);
+              if (mins < 1) return 'just now';
+              if (mins < 60) return `${mins}m ago`;
+              if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+              return `${Math.round(mins / 1440)}d ago`;
+            })()}
+          </span>
+        )}
         <div className="flex-1" />
         <div className="relative w-56">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-terminal-muted" />
@@ -2238,7 +2325,7 @@ export default function FilesDashboard() {
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-12 text-center">
           <div className="text-3xl mb-3 opacity-40">📁</div>
           <p className="text-sm font-semibold text-terminal-text mb-1">No files yet</p>
-          <p className="text-[12px] text-terminal-muted">Upload files using the button above to get started.</p>
+          <p className="text-[12px] text-terminal-muted">Upload files or click "Sync Drive" to import from Google Drive.</p>
         </div>
       ) : (
       <div className="flex gap-5">

@@ -4,6 +4,8 @@
  * GET    /api/v1/files            — List files (with category/search filters)
  * GET    /api/v1/files/categories — Get category list with counts
  * POST   /api/v1/files/upload     — Upload file to Google Drive
+ * POST   /api/v1/files/sync-drive — Trigger Drive auto-scan
+ * GET    /api/v1/files/sync-status — Get sync progress
  */
 
 import express from 'express';
@@ -11,7 +13,8 @@ import multer from 'multer';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { authenticate } from '../middleware/auth.js';
-import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue } from '../cache/database.js';
+import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue, getDriveSyncStatus, getDriveSyncedFiles, getDriveSyncedFileCount } from '../cache/database.js';
+import { runWithTenant } from '../cache/database.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -219,6 +222,64 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   } catch (err) {
     console.error('File upload error:', err);
     res.status(500).json({ error: err.message || 'Upload failed' });
+  }
+});
+
+/**
+ * POST /sync-drive — Trigger a full Drive sync (runs in background)
+ */
+router.post('/sync-drive', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+
+    // Check if sync is already running
+    const status = getDriveSyncStatus(tenantId);
+    if (status?.status === 'running') {
+      // Check if it's been running for more than 30 min (stale)
+      const startedAt = new Date(status.started_at).getTime();
+      if (Date.now() - startedAt < 30 * 60 * 1000) {
+        return res.json({ status: 'already_running', ...status });
+      }
+    }
+
+    // Fire and forget — sync runs in background with tenant context
+    const { syncDrive } = await import('../services/driveSync.js');
+    runWithTenant(tenantId, () => syncDrive(tenantId)).catch(err => {
+      console.error(`[DriveSync] Background sync failed for ${tenantId}:`, err.message);
+    });
+
+    res.json({ status: 'started', message: 'Drive sync initiated' });
+  } catch (err) {
+    console.error('Sync drive error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /sync-status — Get current Drive sync status
+ */
+router.get('/sync-status', (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const status = getDriveSyncStatus(tenantId);
+    res.json({ syncStatus: status || { status: 'never', last_successful_sync: null } });
+  } catch (err) {
+    res.json({ syncStatus: { status: 'never', last_successful_sync: null } });
+  }
+});
+
+/**
+ * GET /drive-files — List all synced Drive files
+ */
+router.get('/drive-files', (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { search, limit } = req.query;
+    const files = getDriveSyncedFiles(tenantId, { search, limit: parseInt(limit) || 200 });
+    const count = getDriveSyncedFileCount(tenantId);
+    res.json({ files, total: count });
+  } catch (err) {
+    res.json({ files: [], total: 0 });
   }
 });
 

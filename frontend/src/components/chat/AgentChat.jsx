@@ -1968,7 +1968,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
-  const [contextPanelOpen, setContextPanelOpen] = useState(true);
+  const [contextPanelWidth, setContextPanelWidth] = useState(340); // px, 0 = minimized
+  const contextDragRef = useRef(null);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const userScrolledUpRef = useRef(false);
@@ -1976,6 +1977,31 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const fileInputRef = useRef(null);
   const autoVoiceRef = useRef(false);
   const isAdmin = ['owner', 'admin'].includes(authUser?.role);
+
+  // ── Context panel drag-to-resize ──────────────────────────────────────────
+  const contextPanelRef = useRef(null);
+  const handleContextDragStart = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const panel = contextPanelRef.current;
+    const startWidth = panel ? panel.offsetWidth : 340;
+
+    const onMove = (moveE) => {
+      const delta = startX - moveE.clientX;
+      const w = startWidth + delta;
+      setContextPanelWidth(w < 80 ? 0 : Math.max(200, Math.min(600, w)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   // ── Multi-instance state (Hivemind agents only) ──────────────────────────
   const isMultiInstance = !!agent.multiInstance;
@@ -2711,7 +2737,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
         {/* Chat area */}
         <div
-          className={`${contextPanelOpen ? 'flex-[3]' : 'flex-1'} flex flex-col min-w-0 min-h-0 relative transition-all duration-300 ${dragging ? 'ring-2 ring-inset' : ''}`}
+          className={`flex-1 flex flex-col min-w-0 min-h-0 relative ${dragging ? 'ring-2 ring-inset' : ''}`}
           style={dragging ? { ringColor: agent.accentColor } : {}}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -2808,18 +2834,27 @@ export default function AgentChat({ agentId = 'estimating' }) {
           </div>
         </div>
 
-        {/* Context panel slide handle + panel */}
+        {/* Context panel resize handle + panel */}
+        {/* Drag handle */}
         <div
-          onClick={() => setContextPanelOpen(prev => !prev)}
-          className="w-3 flex-shrink-0 cursor-col-resize flex items-center justify-center hover:bg-[#e8e7e3] transition-colors group relative"
-          title={contextPanelOpen ? 'Minimize context panel' : 'Expand context panel'}
+          onMouseDown={handleContextDragStart}
+          onDoubleClick={() => setContextPanelWidth(w => w === 0 ? 340 : 0)}
+          className="w-4 flex-shrink-0 cursor-col-resize flex items-center justify-center hover:bg-[#e8e7e3] transition-colors group"
+          title="Drag to resize"
         >
           <div className="w-[3px] h-10 rounded-full bg-[#d5d3ce] group-hover:bg-[#b5b3ae] transition-colors" />
         </div>
+        {/* Context panel */}
         <div
-          className={`min-h-0 overflow-y-auto bg-[#f5f4f0] transition-all duration-300 ease-in-out ${contextPanelOpen ? 'flex-[2] min-w-0 opacity-100' : 'w-0 min-w-0 opacity-0 overflow-hidden'}`}
+          ref={contextPanelRef}
+          className="min-h-0 overflow-hidden bg-[#f5f4f0] flex-shrink-0"
+          style={{ width: contextPanelWidth }}
         >
-          {contextPanelOpen && <ContextPanel agentId={agentId} />}
+          {contextPanelWidth > 0 && (
+            <div className="h-full overflow-y-auto" style={{ minWidth: 200 }}>
+              <ContextPanel agentId={agentId} />
+            </div>
+          )}
         </div>
       </div>
       )}

@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -1757,6 +1757,19 @@ function buildKnowledgeContext(tenantId, userMessage) {
       }
       contextBlocks.push(ai);
     }
+
+    // Search synced Drive files for relevant content (RAG)
+    try {
+      const driveResults = searchDriveContents(tenantId, userMessage, 3);
+      if (driveResults.length > 0) {
+        let dc = 'RELEVANT DRIVE FILE EXCERPTS:\n\n';
+        for (const r of driveResults) {
+          dc += `[FILE: ${r.name}] ${r.category || ''}\n`;
+          dc += `${r.snippet}\n\n`;
+        }
+        contextBlocks.push(dc);
+      }
+    } catch (e) { /* Drive search not available yet */ }
   } catch (err) {
     // Non-fatal — proceed without knowledge context
   }

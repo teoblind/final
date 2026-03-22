@@ -850,6 +850,9 @@ function initSchemaForDb(targetDb) {
   // Initialize accounting tables (QuickBooks / Bill.com)
   initAccountingTables(targetDb);
 
+  // Drive sync tables (auto-scan + RAG)
+  initDriveSyncTables(targetDb);
+
 
   // =========================================================================
   // Portfolio Companies (Zhan Capital)
@@ -4982,6 +4985,135 @@ export function upsertTenantFile(file) {
 
 export function getTenantFileCount(tenantId) {
   return db.prepare('SELECT COUNT(*) as count FROM tenant_files WHERE tenant_id = ?').get(tenantId).count;
+}
+
+// ─── Drive Sync (Auto-scan + RAG) ───────────────────────────────────────────
+
+function initDriveSyncTables(targetDb) {
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS drive_synced_files (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      category TEXT,
+      file_type TEXT,
+      size_bytes INTEGER DEFAULT 0,
+      modified_time TEXT,
+      drive_url TEXT,
+      parent_folder_name TEXT,
+      has_content INTEGER DEFAULT 0,
+      content_length INTEGER DEFAULT 0,
+      content_text TEXT,
+      first_synced_at TEXT DEFAULT (datetime('now')),
+      last_synced_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dsf_tenant ON drive_synced_files(tenant_id)'); } catch (e) {}
+
+  // FTS5 for full-text search of Drive file contents
+  // Migrate: drop old 2-column schema if it exists
+  try {
+    const ftsInfo = targetDb.pragma("table_info('drive_fts')");
+    if (ftsInfo.length > 0 && !ftsInfo.some(c => c.name === 'drive_file_id')) {
+      targetDb.exec('DROP TABLE IF EXISTS drive_fts');
+    }
+  } catch (e) { /* table may not exist */ }
+  try {
+    targetDb.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS drive_fts USING fts5(
+        drive_file_id, tenant_id, name, content_text, tokenize='porter unicode61'
+      )
+    `);
+  } catch (e) { /* FTS5 may already exist */ }
+
+  // Sync status tracking per tenant
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS drive_sync_status (
+      tenant_id TEXT PRIMARY KEY,
+      status TEXT DEFAULT 'idle',
+      started_at TEXT,
+      completed_at TEXT,
+      files_found INTEGER DEFAULT 0,
+      files_indexed INTEGER DEFAULT 0,
+      error_message TEXT,
+      last_successful_sync TEXT
+    )
+  `);
+}
+
+export function getDriveSyncStatus(tenantId) {
+  return db.prepare('SELECT * FROM drive_sync_status WHERE tenant_id = ?').get(tenantId) || null;
+}
+
+export function upsertDriveSyncStatus(tenantId, updates) {
+  const existing = db.prepare('SELECT * FROM drive_sync_status WHERE tenant_id = ?').get(tenantId);
+  if (!existing) {
+    db.prepare('INSERT INTO drive_sync_status (tenant_id, status) VALUES (?, ?)').run(tenantId, 'idle');
+  }
+  const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  const values = Object.values(updates);
+  db.prepare(`UPDATE drive_sync_status SET ${fields} WHERE tenant_id = ?`).run(...values, tenantId);
+}
+
+export function upsertDriveSyncedFile(file) {
+  return db.prepare(`
+    INSERT INTO drive_synced_files (id, tenant_id, name, mime_type, category, file_type, size_bytes, modified_time, drive_url, parent_folder_name, has_content, content_length, content_text, last_synced_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name, mime_type = excluded.mime_type, category = excluded.category,
+      file_type = excluded.file_type, size_bytes = excluded.size_bytes, modified_time = excluded.modified_time,
+      drive_url = excluded.drive_url, parent_folder_name = excluded.parent_folder_name,
+      has_content = excluded.has_content, content_length = excluded.content_length,
+      content_text = excluded.content_text, last_synced_at = datetime('now')
+  `).run(file.id, file.tenantId, file.name, file.mimeType, file.category || 'Other', file.fileType, file.sizeBytes || 0, file.modifiedTime, file.driveUrl, file.parentFolderName, file.hasContent ? 1 : 0, file.contentLength || 0, file.contentText);
+}
+
+export function upsertDriveFtsEntry(driveFileId, tenantId, name, contentText) {
+  // Delete existing entry then re-insert (FTS5 doesn't support UPSERT)
+  try {
+    db.prepare('DELETE FROM drive_fts WHERE drive_file_id = ?').run(driveFileId);
+  } catch (e) { /* may not exist */ }
+  if (contentText) {
+    db.prepare('INSERT INTO drive_fts (drive_file_id, tenant_id, name, content_text) VALUES (?, ?, ?, ?)').run(driveFileId, tenantId, name, contentText);
+  }
+}
+
+export function searchDriveContents(tenantId, query, limit = 3) {
+  // Sanitize query for FTS5
+  const safeQuery = query.replace(/[^\w\s]/g, ' ').trim().split(/\s+/).filter(w => w.length > 2).join(' ');
+  if (!safeQuery) return [];
+
+  try {
+    return db.prepare(`
+      SELECT df.name, df.drive_url, df.category,
+             snippet(drive_fts, 3, '>>>', '<<<', '...', 40) as snippet
+      FROM drive_fts fts
+      JOIN drive_synced_files df ON df.id = fts.drive_file_id
+      WHERE drive_fts MATCH ?
+        AND fts.tenant_id = ?
+      ORDER BY rank
+      LIMIT ?
+    `).all(safeQuery, tenantId, limit);
+  } catch (e) {
+    return [];
+  }
+}
+
+export function getDriveSyncedFiles(tenantId, { search, limit = 200 } = {}) {
+  let sql = 'SELECT id, name, mime_type, category, file_type, size_bytes, modified_time, drive_url, parent_folder_name, has_content, content_length, last_synced_at FROM drive_synced_files WHERE tenant_id = ?';
+  const params = [tenantId];
+  if (search) {
+    sql += ' AND name LIKE ?';
+    params.push(`%${search}%`);
+  }
+  sql += ' ORDER BY modified_time DESC LIMIT ?';
+  params.push(limit);
+  return db.prepare(sql).all(...params);
+}
+
+export function getDriveSyncedFileCount(tenantId) {
+  return db.prepare('SELECT COUNT(*) as count FROM drive_synced_files WHERE tenant_id = ?').get(tenantId)?.count || 0;
 }
 
 export function getRecentApiLogs(limit = 20) {
