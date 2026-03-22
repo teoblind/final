@@ -218,7 +218,7 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
     // Auto-title: use first ~60 chars of first user message
     if (!thread.title) {
       const rawTitle = content.trim().replace(/\s+/g, ' ');
-      const shortTitle = rawTitle.length > 40 ? rawTitle.slice(0, 40).replace(/\s\S*$/, '...') : rawTitle;
+      const shortTitle = rawTitle.length > 25 ? rawTitle.slice(0, 25).replace(/\s\S*$/, '...') : rawTitle;
       updateThreadTitle(threadId, shortTitle);
     }
 
@@ -501,7 +501,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
 
     if (!thread.title) {
       const rawTitle = content.trim().replace(/\s+/g, ' ');
-      const shortTitle = rawTitle.length > 40 ? rawTitle.slice(0, 40).replace(/\s\S*$/, '...') : rawTitle;
+      const shortTitle = rawTitle.length > 25 ? rawTitle.slice(0, 25).replace(/\s\S*$/, '...') : rawTitle;
       updateThreadTitle(threadId, shortTitle);
     }
 
@@ -653,7 +653,8 @@ router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('
 
     if (!thread.title) {
       const titleText = textContent || `File upload: ${uploadedFiles.map(f => f.originalname).join(', ')}`;
-      updateThreadTitle(threadId, titleText.slice(0, 60));
+      const shortUploadTitle = titleText.length > 25 ? titleText.slice(0, 25).replace(/\s\S*$/, '...') : titleText;
+      updateThreadTitle(threadId, shortUploadTitle);
     }
 
     // SSE stream
