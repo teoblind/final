@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -999,8 +999,29 @@ function detectConfirmation(content) {
   return CONFIRM_PATTERNS.some(p => p.test(tail));
 }
 
-function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
+function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit }) {
   const accent = agentDef?.accentColor || '#1e3a5f';
+  const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(msg.content || '');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleStartEdit = () => {
+    setEditText(msg.content || '');
+    setEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (editText.trim() && onEdit) {
+      onEdit(msg.id, editText.trim());
+    }
+    setEditing(false);
+  };
 
   if (msg.type === 'invoke') {
     return <InvokeIndicator text={msg.content} accentColor={accent} />;
@@ -1045,18 +1066,47 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
         )}
 
         {/* Bubble — only render if there's text content */}
-        {msg.content && (
-          <div
-            className={`px-4 py-3 text-[13px] leading-[1.6] ${
-              isUser
-                ? 'text-white rounded-[14px] rounded-tr-[4px]'
-                : msg.error
-                  ? 'bg-red-50 border border-red-200 text-red-700 rounded-[14px] rounded-tl-[4px]'
-                  : 'bg-terminal-panel border border-[#e8e6e1] text-[#333330] rounded-[14px] rounded-tl-[4px]'
-            }`}
-            style={isUser ? { backgroundColor: accent } : undefined}
-          >
-            {formatContent(msg.content)}
+        {msg.content && !editing && (
+          <div className="group/bubble relative">
+            <div
+              className={`px-4 py-3 text-[13px] leading-[1.6] ${
+                isUser
+                  ? 'text-white rounded-[14px] rounded-tr-[4px]'
+                  : msg.error
+                    ? 'bg-red-50 border border-red-200 text-red-700 rounded-[14px] rounded-tl-[4px]'
+                    : 'bg-terminal-panel border border-[#e8e6e1] text-[#333330] rounded-[14px] rounded-tl-[4px]'
+              }`}
+              style={isUser ? { backgroundColor: accent } : undefined}
+            >
+              {formatContent(msg.content)}
+            </div>
+            {/* Copy / Edit buttons — appear on hover */}
+            <div className={`flex items-center gap-0.5 mt-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity ${isUser ? 'justify-end' : ''}`}>
+              <button onClick={handleCopy} className="p-1 rounded hover:bg-[#e8e6e1] transition-colors" title="Copy">
+                {copied ? <ClipboardCheck size={12} className="text-green-600" /> : <Copy size={12} className="text-[#9a9a92]" />}
+              </button>
+              {isUser && onEdit && (
+                <button onClick={handleStartEdit} className="p-1 rounded hover:bg-[#e8e6e1] transition-colors" title="Edit">
+                  <Pencil size={12} className="text-[#9a9a92]" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Edit mode */}
+        {editing && (
+          <div className="flex flex-col gap-1.5">
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              className="w-full px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] text-[#333330] bg-white outline-none resize-none min-h-[60px] focus:border-[#9a9a92]"
+              autoFocus
+            />
+            <div className="flex gap-1.5 justify-end">
+              <button onClick={() => setEditing(false)} className="px-2.5 py-1 text-[11px] text-[#6b6b65] hover:bg-[#e8e6e1] rounded transition-colors">Cancel</button>
+              <button onClick={handleSaveEdit} className="px-2.5 py-1 text-[11px] text-white rounded transition-colors" style={{ backgroundColor: accent }}>Save & Resend</button>
+            </div>
           </div>
         )}
 
@@ -2318,6 +2368,24 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const handleDragLeave = (e) => { e.preventDefault(); setDragging(false); };
   const handleDrop = (e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); };
 
+  // Edit and resend a user message
+  const handleEditMessage = useCallback(async (msgId, newText) => {
+    if (!newText || sending) return;
+    // Remove the edited message and all messages after it
+    setMessages(prev => {
+      const idx = prev.findIndex(m => m.id === msgId);
+      if (idx === -1) return prev;
+      return prev.slice(0, idx);
+    });
+    // Set input to the new text and trigger send
+    setInput(newText);
+    // Small delay to let state update, then send
+    setTimeout(() => {
+      const sendBtn = document.querySelector('[data-send-btn]');
+      if (sendBtn) sendBtn.click();
+    }, 50);
+  }, [sending]);
+
   // Send message
   const handleSend = async () => {
     const text = input.trim();
@@ -2663,7 +2731,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
             {messages.map((msg, idx) => {
               // Find if this is the last agent message (for auto-confirm buttons)
               const isLastAgent = !sending && msg.role === 'agent' && !messages.slice(idx + 1).some(m => m.role === 'agent');
-              return <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} isLastAgent={isLastAgent} />;
+              return <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} isLastAgent={isLastAgent} onEdit={handleEditMessage} />;
             })}
 
             {/* Typing indicator + progress */}
@@ -2736,6 +2804,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 </button>
               </div>
               <button
+                data-send-btn
                 onClick={handleSend}
                 disabled={(!input.trim() && pendingFiles.length === 0) || sending}
                 className="w-11 h-11 rounded-xl text-white flex items-center justify-center transition-colors disabled:opacity-40 shrink-0"
