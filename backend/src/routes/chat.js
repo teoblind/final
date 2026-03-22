@@ -217,7 +217,9 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
 
     // Auto-title: use first ~60 chars of first user message
     if (!thread.title) {
-      updateThreadTitle(threadId, content.trim().slice(0, 60));
+      const rawTitle = content.trim().replace(/\s+/g, ' ');
+      const shortTitle = rawTitle.length > 40 ? rawTitle.slice(0, 40).replace(/\s\S*$/, '...') : rawTitle;
+      updateThreadTitle(threadId, shortTitle);
     }
 
     const result = await chat(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode });
@@ -496,7 +498,9 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     }
 
     if (!thread.title) {
-      updateThreadTitle(threadId, content.trim().slice(0, 60));
+      const rawTitle = content.trim().replace(/\s+/g, ' ');
+      const shortTitle = rawTitle.length > 40 ? rawTitle.slice(0, 40).replace(/\s\S*$/, '...') : rawTitle;
+      updateThreadTitle(threadId, shortTitle);
     }
 
     // Set up SSE

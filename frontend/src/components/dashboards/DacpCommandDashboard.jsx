@@ -49,7 +49,16 @@ export default function DacpCommandDashboard({ onNavigate }) {
     ]).then(([statsRes, inboxRes, meetingsRes]) => {
       setStats(statsRes.stats || null);
       setBids(inboxRes.bidRequests || []);
-      setMeetings(meetingsRes.meetings || []);
+      const mtgs = meetingsRes.meetings || [];
+      setMeetings(mtgs);
+      // Pre-populate invitedMeetings for meetings where agent is already an attendee
+      const alreadyInvited = new Set();
+      for (const m of mtgs) {
+        if (m.attendees?.some(a => a.email?.includes('coppice') || a.email?.includes('agent@'))) {
+          alreadyInvited.add(m.id);
+        }
+      }
+      if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
     }).catch(console.error).finally(() => setLoading(false));
   }, [meetingRange]);
 
