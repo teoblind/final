@@ -1996,6 +1996,55 @@ async function callEmailTool(toolName, toolInput, tenantId) {
   throw new Error(`Unknown email tool: ${toolName}`);
 }
 
+// ─── Code Execution ──────────────────────────────────────────────────────
+const CODE_EXECUTION_TOOLS = [
+  {
+    name: 'execute_code',
+    description: 'Execute code in a sandboxed environment. Use this for calculations, data analysis, file processing, generating charts, or any computational task. The sandbox has Python 3 (with pandas, numpy, matplotlib), Node.js, and bash. Files written to /workspace persist across calls within the conversation.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        language: { type: 'string', enum: ['python', 'javascript', 'bash'], description: 'Programming language to use' },
+        code: { type: 'string', description: 'Code to execute' },
+      },
+      required: ['language', 'code'],
+    },
+  },
+];
+
+const CODE_EXECUTION_PROMPT_ADDON = `
+
+═══ CODE EXECUTION ═══
+You have access to a sandboxed code execution environment. Use the execute_code tool when you need to:
+- Perform calculations or data analysis
+- Process or transform data
+- Generate charts or visualizations (save to /workspace, use matplotlib for Python)
+- Run scripts or automate tasks
+- Parse files or work with structured data
+
+The sandbox has Python 3 (pandas, numpy, matplotlib, requests), Node.js, and bash.
+Files in /workspace persist across calls. Output is captured from stdout/stderr.
+The sandbox has NO internet access and a 30-second timeout.`;
+
+const codeAgents = ['hivemind', 'sangha', 'zhan', 'workflow'];
+
+async function callCodeTool(input, tenantId) {
+  const { language, code } = input;
+  if (!['python', 'javascript', 'bash'].includes(language)) {
+    return { error: 'Invalid language. Use python, javascript, or bash.' };
+  }
+  const { executeCode } = await import('./sandboxService.js');
+  const result = await executeCode(tenantId, language, code);
+
+  let output = '';
+  if (result.stdout) output += result.stdout;
+  if (result.stderr) output += (output ? '\n\nSTDERR:\n' : '') + result.stderr;
+  if (!output) output = `(no output, exit code: ${result.exitCode})`;
+  output += `\n\n[Executed in ${result.durationMs}ms, exit code: ${result.exitCode}]`;
+
+  return output;
+}
+
 async function callKnowledgeTool(toolName, toolInput, tenantId) {
   if (toolName === 'search_knowledge') {
     const results = { entries: [], entities: [], actionItems: [] };
@@ -2958,7 +3007,60 @@ const TOOL_CATEGORIES = {
   scheduler: ['create_scheduled_task', 'list_scheduled_tasks', 'delete_scheduled_task'],
 };
 
+// ─── Safe Tools (read-only, safe to retry on failure) ────────────────────────
+const SAFE_TOOLS = new Set([
+  'search_knowledge', 'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
+  'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
+  'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
+  'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
+  'get_estimates', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'compare_contract',
+  'run_bid_checks', 'parse_supplier_quote',
+  'gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read',
+  'list_scheduled_tasks',
+  'workspace_search_drive', 'workspace_read_file', 'workspace_export_pdf',
+  'plan_content',
+]);
+
+// ─── Agentic Loop Constants ──────────────────────────────────────────────────
+const TOOL_LOOP_TIMEOUT_MS = 300_000; // 5 minutes global timeout
+const TOKEN_BUDGET_LIMIT = 200_000; // cumulative input + output token ceiling
+const EXPANDED_MAX_TOKENS = 8192; // increased max_tokens after first tool round
+
+/**
+ * Execute a tool call with smart retry for safe (read-only) tools.
+ * Action tools are never retried to avoid duplicate side effects.
+ */
+async function executeToolWithRetry(toolName, toolInput, tenantId) {
+  let toolResult;
+  let toolIsError = false;
+  try {
+    toolResult = await routeToolCall(toolName, toolInput, tenantId);
+  } catch (toolError) {
+    // Only retry SAFE tools (read-only), never retry action tools
+    if (SAFE_TOOLS.has(toolName)) {
+      try {
+        await new Promise(r => setTimeout(r, 1000));
+        toolResult = await routeToolCall(toolName, toolInput, tenantId);
+      } catch (retryError) {
+        console.warn(`[ToolRetry] ${toolName} failed on retry: ${retryError.message}`);
+        toolResult = { error: retryError.message };
+        toolIsError = true;
+      }
+    } else {
+      toolResult = { error: toolError.message };
+      toolIsError = true;
+    }
+  }
+  return { toolResult, toolIsError };
+}
+
 async function routeToolCall(toolName, toolInput, tenantId) {
+  // MCP tool dispatch — dynamically loaded external tools
+  if (toolName.startsWith('mcp__')) {
+    const { mcpManager } = await import('./mcpClientService.js');
+    return await mcpManager.callTool(tenantId, toolName, toolInput);
+  }
+  if (toolName === 'execute_code') return await callCodeTool(toolInput, tenantId);
   if (TOOL_CATEGORIES.gws.includes(toolName)) return await callGwsTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.emailSecurity.includes(toolName)) return await callEmailSecurityTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.email.includes(toolName)) return await callEmailTool(toolName, toolInput, tenantId);
@@ -3130,6 +3232,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Scheduler tools — hivemind, workflow, comms, zhan, sangha
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
+  const codeAddon = codeAgents.includes(agentId) ? CODE_EXECUTION_PROMPT_ADDON : '';
   const FORMATTING_RULES = `
 
 ═══ FORMATTING RULES ═══
@@ -3167,7 +3270,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + knowledgeContext + siblingContext;
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + knowledgeContext + siblingContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -3224,6 +3327,23 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   if (schedulerAgents.includes(agentId)) {
     tools.push(...SCHEDULER_TOOLS);
   }
+  // Code execution — sandboxed Docker container
+  if (codeAgents.includes(agentId)) {
+    tools.push(...CODE_EXECUTION_TOOLS);
+  }
+
+  // MCP tools — dynamically loaded from tenant-configured external servers
+  try {
+    const { mcpManager } = await import('./mcpClientService.js');
+    const mcpTools = await mcpManager.getToolsForTenant(tenantId);
+    if (mcpTools.length > 0) {
+      tools.push(...mcpTools);
+      const mcpToolNames = mcpTools.map(t => t.name).join(', ');
+      systemPrompt += `\n\n═══ MCP TOOLS ═══\nYou have access to external MCP tools: ${mcpToolNames}. Use them when the user's request matches their capabilities.`;
+    }
+  } catch (e) {
+    // MCP not configured or connection failed — continue without MCP tools
+  }
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -3263,16 +3383,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
       // ─── Copilot Mode Interceptor ──────────────────────────────────────
       // Read-only tools always execute. Action tools need approval in copilot mode.
-      const SAFE_TOOLS = new Set([
-        'search_knowledge', 'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
-        'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
-        'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
-        'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
-        'get_estimates', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'compare_contract',
-        'run_bid_checks', 'parse_supplier_quote',
-        'gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read',
-        'list_scheduled_tasks',
-      ]);
+      // SAFE_TOOLS is defined at module scope above TOOL_CATEGORIES.
 
       const agentMode = getAgentMode(agentId);
 
@@ -3304,9 +3415,19 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           gws_sheets_append: () => `Append rows to spreadsheet: ${toolInput.range} in ${toolInput.spreadsheet_id}`,
           create_scheduled_task: () => `Create scheduled task: "${toolInput.title || 'untitled'}" (${toolInput.schedule})`,
           delete_scheduled_task: () => `Delete scheduled task: ${toolInput.task_id}`,
+          execute_code: () => `Run ${toolInput.language} code:\n\`\`\`${toolInput.language}\n${toolInput.code?.slice(0, 200)}${toolInput.code?.length > 200 ? '...' : ''}\n\`\`\``,
         };
         const descFn = actionDescriptions[toolName];
-        const actionDesc = descFn ? descFn() : `Execute tool: ${toolName}`;
+        let actionDesc;
+        if (descFn) {
+          actionDesc = descFn();
+        } else if (toolName.startsWith('mcp__')) {
+          // MCP tool — extract server and tool name for a clearer description
+          const mcpParts = toolName.split('__');
+          actionDesc = `Execute MCP tool "${mcpParts.slice(2).join('__')}" on ${mcpParts[1]}`;
+        } else {
+          actionDesc = `Execute tool: ${toolName}`;
+        }
 
         // Insert approval item
         const approvalResult = db.prepare(`
@@ -3347,14 +3468,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         toolInput._userId = userId;
         toolInput._agentId = agentId;
       }
-      let toolResult;
-      let toolIsError = false;
-      try {
-        toolResult = await routeToolCall(toolName, toolInput, tenantId);
-      } catch (toolError) {
-        toolResult = { error: toolError.message };
-        toolIsError = true;
-      }
+      const { toolResult, toolIsError } = await executeToolWithRetry(toolName, toolInput, tenantId);
 
       // ─── Agentic loop: keep calling tools until Claude produces text ───
       // Tracks all tool results so callers (e.g. email handler) can collect
@@ -3382,6 +3496,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       let lastToolResult = toolResult;
 
       const maxTurns = getMaxTurns(agentId);
+      const loopStartTime = Date.now();
       let currentResponse = await getAnthropic().messages.create({
         model: selectedModel,
         max_tokens: maxTokens,
@@ -3394,14 +3509,31 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       totalOutputTokens += currentResponse.usage?.output_tokens || 0;
 
       let iteration = 0;
+      let timedOut = false;
+      let tokenBudgetExceeded = false;
+
       while (currentResponse.stop_reason === 'tool_use' && iteration < maxTurns) {
         iteration++;
+
+        // ─── Global timeout check ────────────────────────────────────────
+        if (Date.now() - loopStartTime > TOOL_LOOP_TIMEOUT_MS) {
+          console.warn(`[Chat] Agent ${agentId} hit global timeout (${TOOL_LOOP_TIMEOUT_MS}ms) at iteration ${iteration}`);
+          timedOut = true;
+          break;
+        }
+
+        // ─── Token budget check ──────────────────────────────────────────
+        const cumulativeTokens = totalInputTokens + totalOutputTokens;
+        if (cumulativeTokens > TOKEN_BUDGET_LIMIT) {
+          console.warn(`[Chat] Agent ${agentId} exceeded token budget (${cumulativeTokens} > ${TOKEN_BUDGET_LIMIT}) at iteration ${iteration}`);
+          tokenBudgetExceeded = true;
+          break;
+        }
+
         const nextToolBlock = currentResponse.content.find(block => block.type === 'tool_use');
         if (!nextToolBlock) break;
 
         const { id: nextToolUseId, name: nextToolName, input: nextToolInput } = nextToolBlock;
-        let nextToolResult;
-        let nextToolIsError = false;
 
         // Copilot mode check for loop iterations too
         if (agentMode === 'copilot' && !SAFE_TOOLS.has(nextToolName)) {
@@ -3427,12 +3559,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           nextToolInput._userId = userId;
           nextToolInput._agentId = agentId;
         }
-        try {
-          nextToolResult = await routeToolCall(nextToolName, nextToolInput, tenantId);
-        } catch (toolError) {
-          nextToolResult = { error: toolError.message };
-          nextToolIsError = true;
-        }
+        const { toolResult: nextToolResult, toolIsError: nextToolIsError } = await executeToolWithRetry(nextToolName, nextToolInput, tenantId);
 
         allToolResults.push({ tool_used: nextToolName, tool_input: nextToolInput, tool_result: nextToolResult, is_error: nextToolIsError });
         lastToolName = nextToolName;
@@ -3455,9 +3582,12 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           },
         ];
 
+        // Dynamic max_tokens: increase after first tool round for longer reasoning
+        const loopMaxTokens = useThinking ? 16384 : EXPANDED_MAX_TOKENS;
+
         currentResponse = await getAnthropic().messages.create({
           model: selectedModel,
-          max_tokens: maxTokens,
+          max_tokens: loopMaxTokens,
           system: systemPrompt,
           messages: loopMessages,
           tools,
@@ -3469,6 +3599,27 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
       if (iteration >= maxTurns) {
         console.warn(`[Chat] Agent ${agentId} hit max_turns limit (${maxTurns})`);
+      }
+
+      // If we hit timeout or token budget, ask Claude to wrap up
+      if (timedOut || tokenBudgetExceeded) {
+        const reason = timedOut ? 'time limit (5 minutes)' : 'token budget limit';
+        const wrapUpMessages = [
+          ...loopMessages,
+          { role: 'assistant', content: currentResponse.content },
+          {
+            role: 'user',
+            content: `[System: You have reached the ${reason} for this request. Please provide your best response with the information gathered so far. Do not make any more tool calls.]`,
+          },
+        ];
+        currentResponse = await getAnthropic().messages.create({
+          model: selectedModel,
+          max_tokens: EXPANDED_MAX_TOKENS,
+          system: systemPrompt,
+          messages: wrapUpMessages,
+        });
+        totalInputTokens += currentResponse.usage?.input_tokens || 0;
+        totalOutputTokens += currentResponse.usage?.output_tokens || 0;
       }
 
       const responseText = currentResponse.content
@@ -3606,7 +3757,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + knowledgeContext + siblingContext;
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + knowledgeContext + siblingContext;
 
   // ─── Build tools list (must match chat()) ───────────────────────────────
   const tools = [...WORKSPACE_TOOLS];
@@ -3628,6 +3779,20 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (gwsAgents.includes(agentId)) tools.push(...GWS_TOOLS);
   // Scheduler tools — recurring task automation
   if (schedulerAgents.includes(agentId)) tools.push(...SCHEDULER_TOOLS);
+  if (codeAgents.includes(agentId)) tools.push(...CODE_EXECUTION_TOOLS);
+
+  // MCP tools — dynamically loaded from tenant-configured external servers
+  try {
+    const { mcpManager } = await import('./mcpClientService.js');
+    const mcpTools = await mcpManager.getToolsForTenant(tenantId);
+    if (mcpTools.length > 0) {
+      tools.push(...mcpTools);
+      const mcpToolNames = mcpTools.map(t => t.name).join(', ');
+      systemPrompt += `\n\n═══ MCP TOOLS ═══\nYou have access to external MCP tools: ${mcpToolNames}. Use them when the user's request matches their capabilities.`;
+    }
+  } catch (e) {
+    // MCP not configured or connection failed — continue without MCP tools
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';
@@ -3643,13 +3808,13 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       ? 'claude-haiku-4-5-20251001'
       : selectModel(agentId, userContent, messages.length, hasToolAddons);
 
-    const maxTokens = options.helpMode ? 1024 : 4096;
+    let maxTokens = options.helpMode ? 1024 : 4096;
 
     // ─── Helper: run one streaming API call, collecting text + tool_use blocks ─
-    async function streamOneRound(roundMessages) {
+    async function streamOneRound(roundMessages, roundMaxTokens) {
       const stream = getAnthropic().messages.stream({
         model: selectedModel,
-        max_tokens: maxTokens,
+        max_tokens: roundMaxTokens || maxTokens,
         system: systemPrompt,
         messages: roundMessages,
         tools,
@@ -3685,6 +3850,9 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       let currentContent = finalMessage.content;
       const maxTurns = getMaxTurns(agentId);
       let iteration = 0;
+      const loopStartTime = Date.now();
+      let timedOut = false;
+      let tokenBudgetExceeded = false;
 
       // TODO: Copilot mode approval in streaming is complex — the SSE connection
       // would need to pause while waiting for user approval via a separate HTTP call.
@@ -3694,9 +3862,28 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       while (currentStopReason === 'tool_use' && iteration < maxTurns) {
         iteration++;
 
+        // ─── Global timeout check ────────────────────────────────────────
+        if (Date.now() - loopStartTime > TOOL_LOOP_TIMEOUT_MS) {
+          console.warn(`[ChatStream] Agent ${agentId} hit global timeout (${TOOL_LOOP_TIMEOUT_MS}ms) at iteration ${iteration}`);
+          timedOut = true;
+          break;
+        }
+
+        // ─── Token budget check ──────────────────────────────────────────
+        const cumulativeTokens = totalInputTokens + totalOutputTokens;
+        if (cumulativeTokens > TOKEN_BUDGET_LIMIT) {
+          console.warn(`[ChatStream] Agent ${agentId} exceeded token budget (${cumulativeTokens} > ${TOKEN_BUDGET_LIMIT}) at iteration ${iteration}`);
+          tokenBudgetExceeded = true;
+          break;
+        }
+
         // Find all tool_use blocks in this response (Claude can request multiple tools)
         const toolBlocks = currentContent.filter(block => block.type === 'tool_use');
         if (toolBlocks.length === 0) break;
+
+        // ─── Progress event ──────────────────────────────────────────────
+        const toolNames = toolBlocks.map(b => b.name);
+        onChunk(JSON.stringify({ _type: 'progress', iteration, maxTurns, tools: toolNames }));
 
         // Build tool_result messages for all requested tools
         const toolResultContents = [];
@@ -3707,14 +3894,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
           // Send open tag to frontend — shows spinner widget
           onChunk(`\n<${toolName}>`);
 
-          let toolResult;
-          let toolIsError = false;
-          try {
-            toolResult = await routeToolCall(toolName, toolInput, tenantId);
-          } catch (toolError) {
-            toolResult = { error: toolError.message };
-            toolIsError = true;
-          }
+          const { toolResult, toolIsError } = await executeToolWithRetry(toolName, toolInput, tenantId);
 
           // Send close tag to frontend — shows checkmark widget
           onChunk(`</${toolName}>\n`);
@@ -3739,7 +3919,10 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
           { role: 'user', content: toolResultContents },
         ];
 
-        const nextRound = await streamOneRound(loopMessages);
+        // Dynamic max_tokens: increase after first tool round for longer reasoning
+        const loopMaxTokens = options.helpMode ? 1024 : EXPANDED_MAX_TOKENS;
+
+        const nextRound = await streamOneRound(loopMessages, loopMaxTokens);
         fullText += nextRound.roundText;
         totalInputTokens += nextRound.finalMessage.usage?.input_tokens || 0;
         totalOutputTokens += nextRound.finalMessage.usage?.output_tokens || 0;
@@ -3753,6 +3936,22 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
       if (iteration >= maxTurns) {
         console.warn(`[ChatStream] Agent ${agentId} hit max_turns limit (${maxTurns})`);
+      }
+
+      // If we hit timeout or token budget, stream a wrap-up response
+      if (timedOut || tokenBudgetExceeded) {
+        const reason = timedOut ? 'time limit (5 minutes)' : 'token budget limit';
+        const wrapUpMessages = [
+          ...loopMessages,
+          {
+            role: 'user',
+            content: `[System: You have reached the ${reason} for this request. Please provide your best response with the information gathered so far. Do not make any more tool calls.]`,
+          },
+        ];
+        const wrapUpRound = await streamOneRound(wrapUpMessages, EXPANDED_MAX_TOKENS);
+        fullText += wrapUpRound.roundText;
+        totalInputTokens += wrapUpRound.finalMessage.usage?.input_tokens || 0;
+        totalOutputTokens += wrapUpRound.finalMessage.usage?.output_tokens || 0;
       }
 
       // If no text was streamed across all rounds (rare), send a fallback

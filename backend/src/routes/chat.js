@@ -511,6 +511,16 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     res.flushHeaders();
 
     await chatStream(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
+      // Detect progress events from the tool loop
+      try {
+        if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
+          const parsed = JSON.parse(chunk);
+          if (parsed._type === 'progress') {
+            res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
+            return;
+          }
+        }
+      } catch {}
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
     });
 
@@ -558,6 +568,16 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
 
     await chatStream(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
+      // Detect progress events from the tool loop
+      try {
+        if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
+          const parsed = JSON.parse(chunk);
+          if (parsed._type === 'progress') {
+            res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
+            return;
+          }
+        }
+      } catch {}
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
     });
 

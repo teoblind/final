@@ -80,6 +80,7 @@ import accountingRoutes from './routes/accounting.js';
 import priceMonitorRoutes from './routes/priceMonitor.js';
 import portfolioRoutes from './routes/portfolio.js';
 import schedulerRoutes from './routes/scheduler.js';
+import mcpConfigRoutes from './routes/mcpConfig.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -489,6 +490,7 @@ app.use('/api/v1/accounting', accountingRoutes);
 app.use('/api/v1/price-monitor', priceMonitorRoutes);
 app.use('/api/v1/portfolio', portfolioRoutes);
 app.use('/api/v1/scheduler', schedulerRoutes);
+app.use('/api/v1/mcp-servers', mcpConfigRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/
@@ -650,4 +652,24 @@ server.listen(PORT, async () => {
 
   // Verify SanghaModel simulator connectivity (Phase 9)
   verifySanghaModel();
+
+  // Auto-connect enabled MCP servers for all tenants
+  try {
+    const { mcpManager } = await import('./services/mcpClientService.js');
+    const { getMcpServers, getSystemDb } = await import('./cache/database.js');
+    const sysDb = getSystemDb();
+    const allTenants = sysDb.prepare('SELECT id FROM tenants').all();
+    for (const tenant of allTenants) {
+      const servers = getMcpServers(tenant.id);
+      for (const server of servers.filter(s => s.enabled)) {
+        try {
+          await mcpManager.connect(tenant.id, server);
+        } catch (e) {
+          console.warn(`[MCP] Failed to connect "${server.name}" for tenant ${tenant.id}: ${e.message}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[MCP] MCP startup auto-connect skipped:', err.message);
+  }
 });

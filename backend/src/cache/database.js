@@ -953,6 +953,23 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_tenant ON scheduled_tasks(tenant_id, enabled)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at, enabled)'); } catch (e) {}
 
+  // MCP server configurations per tenant
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_servers (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      transport TEXT NOT NULL CHECK(transport IN ('stdio', 'sse')),
+      command TEXT,
+      args_json TEXT DEFAULT '[]',
+      env_json TEXT DEFAULT '{}',
+      url TEXT,
+      enabled INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_mcp_servers_tenant ON mcp_servers(tenant_id, enabled)'); } catch (e) {}
+
   // Add tenant_id to ALL existing tables (idempotent) — kept for defense-in-depth
   const tablesToMigrate = [
     'cache', 'manual_data', 'alerts', 'alert_history', 'notes', 'imec_milestones',
@@ -6140,6 +6157,48 @@ export function getDueScheduledTasks() {
     SELECT * FROM scheduled_tasks
     WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= datetime('now')
   `).all();
+}
+
+// ─── MCP Server CRUD ──────────────────────────────────────────────────────
+
+export function getMcpServers(tenantId) {
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT * FROM mcp_servers WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getMcpServer(id, tenantId) {
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT * FROM mcp_servers WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+}
+
+export function createMcpServer(tenantId, { id, name, transport, command, args_json, env_json, url }) {
+  const tdb = getTenantDb(tenantId);
+  tdb.prepare(`
+    INSERT INTO mcp_servers (id, tenant_id, name, transport, command, args_json, env_json, url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, tenantId, name, transport, command || null, args_json || '[]', env_json || '{}', url || null);
+  return getMcpServer(id, tenantId);
+}
+
+export function updateMcpServer(id, tenantId, updates) {
+  const tdb = getTenantDb(tenantId);
+  const allowed = ['name', 'transport', 'command', 'args_json', 'env_json', 'url', 'enabled'];
+  const setClauses = [];
+  const values = [];
+  for (const [key, val] of Object.entries(updates)) {
+    if (allowed.includes(key)) {
+      setClauses.push(`${key} = ?`);
+      values.push(val);
+    }
+  }
+  if (setClauses.length === 0) return;
+  values.push(id, tenantId);
+  tdb.prepare(`UPDATE mcp_servers SET ${setClauses.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...values);
+}
+
+export function deleteMcpServer(id, tenantId) {
+  const tdb = getTenantDb(tenantId);
+  tdb.prepare('DELETE FROM mcp_servers WHERE id = ? AND tenant_id = ?').run(id, tenantId);
 }
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────

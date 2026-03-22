@@ -127,6 +127,12 @@ const TOOL_LABELS = {
   add_trusted_sender: 'Adding Trusted Sender',
   remove_trusted_sender: 'Removing Trusted Sender',
   list_trusted_senders: 'Loading Trusted Senders',
+  // Scheduler
+  create_scheduled_task: 'Creating Scheduled Task',
+  list_scheduled_tasks: 'Loading Scheduled Tasks',
+  delete_scheduled_task: 'Deleting Scheduled Task',
+  // Code execution
+  execute_code: 'Running Code',
 };
 
 function formatContent(text) {
@@ -1831,6 +1837,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [progressInfo, setProgressInfo] = useState(null); // { iteration, maxTurns, tools }
   const [activeTab, setActiveTab] = useState('Chat');
   const [autoVoice, setAutoVoice] = useState(false);
   const [showCallPanel, setShowCallPanel] = useState(false);
@@ -2427,6 +2434,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 setMessages(prev => prev.map(m =>
                   m.id === agentMsgId ? { ...m, content: m.content + event.text } : m
                 ));
+              } else if (event.type === 'progress') {
+                setProgressInfo({ iteration: event.iteration, maxTurns: event.maxTurns, tools: event.tools });
               } else if (event.type === 'thread' && event.threadId && !activeThreadId) {
                 const newThread = { id: event.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
                 setThreads(prev => [newThread, ...prev]);
@@ -2439,6 +2448,9 @@ export default function AgentChat({ agentId = 'estimating' }) {
             }
           }
         }
+
+        // Clear progress indicator when streaming ends
+        setProgressInfo(null);
 
         // Safeguard: if stream ended with empty content, show fallback
         setMessages(prev => prev.map(m =>
@@ -2472,6 +2484,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
       });
     } finally {
       setSending(false);
+      setProgressInfo(null);
     }
   };
 
@@ -2631,16 +2644,24 @@ export default function AgentChat({ agentId = 'estimating' }) {
               return <ChatMessage key={msg.id} msg={msg} agentDef={agent} onAction={handleChatAction} onApproval={handleApproval} isLastAgent={isLastAgent} />;
             })}
 
-            {/* Typing indicator */}
+            {/* Typing indicator + progress */}
             {sending && (
               <div className="self-start flex gap-2.5 max-w-[85%]">
                 <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: agent.color }}>
                   {agent.initial}
                 </div>
-                <div className="flex items-center gap-1 px-4 py-2.5 bg-terminal-panel border border-[#e8e6e1] rounded-[14px] rounded-tl-[4px]">
-                  {[0, 1, 2].map(i => (
-                    <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#c5c5bc]" style={{ animation: `typingBounce 1.4s ease-in-out ${i * 0.2}s infinite` }} />
-                  ))}
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1 px-4 py-2.5 bg-terminal-panel border border-[#e8e6e1] rounded-[14px] rounded-tl-[4px]">
+                    {[0, 1, 2].map(i => (
+                      <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#c5c5bc]" style={{ animation: `typingBounce 1.4s ease-in-out ${i * 0.2}s infinite` }} />
+                    ))}
+                  </div>
+                  {progressInfo && (
+                    <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-[#8a8a82] font-medium">
+                      <div className="w-2 h-2 rounded-full border border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
+                      <span>Step {progressInfo.iteration}/{progressInfo.maxTurns} — {(progressInfo.tools || []).map(t => TOOL_LABELS[t] || t.replace(/_/g, ' ')).join(', ')}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
