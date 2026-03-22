@@ -42,6 +42,7 @@ import {
   getCompanyEmailAccounts,
   addCompanyEmailAccount,
   updateCompanyEmailAccountToken,
+  runWithTenant,
 } from '../cache/database.js';
 import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
@@ -1002,23 +1003,26 @@ router.get('/google/integrate/callback', async (req, res) => {
         ));
       }
 
-      if (tokens.refresh_token && gmailAddress) {
-        const existing = getCompanyEmailAccounts(companyId, tenantId);
-        const match = existing.find(a => a.gmail_address === gmailAddress);
-        if (match) {
-          updateCompanyEmailAccountToken(match.id, tokens.refresh_token, tenantId);
-        } else {
-          addCompanyEmailAccount({
-            id: `cea-${Date.now().toString(36)}`,
-            companyId,
-            gmailAddress,
-            oauthRefreshToken: tokens.refresh_token,
-            tenantId,
-          });
+      // Run DB operations in tenant context (OAuth callback has no tenant middleware)
+      await runWithTenant(tenantId, async () => {
+        if (tokens.refresh_token && gmailAddress) {
+          const existing = getCompanyEmailAccounts(companyId, tenantId);
+          const match = existing.find(a => a.gmail_address === gmailAddress);
+          if (match) {
+            updateCompanyEmailAccountToken(match.id, tokens.refresh_token, tenantId);
+          } else {
+            addCompanyEmailAccount({
+              id: `cea-${Date.now().toString(36)}`,
+              companyId,
+              gmailAddress,
+              oauthRefreshToken: tokens.refresh_token,
+              tenantId,
+            });
+          }
         }
-      }
 
-      insertAuditLog({ tenantId, userId, action: 'portfolio.gmail_connected', resourceType: 'portfolio_company', resourceId: companyId, details: { email: gmailAddress }, ipAddress: req.ip });
+        insertAuditLog({ tenantId, userId, action: 'portfolio.gmail_connected', resourceType: 'portfolio_company', resourceId: companyId, details: { email: gmailAddress }, ipAddress: req.ip });
+      });
 
       const postMessageOrigin = origin || '*';
       return res.send(`<!DOCTYPE html><html><head><title>Gmail Connected</title></head><body>
