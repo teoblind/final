@@ -3119,13 +3119,13 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
   // Document generation tools — all agents
-  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow'];
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   // DACP estimation tools
   const dacpPromptAgents = ['hivemind', 'estimating', 'workflow'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
-  // Google Workspace CLI tools — hivemind + sangha + zhan
-  const gwsAgents = ['hivemind', 'sangha', 'zhan'];
+  // Google Workspace CLI tools
+  const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
   // Scheduler tools — hivemind, workflow, comms, zhan, sangha
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
@@ -3581,11 +3581,11 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
-  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow'];
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   const dacpPromptAgents = ['hivemind', 'estimating', 'workflow'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
-  const gwsAgents = ['hivemind', 'sangha', 'zhan'];
+  const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
