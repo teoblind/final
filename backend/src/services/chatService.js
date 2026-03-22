@@ -3785,6 +3785,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
+  const codeAddon = codeAgents.includes(agentId) ? CODE_EXECUTION_PROMPT_ADDON : '';
 
   // Inject sibling thread context for cross-thread awareness
   let siblingContext = '';
