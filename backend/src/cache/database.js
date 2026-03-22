@@ -2795,6 +2795,26 @@ export function backfillOrphanMessages(tenantId, agentId, userId, threadId) {
   `).run(threadId, tenantId, agentId, userId);
 }
 
+// ─── Thread Context Summaries (cross-thread awareness) ──────────────────────
+
+export function saveThreadSummary(threadId, tenantId, agentId, userId, summary) {
+  return db.prepare(`
+    INSERT INTO thread_summaries (thread_id, tenant_id, agent_id, user_id, summary, updated_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(thread_id) DO UPDATE SET summary = ?, updated_at = datetime('now')
+  `).run(threadId, tenantId, agentId, userId, summary, summary);
+}
+
+export function getSiblingThreadSummaries(tenantId, agentId, currentThreadId, limit = 5) {
+  return db.prepare(`
+    SELECT ts.thread_id, ts.summary, ts.updated_at, ct.title
+    FROM thread_summaries ts
+    LEFT JOIN chat_threads ct ON ct.id = ts.thread_id
+    WHERE ts.tenant_id = ? AND ts.agent_id = ? AND ts.thread_id != ?
+    ORDER BY ts.updated_at DESC LIMIT ?
+  `).all(tenantId, agentId, currentThreadId, limit);
+}
+
 // ─── Phase 8: Webhook Helpers ───────────────────────────────────────────────
 
 export function getWebhooks(tenantId) {
@@ -3899,6 +3919,19 @@ function initDacpTablesSchema(targetDb) {
 
   // Add is_pinned column to chat_threads (idempotent)
   try { targetDb.exec('ALTER TABLE chat_threads ADD COLUMN is_pinned INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
+
+  // Thread context summaries — shared across sibling threads for cross-thread awareness
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS thread_summaries (
+      thread_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      user_id TEXT,
+      summary TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_thread_summaries_agent ON thread_summaries(tenant_id, agent_id)'); } catch (e) {}
 
   // Approval queue
   targetDb.exec(`

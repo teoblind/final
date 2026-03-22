@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, Check } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -1131,9 +1131,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
 
   const isUser = msg.role === 'user';
   // Auto-detect confirmation prompts on the last agent message
-  const showConfirmButtons = !isUser && isLastAgent && !msg.actions && !msg.actionDone && detectConfirmation(msg.content);
-  if (showConfirmButtons) console.log('[Confirm] Showing buttons for msg:', msg.id, 'tail:', msg.content?.slice(-200));
-  if (!isUser && isLastAgent && !showConfirmButtons) console.log('[Confirm] NO match. isLastAgent:', isLastAgent, 'actions:', msg.actions, 'actionDone:', msg.actionDone, 'tail:', msg.content?.slice(-200));
+  const showConfirmButtons = !isUser && isLastAgent && !msg.actions && !msg.actionDone && !msg.confirmed && detectConfirmation(msg.content);
 
   return (
     <div className={`flex gap-2.5 max-w-[85%] ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}>
@@ -1208,7 +1206,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
         {showConfirmButtons && (
           <div className="flex gap-2 mt-2">
             <button
-              onClick={() => onAction?.('Yes, send it', msg, 'quick_reply')}
+              onClick={() => onAction?.('Yes, send it', msg, 'confirm_silent')}
               className="px-4 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
               style={{ backgroundColor: accent }}
             >
@@ -1221,6 +1219,17 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
             >
               No
             </button>
+          </div>
+        )}
+        {/* Inline confirmation status */}
+        {msg.confirmed === 'sending' && (
+          <div className="flex items-center gap-1.5 mt-2 text-[12px] font-medium text-[#9ca3af]">
+            <div className="w-3 h-3 rounded-full border-2 border-[#9ca3af] border-t-transparent animate-spin" /> Sending...
+          </div>
+        )}
+        {msg.confirmed === true && (
+          <div className="flex items-center gap-1.5 mt-2 text-[12px] font-medium" style={{ color: '#16a34a' }}>
+            <Check size={14} /> Sent
           </div>
         )}
       </div>
@@ -2260,6 +2269,27 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
   // Handle action button clicks in chat messages (Approve & Send, etc.)
   const handleChatAction = async (actionLabel, msg, variant) => {
+    // confirm_silent: send confirmation to backend but show inline checkmark instead of new messages
+    if (variant === 'confirm_silent') {
+      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, actionDone: true, confirmed: 'sending' } : m));
+      const token = getAuthToken();
+      const postUrl = activeThreadId
+        ? `${API_BASE}/v1/chat/${agentId}/threads/${activeThreadId}/messages`
+        : `${API_BASE}/v1/chat/${agentId}/messages`;
+      fetch(postUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: actionLabel }),
+      })
+        .then(res => res.json())
+        .then(() => {
+          setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: true } : m));
+        })
+        .catch(() => {
+          setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, confirmed: false, actionDone: false } : m));
+        });
+      return;
+    }
     // quick_reply: send the button label as a new user message
     if (variant === 'quick_reply') {
       setInput(actionLabel);

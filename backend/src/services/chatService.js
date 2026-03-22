@@ -6,7 +6,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -2429,7 +2429,15 @@ You can view active jobs, track progress, review field reports, and answer quest
 You can create Google Docs, Sheets, and Slides to produce estimates, bid packages, comparison tables, and job reports.
 You can draft and send bid response emails to GCs.
 
-Keep responses focused on the construction workflow — estimating, pricing, and jobs. Use construction industry terminology naturally. Be precise with numbers.`,
+Keep responses focused on the construction workflow — estimating, pricing, and jobs. Use construction industry terminology naturally. Be precise with numbers.
+
+═══ EMAIL STYLE RULES (MANDATORY — when drafting any email) ═══
+GREETING: Always "Hey [First Name]," — never "Hi", "Hello", "Dear".
+TONE: Direct, confident, conversational. Short paragraphs (2-4 sentences). Specific numbers over vague claims.
+NEVER SAY: "I'd be happy to discuss", "Thanks for your time", "Looking forward to hearing from you", "explore opportunities".
+CLOSING: Last paragraph = specific question. Then "Best," on its own line. Do NOT add name/signature/email after "Best," — auto-appended.
+BEFORE SENDING: Always confirm From and To addresses, then ask "Should I send this?"
+CONFIDENTIALITY: Never mention other clients by name. Never fabricate case studies.`,
 
   comms: `You are the Comms Agent for DACP Construction — handling all communication including email correspondence, meeting summaries, and action items.
 
@@ -2446,9 +2454,31 @@ MEETING CAPABILITIES:
 - Prepare agendas for upcoming meetings
 
 You can create Google Docs and Sheets for email templates, contact lists, meeting notes, and outreach tracking.
+When referencing meetings, cite specific dates, attendees, and action items.
 
-When drafting emails, use a professional but conversational tone appropriate for construction industry communication. Include specific project names, numbers, and dates.
-When referencing meetings, cite specific dates, attendees, and action items.`,
+═══ EMAIL STYLE RULES (MANDATORY) ═══
+ALL outbound emails MUST follow these rules exactly:
+
+GREETING: Always "Hey [First Name]," — never "Hi", "Hello", "Dear", or "Good morning".
+
+TONE: Direct, confident, conversational. NOT corporate or stiff. Short paragraphs (2-4 sentences max). Use specific numbers over vague claims. Use dashes freely for asides.
+
+NEVER SAY: "I'd be happy to discuss", "Thanks for your time", "Looking forward to hearing from you", "Please don't hesitate to reach out", "explore opportunities for collaboration", "Thank you for your inquiry", "I hope this finds you well", "I'd be happy to share more".
+
+CLOSING STRUCTURE (strict order):
+1. Body paragraphs
+2. LAST PARAGRAPH = a specific question (Triple Aikido — bounce the ball back, make them engage)
+3. "Best," on its own line
+4. Do NOT add any name/signature/email after "Best," — the system auto-appends the signature
+
+CRITICAL: "Best," must come AFTER the question, never before it. Do NOT write your own sign-off name or email address — the email system adds the signature automatically.
+
+BEFORE SENDING: Always confirm with the user:
+- From: [sender address]
+- To: [recipient address]
+Then ask "Should I send this?"
+
+CONFIDENTIALITY: NEVER mention other clients by name. NEVER fabricate case studies. Use "we've worked with similar projects" if needed.`,
 };
 
 // Lead engine prompt additions (appended to sangha/hivemind when lead engine tools are available)
@@ -2788,7 +2818,23 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 - Keep answers helpful, concise, and focused on the product features available in their dashboard.
 - You can help with: estimating, bid requests, pricing table, job tracking, field reports, document generation, and agent tools.` : '';
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
+  // Inject sibling thread context for cross-thread awareness
+  let siblingContext = '';
+  if (threadId) {
+    try {
+      const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, 5);
+      if (siblings.length > 0) {
+        siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads — use this context to stay informed but do not repeat or reference it unless relevant:\n';
+        for (const s of siblings) {
+          const age = Math.round((Date.now() - new Date(s.updated_at + 'Z').getTime()) / 60000);
+          const ageLabel = age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age / 60)}h ago` : `${Math.round(age / 1440)}d ago`;
+          siblingContext += `\n- [${s.title || 'Untitled'}] (${ageLabel}): ${s.summary}`;
+        }
+      }
+    } catch (e) { /* thread_summaries table may not exist yet */ }
+  }
+
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext + siblingContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -3086,6 +3132,11 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         tool_result: lastToolResult,
       }, threadId);
 
+      // Save thread summary for cross-thread awareness
+      if (threadId) {
+        try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${responseText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
+      }
+
       // Generate TTS audio for tool-use responses
       const audioUrl = await generateAudioIfEnabled(responseText);
 
@@ -3112,6 +3163,11 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       output_tokens: completion.usage?.output_tokens,
       stop_reason: completion.stop_reason,
     }, threadId);
+
+    // Save thread summary for cross-thread awareness
+    if (threadId) {
+      try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${responseText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
+    }
 
     // Generate TTS audio
     const audioUrl = await generateAudioIfEnabled(responseText);
@@ -3172,7 +3228,23 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const gwsAgents = ['hivemind', 'sangha', 'zhan'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
 
-  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext;
+  // Inject sibling thread context for cross-thread awareness
+  let siblingContext = '';
+  if (threadId) {
+    try {
+      const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, 5);
+      if (siblings.length > 0) {
+        siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads — use this context to stay informed but do not repeat or reference it unless relevant:\n';
+        for (const s of siblings) {
+          const age = Math.round((Date.now() - new Date(s.updated_at + 'Z').getTime()) / 60000);
+          const ageLabel = age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age / 60)}h ago` : `${Math.round(age / 1440)}d ago`;
+          siblingContext += `\n- [${s.title || 'Untitled'}] (${ageLabel}): ${s.summary}`;
+        }
+      }
+    } catch (e) { /* thread_summaries table may not exist yet */ }
+  }
+
+  const systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + knowledgeContext + siblingContext;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';
@@ -3218,6 +3290,11 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       stop_reason: finalMessage.stop_reason,
       streamed: true,
     }, threadId);
+
+    // Save thread summary for cross-thread awareness
+    if (threadId) {
+      try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${fullText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
+    }
 
     return { response: fullText };
   } catch (error) {
