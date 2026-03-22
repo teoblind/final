@@ -656,25 +656,9 @@ async function pollSingleInbox(gmail, tenantId, label) {
             agentId: 'coppice',
           });
 
-          // Store as knowledge entry
-          try {
-            const knEntryId = `KN-owner-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-            const tdb = getTenantDb(ownerTenant);
-            tdb.prepare(`
-              INSERT INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
-              VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))
-            `).run(
-              knEntryId, ownerTenant,
-              `Owner email: ${subject} (from ${senderName || senderEmail})`,
-              JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id }),
-              `owner-observe:${senderEmail}`
-            );
-            processKnowledgeEntry(knEntryId, ownerTenant).catch(err => {
-              console.warn(`[GmailPoll] Owner knowledge processing failed: ${err.message}`);
-            });
-          } catch (knErr) {
-            console.warn(`[GmailPoll] Owner knowledge storage failed: ${knErr.message}`);
-          }
+          // Owner emails are NOT stored as knowledge entries — they're internal/test
+          // traffic that would pollute the knowledge graph with non-business data.
+          // The activity_log entry above is sufficient for audit trail.
 
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'owner-observe', tenantId: ownerTenant });
