@@ -134,7 +134,11 @@ router.get('/', async (req, res) => {
     } else if (range === 'month') {
       timeMin = new Date(now.getFullYear(), now.getMonth(), 1);
       timeMax = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    } else if (range === '90') {
+      timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 90);
+      timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
     } else {
+      // 'week' — Monday to Sunday
       const day = now.getDay();
       const mondayOffset = day === 0 ? -6 : 1 - day;
       timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);

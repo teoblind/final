@@ -25,10 +25,17 @@ const URGENCY_BADGE = {
   low: 'bg-gray-50 text-terminal-muted border-gray-200',
 };
 
+const MEETING_RANGES = [
+  { key: 'week', label: '7d' },
+  { key: 'month', label: '30d' },
+  { key: '90', label: '90d' },
+];
+
 export default function DacpCommandDashboard({ onNavigate }) {
   const [stats, setStats] = useState(null);
   const [bids, setBids] = useState([]);
   const [meetings, setMeetings] = useState([]);
+  const [meetingRange, setMeetingRange] = useState('week');
   const [invitedMeetings, setInvitedMeetings] = useState(new Set());
   const [invitingId, setInvitingId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,13 +45,13 @@ export default function DacpCommandDashboard({ onNavigate }) {
     Promise.all([
       fetch(`${API_BASE}/v1/estimates/stats`, { headers }).then(r => r.json()).catch(() => ({})),
       fetch(`${API_BASE}/v1/estimates/inbox`, { headers }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API_BASE}/v1/meetings?range=week`, { headers }).then(r => r.json()).catch(() => ({})),
+      fetch(`${API_BASE}/v1/meetings?range=${meetingRange}`, { headers }).then(r => r.json()).catch(() => ({})),
     ]).then(([statsRes, inboxRes, meetingsRes]) => {
       setStats(statsRes.stats || null);
       setBids(inboxRes.bidRequests || []);
       setMeetings(meetingsRes.meetings || []);
     }).catch(console.error).finally(() => setLoading(false));
-  }, []);
+  }, [meetingRange]);
 
   const metrics = stats ? [
     { label: 'Open RFQs', value: stats.openRfqs, delta: `${stats.totalBidRequests} total`, type: 'up', bar: Math.min((stats.openRfqs / Math.max(stats.totalBidRequests, 1)) * 100, 100), icon: ClipboardList },
@@ -148,9 +155,22 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
             <Calendar size={14} className="text-[#1e3a5f]" />
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Meetings This Week</span>
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Meetings</span>
           </div>
-          <span className="text-[11px] text-terminal-muted">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-terminal-muted">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+            <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden">
+              {MEETING_RANGES.map(r => (
+                <button
+                  key={r.key}
+                  onClick={() => setMeetingRange(r.key)}
+                  className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${meetingRange === r.key ? 'bg-[#1e3a5f] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         {meetings.length === 0 ? (
           <div className="px-[18px] py-8 text-center text-[13px] text-terminal-muted">No meetings this week</div>
