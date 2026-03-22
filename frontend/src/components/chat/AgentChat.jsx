@@ -709,8 +709,15 @@ function CallPanel({ agentDef, onClose }) {
           try { recognition.start(); } catch {}
           return;
         }
+        if (event.error === 'aborted') return; // Intentional abort
         console.error('Speech recognition error:', event.error);
-        setErrorMsg(`Mic error: ${event.error}`);
+        if (event.error === 'network') {
+          setErrorMsg('Speech recognition requires HTTPS. If running locally, use localhost (not an IP) or deploy with SSL.');
+        } else if (event.error === 'not-allowed') {
+          setErrorMsg('Microphone access denied. Allow mic access in browser settings and reload.');
+        } else {
+          setErrorMsg(`Mic error: ${event.error}`);
+        }
         setCallState('error');
       };
 
@@ -1094,21 +1101,24 @@ function CopilotApprovalCard({ msg, accentColor, onApproval }) {
 // ─── Chat Message ───────────────────────────────────────────────────────────────
 // Detect confirmation questions at end of agent messages
 const CONFIRM_PATTERNS = [
-  /should I send (this|it|the email)/i,
-  /shall I send (this|it|the email)/i,
-  /want me to send (this|it|the email)/i,
+  /should I send/i,
+  /shall I send/i,
+  /want me to send/i,
   /ready to send/i,
   /go ahead and send/i,
-  /send (this|it) now\??$/i,
+  /send (this|it) now/i,
   /would you like me to (send|proceed|go ahead)/i,
   /do you (want|approve|confirm)/i,
   /shall I (proceed|go ahead)/i,
+  /like me to send/i,
+  /would you prefer any (modifications|changes)/i,
+  /any (modifications|changes|edits) (first|before)/i,
 ];
 
 function detectConfirmation(content) {
   if (!content) return false;
-  // Check last 100 chars for confirmation patterns
-  const tail = content.slice(-150);
+  // Check last 500 chars for confirmation patterns (email drafts can have trailing whitespace/newlines)
+  const tail = content.slice(-500);
   return CONFIRM_PATTERNS.some(p => p.test(tail));
 }
 
@@ -1122,6 +1132,8 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
   const isUser = msg.role === 'user';
   // Auto-detect confirmation prompts on the last agent message
   const showConfirmButtons = !isUser && isLastAgent && !msg.actions && !msg.actionDone && detectConfirmation(msg.content);
+  if (showConfirmButtons) console.log('[Confirm] Showing buttons for msg:', msg.id, 'tail:', msg.content?.slice(-200));
+  if (!isUser && isLastAgent && !showConfirmButtons) console.log('[Confirm] NO match. isLastAgent:', isLastAgent, 'actions:', msg.actions, 'actionDone:', msg.actionDone, 'tail:', msg.content?.slice(-200));
 
   return (
     <div className={`flex gap-2.5 max-w-[85%] ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}>
