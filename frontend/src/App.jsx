@@ -324,11 +324,25 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
 function AppContent() {
   const { user, loading: authLoading, login, logout, hasPermission, hasRole } = useAuth();
   const { tenant } = useTenant();
-  const [activeTab, setActiveTab] = useState('command');
+  const [activeTab, setActiveTab] = useState(() => {
+    const hash = window.location.hash.slice(1);
+    return hash || 'command';
+  });
   const handleSetActiveTab = (tab) => {
     if (tab !== 'portfolio') setSelectedCompanyId(null);
     setActiveTab(tab);
+    window.location.hash = tab;
   };
+
+  // Sync tab from browser back/forward
+  useEffect(() => {
+    const onHash = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash) setActiveTab(hash);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
