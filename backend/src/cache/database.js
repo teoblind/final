@@ -1217,7 +1217,7 @@ function seedTenantData(targetDb, tenantId) {
         VALUES (?, ?, ?, ?, ?, 'zhan-capital')
       `);
       insertCompany.run('pc-coppice', 'Coppice AI', 'Vertical AI SaaS', 'active', 'AI-powered multi-tenant operations platform for industrial businesses');
-      insertCompany.run('pc-volt', 'Volt Charging', 'EV Infrastructure', 'pilot', 'EV charging partnerships with hospitality venues across the US');
+      insertCompany.run('pc-volt', 'Volt Charging', 'EV Charging', 'pilot', 'Rentable portable EV chargers for hospitality venues across the US');
       insertCompany.run('pc-sangha', 'Sangha Renewables', 'Bitcoin Mining / Energy', 'partner', 'Behind-the-meter bitcoin mining and renewable energy optimization');
       console.log('[DB] Zhan Capital portfolio companies seeded');
     }
