@@ -909,8 +909,12 @@ router.get('/google/integrate', (req, res) => {
     const originProto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
     const state = Buffer.from(JSON.stringify({ tenantId, userId, source, origin: `${originProto}://${originHost}` })).toString('base64url');
 
-    // Build full scope URLs
-    const scopeList = scopes.split(',').map(s => `https://www.googleapis.com/auth/${s.trim()}`);
+    // Build full scope URLs — openid/email/profile are OIDC scopes (no prefix)
+    const OIDC_SCOPES = new Set(['openid', 'email', 'profile']);
+    const scopeList = scopes.split(',').map(s => {
+      const trimmed = s.trim();
+      return OIDC_SCOPES.has(trimmed) ? trimmed : `https://www.googleapis.com/auth/${trimmed}`;
+    });
 
     const oauth2Client = getIntegrationOAuth2Client();
     const authUrl = oauth2Client.generateAuthUrl({
@@ -968,11 +972,35 @@ router.get('/google/integrate/callback', async (req, res) => {
     // ── Portfolio company Gmail connection ──
     if (source.startsWith('portfolio-gmail:')) {
       const companyId = source.replace('portfolio-gmail:', '');
-      // Get the email address from the OAuth token
-      oauth2Client.setCredentials(tokens);
-      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-      const { data: userInfo } = await oauth2.userinfo.get();
-      const gmailAddress = userInfo.email;
+
+      // Get email from id_token (JWT) — more reliable than userinfo API
+      let gmailAddress = null;
+      if (tokens.id_token) {
+        try {
+          const payload = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64').toString());
+          gmailAddress = payload.email;
+        } catch (e) {
+          console.warn('[Portfolio OAuth] Failed to decode id_token:', e.message);
+        }
+      }
+      // Fallback: call userinfo API
+      if (!gmailAddress && tokens.access_token) {
+        try {
+          oauth2Client.setCredentials(tokens);
+          const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+          const { data: userInfo } = await oauth2.userinfo.get();
+          gmailAddress = userInfo.email;
+        } catch (e) {
+          console.warn('[Portfolio OAuth] userinfo fallback failed:', e.message);
+        }
+      }
+
+      if (!gmailAddress) {
+        return res.status(400).send(renderIntegrationErrorPage(
+          'Could not determine Gmail address from OAuth response.',
+          'no_email'
+        ));
+      }
 
       if (tokens.refresh_token && gmailAddress) {
         const existing = getCompanyEmailAccounts(companyId, tenantId);

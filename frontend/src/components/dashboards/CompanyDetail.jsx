@@ -346,7 +346,7 @@ export default function CompanyDetail({ companyId, onBack }) {
 
   const connectGmailOAuth = () => {
     const token = getAuthToken();
-    const scopes = 'userinfo.email,gmail.readonly,gmail.send,gmail.modify';
+    const scopes = 'openid,email,profile,gmail.readonly,gmail.send,gmail.modify';
     const source = `portfolio-gmail:${companyId}`;
     const url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=${encodeURIComponent(source)}&token=${encodeURIComponent(token)}`;
     const popup = window.open(url, 'oauth-popup', 'width=600,height=700,scrollbars=yes');
