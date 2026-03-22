@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Mail, FolderOpen, Plus, ExternalLink,
-  Send, Inbox, FileText, Clock, RefreshCw,
+  Send, Inbox, FileText, Clock, RefreshCw, Trash2,
 } from 'lucide-react';
 import api from '../../lib/hooks/useApi';
 
@@ -210,74 +210,12 @@ function FilesPanel({ files, loading }) {
   );
 }
 
-function ConnectGmailModal({ companyId, onClose, onSuccess }) {
-  const [address, setAddress] = useState('');
-  const [token, setToken] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!address.trim()) return;
-    setSubmitting(true);
-    try {
-      await api.post(`/v1/portfolio/companies/${companyId}/connect-gmail`, {
-        gmail_address: address.trim(),
-        refresh_token: token.trim() || null,
-      });
-      onSuccess?.();
-      onClose();
-    } catch (err) {
-      console.error('Connect Gmail error:', err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
-      onClick={onClose}
-    >
-      <form
-        onClick={e => e.stopPropagation()}
-        onSubmit={handleSubmit}
-        style={{ background: '#fff', border: '1px solid #e5e2dc', borderRadius: 14, padding: 28, width: 420, maxWidth: '90vw', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }}
-      >
-        <h3 style={{ color: 'var(--t-text, #1a1917)', fontSize: 16, fontWeight: 600, marginBottom: 20 }}>Connect Gmail Account</h3>
-
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ display: 'block', fontSize: 12, color: '#6b6b65', marginBottom: 6 }}>Gmail Address *</label>
-          <input
-            value={address}
-            onChange={e => setAddress(e.target.value)}
-            placeholder="hello@company.com"
-            autoFocus
-            style={{ width: '100%', background: '#f9f9f7', border: '1px solid #e5e2dc', borderRadius: 8, padding: '10px 12px', color: 'var(--t-text, #1a1917)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 12, color: '#6b6b65', marginBottom: 6 }}>OAuth Refresh Token (optional)</label>
-          <input
-            value={token}
-            onChange={e => setToken(e.target.value)}
-            placeholder="Paste refresh token..."
-            style={{ width: '100%', background: '#f9f9f7', border: '1px solid #e5e2dc', borderRadius: 8, padding: '10px 12px', color: 'var(--t-text, #1a1917)', fontSize: 13, outline: 'none', boxSizing: 'border-box' }}
-          />
-          <div style={{ fontSize: 11, color: '#9a9a92', marginTop: 4 }}>Required to fetch emails. Use Google OAuth integration to obtain one.</div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={{ padding: '8px 18px', background: 'transparent', border: '1px solid #e5e2dc', borderRadius: 8, color: '#6b6b65', fontSize: 13, cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button type="submit" disabled={!address.trim() || submitting} style={{ padding: '8px 18px', background: address.trim() ? '#1e3a5f' : '#e5e2dc', border: 'none', borderRadius: 8, color: address.trim() ? '#fff' : '#9a9a92', fontSize: 13, fontWeight: 600, cursor: address.trim() ? 'pointer' : 'default' }}>
-            {submitting ? 'Connecting...' : 'Connect'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
+function getAuthToken() {
+  try {
+    const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+    if (session?.tokens?.accessToken) return session.tokens.accessToken;
+  } catch {}
+  return localStorage.getItem('auth_token') || '';
 }
 
 function ConnectDriveModal({ companyId, onClose, onSuccess }) {
@@ -368,7 +306,6 @@ export default function CompanyDetail({ companyId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [filesLoading, setFilesLoading] = useState(false);
-  const [showConnectGmail, setShowConnectGmail] = useState(false);
   const [showConnectDrive, setShowConnectDrive] = useState(false);
 
   const fetchCompany = async () => {
@@ -404,6 +341,39 @@ export default function CompanyDetail({ companyId, onBack }) {
       console.error('Files fetch error:', err);
     } finally {
       setFilesLoading(false);
+    }
+  };
+
+  const connectGmailOAuth = () => {
+    const token = getAuthToken();
+    const scopes = 'gmail.readonly,gmail.send,gmail.modify';
+    const source = `portfolio-gmail:${companyId}`;
+    const url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=${encodeURIComponent(source)}&token=${encodeURIComponent(token)}`;
+    const popup = window.open(url, 'oauth-popup', 'width=600,height=700,scrollbars=yes');
+
+    const handleMessage = (event) => {
+      if (event.data?.type === 'oauth-integration-success' && event.data.source === source) {
+        window.removeEventListener('message', handleMessage);
+        fetchCompany();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    // Fallback: poll for popup close
+    const timer = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(timer);
+        window.removeEventListener('message', handleMessage);
+        fetchCompany();
+      }
+    }, 1000);
+  };
+
+  const removeEmailAccount = async (accountId) => {
+    try {
+      await api.delete(`/v1/portfolio/companies/${companyId}/email-accounts/${accountId}`);
+      fetchCompany();
+    } catch (err) {
+      console.error('Remove email error:', err);
     }
   };
 
@@ -524,7 +494,7 @@ export default function CompanyDetail({ companyId, onBack }) {
                   </button>
                 )}
                 <button
-                  onClick={() => setShowConnectGmail(true)}
+                  onClick={connectGmailOAuth}
                   style={{ background: 'none', border: 'none', color: '#9a9a92', cursor: 'pointer', padding: 4 }}
                   title="Connect Gmail"
                 >
@@ -537,8 +507,17 @@ export default function CompanyDetail({ companyId, onBack }) {
               <>
                 <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0eeea' }}>
                   {company.email_accounts.map(a => (
-                    <div key={a.id} style={{ fontSize: 11, color: a.oauth_refresh_token ? '#1a6b3c' : '#8b6914', padding: '2px 0' }}>
-                      {a.gmail_address} {a.oauth_refresh_token ? '(connected)' : '(no token)'}
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: a.oauth_refresh_token ? '#1a6b3c' : '#8b6914', padding: '3px 0' }}>
+                      <span>{a.gmail_address} {a.oauth_refresh_token ? '(connected)' : '(no token)'}</span>
+                      <button
+                        onClick={() => removeEmailAccount(a.id)}
+                        style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', padding: 2, opacity: 0.5 }}
+                        title="Remove email account"
+                        onMouseOver={e => e.currentTarget.style.opacity = 1}
+                        onMouseOut={e => e.currentTarget.style.opacity = 0.5}
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -548,9 +527,9 @@ export default function CompanyDetail({ companyId, onBack }) {
               <ConnectBox
                 icon={Mail}
                 title="Connect Gmail"
-                description="Link a Gmail account to monitor email activity"
-                buttonText="Connect Account"
-                onClick={() => setShowConnectGmail(true)}
+                description="Sign in with Google to connect a Gmail account"
+                buttonText="Sign in with Google"
+                onClick={connectGmailOAuth}
               />
             )}
           </div>
@@ -641,13 +620,6 @@ export default function CompanyDetail({ companyId, onBack }) {
       </div>
 
       {/* Modals */}
-      {showConnectGmail && (
-        <ConnectGmailModal
-          companyId={companyId}
-          onClose={() => setShowConnectGmail(false)}
-          onSuccess={fetchCompany}
-        />
-      )}
       {showConnectDrive && (
         <ConnectDriveModal
           companyId={companyId}

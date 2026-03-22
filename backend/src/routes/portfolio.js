@@ -193,6 +193,26 @@ router.post('/companies/:id/connect-gmail', async (req, res) => {
   }
 });
 
+// ─── DELETE /companies/:id/email-accounts/:accountId — Remove email account ──
+
+router.delete('/companies/:id/email-accounts/:accountId', async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    const company = getPortfolioCompany(req.params.id, tenantId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    const { getTenantDb } = await import('../cache/database.js');
+    const db = getTenantDb(tenantId);
+    db.prepare('DELETE FROM company_email_accounts WHERE id = ? AND company_id = ? AND tenant_id = ?')
+      .run(req.params.accountId, company.id, tenantId);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete email account error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── POST /companies/:id/connect-drive — Store Drive folder ──────────────────
 
 router.post('/companies/:id/connect-drive', async (req, res) => {

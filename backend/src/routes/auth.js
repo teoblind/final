@@ -39,6 +39,9 @@ import {
   markPasswordResetUsed,
   upsertKeyVaultEntry,
   getKeyVaultEntries,
+  getCompanyEmailAccounts,
+  addCompanyEmailAccount,
+  updateCompanyEmailAccountToken,
 } from '../cache/database.js';
 import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
@@ -962,6 +965,41 @@ router.get('/google/integrate/callback', async (req, res) => {
     const oauth2Client = getIntegrationOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
 
+    // ── Portfolio company Gmail connection ──
+    if (source.startsWith('portfolio-gmail:')) {
+      const companyId = source.replace('portfolio-gmail:', '');
+      // Get the email address from the OAuth token
+      oauth2Client.setCredentials(tokens);
+      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+      const { data: userInfo } = await oauth2.userinfo.get();
+      const gmailAddress = userInfo.email;
+
+      if (tokens.refresh_token && gmailAddress) {
+        const existing = getCompanyEmailAccounts(companyId, tenantId);
+        const match = existing.find(a => a.gmail_address === gmailAddress);
+        if (match) {
+          updateCompanyEmailAccountToken(match.id, tokens.refresh_token, tenantId);
+        } else {
+          addCompanyEmailAccount({
+            id: `cea-${Date.now().toString(36)}`,
+            companyId,
+            gmailAddress,
+            oauthRefreshToken: tokens.refresh_token,
+            tenantId,
+          });
+        }
+      }
+
+      insertAuditLog({ tenantId, userId, action: 'portfolio.gmail_connected', resourceType: 'portfolio_company', resourceId: companyId, details: { email: gmailAddress }, ipAddress: req.ip });
+
+      const postMessageOrigin = origin || '*';
+      return res.send(`<!DOCTYPE html><html><head><title>Gmail Connected</title></head><body>
+        <p style="font-family:-apple-system,sans-serif;text-align:center;margin-top:40px;color:#1a6b3c;">Gmail connected successfully. This window will close.</p>
+        <script>if(window.opener){window.opener.postMessage({type:'oauth-integration-success',source:${JSON.stringify(source)}},${JSON.stringify(postMessageOrigin)});}window.close();</script>
+      </body></html>`);
+    }
+
+    // ── Standard integration flow (key_vault storage) ──
     // Determine which services to store tokens for
     const services = source === 'google-all'
       ? ['google-gmail', 'google-calendar', 'google-docs']
