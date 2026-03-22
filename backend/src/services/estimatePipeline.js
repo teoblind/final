@@ -12,7 +12,10 @@ import { fileURLToPath } from 'url';
 import { mkdirSync, existsSync } from 'fs';
 import {
   createDacpBidRequest,
+  updateDacpBidRequest,
   insertActivity,
+  insertApprovalItem,
+  getAgentMode,
 } from '../cache/database.js';
 import { generateEstimate } from './estimateBot.js';
 import { sendEmailWithAttachments } from './emailService.js';
@@ -406,34 +409,81 @@ CONFIDENTIALITY (critical):
   const replySubject = subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`;
   const html = markdownToEmailHtml(agentResponse);
 
-  await sendEmailWithAttachments({
-    to: from,
-    subject: replySubject,
-    html,
-    attachments: [{
-      filename,
-      path: filepath,
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    }],
-    tenantId,
-    threadId,
-    inReplyTo: messageId,
-    references: messageId,
-  });
+  // Check copilot mode — if enabled, queue for approval instead of auto-sending
+  const agentMode = getAgentMode('estimating');
+  const isCopilot = agentMode === 'copilot';
 
-  console.log(`[EstimatePipeline] Reply sent to ${from} with estimate ${estimate.id}`);
+  if (isCopilot) {
+    // Queue the reply as an approval item — user must approve before it sends
+    const approvalPayload = {
+      to: from,
+      subject: replySubject,
+      html,
+      body: agentResponse,
+      attachments: [{ filename, path: filepath, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+      tenantId,
+      threadId,
+      inReplyTo: messageId,
+      references: messageId,
+      estimateId: estimate.id,
+      bidId,
+      totalBid: estimate.totalBid,
+    };
 
-  // Log activity for sent email
-  insertActivity({
-    tenantId,
-    type: 'out',
-    title: `Bid proposal sent to ${gcName}`,
-    subtitle: `$${estimate.totalBid.toLocaleString()} — ${estimate.projectName}`,
-    detailJson: JSON.stringify({ to: from, estimateId: estimate.id, totalBid: estimate.totalBid, excelFile: filename }),
-    sourceType: 'email',
-    sourceId: `reply-${messageId}`,
-    agentId: 'estimating',
-  });
+    insertApprovalItem({
+      tenantId,
+      agentId: 'estimating',
+      title: `Send estimate reply to ${gcName}: $${estimate.totalBid.toLocaleString()}`,
+      description: `Reply to "${subject}" with estimate ${estimate.id} ($${estimate.totalBid.toLocaleString()}) + Excel attachment`,
+      type: 'email_draft',
+      payloadJson: JSON.stringify(approvalPayload),
+    });
+
+    // Update bid status to 'draft' (pending approval)
+    updateDacpBidRequest(tenantId, bidId, { status: 'draft' });
+
+    console.log(`[EstimatePipeline] Reply queued for approval (copilot mode) — ${estimate.id}`);
+
+    insertActivity({
+      tenantId,
+      type: 'agent',
+      title: `Estimate reply drafted — awaiting approval`,
+      subtitle: `$${estimate.totalBid.toLocaleString()} to ${gcName} — review in Approvals`,
+      detailJson: JSON.stringify({ to: from, estimateId: estimate.id, totalBid: estimate.totalBid, excelFile: filename, copilotPending: true }),
+      sourceType: 'email',
+      sourceId: `draft-${messageId}`,
+      agentId: 'estimating',
+    });
+  } else {
+    // Autonomous mode — send immediately
+    await sendEmailWithAttachments({
+      to: from,
+      subject: replySubject,
+      html,
+      attachments: [{
+        filename,
+        path: filepath,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }],
+      tenantId,
+      threadId,
+      inReplyTo: messageId,
+      references: messageId,
+    });
+
+    console.log(`[EstimatePipeline] Reply sent to ${from} with estimate ${estimate.id}`);
+
+    insertActivity({
+      tenantId,
+      type: 'out',
+      title: `Bid proposal sent to ${gcName}`,
+      subtitle: `$${estimate.totalBid.toLocaleString()} — ${estimate.projectName}`,
+      detailJson: JSON.stringify({ to: from, estimateId: estimate.id, totalBid: estimate.totalBid, excelFile: filename }),
+      sourceType: 'email',
+      sourceId: `reply-${messageId}`,
+      agentId: 'estimating',
+    });
+  }
 
   return { bidId, estimate, filename };
 }

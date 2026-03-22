@@ -12,7 +12,7 @@ import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import db from '../cache/database.js';
 import { insertActivity } from '../cache/database.js';
-import { sendEstimateEmail, sendEmail } from '../services/emailService.js';
+import { sendEstimateEmail, sendEmail, sendEmailWithAttachments } from '../services/emailService.js';
 
 const router = express.Router();
 
@@ -200,9 +200,26 @@ router.post('/:id/approve', async (req, res) => {
     if (item.type === 'email_draft' && item.payload_json) {
       try {
         const payload = JSON.parse(item.payload_json);
-        // Use demo_to (teo@zhan.capital) for demo, real 'to' in production
         const recipient = payload.demo_to || payload.to;
-        if (payload.attachment) {
+
+        if (payload.attachments && payload.html) {
+          // Estimate pipeline format — HTML body + file attachments
+          await sendEmailWithAttachments({
+            to: recipient,
+            subject: payload.subject,
+            html: payload.html,
+            attachments: payload.attachments,
+            tenantId: payload.tenantId || tenantId,
+            threadId: payload.threadId,
+            inReplyTo: payload.inReplyTo,
+            references: payload.references,
+          });
+          // Update bid request status from 'draft' to 'estimated'
+          if (payload.bidId) {
+            const { updateDacpBidRequest } = await import('../cache/database.js');
+            updateDacpBidRequest(payload.tenantId || tenantId, payload.bidId, { status: 'estimated' });
+          }
+        } else if (payload.attachment) {
           await sendEstimateEmail({
             to: recipient,
             subject: payload.subject,
@@ -221,7 +238,6 @@ router.post('/:id/approve', async (req, res) => {
         console.log(`Approval ${item.id}: email sent to ${recipient}`);
       } catch (emailErr) {
         console.error(`Approval ${item.id}: email send failed:`, emailErr.message);
-        // Don't fail the approval — email is best-effort
       }
     }
 

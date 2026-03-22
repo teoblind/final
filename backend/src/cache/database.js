@@ -1828,15 +1828,29 @@ export function getAgentRow(agentId) {
 
 /**
  * Get the operational mode for an agent: 'autonomous' | 'copilot' | 'off'.
- * Reads from config_json.mode; defaults to 'autonomous' if not set.
+ * Checks agents table first, then falls back to tenant settings_json.agents map.
  */
 export function getAgentMode(agentId) {
+  // 1. Check agents table (runtime-registered agents)
   const row = db.prepare('SELECT config_json FROM agents WHERE id = ?').get(agentId);
-  if (!row || !row.config_json) return 'autonomous';
-  try {
-    const config = JSON.parse(row.config_json);
-    return config.mode || 'autonomous';
-  } catch { return 'autonomous'; }
+  if (row && row.config_json) {
+    try {
+      const config = JSON.parse(row.config_json);
+      if (config.mode) return config.mode;
+    } catch {}
+  }
+
+  // 2. Fall back to tenant settings_json.agents map
+  const tenantRow = db.prepare('SELECT settings_json FROM tenants LIMIT 1').get();
+  if (tenantRow && tenantRow.settings_json) {
+    try {
+      const settings = JSON.parse(tenantRow.settings_json);
+      const agentModes = settings.agents || {};
+      if (agentModes[agentId]) return agentModes[agentId];
+    } catch {}
+  }
+
+  return 'autonomous';
 }
 
 export function getAllAgentRows() {
@@ -1919,6 +1933,13 @@ export function resolveApproval(approvalId, status, resolvedBy = 'operator', rej
     SET status = ?, resolved_at = datetime('now'), resolved_by = ?, rejection_reason = ?
     WHERE id = ?
   `).run(status, resolvedBy, rejectionReason, approvalId);
+}
+
+export function insertApprovalItem({ tenantId, agentId, title, description, type, payloadJson }) {
+  return db.prepare(`
+    INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending')
+  `).run(tenantId, agentId, title, description, type, payloadJson);
 }
 
 export function expireOldApprovals() {
