@@ -2711,7 +2711,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
         {/* Chat area */}
         <div
-          className={`${contextPanelOpen ? 'flex-[3]' : 'flex-1'} flex flex-col border-r border-terminal-border min-w-0 min-h-0 relative transition-all duration-300 ${dragging ? 'ring-2 ring-inset' : ''}`}
+          className={`${contextPanelOpen ? 'flex-[3]' : 'flex-1'} flex flex-col min-w-0 min-h-0 relative transition-all duration-300 ${dragging ? 'ring-2 ring-inset' : ''}`}
           style={dragging ? { ringColor: agent.accentColor } : {}}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -2808,21 +2808,18 @@ export default function AgentChat({ agentId = 'estimating' }) {
           </div>
         </div>
 
-        {/* Context panel toggle + panel */}
-        <div className="relative flex">
-          {/* Toggle button */}
-          <button
-            onClick={() => setContextPanelOpen(prev => !prev)}
-            className="absolute -left-3 top-4 z-10 w-6 h-6 rounded-full bg-white border border-[#e0ddd8] shadow-sm flex items-center justify-center hover:bg-[#f5f4f0] transition-colors"
-            title={contextPanelOpen ? 'Collapse context panel' : 'Expand context panel'}
-          >
-            {contextPanelOpen ? <ChevronRight size={13} className="text-[#9a9a92]" /> : <ChevronLeft size={13} className="text-[#9a9a92]" />}
-          </button>
-          <div
-            className={`min-h-0 overflow-y-auto bg-[#f5f4f0] transition-all duration-300 ease-in-out ${contextPanelOpen ? 'flex-[2] min-w-0 opacity-100' : 'w-0 min-w-0 opacity-0 overflow-hidden'}`}
-          >
-            {contextPanelOpen && <ContextPanel agentId={agentId} />}
-          </div>
+        {/* Context panel slide handle + panel */}
+        <div
+          onClick={() => setContextPanelOpen(prev => !prev)}
+          className="w-3 flex-shrink-0 cursor-col-resize flex items-center justify-center hover:bg-[#e8e7e3] transition-colors group relative"
+          title={contextPanelOpen ? 'Minimize context panel' : 'Expand context panel'}
+        >
+          <div className="w-[3px] h-10 rounded-full bg-[#d5d3ce] group-hover:bg-[#b5b3ae] transition-colors" />
+        </div>
+        <div
+          className={`min-h-0 overflow-y-auto bg-[#f5f4f0] transition-all duration-300 ease-in-out ${contextPanelOpen ? 'flex-[2] min-w-0 opacity-100' : 'w-0 min-w-0 opacity-0 overflow-hidden'}`}
+        >
+          {contextPanelOpen && <ContextPanel agentId={agentId} />}
         </div>
       </div>
       )}

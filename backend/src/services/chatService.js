@@ -2822,7 +2822,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   let siblingContext = '';
   if (threadId) {
     try {
-      const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, 5);
+      const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, userId, 5);
       if (siblings.length > 0) {
         siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads — use this context to stay informed but do not repeat or reference it unless relevant:\n';
         for (const s of siblings) {
@@ -3232,7 +3232,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   let siblingContext = '';
   if (threadId) {
     try {
-      const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, 5);
+      const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, userId, 5);
       if (siblings.length > 0) {
         siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads — use this context to stay informed but do not repeat or reference it unless relevant:\n';
         for (const s of siblings) {

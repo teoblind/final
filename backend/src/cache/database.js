@@ -2805,14 +2805,15 @@ export function saveThreadSummary(threadId, tenantId, agentId, userId, summary) 
   `).run(threadId, tenantId, agentId, userId, summary, summary);
 }
 
-export function getSiblingThreadSummaries(tenantId, agentId, currentThreadId, limit = 5) {
+export function getSiblingThreadSummaries(tenantId, agentId, currentThreadId, userId, limit = 5) {
   return db.prepare(`
     SELECT ts.thread_id, ts.summary, ts.updated_at, ct.title
     FROM thread_summaries ts
     LEFT JOIN chat_threads ct ON ct.id = ts.thread_id
     WHERE ts.tenant_id = ? AND ts.agent_id = ? AND ts.thread_id != ?
+      AND (ts.user_id = ? OR ts.user_id IS NULL)
     ORDER BY ts.updated_at DESC LIMIT ?
-  `).all(tenantId, agentId, currentThreadId, limit);
+  `).all(tenantId, agentId, currentThreadId, userId, limit);
 }
 
 // ─── Phase 8: Webhook Helpers ───────────────────────────────────────────────
