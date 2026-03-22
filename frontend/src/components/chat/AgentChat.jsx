@@ -49,17 +49,83 @@ const DEMO_MESSAGES = {};
 const DEMO_CONTEXT = {};
 
 // ─── Simple markdown-like formatting ────────────────────────────────────────────
+// Tool tag display names
+const TOOL_LABELS = {
+  gws_drive_search: 'Searching Drive',
+  gws_gmail_search: 'Searching Email',
+  gws_gmail_read: 'Reading Email',
+  gws_calendar_events: 'Checking Calendar',
+  gws_sheets_read: 'Reading Spreadsheet',
+  gws_sheets_append: 'Updating Spreadsheet',
+  gws_workspace_command: 'Workspace Action',
+  send_email: 'Drafting Email',
+  search_knowledge: 'Searching Knowledge Base',
+  web_research: 'Researching',
+  create_estimate: 'Creating Estimate',
+  create_meeting: 'Scheduling Meeting',
+  search_hubspot_contacts: 'Searching Contacts',
+  search_hubspot_companies: 'Searching Companies',
+  search_hubspot_deals: 'Searching Deals',
+  create_hubspot_contact: 'Creating Contact',
+};
+
 function formatContent(text) {
   if (!text) return null;
-  return text.split('\n').map((line, i) => {
-    // Bold
-    const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>;
-      }
-      return part;
+
+  // Split text on tool invocation blocks: <tool_name>...</tool_name> (completed) or <tool_name>... (still running)
+  const closedPattern = /<(\w+)>\s*[\s\S]*?<\/\1>/g;
+  const segments = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = closedPattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+    }
+    segments.push({ type: 'tool', name: match[1], done: true });
+    lastIndex = match.index + match[0].length;
+  }
+  // Check for unclosed tool tag at the end (still streaming)
+  const remaining = text.slice(lastIndex);
+  const openMatch = remaining.match(/<(\w+)>\s*[\s\S]*$/);
+  if (openMatch && TOOL_LABELS[openMatch[1]]) {
+    if (openMatch.index > 0) {
+      segments.push({ type: 'text', value: remaining.slice(0, openMatch.index) });
+    }
+    segments.push({ type: 'tool', name: openMatch[1], done: false });
+  } else if (remaining.length > 0) {
+    segments.push({ type: 'text', value: remaining });
+  }
+
+  if (segments.length === 0) {
+    segments.push({ type: 'text', value: text });
+  }
+
+  return segments.map((seg, si) => {
+    if (seg.type === 'tool') {
+      const label = TOOL_LABELS[seg.name] || seg.name.replace(/_/g, ' ');
+      return seg.done ? (
+        <div key={`tool-${si}`} className="my-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#f0f7f2] border border-[#d0e8d8] text-[11px] text-[#1a6b3c]">
+          <Check size={12} className="shrink-0" />
+          <span className="font-medium">{label}</span>
+        </div>
+      ) : (
+        <div key={`tool-${si}`} className="my-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#f5f4f0] border border-[#e8e6e1] text-[11px] text-[#6b6b65]">
+          <div className="w-3 h-3 rounded-full border-2 border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
+          <span className="font-medium">{label}...</span>
+        </div>
+      );
+    }
+    // Regular text — render with bold/line breaks
+    return seg.value.split('\n').map((line, i, arr) => {
+      const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      });
+      return <span key={`${si}-${i}`}>{parts}{i < arr.length - 1 && <br />}</span>;
     });
-    return <span key={i}>{parts}{i < text.split('\n').length - 1 && <br />}</span>;
   });
 }
 
