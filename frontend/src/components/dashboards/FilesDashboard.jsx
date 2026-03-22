@@ -1943,6 +1943,10 @@ function ReportViewerModal({ file, onClose }) {
 
 export default function FilesDashboard() {
   const { tenant } = useTenant();
+  const { tokens } = useAuth();
+  const authHeaders = tokens?.accessToken
+    ? { Authorization: `Bearer ${tokens.accessToken}` }
+    : {};
   const isConstruction = tenant?.settings?.industry === 'construction';
   const isVenture = tenant?.settings?.industry === 'venture';
   const driveRoot = isConstruction ? '/DACP/' : isVenture ? '/Drive/' : '/Sangha/';
@@ -1975,7 +1979,7 @@ export default function FilesDashboard() {
       const formData = new FormData();
       formData.append('file', file);
       if (selectedFolder) formData.append('folder', selectedFolder);
-      const res = await fetch(`${API_BASE}/v1/files/upload`, { method: 'POST', body: formData });
+      const res = await fetch(`${API_BASE}/v1/files/upload`, { method: 'POST', headers: authHeaders, body: formData });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Upload failed');
@@ -2074,7 +2078,7 @@ export default function FilesDashboard() {
       setLoading(true);
       try {
         // First try the tenant files endpoint
-        const res = await fetch(`${API_BASE}/v1/files`);
+        const res = await fetch(`${API_BASE}/v1/files`, { headers: authHeaders });
         if (!res.ok) throw new Error('Files endpoint not available');
         const data = await res.json();
         if (!cancelled && data.files && data.files.length > 0) {
@@ -2096,7 +2100,7 @@ export default function FilesDashboard() {
       // Fallback: try workspace agent (skip for venture — no demo data)
       if (!isVenture) {
         try {
-          const res = await fetch(`${API_BASE}/v1/workspace/files`);
+          const res = await fetch(`${API_BASE}/v1/workspace/files`, { headers: authHeaders });
           if (!res.ok) throw new Error('Workspace agent not available');
           const data = await res.json();
           if (!cancelled && data.files && data.files.length > 0) {
@@ -2133,7 +2137,7 @@ export default function FilesDashboard() {
   const refreshFiles = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/v1/files`);
+      const res = await fetch(`${API_BASE}/v1/files`, { headers: authHeaders });
       if (res.ok) {
         const data = await res.json();
         if (data.files?.length > 0) {
@@ -2150,7 +2154,7 @@ export default function FilesDashboard() {
   // ─── Drive Sync ────────────────────────────────────────────────────────
   const fetchSyncStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/v1/files/sync-status`);
+      const res = await fetch(`${API_BASE}/v1/files/sync-status`, { headers: authHeaders });
       if (res.ok) {
         const data = await res.json();
         setSyncStatus(data.syncStatus || null);
@@ -2161,12 +2165,12 @@ export default function FilesDashboard() {
         }
       }
     } catch {}
-  }, []);
+  }, [tokens?.accessToken]);
 
   const handleSyncDrive = async () => {
     setSyncing(true);
     try {
-      const res = await fetch(`${API_BASE}/v1/files/sync-drive`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/v1/files/sync-drive`, { method: 'POST', headers: authHeaders });
       if (res.ok) {
         const data = await res.json();
         if (data.status === 'already_running') {
