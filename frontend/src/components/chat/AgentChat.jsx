@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, Check } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -1026,6 +1026,23 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent }) {
           <span className="text-[11px] font-semibold text-[#6b6b65]">{isUser ? (agentDef?.userName || 'You') : agentDef?.name}</span>
           <span className="text-[10px] text-[#c5c5bc] font-mono">{msg.time}</span>
         </div>
+
+        {/* File attachments (image thumbnails + file icons) */}
+        {msg.attachments?.length > 0 && (
+          <div className={`flex flex-wrap gap-1.5 mb-1.5 ${isUser ? 'justify-end' : ''}`}>
+            {msg.attachments.map((att, i) => (
+              att.isImage && att.previewUrl ? (
+                <img key={i} src={att.previewUrl} alt={att.name}
+                  className="max-w-[200px] max-h-[150px] rounded-lg border border-[#e8e6e1] object-cover" />
+              ) : (
+                <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#f5f4f0] border border-[#e8e6e1] text-[11px] text-[#6b6b65]">
+                  <FileText size={12} />
+                  <span className="truncate max-w-[150px]">{att.name}</span>
+                </div>
+              )
+            ))}
+          </div>
+        )}
 
         {/* Bubble — only render if there's text content */}
         {msg.content && (
@@ -2317,6 +2334,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
       role: 'user',
       content: text || `Sent ${fileNames.length} file(s): ${fileNames.join(', ')}`,
       files: fileNames.length > 0 ? fileNames : undefined,
+      attachments: filesToSend.length > 0 ? filesToSend.map(f => ({
+        name: f.name,
+        isImage: f.type?.startsWith('image/'),
+        previewUrl: f.type?.startsWith('image/') ? URL.createObjectURL(f) : null,
+      })) : undefined,
       time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     };
 

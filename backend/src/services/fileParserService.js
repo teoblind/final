@@ -129,6 +129,20 @@ function parseImage(filePath, mimeType) {
   };
   const mediaType = mediaMap[mimeType] || mimeType;
 
+  // Check size — Claude's limit is ~5MB for base64 images
+  const sizeMB = buffer.length / (1024 * 1024);
+  if (sizeMB > 5) {
+    console.warn(`[FileParser] Image too large for vision: ${filePath} (${sizeMB.toFixed(1)} MB)`);
+    return {
+      text: `[Uploaded image: ${filePath.split('/').pop()}] (${sizeMB.toFixed(1)} MB — too large for vision analysis, max 5 MB)`,
+      type: 'image',
+      isImage: true,
+      imageTooLarge: true,
+      base64: null,
+      mediaType,
+    };
+  }
+
   return {
     text: '',
     type: 'image',

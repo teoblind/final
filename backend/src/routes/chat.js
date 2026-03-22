@@ -296,7 +296,7 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
     mkdirSync(persistDir, { recursive: true });
 
     const { parseFile } = await import('../services/fileParserService.js');
-    const fileContexts = [];
+    const contentBlocks = [];
     const savedFiles = [];
 
     for (const file of files) {
@@ -309,28 +309,29 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
 
       const parsed = await parseFile(persistPath, file.mimetype, file.originalname);
 
-      if (parsed.isImage) {
-        fileContexts.push(`[Uploaded image: ${file.originalname}]`);
+      if (parsed.isImage && parsed.base64 && !parsed.imageTooLarge) {
+        // Send image as vision block for Claude to see
+        contentBlocks.push({
+          type: 'image',
+          source: { type: 'base64', media_type: parsed.mediaType, data: parsed.base64 },
+          _fileName: file.originalname,
+        });
       } else {
-        const preview = parsed.text.length > 8000
+        const preview = (parsed.text || '').length > 8000
           ? parsed.text.slice(0, 8000) + '\n[... truncated — full file available on disk]'
-          : parsed.text;
-        fileContexts.push(`[Uploaded file: ${file.originalname} (${parsed.type}${parsed.pageCount ? `, ${parsed.pageCount} pages` : ''})]\n--- FILE CONTENT ---\n${preview}\n--- END FILE CONTENT ---`);
+          : (parsed.text || `[Uploaded file: ${file.originalname}]`);
+        contentBlocks.push({
+          type: 'text',
+          text: `[File: ${file.originalname} (${parsed.type || 'unknown'}${parsed.pageCount ? `, ${parsed.pageCount} pages` : ''})]\n${preview}`,
+        });
       }
     }
 
-    // Build the prompt — include file paths so RC agent can access raw files
-    const fileList = savedFiles.map(f => `  - ${f.name} → ${f.path}`).join('\n');
-    const filesHeader = `[${savedFiles.length} file(s) uploaded — saved to disk for direct access]\n${fileList}\n\n`;
-    const allFileContexts = fileContexts.join('\n\n');
-
-    let content;
+    // Add user text or default prompt
     if (userText) {
-      content = `${filesHeader}${allFileContexts}\n\n${userText}`;
-    } else if (savedFiles.length === 1) {
-      content = `${filesHeader}${allFileContexts}\n\nPlease analyze this file.`;
-    } else {
-      content = `${filesHeader}${allFileContexts}\n\nPlease analyze these ${savedFiles.length} files.`;
+      contentBlocks.push({ type: 'text', text: userText });
+    } else if (!contentBlocks.some(b => b.type === 'text')) {
+      contentBlocks.push({ type: 'text', text: `Analyze the uploaded file${savedFiles.length > 1 ? 's' : ''}.` });
     }
 
     if (!thread.title) {
@@ -340,7 +341,8 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
       updateThreadTitle(threadId, `${titleName} — ${(userText || 'Analysis').slice(0, 40)}`);
     }
 
-    const result = await chat(tenantId, agentId, userId, content, threadId);
+    // Pass content blocks (multimodal) — chat() handles both string and array
+    const result = await chat(tenantId, agentId, userId, contentBlocks, threadId);
 
     const response = {
       response: result.response,
@@ -590,6 +592,100 @@ router.post('/:agentId/messages/stream', async (req, res) => {
       res.end();
     } else {
       res.status(500).json({ error: 'Failed to stream response', details: error.message });
+    }
+  }
+});
+
+// ─── Streaming File Upload ──────────────────────────────────────────────────
+/**
+ * POST /:agentId/threads/:threadId/messages/upload-stream — Upload files with SSE streaming response
+ */
+router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('files', 5), async (req, res) => {
+  const uploadedFiles = req.files || [];
+  try {
+    const { tenantId, userId, agentId } = resolveIds(req);
+    const { threadId } = req.params;
+    const isAdmin = ['owner', 'admin'].includes(req.user?.role);
+
+    if (!VALID_AGENTS.has(agentId)) {
+      for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
+      return res.status(400).json({ error: `Unknown agent: ${agentId}` });
+    }
+    const thread = getThread(threadId);
+    if (!thread || thread.tenant_id !== tenantId) {
+      for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
+      return res.status(404).json({ error: 'Thread not found' });
+    }
+    if (thread.visibility === 'private' && thread.user_id !== userId && !isAdmin) {
+      for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const textContent = (req.body.content || '').trim();
+    const { parseFile } = await import('../services/fileParserService.js');
+    const contentBlocks = [];
+
+    for (const file of uploadedFiles) {
+      try {
+        const parsed = await parseFile(file.path, file.mimetype, file.originalname);
+        if (parsed.isImage && parsed.base64 && !parsed.imageTooLarge) {
+          contentBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: parsed.mediaType, data: parsed.base64 },
+            _fileName: file.originalname,
+          });
+        } else {
+          contentBlocks.push({ type: 'text', text: `[File: ${file.originalname}]\n${parsed.text || '[could not parse]'}` });
+        }
+      } catch (e) {
+        contentBlocks.push({ type: 'text', text: `[File: ${file.originalname}] (parse error: ${e.message})` });
+      }
+    }
+
+    if (textContent) {
+      contentBlocks.push({ type: 'text', text: textContent });
+    } else if (!contentBlocks.some(b => b.type === 'text')) {
+      contentBlocks.push({ type: 'text', text: `Analyze the uploaded file${uploadedFiles.length > 1 ? 's' : ''}.` });
+    }
+
+    // Cleanup temp files (base64 already extracted)
+    for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
+
+    if (!thread.title) {
+      const titleText = textContent || `File upload: ${uploadedFiles.map(f => f.originalname).join(', ')}`;
+      updateThreadTitle(threadId, titleText.slice(0, 60));
+    }
+
+    // SSE stream
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    await chatStream(tenantId, agentId, userId, contentBlocks, threadId, {}, (chunk) => {
+      try {
+        if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
+          const parsed = JSON.parse(chunk);
+          if (parsed._type === 'progress') {
+            res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
+            return;
+          }
+        }
+      } catch {}
+      res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+    });
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error) {
+    console.error('Upload stream error:', error);
+    for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: error.message });
     }
   }
 });

@@ -3126,11 +3126,20 @@ function buildThinkingParam(agentId, userContent) {
 }
 
 export async function chat(tenantId, agentId, userId, userContent, threadId = null, options = {}) {
-  // Auto-create default thread if threadId provided but doesn't exist yet
-  // (thread creation is handled by the route layer)
+  // Support multimodal content: userContent can be a string or an array of content blocks
+  const isMultimodal = Array.isArray(userContent);
+  const displayContent = isMultimodal
+    ? userContent.filter(b => b.type === 'text').map(b => b.text).join('\n')
+    : userContent;
 
-  // 1. Save user message
-  saveMessage(tenantId, agentId, userId, 'user', userContent, null, threadId);
+  // 1. Save user message (text only — base64 images are too large for SQLite)
+  const messageMetadata = isMultimodal ? {
+    multimodal: true,
+    files: userContent
+      .filter(b => b.type === 'image')
+      .map(b => ({ name: b._fileName || 'image', type: b.source?.media_type || 'image/unknown' })),
+  } : null;
+  saveMessage(tenantId, agentId, userId, 'user', displayContent, messageMetadata, threadId);
 
   // 2. Load conversation history (most recent N messages, in chronological order)
   const rows = db.prepare(SQL.getRecentHistory).all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
@@ -3141,6 +3150,18 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     role: row.role === 'assistant' ? 'assistant' : 'user',
     content: row.content,
   }));
+
+  // For multimodal messages, replace the last message with full content blocks
+  if (isMultimodal && messages.length > 0) {
+    const apiContent = userContent.map(block => {
+      if (block.type === 'image') {
+        const { _fileName, ...rest } = block;
+        return rest;
+      }
+      return block;
+    });
+    messages[messages.length - 1].content = apiContent;
+  }
 
   // ─── Claude Code CLI route ─────────────────────────────────────────────
   // Routes complex queries through `claude -p` (Max subscription, flat rate)
@@ -3183,7 +3204,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     try {
       const { queryHivemindCli } = await import('./hivemindCli.js');
       const historyForContext = messages.slice(0, -1);
-      const cliResult = await queryHivemindCli(userContent, historyForContext, tenantId);
+      const cliResult = await queryHivemindCli(displayContent, historyForContext, tenantId);
 
       saveMessage(tenantId, agentId, userId, 'assistant', cliResult.response, {
         model: 'claude-code-cli',
@@ -3202,7 +3223,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 
   // 4. Get system prompt for this agent, enriched with knowledge context
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
-  const knowledgeContext = buildKnowledgeContext(tenantId, userContent);
+  const knowledgeContext = buildKnowledgeContext(tenantId, displayContent);
   // Add lead engine prompt for agents that have access
   const leAgents = ['sangha', 'hivemind', 'email', 'lead-engine', 'zhan'];
   const leadEngineAddon = leAgents.includes(agentId) ? LEAD_ENGINE_PROMPT_ADDON : '';
@@ -3355,7 +3376,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
   try {
     // Route to optimal model based on complexity
-    const selectedModel = selectModel(agentId, userContent, messages.length, true);
+    const selectedModel = selectModel(agentId, displayContent, messages.length, true);
 
     // All agents get 4096 tokens to support agentic multi-step reasoning
     // Extended thinking gets 16384 to accommodate thinking + response
@@ -3702,8 +3723,20 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
  * @returns {Promise<Object>} Final result (same shape as chat())
  */
 export async function chatStream(tenantId, agentId, userId, userContent, threadId = null, options = {}, onChunk) {
-  // Save user message
-  saveMessage(tenantId, agentId, userId, 'user', userContent, null, threadId);
+  // Support multimodal content
+  const isMultimodal = Array.isArray(userContent);
+  const displayContent = isMultimodal
+    ? userContent.filter(b => b.type === 'text').map(b => b.text).join('\n')
+    : userContent;
+
+  // Save user message (text only — base64 too large for SQLite)
+  const messageMetadata = isMultimodal ? {
+    multimodal: true,
+    files: userContent
+      .filter(b => b.type === 'image')
+      .map(b => ({ name: b._fileName || 'image', type: b.source?.media_type || 'image/unknown' })),
+  } : null;
+  saveMessage(tenantId, agentId, userId, 'user', displayContent, messageMetadata, threadId);
 
   const rows = db.prepare(SQL.getRecentHistory).all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
   const history = rows.reverse();
@@ -3712,9 +3745,21 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     content: row.content,
   }));
 
+  // For multimodal messages, replace the last message with full content blocks
+  if (isMultimodal && messages.length > 0) {
+    const apiContent = userContent.map(block => {
+      if (block.type === 'image') {
+        const { _fileName, ...rest } = block;
+        return rest;
+      }
+      return block;
+    });
+    messages[messages.length - 1].content = apiContent;
+  }
+
   // Build system prompt — must match chat() so agents have full context when streaming
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
-  const knowledgeContext = buildKnowledgeContext(tenantId, userContent);
+  const knowledgeContext = buildKnowledgeContext(tenantId, displayContent);
 
   const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists — no decorative formatting.`;
 
@@ -3806,7 +3851,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     const hasToolAddons = emailAgents.includes(agentId) || docAgents.includes(agentId) || dacpPromptAgents.includes(agentId);
     const selectedModel = options.helpMode
       ? 'claude-haiku-4-5-20251001'
-      : selectModel(agentId, userContent, messages.length, hasToolAddons);
+      : selectModel(agentId, displayContent, messages.length, hasToolAddons);
 
     let maxTokens = options.helpMode ? 1024 : 4096;
 
