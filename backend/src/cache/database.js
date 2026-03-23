@@ -709,6 +709,32 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_metrics_agent_date ON agent_metrics(agent_id, date)'); } catch (e) { /* exists */ }
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, dismissed)'); } catch (e) { /* exists */ }
 
+  // ─── Agent Run History (eval / regression tracking) ─────────────────────────
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT UNIQUE NOT NULL,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      user_id TEXT,
+      thread_id TEXT,
+      input TEXT NOT NULL,
+      output TEXT,
+      model TEXT,
+      route TEXT DEFAULT 'api',
+      input_tokens INTEGER DEFAULT 0,
+      output_tokens INTEGER DEFAULT 0,
+      tools_used TEXT,
+      duration_ms INTEGER,
+      status TEXT DEFAULT 'completed' CHECK(status IN ('running', 'completed', 'failed', 'timeout')),
+      error_message TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_agent ON agent_runs(tenant_id, agent_id, created_at)'); } catch (e) { /* exists */ }
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_run_id ON agent_runs(run_id)'); } catch (e) { /* exists */ }
+
   // ─── Phase 7: HPC / AI Compute Abstraction Layer ────────────────────────────
 
   // Workload configuration (BTC + HPC workloads)
@@ -2002,6 +2028,40 @@ export function getAgentReports(limit = 20) {
 
 export function getAgentReport(reportId) {
   return db.prepare('SELECT * FROM agent_reports WHERE id = ?').get(reportId);
+}
+
+// ─── Agent Run History ────────────────────────────────────────────────────────
+
+export function insertAgentRun({ runId, tenantId, agentId, userId, threadId, input, output, model, route, inputTokens, outputTokens, toolsUsed, durationMs, status, errorMessage }) {
+  return db.prepare(`
+    INSERT INTO agent_runs (run_id, tenant_id, agent_id, user_id, thread_id, input, output, model, route, input_tokens, output_tokens, tools_used, duration_ms, status, error_message)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(runId, tenantId, agentId, userId || null, threadId || null, input, output || null, model || null, route || 'api', inputTokens || 0, outputTokens || 0, toolsUsed ? JSON.stringify(toolsUsed) : null, durationMs || null, status || 'completed', errorMessage || null);
+}
+
+export function getAgentRuns(tenantId, agentId, { limit = 50, offset = 0 } = {}) {
+  return db.prepare(`
+    SELECT * FROM agent_runs WHERE tenant_id = ? AND agent_id = ?
+    ORDER BY created_at DESC LIMIT ? OFFSET ?
+  `).all(tenantId, agentId, limit, offset);
+}
+
+export function getAgentRun(runId) {
+  return db.prepare('SELECT * FROM agent_runs WHERE run_id = ?').get(runId);
+}
+
+export function getAgentRunsByThread(tenantId, threadId, { limit = 50 } = {}) {
+  return db.prepare(`
+    SELECT * FROM agent_runs WHERE tenant_id = ? AND thread_id = ?
+    ORDER BY created_at DESC LIMIT ?
+  `).all(tenantId, threadId, limit);
+}
+
+export function getAllAgentRuns(tenantId, { limit = 100, offset = 0 } = {}) {
+  return db.prepare(`
+    SELECT * FROM agent_runs WHERE tenant_id = ?
+    ORDER BY created_at DESC LIMIT ? OFFSET ?
+  `).all(tenantId, limit, offset);
 }
 
 // Notifications

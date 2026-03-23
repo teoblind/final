@@ -1,8 +1,9 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield, Mail } from 'lucide-react';
+import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield, Mail, Activity } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
 import SettingsTeamPanel from './SettingsTeamPanel';
 const EmailSecurityPanel = lazy(() => import('./EmailSecurityPanel'));
+const AgentRunHistory = lazy(() => import('./panels/agents/AgentRunHistory'));
 
 interface SettingsSectionProps {
   title: string;
@@ -1944,6 +1945,13 @@ export default function SettingsPanel() {
 
         {/* Phase 9: Insurance Settings */}
         <InsuranceSettingsSection />
+
+        {/* Agent Run History / Eval */}
+        <SettingsSection title="Agent Run History" description="Audit agent outputs, track regressions, and compare runs" icon={<Activity size={18} />}>
+          <Suspense fallback={<div className="py-8 text-center text-terminal-muted text-sm">Loading run history...</div>}>
+            <AgentRunHistory />
+          </Suspense>
+        </SettingsSection>
       </div>}
     </div>
   );

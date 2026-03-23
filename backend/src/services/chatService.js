@@ -7,7 +7,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { google } from 'googleapis';
-import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun } from '../cache/database.js';
+import { randomUUID } from 'node:crypto';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -3126,6 +3127,28 @@ function buildThinkingParam(agentId, userContent) {
 }
 
 export async function chat(tenantId, agentId, userId, userContent, threadId = null, options = {}) {
+  const _runId = randomUUID().slice(0, 12);
+  const _runStart = Date.now();
+  const _toolsUsed = [];
+
+  // Helper: record a completed run (fire-and-forget, never throws)
+  function _recordRun({ output, model, route, inputTokens, outputTokens, status, errorMessage }) {
+    try {
+      insertAgentRun({
+        runId: _runId, tenantId, agentId, userId, threadId,
+        input: typeof userContent === 'string' ? userContent : JSON.stringify(userContent),
+        output: output?.slice(0, 10000), // cap stored output at 10k chars
+        model, route: route || 'api',
+        inputTokens: inputTokens || 0, outputTokens: outputTokens || 0,
+        toolsUsed: _toolsUsed.length > 0 ? _toolsUsed : null,
+        durationMs: Date.now() - _runStart,
+        status: status || 'completed', errorMessage,
+      });
+    } catch (e) {
+      console.warn('[AgentRun] Failed to record run:', e.message);
+    }
+  }
+
   // Support multimodal content: userContent can be a string or an array of content blocks
   const isMultimodal = Array.isArray(userContent);
   const displayContent = isMultimodal
@@ -3192,9 +3215,11 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
       }, threadId);
 
       const audioUrl = await generateAudioIfEnabled(cliResult.response);
+      _recordRun({ output: cliResult.response, model: 'claude-code-cli', route: 'cli', status: cliResult.timedOut ? 'timeout' : 'completed' });
       return { response: cliResult.response, audio_url: audioUrl };
     } catch (error) {
       console.error(`[ClaudeAgent] CLI error (agent=${agentId}, tenant=${tenantId}):`, error.message);
+      _recordRun({ output: null, model: 'claude-code-cli', route: 'cli', status: 'failed', errorMessage: error.message });
       // Fall through to API route on CLI failure
       console.log(`[ClaudeAgent] Falling back to API route`);
     }
@@ -3490,6 +3515,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         toolInput._agentId = agentId;
       }
       const { toolResult, toolIsError } = await executeToolWithRetry(toolName, toolInput, tenantId);
+      _toolsUsed.push(toolName);
 
       // ─── Agentic loop: keep calling tools until Claude produces text ───
       // Tracks all tool results so callers (e.g. email handler) can collect
@@ -3581,6 +3607,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           nextToolInput._agentId = agentId;
         }
         const { toolResult: nextToolResult, toolIsError: nextToolIsError } = await executeToolWithRetry(nextToolName, nextToolInput, tenantId);
+        _toolsUsed.push(nextToolName);
 
         allToolResults.push({ tool_used: nextToolName, tool_input: nextToolInput, tool_result: nextToolResult, is_error: nextToolIsError });
         lastToolName = nextToolName;
@@ -3667,6 +3694,8 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       // Generate TTS audio for tool-use responses
       const audioUrl = await generateAudioIfEnabled(responseText);
 
+      _recordRun({ output: responseText, model: currentResponse.model, route: 'api', inputTokens: totalInputTokens, outputTokens: totalOutputTokens, status: timedOut ? 'timeout' : 'completed' });
+
       return {
         response: responseText,
         audio_url: audioUrl,
@@ -3699,9 +3728,12 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     // Generate TTS audio
     const audioUrl = await generateAudioIfEnabled(responseText);
 
+    _recordRun({ output: responseText, model: completion.model, route: 'api', inputTokens: completion.usage?.input_tokens, outputTokens: completion.usage?.output_tokens });
+
     return { response: responseText, audio_url: audioUrl };
   } catch (error) {
     console.error(`Chat error (agent=${agentId}):`, error.message);
+    _recordRun({ output: null, model: null, route: 'api', status: 'failed', errorMessage: error.message });
 
     // Save error as system message for debugging
     saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
@@ -3723,6 +3755,15 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
  * @returns {Promise<Object>} Final result (same shape as chat())
  */
 export async function chatStream(tenantId, agentId, userId, userContent, threadId = null, options = {}, onChunk) {
+  const _runId = randomUUID().slice(0, 12);
+  const _runStart = Date.now();
+  const _toolsUsed = [];
+  function _recordRun({ output, model, route, inputTokens, outputTokens, status, errorMessage }) {
+    try {
+      insertAgentRun({ runId: _runId, tenantId, agentId, userId, threadId, input: typeof userContent === 'string' ? userContent : JSON.stringify(userContent), output: output?.slice(0, 10000), model, route: route || 'api', inputTokens: inputTokens || 0, outputTokens: outputTokens || 0, toolsUsed: _toolsUsed.length > 0 ? _toolsUsed : null, durationMs: Date.now() - _runStart, status: status || 'completed', errorMessage });
+    } catch (e) { console.warn('[AgentRun] Failed to record stream run:', e.message); }
+  }
+
   // Support multimodal content
   const isMultimodal = Array.isArray(userContent);
   const displayContent = isMultimodal
@@ -3941,6 +3982,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
           onChunk(`\n<${toolName}>`);
 
           const { toolResult, toolIsError } = await executeToolWithRetry(toolName, toolInput, tenantId);
+          _toolsUsed.push(toolName);
 
           // Send close tag to frontend — shows checkmark widget
           onChunk(`</${toolName}>\n`);
@@ -4024,6 +4066,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
         try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${fullText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
       }
 
+      _recordRun({ output: fullText, model: selectedModel, route: 'api', inputTokens: totalInputTokens, outputTokens: totalOutputTokens, status: timedOut ? 'timeout' : 'completed' });
+
       return {
         response: fullText,
         tool_used: lastToolName,
@@ -4054,9 +4098,12 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${fullText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
     }
 
+    _recordRun({ output: fullText, model: finalMessage.model, route: 'api', inputTokens: totalInputTokens, outputTokens: totalOutputTokens });
+
     return { response: fullText };
   } catch (error) {
     console.error(`ChatStream error (agent=${agentId}, tenant=${tenantId}):`, error.message, error.stack?.split('\n').slice(0, 3).join(' | '));
+    _recordRun({ output: null, model: null, route: 'api', status: 'failed', errorMessage: error.message });
     saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
     throw error;
   }

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Building2, DollarSign, BarChart3, MessageSquare, FileText,
-  Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon
+  Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon, Activity,
 } from 'lucide-react';
 import SettingsTeamPanel from './SettingsTeamPanel';
 import api from '../lib/hooks/useApi';
 const EmailSecurityPanel = lazy(() => import('./EmailSecurityPanel'));
+const AgentRunHistory = lazy(() => import('./panels/agents/AgentRunHistory'));
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -601,6 +602,13 @@ export default function DacpSettingsPanel() {
           <Btn variant="secondary">Import from Contacts</Btn>
           <Btn onClick={() => saveSettings('gcContacts', gcContacts)} saving={saving} saved={savedSection === 'gcContacts'}>Save GC List</Btn>
         </div>
+      </Section>
+
+      {/* ═══ AGENT RUN HISTORY ═══ */}
+      <Section icon={Activity} iconClass="bg-[#e8eef5] text-[#1e3a5f]" title="Agent Run History" desc="Audit agent outputs, track regressions, compare runs">
+        <Suspense fallback={<div className="py-8 text-center text-terminal-muted text-[13px]">Loading run history...</div>}>
+          <AgentRunHistory />
+        </Suspense>
       </Section>
 
       {/* ═══ DANGER ZONE ═══ */}

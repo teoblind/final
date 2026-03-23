@@ -12,6 +12,7 @@ import {
   getAgentMetrics, getAllAgentMetrics,
   getAgentReports, getAgentReport,
   getAgentMode, updateAgentConfig,
+  getAgentRuns, getAgentRun, getAllAgentRuns,
 } from '../cache/database.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -398,6 +399,97 @@ router.get('/:id/metrics', (req, res) => {
       days,
       daily: metrics,
       fetchedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Run History (eval / regression tracking) ──────────────────────────────
+
+/** GET /runs — All runs across agents for this tenant */
+router.get('/runs', (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const offset = parseInt(req.query.offset) || 0;
+    const runs = getAllAgentRuns(tenantId, { limit, offset });
+    res.json({ runs });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /:id/runs — Paginated run history for a specific agent */
+router.get('/:id/runs', (req, res) => {
+  try {
+    const tenantId = req.user.tenantId;
+    const agentId = req.params.id;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const offset = parseInt(req.query.offset) || 0;
+    const runs = getAgentRuns(tenantId, agentId, { limit, offset });
+    res.json({ runs });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /runs/:runId — Single run detail */
+router.get('/runs/:runId', (req, res) => {
+  try {
+    const run = getAgentRun(req.params.runId);
+    if (!run || run.tenant_id !== req.user.tenantId) {
+      return res.status(404).json({ error: 'Run not found' });
+    }
+    // Parse tools_used JSON
+    if (run.tools_used) {
+      try { run.tools_used = JSON.parse(run.tools_used); } catch (e) { /* leave as string */ }
+    }
+    res.json({ run });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /runs/diff — Compare two run outputs */
+router.get('/runs/diff', (req, res) => {
+  try {
+    const { a, b } = req.query;
+    if (!a || !b) return res.status(400).json({ error: 'Query params a and b (run IDs) are required' });
+
+    const runA = getAgentRun(a);
+    const runB = getAgentRun(b);
+    const tenantId = req.user.tenantId;
+
+    if (!runA || runA.tenant_id !== tenantId) return res.status(404).json({ error: `Run ${a} not found` });
+    if (!runB || runB.tenant_id !== tenantId) return res.status(404).json({ error: `Run ${b} not found` });
+
+    // Compute simple line-by-line diff
+    const linesA = (runA.output || '').split('\n');
+    const linesB = (runB.output || '').split('\n');
+    const diff = [];
+    const maxLen = Math.max(linesA.length, linesB.length);
+
+    for (let i = 0; i < maxLen; i++) {
+      const lineA = linesA[i];
+      const lineB = linesB[i];
+      if (lineA === lineB) {
+        diff.push({ type: 'equal', line: lineA });
+      } else {
+        if (lineA !== undefined) diff.push({ type: 'removed', line: lineA });
+        if (lineB !== undefined) diff.push({ type: 'added', line: lineB });
+      }
+    }
+
+    res.json({
+      runA: { run_id: runA.run_id, agent_id: runA.agent_id, created_at: runA.created_at, model: runA.model, input: runA.input },
+      runB: { run_id: runB.run_id, agent_id: runB.agent_id, created_at: runB.created_at, model: runB.model, input: runB.input },
+      diff,
+      stats: {
+        added: diff.filter(d => d.type === 'added').length,
+        removed: diff.filter(d => d.type === 'removed').length,
+        equal: diff.filter(d => d.type === 'equal').length,
+      },
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
