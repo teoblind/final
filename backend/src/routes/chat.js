@@ -14,6 +14,7 @@ import { dirname, join } from 'path';
 import { unlinkSync, mkdirSync, copyFileSync, existsSync } from 'fs';
 import { authenticate } from '../middleware/auth.js';
 import { getMessages, getThreadMessages, chat, chatStream, saveMessage } from '../services/chatService.js';
+import { chatStreamSdk, isSdkEnabled } from '../services/agentSdkService.js';
 import { sendEmail, sendEstimateEmail } from '../services/emailService.js';
 import { getOpusModel } from '../services/modelRouter.js';
 import {
@@ -512,7 +513,15 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    await chatStream(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
+    // Route through SDK or legacy engine based on feature flag
+    const useSdk = isSdkEnabled(tenantId, agentId);
+    const streamFn = useSdk ? chatStreamSdk : chatStream;
+
+    if (useSdk) {
+      res.write(`data: ${JSON.stringify({ type: 'text', text: '' })}\n\n`); // SDK init signal
+    }
+
+    await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
       // Detect progress events from the tool loop
       try {
         if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
@@ -569,7 +578,10 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     // Send threadId first so frontend can track it
     res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
 
-    await chatStream(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
+    const useSdk = isSdkEnabled(tenantId, agentId);
+    const streamFn = useSdk ? chatStreamSdk : chatStream;
+
+    await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
       // Detect progress events from the tool loop
       try {
         if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
@@ -664,7 +676,10 @@ router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
-    await chatStream(tenantId, agentId, userId, contentBlocks, threadId, {}, (chunk) => {
+    const useSdk = isSdkEnabled(tenantId, agentId);
+    const streamFn = useSdk ? chatStreamSdk : chatStream;
+
+    await streamFn(tenantId, agentId, userId, contentBlocks, threadId, {}, (chunk) => {
       try {
         if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
           const parsed = JSON.parse(chunk);

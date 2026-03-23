@@ -9,6 +9,8 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.81",
+    "@anthropic-ai/claude-code": "^2.1.81",
     "@anthropic-ai/sdk": "^0.78.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "axios": "^1.6.5",
@@ -33,7 +35,8 @@
     "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0",
     "ws": "^8.16.0",
-    "yahoo-finance2": "^3.13.0"
+    "yahoo-finance2": "^3.13.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"

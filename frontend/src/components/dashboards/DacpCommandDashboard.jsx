@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail, FileSpreadsheet, MessageSquare, Paperclip } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -42,6 +42,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [approvals, setApprovals] = useState([]);
   const [processingApproval, setProcessingApproval] = useState(null);
   const [expandedApproval, setExpandedApproval] = useState(null);
+  const [showBidsList, setShowBidsList] = useState(false);
+  const [showJobsList, setShowJobsList] = useState(false);
 
   const fetchApprovals = () => {
     fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
@@ -155,36 +157,63 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
-      {/* Top row: Bids Due + Active Jobs */}
+      {/* Top row: Bids Due + Active Jobs — inline expandable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-        <div
-          className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
-          onClick={() => onNavigate?.('estimating')}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#fdf6e8] flex items-center justify-center">
-              <ClipboardList size={18} className="text-[#b8860b]" />
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+          <div
+            className="p-5 cursor-pointer hover:bg-[#f5f4f0] transition-colors flex items-center justify-between"
+            onClick={() => { setShowBidsList(v => !v); setShowJobsList(false); }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[10px] bg-[#fdf6e8] flex items-center justify-center">
+                <ClipboardList size={18} className="text-[#b8860b]" />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Bids Due This Week</div>
+                <div className="text-xl font-bold text-terminal-text tabular-nums">{bidsThisWeek.length}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Bids Due This Week</div>
-              <div className="text-xl font-bold text-terminal-text tabular-nums">{bidsThisWeek.length}</div>
-            </div>
+            {bidsThisWeek.length > 0 && (showBidsList ? <ChevronUp size={16} className="text-terminal-muted" /> : <ChevronDown size={16} className="text-terminal-muted" />)}
           </div>
+          {showBidsList && bidsThisWeek.length > 0 && (
+            <div className="border-t border-[#f0eeea] max-h-[300px] overflow-y-auto">
+              {bidsThisWeek.map(bid => (
+                <div key={bid.id} className="px-5 py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] cursor-pointer" onClick={() => onNavigate?.('workflow-chat')}>
+                  <div className="text-[12px] font-medium text-terminal-text truncate">{bid.gc_name} — {bid.subject}</div>
+                  <div className="text-[10px] text-terminal-muted flex gap-3 mt-0.5">
+                    <span>Due: {new Date(bid.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                    <span className={`font-semibold ${bid.status === 'new' ? 'text-[#b8860b]' : bid.status === 'estimated' ? 'text-[#1a6b3c]' : ''}`}>{bid.status}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {showBidsList && bidsThisWeek.length === 0 && (
+            <div className="border-t border-[#f0eeea] px-5 py-4 text-[11px] text-terminal-muted">No bids due this week.</div>
+          )}
         </div>
 
-        <div
-          className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
-          onClick={() => onNavigate?.('jobs')}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-[10px] bg-[#e8f5ee] flex items-center justify-center">
-              <HardHat size={18} className="text-[#1a6b3c]" />
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+          <div
+            className="p-5 cursor-pointer hover:bg-[#f5f4f0] transition-colors flex items-center justify-between"
+            onClick={() => { setShowJobsList(v => !v); setShowBidsList(false); }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-[10px] bg-[#e8f5ee] flex items-center justify-center">
+                <HardHat size={18} className="text-[#1a6b3c]" />
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Active Jobs</div>
+                <div className="text-xl font-bold text-terminal-text tabular-nums">{stats?.activeJobs || 0}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Active Jobs</div>
-              <div className="text-xl font-bold text-terminal-text tabular-nums">{stats?.activeJobs || 0}</div>
-            </div>
+            {(stats?.activeJobs > 0) && (showJobsList ? <ChevronUp size={16} className="text-terminal-muted" /> : <ChevronDown size={16} className="text-terminal-muted" />)}
           </div>
+          {showJobsList && (
+            <div className="border-t border-[#f0eeea] px-5 py-4 text-[11px] text-terminal-muted">
+              {stats?.activeJobs > 0 ? 'Open the Workflow agent Jobs tab for details.' : 'No active jobs.'}
+            </div>
+          )}
         </div>
       </div>
 
@@ -322,13 +351,63 @@ export default function DacpCommandDashboard({ onNavigate }) {
                     </button>
                   </div>
                 </div>
-                {isExpanded && payload.body && (
-                  <div className="px-[18px] pb-4 pt-1">
-                    <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg p-4 text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
-                      <div className="text-[10px] font-semibold text-terminal-muted uppercase mb-2">Draft Reply Preview</div>
-                      <div className="text-[11px] text-[#6b6b65] mb-2">To: {payload.to} &middot; Subject: {payload.subject}</div>
-                      {payload.body}
+                {isExpanded && (
+                  <div className="px-[18px] pb-4 pt-1 space-y-3">
+                    {/* Email header + body */}
+                    <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
+                      {(payload.to || payload.subject) && (
+                        <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
+                          <div className="text-[10px] font-semibold text-terminal-muted uppercase mb-1.5">Draft Reply Preview</div>
+                          {payload.to && (
+                            <div className="text-[11px] text-[#6b6b65]">
+                              <span className="font-medium text-terminal-text">To:</span> {payload.to}
+                            </div>
+                          )}
+                          {payload.subject && (
+                            <div className="text-[11px] text-[#6b6b65]">
+                              <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div className="p-4">
+                        {payload.html ? (
+                          <div
+                            className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
+                            dangerouslySetInnerHTML={{ __html: payload.html }}
+                          />
+                        ) : payload.body ? (
+                          <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
+                            {payload.body}
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-terminal-muted">
+                            {item.description || 'No preview available'}
+                          </div>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Attachments */}
+                    {payload.attachments && payload.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {payload.attachments.map((att, i) => (
+                          <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md">
+                            <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
+                            <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Edit in Chat button */}
+                    <button
+                      onClick={() => onNavigate?.('hivemind-chat')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-[#1e3a5f] bg-[#eef3f8] border border-[#c8d8e8] hover:bg-[#dde8f2] transition-colors"
+                    >
+                      <MessageSquare size={12} />
+                      Edit in DACP Agent
+                    </button>
                   </div>
                 )}
               </div>

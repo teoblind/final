@@ -8,7 +8,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3002',
-        changeOrigin: false
+        // Keep changeOrigin false so the original Host header (e.g. dacp.localhost:5173)
+        // is forwarded to the backend, allowing tenant resolver to pick up the subdomain
+        changeOrigin: false,
       }
     }
   }

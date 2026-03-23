@@ -12,6 +12,7 @@ import {
   getApiKeyByPrefix,
   updateApiKeyLastUsed,
   insertAuditLog,
+  setTenantContext,
 } from '../cache/database.js';
 
 // ─── Role Permissions Map ───────────────────────────────────────────────────
@@ -266,6 +267,14 @@ export async function authenticate(req, res, next) {
       };
       req.tenantId = user.tenant_id;
 
+      // Re-set AsyncLocalStorage tenant context to match the authenticated user's tenant.
+      // This ensures the DB proxy routes to the correct tenant database even when
+      // the hostname doesn't carry a subdomain (e.g. localhost in dev).
+      if (req.resolvedTenant?.id !== user.tenant_id) {
+        req.resolvedTenant = { id: tenant.id, name: tenant.name, slug: tenant.slug, branding: tenant.branding || {}, settings: tenant.settings || {} };
+        return setTenantContext(user.tenant_id, () => next());
+      }
+
       return next();
     }
 
@@ -320,6 +329,14 @@ export async function authenticate(req, res, next) {
         permissions,
       };
       req.tenantId = user.tenant_id;
+
+      if (req.resolvedTenant?.id !== user.tenant_id) {
+        const apiTenant = getTenant(user.tenant_id);
+        if (apiTenant) {
+          req.resolvedTenant = { id: apiTenant.id, name: apiTenant.name, slug: apiTenant.slug, branding: apiTenant.branding || {}, settings: apiTenant.settings || {} };
+        }
+        return setTenantContext(user.tenant_id, () => next());
+      }
 
       return next();
     }
