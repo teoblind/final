@@ -2052,12 +2052,13 @@ export default function AgentChat({ agentId = 'estimating' }) {
         // Pre-fill input if navigated from approval context
         if (approvalContext) {
           const p = approvalContext.payload || {};
-          const parts = [`I need to review and edit this estimate before sending:\n`];
-          parts.push(`**${approvalContext.title}**`);
+          const parts = [`I need to review and edit this estimate reply before sending.\n`];
+          parts.push(`Approval ID: ${approvalContext.approvalId}`);
           if (p.to) parts.push(`To: ${p.to}`);
           if (p.subject) parts.push(`Subject: ${p.subject}`);
           if (p.totalBid) parts.push(`Total Bid: $${p.totalBid.toLocaleString()}`);
-          if (p.body) parts.push(`\nCurrent draft:\n${p.body}`);
+          if (p.body) parts.push(`\nCurrent email draft:\n---\n${p.body}\n---`);
+          parts.push(`\nPlease show me this draft so I can tell you what to change. Use update_approval_draft with approval_id ${approvalContext.approvalId} when I confirm edits.`);
           setInput(parts.join('\n'));
           setTimeout(() => inputRef.current?.focus(), 100);
         }

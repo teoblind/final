@@ -1201,6 +1201,20 @@ const DACP_TOOLS = [
       required: ['email_body'],
     },
   },
+  {
+    name: 'update_approval_draft',
+    description: 'Update a pending approval item\'s email draft. Use this after the user asks you to edit an estimate reply or email draft. Updates the email body/HTML and optionally the subject line. The user can then review the updated draft on the Command Dashboard and approve it to send.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        approval_id: { type: 'integer', description: 'The approval item ID to update' },
+        body: { type: 'string', description: 'The updated email body text (plain text / markdown). Will be auto-converted to HTML.' },
+        subject: { type: 'string', description: 'Updated subject line (optional — only if the subject needs to change)' },
+        to: { type: 'string', description: 'Updated recipient email (optional — only if the recipient needs to change)' },
+      },
+      required: ['approval_id', 'body'],
+    },
+  },
 ];
 
 async function callDacpTool(toolName, toolInput, tenantId) {
@@ -1337,6 +1351,30 @@ async function callDacpTool(toolName, toolInput, tenantId) {
       return parseSupplierQuote(toolInput.email_body, toolInput.from_name || '', toolInput.from_email || '');
     }
 
+    case 'update_approval_draft': {
+      const { getApprovalItem, updateApprovalPayload } = await import('../cache/database.js');
+      const { markdownToEmailHtml } = await import('./emailService.js');
+      const item = getApprovalItem(tid, toolInput.approval_id);
+      if (!item) throw new Error(`Approval item ${toolInput.approval_id} not found`);
+      if (item.status !== 'pending') throw new Error(`Cannot edit — approval is already ${item.status}`);
+
+      const existing = item.payload_json ? JSON.parse(item.payload_json) : {};
+      const updatedPayload = {
+        ...existing,
+        body: toolInput.body,
+        html: markdownToEmailHtml(toolInput.body),
+      };
+      if (toolInput.subject) updatedPayload.subject = toolInput.subject;
+      if (toolInput.to) updatedPayload.to = toolInput.to;
+
+      const newTitle = toolInput.subject
+        ? `Send estimate reply: ${toolInput.subject}`
+        : null;
+
+      updateApprovalPayload(tid, toolInput.approval_id, JSON.stringify(updatedPayload), newTitle);
+      return { success: true, approval_id: toolInput.approval_id, message: 'Draft updated. Go to Command Dashboard to review and approve.' };
+    }
+
     default:
       throw new Error(`Unknown DACP tool: ${toolName}`);
   }
@@ -1377,7 +1415,10 @@ When walking the estimator through the 8-step process:
 
 For the demo ITB (BR-DEMO-001 — Riverside Commerce Center), you can walk through all 8 steps.
 
-When asked to estimate concrete work, ALWAYS use lookup_pricing first to get current rates, then create_estimate with proper line items. Be precise with quantities and units.`;
+When asked to estimate concrete work, ALWAYS use lookup_pricing first to get current rates, then create_estimate with proper line items. Be precise with quantities and units.
+
+DRAFT EDITING:
+- update_approval_draft: Update a pending email draft in the approval queue. When the user says they want to edit an estimate reply or email, use this tool with the approval_id and the new email body text. The text will be auto-converted to HTML. After updating, tell the user to check the Command Dashboard to review and approve.`;
 
 // ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
 
@@ -3004,7 +3045,7 @@ const TOOL_CATEGORIES = {
   web: ['browse_url', 'web_research'],
   legal: ['generate_legal_doc'],
   document: ['generate_document'],
-  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote'],
+  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote', 'update_approval_draft'],
   scheduler: ['create_scheduled_task', 'list_scheduled_tasks', 'delete_scheduled_task'],
 };
 

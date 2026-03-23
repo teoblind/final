@@ -1968,6 +1968,18 @@ export function insertApprovalItem({ tenantId, agentId, title, description, type
   `).run(tenantId, agentId, title, description, type, payloadJson);
 }
 
+export function getApprovalItem(tenantId, id) {
+  return db.prepare('SELECT * FROM approval_items WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+}
+
+export function updateApprovalPayload(tenantId, id, payloadJson, title) {
+  const updates = ['payload_json = ?'];
+  const params = [payloadJson];
+  if (title) { updates.push('title = ?'); params.push(title); }
+  params.push(id, tenantId);
+  return db.prepare(`UPDATE approval_items SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ? AND status = 'pending'`).run(...params);
+}
+
 export function expireOldApprovals() {
   const result = db.prepare(`
     UPDATE agent_approvals
