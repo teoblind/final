@@ -322,7 +322,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#fdf6e8] text-[#b8860b] border border-[#f0d88a]">{approvals.length}</span>
           </div>
           {approvals.map((item) => {
-            const payload = item.payload_json ? JSON.parse(item.payload_json) : {};
+            const payload = item.payload || (item.payload_json ? JSON.parse(item.payload_json) : {});
             const isExpanded = expandedApproval === item.id;
             const isProcessing = processingApproval === item.id;
             return (
