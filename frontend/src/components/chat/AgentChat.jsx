@@ -2013,6 +2013,14 @@ export default function AgentChat({ agentId = 'estimating' }) {
     const pendingThreadId = localStorage.getItem('open_thread_id');
     if (pendingThreadId) localStorage.removeItem('open_thread_id');
 
+    // Check if navigated from approval "Edit in DACP Agent" button
+    const approvalContextRaw = sessionStorage.getItem('dacp_approval_context');
+    let approvalContext = null;
+    if (approvalContextRaw) {
+      sessionStorage.removeItem('dacp_approval_context');
+      try { approvalContext = JSON.parse(approvalContextRaw); } catch {}
+    }
+
     fetch(`${API_BASE}/v1/chat/${agentId}/threads`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -2041,6 +2049,18 @@ export default function AgentChat({ agentId = 'estimating' }) {
           }
         }
         setThreadsLoaded(true);
+        // Pre-fill input if navigated from approval context
+        if (approvalContext) {
+          const p = approvalContext.payload || {};
+          const parts = [`I need to review and edit this estimate before sending:\n`];
+          parts.push(`**${approvalContext.title}**`);
+          if (p.to) parts.push(`To: ${p.to}`);
+          if (p.subject) parts.push(`Subject: ${p.subject}`);
+          if (p.totalBid) parts.push(`Total Bid: $${p.totalBid.toLocaleString()}`);
+          if (p.body) parts.push(`\nCurrent draft:\n${p.body}`);
+          setInput(parts.join('\n'));
+          setTimeout(() => inputRef.current?.focus(), 100);
+        }
       })
       .catch(() => {
         const demo = DEMO_MESSAGES[agentId];

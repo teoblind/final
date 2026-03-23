@@ -11,7 +11,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import db from '../cache/database.js';
-import { insertActivity } from '../cache/database.js';
+import { insertActivity, setTenantContext } from '../cache/database.js';
 import { sendEstimateEmail, sendEmail, sendEmailWithAttachments } from '../services/emailService.js';
 
 const router = express.Router();
@@ -24,7 +24,7 @@ router.use(authenticate);
 // ---------------------------------------------------------------------------
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || 'default';
+  const tenantId = req.tenantId || req.resolvedTenant?.id || 'default';
   const userId = req.user.id; // auth middleware guarantees req.user exists
   return { tenantId, userId };
 }
@@ -157,6 +157,52 @@ router.get('/:id', (req, res) => {
     res.json(formatItem(item));
   } catch (error) {
     console.error('Approvals GET/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /:id/attachment/:index — preview attachment content (Excel → JSON)
+// ---------------------------------------------------------------------------
+router.get('/:id/attachment/:index', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const item = db.prepare('SELECT * FROM approval_items WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
+    if (!item) return res.status(404).json({ error: 'Approval item not found' });
+
+    const payload = item.payload_json ? JSON.parse(item.payload_json) : {};
+    const attachments = payload.attachments || [];
+    const idx = parseInt(req.params.index);
+    if (idx < 0 || idx >= attachments.length) return res.status(404).json({ error: 'Attachment not found' });
+
+    const att = attachments[idx];
+    const filePath = att.path;
+    if (!filePath) return res.status(404).json({ error: 'No file path for attachment' });
+
+    const fs = await import('fs');
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
+
+    // Parse Excel with exceljs
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const sheets = [];
+    workbook.eachSheet((worksheet) => {
+      const rows = [];
+      worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        const cells = [];
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cells.push(cell.text || cell.value?.toString() || '');
+        });
+        rows.push(cells);
+      });
+      sheets.push({ name: worksheet.name, rows });
+    });
+
+    res.json({ filename: att.filename || att.name, sheets });
+  } catch (error) {
+    console.error('Attachment preview error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -442,30 +488,55 @@ function seedDemoApprovals() {
   }
   console.log(`Seeded ${sanghaItems.length} approval items for tenant default`);
 
-  // DACP seeds (only if none exist)
+  // DACP seeds (only if none exist) — must run inside DACP tenant context
+  // so the db proxy routes to the correct SQLite file
+  setTenantContext('dacp-construction-001', () => {
   const dacpCount = db.prepare("SELECT COUNT(*) as c FROM approval_items WHERE tenant_id = 'dacp-construction-001'").get();
   if (dacpCount.c === 0) {
     const dacpItems = [
       {
         agent_id: 'estimating',
-        title: 'Turner Construction bid email draft',
-        description: 'Outreach email to Turner Construction regarding the Frisco Station Phase 2 bid opportunity.',
+        title: 'Send estimate reply to Turner Construction: $595,000',
+        description: 'Reply to "RFQ: Parking Garage Foundation — Frisco Station Phase 2" with estimate EST-20260312 ($595,000) + Excel attachment',
         type: 'email_draft',
-        payload_json: JSON.stringify({ to: 'bids@turnerconstruction.com', subject: 'Frisco Station Phase 2 — Bid Submission', body: 'Hi,\n\nPlease find attached our bid for Frisco Station Phase 2.\n\nBest,\nDACP Construction', projectValue: 4200000 }),
+        payload_json: JSON.stringify({
+          to: 'bids@turnerconstruction.com',
+          subject: 'Re: RFQ: Parking Garage Foundation — Frisco Station Phase 2',
+          body: 'Hey Mike,\n\nThanks for sending over the Frisco Station Phase 2 parking garage foundation package. We reviewed the drawings and specs — here\'s our number.\n\nTotal Bid: $595,000\n\nBreakdown attached as an Excel file. Includes mobilization, concrete foundations, rebar, formwork, and backfill. We excluded dewatering and any structural steel above grade.\n\nA few things we noticed:\n- The geotech report shows high water table at 8\' — might need dewatering depending on your schedule\n- Specs call for 5000 PSI concrete but the structural drawings note 4000 PSI in a couple spots — which one governs?\n\nWhen are you looking to start? We could mobilize within 2 weeks of NTP.\n\nMarcel\nDACP Construction',
+          html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6"><p>Hey Mike,</p><p>Thanks for sending over the Frisco Station Phase 2 parking garage foundation package. We reviewed the drawings and specs — here\'s our number.</p><p><strong>Total Bid: $595,000</strong></p><p>Breakdown attached as an Excel file. Includes mobilization, concrete foundations, rebar, formwork, and backfill. We excluded dewatering and any structural steel above grade.</p><p>A few things we noticed:</p><ul><li>The geotech report shows high water table at 8\' — might need dewatering depending on your schedule</li><li>Specs call for 5000 PSI concrete but the structural drawings note 4000 PSI in a couple spots — which one governs?</li></ul><p>When are you looking to start? We could mobilize within 2 weeks of NTP.</p><p>Marcel<br/>DACP Construction</p></div>',
+          attachments: [{ filename: 'DACP_Estimate_EST-20260312_Parking_Garage_Foundation.xlsx', path: '', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+          estimateId: 'EST-20260312',
+          bidId: 'BID-FRISCO-001',
+          totalBid: 595000,
+        }),
       },
       {
-        agent_id: 'meetings',
-        title: 'Frisco Station field report',
-        description: 'Auto-generated field report from site visit on March 5.',
-        type: 'report',
-        payload_json: JSON.stringify({ project: 'Frisco Station', visitDate: '2026-03-05', completionPct: 34, issues: ['2-day weather delay', 'rebar delivery pending'] }),
+        agent_id: 'estimating',
+        title: 'Send estimate reply to Hensel Phelps: $1,250,000',
+        description: 'Reply to "RFQ: Site Work & Utilities — Legacy West Phase 3" with estimate EST-20260315 ($1,250,000) + Excel attachment',
+        type: 'email_draft',
+        payload_json: JSON.stringify({
+          to: 'preconstruction@henselphelps.com',
+          subject: 'Re: RFQ: Site Work & Utilities — Legacy West Phase 3',
+          body: 'Hey Rachel,\n\nAppreciate you including us on Legacy West Phase 3. We went through the civil drawings and utility plans — here\'s where we landed.\n\nTotal Bid: $1,250,000\n\nCovers earthwork, storm drainage, water/sewer, paving, and site concrete. Excel breakdown attached. We excluded any landscaping and irrigation.\n\nOne question — the civil plans show a 24" storm line crossing the existing water main at Station 4+50. Has that conflict been resolved or should we carry a contingency for rerouting?\n\nHappy to walk through the numbers if helpful.\n\nMarcel\nDACP Construction',
+          html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6"><p>Hey Rachel,</p><p>Appreciate you including us on Legacy West Phase 3. We went through the civil drawings and utility plans — here\'s where we landed.</p><p><strong>Total Bid: $1,250,000</strong></p><p>Covers earthwork, storm drainage, water/sewer, paving, and site concrete. Excel breakdown attached. We excluded any landscaping and irrigation.</p><p>One question — the civil plans show a 24" storm line crossing the existing water main at Station 4+50. Has that conflict been resolved or should we carry a contingency for rerouting?</p><p>Happy to walk through the numbers if helpful.</p><p>Marcel<br/>DACP Construction</p></div>',
+          attachments: [{ filename: 'DACP_Estimate_EST-20260315_Site_Work_Utilities.xlsx', path: '', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+          estimateId: 'EST-20260315',
+          bidId: 'BID-LEGACY-001',
+          totalBid: 1250000,
+        }),
       },
     ];
+    const dacpInsert = db.prepare(`
+      INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    `);
     for (const item of dacpItems) {
-      insert.run('dacp-construction-001', item.agent_id, item.title, item.description, item.type, item.payload_json);
+      dacpInsert.run('dacp-construction-001', item.agent_id, item.title, item.description, item.type, item.payload_json);
     }
     console.log('Seeded 2 approval items for tenant dacp-construction-001');
   }
+  }); // end setTenantContext
 }
 
 // ---------------------------------------------------------------------------

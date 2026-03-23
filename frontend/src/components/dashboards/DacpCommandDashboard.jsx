@@ -44,6 +44,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [expandedApproval, setExpandedApproval] = useState(null);
   const [showBidsList, setShowBidsList] = useState(false);
   const [showJobsList, setShowJobsList] = useState(false);
+  const [excelPreview, setExcelPreview] = useState(null); // { approvalId, index, data }
+  const [loadingExcel, setLoadingExcel] = useState(false);
 
   const fetchApprovals = () => {
     fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
@@ -390,19 +392,78 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
                     {/* Attachments */}
                     {payload.attachments && payload.attachments.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {payload.attachments.map((att, i) => (
-                          <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md">
-                            <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
-                            <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-2">
+                          {payload.attachments.map((att, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                if (excelPreview?.approvalId === item.id && excelPreview?.index === i) {
+                                  setExcelPreview(null);
+                                  return;
+                                }
+                                setLoadingExcel(true);
+                                fetch(`${API_BASE}/v1/approvals/${item.id}/attachment/${i}`, { headers: getAuthHeaders() })
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    if (data.sheets) setExcelPreview({ approvalId: item.id, index: i, data });
+                                    else setExcelPreview({ approvalId: item.id, index: i, data: null, error: data.error || 'Could not load' });
+                                  })
+                                  .catch(() => setExcelPreview({ approvalId: item.id, index: i, data: null, error: 'Could not load file' }))
+                                  .finally(() => setLoadingExcel(false));
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md hover:bg-[#eeedea] transition-colors cursor-pointer"
+                            >
+                              <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
+                              <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
+                              <ChevronDown size={10} className={`text-terminal-muted transition-transform ${excelPreview?.approvalId === item.id && excelPreview?.index === i ? 'rotate-180' : ''}`} />
+                            </button>
+                          ))}
+                        </div>
+                        {/* Excel preview table */}
+                        {excelPreview?.approvalId === item.id && excelPreview.data && (
+                          <div className="bg-white border border-[#e8e6e2] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                            {excelPreview.data.sheets.map((sheet, si) => (
+                              <div key={si}>
+                                <div className="px-3 py-1.5 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[10px] font-semibold text-terminal-muted uppercase">{sheet.name}</div>
+                                <table className="w-full text-[11px]">
+                                  <tbody>
+                                    {sheet.rows.map((row, ri) => (
+                                      <tr key={ri} className={ri === 0 ? 'bg-[#1e3a5f] text-white font-semibold' : ri % 2 === 0 ? 'bg-[#fafaf8]' : ''}>
+                                        {row.map((cell, ci) => (
+                                          <td key={ci} className={`px-2 py-1 border-b border-[#f0eeea] ${ri === 0 ? 'border-[#2a4d73]' : ''}`}>{cell}</td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
+                        {excelPreview?.approvalId === item.id && excelPreview.error && (
+                          <div className="text-[11px] text-terminal-muted italic px-2">{excelPreview.error}</div>
+                        )}
+                        {loadingExcel && excelPreview?.approvalId === item.id && (
+                          <div className="text-[11px] text-terminal-muted italic px-2">Loading spreadsheet...</div>
+                        )}
                       </div>
                     )}
 
                     {/* Edit in Chat button */}
                     <button
-                      onClick={() => onNavigate?.('hivemind-chat')}
+                      onClick={() => {
+                        // Store approval context so AgentChat can pre-populate the conversation
+                        const context = {
+                          approvalId: item.id,
+                          title: item.title,
+                          description: item.description,
+                          type: item.type,
+                          payload,
+                        };
+                        sessionStorage.setItem('dacp_approval_context', JSON.stringify(context));
+                        onNavigate?.('hivemind-chat');
+                      }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-[#1e3a5f] bg-[#eef3f8] border border-[#c8d8e8] hover:bg-[#dde8f2] transition-colors"
                     >
                       <MessageSquare size={12} />
