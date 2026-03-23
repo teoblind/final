@@ -152,6 +152,33 @@ router.post('/start-voice-loop', (req, res) => {
   }
 });
 
+/**
+ * POST /save-transcript — Save a locally-captured meeting transcript
+ * No auth — called by local menu bar app.
+ * Body: { tenantId, title, date, transcript, duration, source }
+ */
+router.post('/save-transcript', async (req, res) => {
+  try {
+    const { tenantId = 'zhan-capital', title, date, transcript, duration, source } = req.body;
+    if (!transcript) return res.status(400).json({ error: 'transcript is required' });
+
+    // Save as a knowledge entry (meeting type) — same schema as calendarPoll.js
+    const { getTenantDb } = await import('../cache/database.js');
+    const db = getTenantDb(tenantId);
+    const id = `local-${Date.now()}`;
+    db.prepare(`
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at, processed)
+      VALUES (?, ?, 'meeting', ?, ?, ?, 'local-capture', 'coppice-menubar', ?, 1)
+    `).run(id, tenantId, title || 'Untitled Meeting', transcript, transcript, date || new Date().toISOString());
+    console.log(`[Recall] Saved local transcript: "${title}" (${transcript.split(/\s+/).length} words)`);
+
+    res.json({ id, saved: true });
+  } catch (error) {
+    console.error('[Recall] Save transcript error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ── Authenticated routes ──
 router.use(authenticate);
 
