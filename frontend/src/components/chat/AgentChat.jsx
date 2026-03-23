@@ -1669,40 +1669,6 @@ function ConfigTab({ accent }) {
           ))}
         </div>
 
-        {/* Model Routing */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-xl p-5">
-          <div className="text-[13px] font-semibold text-terminal-text mb-1">Model Routing</div>
-          <div className="text-[11px] text-[#9a9a92] mb-3">AI model selection based on task complexity</div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-terminal-border">
-                <th className="text-left py-2 text-[10px] font-semibold text-[#9a9a92] uppercase">Task</th>
-                <th className="text-left py-2 text-[10px] font-semibold text-[#9a9a92] uppercase">Model</th>
-                <th className="text-right py-2 text-[10px] font-semibold text-[#9a9a92] uppercase">Cost/call</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { task: 'Chat responses', model: 'Claude Sonnet', cost: '$0.003' },
-                { task: 'Scope extraction', model: 'Claude Sonnet', cost: '$0.008' },
-                { task: 'Estimate generation', model: 'Claude Opus', cost: '$0.025' },
-                { task: 'Email drafting', model: 'Claude Haiku', cost: '$0.001' },
-                { task: 'Document analysis', model: 'Claude Opus', cost: '$0.035' },
-              ].map((r, i) => (
-                <tr key={i} className="border-b border-terminal-border/50">
-                  <td className="py-2 text-terminal-text">{r.task}</td>
-                  <td className="py-2 text-[#9a9a92]">{r.model}</td>
-                  <td className="py-2 text-right font-mono text-terminal-text">{r.cost}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-3 pt-3 border-t border-terminal-border flex items-center justify-between">
-            <span className="text-[11px] text-[#9a9a92]">Estimated monthly spend</span>
-            <span className="text-[14px] font-bold text-terminal-text">$47.20</span>
-          </div>
-        </div>
-
         {/* Save */}
         <button onClick={() => alert('Configuration saved.')} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: accent }}>Save Configuration</button>
       </div>

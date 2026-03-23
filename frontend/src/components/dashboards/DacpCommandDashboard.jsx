@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -39,6 +39,16 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [invitedMeetings, setInvitedMeetings] = useState(new Set());
   const [invitingId, setInvitingId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [approvals, setApprovals] = useState([]);
+  const [processingApproval, setProcessingApproval] = useState(null);
+  const [expandedApproval, setExpandedApproval] = useState(null);
+
+  const fetchApprovals = () => {
+    fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setApprovals(d.items || []))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     const headers = getAuthHeaders();
@@ -46,12 +56,13 @@ export default function DacpCommandDashboard({ onNavigate }) {
       fetch(`${API_BASE}/v1/estimates/stats`, { headers }).then(r => r.json()).catch(() => ({})),
       fetch(`${API_BASE}/v1/estimates/inbox`, { headers }).then(r => r.json()).catch(() => ({})),
       fetch(`${API_BASE}/v1/meetings?range=${meetingRange}`, { headers }).then(r => r.json()).catch(() => ({})),
-    ]).then(([statsRes, inboxRes, meetingsRes]) => {
+      fetch(`${API_BASE}/v1/approvals?status=pending`, { headers }).then(r => r.json()).catch(() => ({})),
+    ]).then(([statsRes, inboxRes, meetingsRes, approvalsRes]) => {
       setStats(statsRes.stats || null);
       setBids(inboxRes.bidRequests || []);
+      setApprovals(approvalsRes.items || []);
       const mtgs = meetingsRes.meetings || [];
       setMeetings(mtgs);
-      // Pre-populate invitedMeetings for meetings where agent is already an attendee
       const alreadyInvited = new Set();
       for (const m of mtgs) {
         if (m.attendees?.some(a => a.email?.includes('coppice') || a.email?.includes('agent@'))) {
@@ -61,6 +72,24 @@ export default function DacpCommandDashboard({ onNavigate }) {
       if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
     }).catch(console.error).finally(() => setLoading(false));
   }, [meetingRange]);
+
+  const handleApprove = async (id) => {
+    setProcessingApproval(id);
+    try {
+      await fetch(`${API_BASE}/v1/approvals/${id}/approve`, { method: 'POST', headers: getAuthHeaders() });
+      fetchApprovals();
+    } catch (err) { console.error('Approve failed:', err); }
+    finally { setProcessingApproval(null); }
+  };
+
+  const handleReject = async (id) => {
+    setProcessingApproval(id);
+    try {
+      await fetch(`${API_BASE}/v1/approvals/${id}/reject`, { method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Rejected by operator' }) });
+      fetchApprovals();
+    } catch (err) { console.error('Reject failed:', err); }
+    finally { setProcessingApproval(null); }
+  };
 
   const metrics = stats ? [
     { label: 'Open RFQs', value: stats.openRfqs, delta: `${stats.totalBidRequests} total`, type: 'up', bar: Math.min((stats.openRfqs / Math.max(stats.totalBidRequests, 1)) * 100, 100), icon: ClipboardList },
@@ -250,6 +279,63 @@ export default function DacpCommandDashboard({ onNavigate }) {
           </div>
         )}
       </div>
+
+      {/* Pending Approvals */}
+      {approvals.length > 0 && (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={14} className="text-[#b8860b]" />
+              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Pending Approvals</span>
+            </div>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#fdf6e8] text-[#b8860b] border border-[#f0d88a]">{approvals.length}</span>
+          </div>
+          {approvals.map((item) => {
+            const payload = item.payload_json ? JSON.parse(item.payload_json) : {};
+            const isExpanded = expandedApproval === item.id;
+            const isProcessing = processingApproval === item.id;
+            return (
+              <div key={item.id} className="border-b border-[#f0eeea] last:border-b-0">
+                <div className="flex items-center gap-3 px-[18px] py-3 hover:bg-[#f9f9f7] transition-colors">
+                  <Mail size={14} className="text-[#1e3a5f] shrink-0" />
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedApproval(isExpanded ? null : item.id)}>
+                    <div className="text-[13px] font-medium text-terminal-text truncate">{item.title}</div>
+                    <div className="text-[11px] text-terminal-muted truncate">{item.description}</div>
+                  </div>
+                  <button onClick={() => setExpandedApproval(isExpanded ? null : item.id)} className="p-1 text-terminal-muted hover:text-terminal-text shrink-0">
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleApprove(item.id)}
+                      disabled={isProcessing}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-white bg-[#1a6b3c] hover:bg-[#155e33] transition-colors disabled:opacity-50"
+                    >
+                      <Check size={10} /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(item.id)}
+                      disabled={isProcessing}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-terminal-red bg-red-50 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      <X size={10} /> Reject
+                    </button>
+                  </div>
+                </div>
+                {isExpanded && payload.body && (
+                  <div className="px-[18px] pb-4 pt-1">
+                    <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg p-4 text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
+                      <div className="text-[10px] font-semibold text-terminal-muted uppercase mb-2">Draft Reply Preview</div>
+                      <div className="text-[11px] text-[#6b6b65] mb-2">To: {payload.to} &middot; Subject: {payload.subject}</div>
+                      {payload.body}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Metrics Strip */}
       {metrics.length > 0 && (
