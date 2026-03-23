@@ -1195,8 +1195,80 @@ function ContextSection({ title, meta, children, defaultOpen = true }) {
   );
 }
 
-function ContextPanel({ agentId }) {
+function ContextPanel({ agentId, approvalContext }) {
   const ctx = DEMO_CONTEXT[agentId];
+
+  // Show approval context if navigated from "Edit in DACP Agent"
+  if (approvalContext) {
+    const p = approvalContext.payload || {};
+    return (
+      <>
+        <ContextSection title="Draft Reply" meta={`Approval #${approvalContext.approvalId}`}>
+          {p.to && (
+            <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
+              <span className="text-[#6b6b65]">To</span>
+              <span className="font-medium text-terminal-text text-[11px]">{p.to}</span>
+            </div>
+          )}
+          {p.subject && (
+            <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
+              <span className="text-[#6b6b65]">Subject</span>
+              <span className="font-medium text-terminal-text text-[11px] text-right ml-4">{p.subject}</span>
+            </div>
+          )}
+          {p.totalBid && (
+            <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
+              <span className="text-[#6b6b65]">Total Bid</span>
+              <span className="font-mono font-bold text-[#1a6b3c] text-[12px]">${p.totalBid.toLocaleString()}</span>
+            </div>
+          )}
+          {p.attachments && p.attachments.length > 0 && (
+            <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
+              <span className="text-[#6b6b65]">Attachment</span>
+              <span className="font-medium text-terminal-text text-[10px]">{p.attachments[0].filename}</span>
+            </div>
+          )}
+          {p.body && (
+            <div className="mt-2 p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
+              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1.5">Email Body</div>
+              <div className="text-[11px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[250px] overflow-y-auto">{p.body}</div>
+            </div>
+          )}
+        </ContextSection>
+        {approvalContext.originalEmail && (
+          <ContextSection title="Original RFQ" meta="Inbound email" defaultOpen={false}>
+            <div className="space-y-1">
+              {approvalContext.originalEmail.from_name && (
+                <div className="flex justify-between text-[11px] py-[4px]">
+                  <span className="text-[#6b6b65]">From</span>
+                  <span className="font-medium text-terminal-text">{approvalContext.originalEmail.from_name}</span>
+                </div>
+              )}
+              {approvalContext.originalEmail.gc_name && approvalContext.originalEmail.gc_name !== approvalContext.originalEmail.from_email && (
+                <div className="flex justify-between text-[11px] py-[4px]">
+                  <span className="text-[#6b6b65]">GC</span>
+                  <span className="font-medium text-terminal-text">{approvalContext.originalEmail.gc_name}</span>
+                </div>
+              )}
+              {approvalContext.originalEmail.due_date && (
+                <div className="flex justify-between text-[11px] py-[4px]">
+                  <span className="text-[#6b6b65]">Due</span>
+                  <span className="font-medium text-terminal-text">{new Date(approvalContext.originalEmail.due_date).toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+            {approvalContext.originalEmail.body && (
+              <div className="mt-2 p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1.5">RFQ Body</div>
+                <div className="text-[11px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[200px] overflow-y-auto">{approvalContext.originalEmail.body}</div>
+              </div>
+            )}
+          </ContextSection>
+        )}
+      </>
+    );
+  }
+
   if (!ctx) {
     return (
       <div className="p-6 text-center text-[13px] text-[#9a9a92]">
@@ -1880,6 +1952,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [contextPanelWidth, setContextPanelWidth] = useState(340); // px, 0 = minimized
+  const [approvalCtx, setApprovalCtx] = useState(null); // approval context from "Edit in DACP Agent"
   const contextDragRef = useRef(null);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -2006,6 +2079,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
     setMessages([]);
     setInstances([]);
     setActiveInstanceId(null);
+    setApprovalCtx(null);
 
     const token = getAuthToken();
 
@@ -2049,16 +2123,34 @@ export default function AgentChat({ agentId = 'estimating' }) {
           }
         }
         setThreadsLoaded(true);
-        // Pre-fill input if navigated from approval context
+        // Load approval context if navigated from "Edit in DACP Agent"
         if (approvalContext) {
           const p = approvalContext.payload || {};
-          const parts = [`I need to review and edit this estimate reply before sending.\n`];
-          parts.push(`Approval ID: ${approvalContext.approvalId}`);
+          // Store in state for context panel
+          setApprovalCtx(approvalContext);
+          // Ensure context panel is open
+          setContextPanelWidth(w => w < 200 ? 340 : w);
+          // Fetch the original RFQ email for context panel
+          if (p.bidId) {
+            fetch(`${API_BASE}/v1/estimates/inbox/${p.bidId}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            })
+              .then(r => r.json())
+              .then(d => {
+                if (d.bidRequest) setApprovalCtx(prev => prev ? { ...prev, originalEmail: d.bidRequest } : prev);
+              })
+              .catch(() => {});
+          }
+          // Build context message with the full draft for the agent
+          const parts = [
+            `I want to review and possibly edit this estimate reply before sending.`,
+            `\nApproval ID: ${approvalContext.approvalId}`,
+          ];
           if (p.to) parts.push(`To: ${p.to}`);
           if (p.subject) parts.push(`Subject: ${p.subject}`);
           if (p.totalBid) parts.push(`Total Bid: $${p.totalBid.toLocaleString()}`);
           if (p.body) parts.push(`\nCurrent email draft:\n---\n${p.body}\n---`);
-          parts.push(`\nPlease show me this draft so I can tell you what to change. Use update_approval_draft with approval_id ${approvalContext.approvalId} when I confirm edits.`);
+          parts.push(`\nThe full draft and RFQ details are in my context panel. I'll tell you what I want to change — use update_approval_draft with approval_id ${approvalContext.approvalId} to save edits.`);
           setInput(parts.join('\n'));
           setTimeout(() => inputRef.current?.focus(), 100);
         }
@@ -2822,7 +2914,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
         >
           {contextPanelWidth > 0 && (
             <div className="h-full overflow-y-auto" style={{ minWidth: 200 }}>
-              <ContextPanel agentId={agentId} />
+              <ContextPanel agentId={agentId} approvalContext={approvalCtx} />
             </div>
           )}
         </div>
