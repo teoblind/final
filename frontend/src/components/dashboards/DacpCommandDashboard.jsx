@@ -46,6 +46,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [showJobsList, setShowJobsList] = useState(false);
   const [excelPreview, setExcelPreview] = useState(null); // { approvalId, index, data }
   const [loadingExcel, setLoadingExcel] = useState(false);
+  const [originalEmail, setOriginalEmail] = useState(null); // { approvalId, data }
+  const [loadingOriginal, setLoadingOriginal] = useState(false);
 
   const fetchApprovals = () => {
     fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
@@ -446,6 +448,67 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         )}
                         {loadingExcel && excelPreview?.approvalId === item.id && (
                           <div className="text-[11px] text-terminal-muted italic px-2">Loading spreadsheet...</div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* View Original RFQ */}
+                    {payload.bidId && (
+                      <div>
+                        <button
+                          onClick={() => {
+                            if (originalEmail?.approvalId === item.id) {
+                              setOriginalEmail(null);
+                              return;
+                            }
+                            setLoadingOriginal(true);
+                            fetch(`${API_BASE}/v1/estimates/inbox/${payload.bidId}`, { headers: getAuthHeaders() })
+                              .then(r => r.json())
+                              .then(data => {
+                                if (data.bidRequest) setOriginalEmail({ approvalId: item.id, data: data.bidRequest });
+                                else setOriginalEmail({ approvalId: item.id, data: null, error: 'Could not load original email' });
+                              })
+                              .catch(() => setOriginalEmail({ approvalId: item.id, data: null, error: 'Could not load original email' }))
+                              .finally(() => setLoadingOriginal(false));
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-[#6b6b65] bg-[#f5f4f0] border border-[#e8e6e2] hover:bg-[#eeedea] transition-colors"
+                        >
+                          <Mail size={12} />
+                          {originalEmail?.approvalId === item.id ? 'Hide Original RFQ' : 'View Original RFQ'}
+                          <ChevronDown size={10} className={`transition-transform ${originalEmail?.approvalId === item.id ? 'rotate-180' : ''}`} />
+                        </button>
+                        {loadingOriginal && originalEmail?.approvalId === item.id && (
+                          <div className="text-[11px] text-terminal-muted italic px-2 mt-1">Loading...</div>
+                        )}
+                        {originalEmail?.approvalId === item.id && originalEmail.data && (
+                          <div className="mt-2 bg-white border border-[#e8e6e2] rounded-lg overflow-hidden">
+                            <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
+                              <div className="text-[10px] font-semibold text-terminal-muted uppercase mb-1.5">Original RFQ Email</div>
+                              <div className="text-[11px] text-[#6b6b65]">
+                                <span className="font-medium text-terminal-text">From:</span> {originalEmail.data.from_name || originalEmail.data.from_email}
+                                {originalEmail.data.from_name && <span className="text-[#999]"> &lt;{originalEmail.data.from_email}&gt;</span>}
+                              </div>
+                              <div className="text-[11px] text-[#6b6b65]">
+                                <span className="font-medium text-terminal-text">Subject:</span> {originalEmail.data.subject}
+                              </div>
+                              {originalEmail.data.gc_name && originalEmail.data.gc_name !== originalEmail.data.from_email && (
+                                <div className="text-[11px] text-[#6b6b65]">
+                                  <span className="font-medium text-terminal-text">GC:</span> {originalEmail.data.gc_name}
+                                </div>
+                              )}
+                              {originalEmail.data.due_date && (
+                                <div className="text-[11px] text-[#6b6b65]">
+                                  <span className="font-medium text-terminal-text">Due:</span> {new Date(originalEmail.data.due_date).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                            <div className="p-4 text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">
+                              {originalEmail.data.body}
+                            </div>
+                          </div>
+                        )}
+                        {originalEmail?.approvalId === item.id && originalEmail.error && (
+                          <div className="text-[11px] text-terminal-muted italic px-2 mt-1">{originalEmail.error}</div>
                         )}
                       </div>
                     )}
