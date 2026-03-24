@@ -62,6 +62,11 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [linking, setLinking] = useState(false);
   const [driveResults, setDriveResults] = useState([]);
   const [driveSearching, setDriveSearching] = useState(false);
+  // Agent assignments state
+  const [assignments, setAssignments] = useState([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [processingAssignment, setProcessingAssignment] = useState(null);
+  const [generating, setGenerating] = useState(false);
   const [driveQuery, setDriveQuery] = useState('');
 
   // Dynamic senders: Coppice (default) + currently logged-in user
@@ -127,6 +132,56 @@ export default function DacpCommandDashboard({ onNavigate }) {
     finally { setDriveSearching(false); }
   }, []);
 
+  const fetchAssignments = useCallback(() => {
+    setAssignmentsLoading(true);
+    fetch(`${API_BASE}/v1/estimates/assignments`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => setAssignments((data.assignments || []).filter(a => a.status !== 'dismissed')))
+      .catch(() => {})
+      .finally(() => setAssignmentsLoading(false));
+  }, []);
+
+  const handleConfirmAssignment = useCallback(async (id) => {
+    setProcessingAssignment(id);
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${id}/confirm`, { method: 'POST', headers: getAuthHeaders() });
+      // Optimistic update
+      setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: 'in_progress' } : a));
+      // Poll for completion
+      const poll = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/v1/estimates/assignments`, { headers: getAuthHeaders() });
+          const data = await res.json();
+          const updated = (data.assignments || []).find(a => a.id === id);
+          if (updated && updated.status !== 'in_progress') {
+            setAssignments(prev => prev.map(a => a.id === id ? updated : a));
+            clearInterval(poll);
+          }
+        } catch {}
+      }, 5000);
+      setTimeout(() => clearInterval(poll), 300000); // stop polling after 5 min
+    } catch {}
+    finally { setProcessingAssignment(null); }
+  }, []);
+
+  const handleDismissAssignment = useCallback(async (id) => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${id}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
+      setAssignments(prev => prev.filter(a => a.id !== id));
+    } catch {}
+  }, []);
+
+  const handleGenerateAssignments = useCallback(async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/generate`, { method: 'POST', headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.assignments) setAssignments(data.assignments);
+      else fetchAssignments();
+    } catch {}
+    finally { setGenerating(false); }
+  }, [fetchAssignments]);
+
   const handleSaveEdit = useCallback(async (approvalId) => {
     setSavingEdit(true);
     try {
@@ -187,7 +242,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
       if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
     }).catch(console.error).finally(() => setLoading(false));
     fetchLeadsSheet();
-  }, [meetingRange, fetchLeadsSheet]);
+    fetchAssignments();
+  }, [meetingRange, fetchLeadsSheet, fetchAssignments]);
 
   const handleApprove = async (id) => {
     setProcessingApproval(id);
@@ -691,6 +747,102 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Agent Assignments */}
+      {(assignments.filter(a => a.status === 'proposed' || a.status === 'in_progress' || a.status === 'completed').length > 0 || !assignmentsLoading) && (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <div className="flex items-center gap-2">
+              <ClipboardList size={14} className="text-[#1e3a5f]" />
+              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Suggested Tasks</span>
+              {assignments.filter(a => a.status === 'proposed').length > 0 && (
+                <span className="text-[10px] bg-[#1e3a5f] text-white px-1.5 py-0.5 rounded-full font-semibold">
+                  {assignments.filter(a => a.status === 'proposed').length}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleGenerateAssignments}
+              disabled={generating}
+              className="flex items-center gap-1.5 text-[11px] font-medium text-terminal-muted px-2.5 py-1 rounded-md border border-[#e8e6e2] hover:bg-[#f5f4f0] disabled:opacity-50"
+            >
+              {generating ? (
+                <><RotateCcw size={10} className="animate-spin" /> Analyzing...</>
+              ) : (
+                <><RotateCcw size={10} /> Run Analysis</>
+              )}
+            </button>
+          </div>
+          {assignments.filter(a => a.status !== 'dismissed').length === 0 ? (
+            <div className="px-[18px] py-6 text-center">
+              <div className="text-[12px] text-[#9a9a92] mb-1">No pending tasks</div>
+              <div className="text-[11px] text-terminal-muted">Click "Run Analysis" to generate suggestions, or they'll appear automatically each morning.</div>
+            </div>
+          ) : (
+            <div>
+              {assignments.filter(a => a.status !== 'dismissed').map(a => {
+                const catColors = {
+                  follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
+                  estimate: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+                  outreach: 'bg-purple-50 text-purple-600 border-purple-200',
+                  admin: 'bg-gray-50 text-gray-600 border-gray-200',
+                  research: 'bg-amber-50 text-amber-600 border-amber-200',
+                };
+                const prioIcons = { high: '!!', medium: '!', low: '' };
+                return (
+                  <div key={a.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
+                        <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
+                          {a.category?.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
+                      {a.status === 'completed' && a.result_summary && (
+                        <div className="mt-1.5 text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                          Done: {a.result_summary.slice(0, 200)}{a.result_summary.length > 200 ? '...' : ''}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                      {a.status === 'proposed' && (
+                        <>
+                          <button
+                            onClick={() => handleConfirmAssignment(a.id)}
+                            disabled={processingAssignment === a.id}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                          >
+                            <Check size={11} /> Run
+                          </button>
+                          <button
+                            onClick={() => handleDismissAssignment(a.id)}
+                            className="p-1 text-terminal-muted hover:text-red-500 rounded"
+                            title="Dismiss"
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      )}
+                      {a.status === 'in_progress' && (
+                        <span className="flex items-center gap-1 text-[11px] text-[#1e3a5f] font-medium">
+                          <RotateCcw size={11} className="animate-spin" /> Working...
+                        </span>
+                      )}
+                      {a.status === 'completed' && (
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                          <CheckCircle size={11} /> Done
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

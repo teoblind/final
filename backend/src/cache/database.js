@@ -979,6 +979,28 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_tenant ON scheduled_tasks(tenant_id, enabled)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at, enabled)'); } catch (e) {}
 
+  // Agent assignments — overnight autonomous analysis proposals
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS agent_assignments (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL DEFAULT 'estimating',
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'general',
+      priority TEXT NOT NULL DEFAULT 'medium',
+      action_prompt TEXT,
+      context_json TEXT,
+      status TEXT NOT NULL DEFAULT 'proposed',
+      result_summary TEXT,
+      thread_id TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      confirmed_at TEXT,
+      completed_at TEXT
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_assignments_tenant ON agent_assignments(tenant_id, status)'); } catch (e) {}
+
   // MCP server configurations per tenant
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS mcp_servers (
@@ -6291,6 +6313,44 @@ export function getDueScheduledTasks() {
     SELECT * FROM scheduled_tasks
     WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= datetime('now')
   `).all();
+}
+
+// ─── Agent Assignments CRUD ───────────────────────────────────────────────
+
+export function getAgentAssignments(tenantId, status = null) {
+  if (status) {
+    return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? ORDER BY priority DESC, created_at DESC').all(tenantId, status);
+  }
+  return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? ORDER BY CASE status WHEN \'proposed\' THEN 0 WHEN \'confirmed\' THEN 1 WHEN \'in_progress\' THEN 2 WHEN \'completed\' THEN 3 WHEN \'dismissed\' THEN 4 END, created_at DESC').all(tenantId);
+}
+
+export function getAgentAssignment(tenantId, id) {
+  return db.prepare('SELECT * FROM agent_assignments WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+}
+
+export function insertAgentAssignment(assignment) {
+  db.prepare(`
+    INSERT INTO agent_assignments (id, tenant_id, agent_id, title, description, category, priority, action_prompt, context_json, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed')
+  `).run(assignment.id, assignment.tenant_id, assignment.agent_id || 'estimating', assignment.title,
+    assignment.description, assignment.category || 'general', assignment.priority || 'medium',
+    assignment.action_prompt || null, assignment.context_json || null);
+}
+
+export function updateAgentAssignment(tenantId, id, updates) {
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at'];
+  const sets = [];
+  const vals = [];
+  for (const [k, v] of Object.entries(updates)) {
+    if (allowed.includes(k)) { sets.push(`${k} = ?`); vals.push(v); }
+  }
+  if (sets.length === 0) return;
+  vals.push(id, tenantId);
+  db.prepare(`UPDATE agent_assignments SET ${sets.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...vals);
+}
+
+export function clearOldAssignments(tenantId, daysOld = 7) {
+  db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status IN ('completed', 'dismissed') AND created_at < datetime('now', '-' || ? || ' days')`).run(tenantId, daysOld);
 }
 
 // ─── MCP Server CRUD ──────────────────────────────────────────────────────

@@ -34,6 +34,9 @@ import {
   getKeyVaultValue,
   upsertKeyVaultEntry,
   getTenantEmailConfig,
+  getAgentAssignments,
+  getAgentAssignment,
+  updateAgentAssignment,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -973,6 +976,98 @@ router.get('/leads-sheet/search', async (req, res) => {
   } catch (error) {
     console.error('Search Drive error:', error.message);
     res.json({ files: [] });
+  }
+});
+
+// ─── Agent Assignments ────────────────────────────────────────────────────────
+
+/** GET /assignments — List proposed/active assignments */
+router.get('/assignments', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const status = req.query.status || null;
+    const assignments = getAgentAssignments(tenantId, status);
+    res.json({ assignments });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/:id/confirm — Confirm an assignment for execution */
+router.post('/assignments/:id/confirm', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    if (assignment.status !== 'proposed') return res.status(400).json({ error: 'Assignment not in proposed state' });
+
+    // Mark as confirmed
+    updateAgentAssignment(tenantId, id, {
+      status: 'confirmed',
+      confirmed_at: new Date().toISOString(),
+    });
+
+    // Execute asynchronously via chat
+    const prompt = assignment.action_prompt || `Execute this task: ${assignment.title}\n\n${assignment.description}`;
+    const agentId = assignment.agent_id || 'estimating';
+
+    // Start execution in background
+    updateAgentAssignment(tenantId, id, { status: 'in_progress' });
+
+    (async () => {
+      try {
+        const { chat } = await import('../services/chatService.js');
+        const result = await chat(tenantId, agentId, 'system', prompt, null, { helpMode: false });
+        updateAgentAssignment(tenantId, id, {
+          status: 'completed',
+          result_summary: (result.response || '').slice(0, 2000),
+          completed_at: new Date().toISOString(),
+          thread_id: result.threadId || null,
+        });
+        console.log(`[Assignments] Completed: ${assignment.title}`);
+      } catch (err) {
+        updateAgentAssignment(tenantId, id, {
+          status: 'proposed',
+          result_summary: `Failed: ${err.message}`,
+        });
+        console.error(`[Assignments] Failed: ${assignment.title}:`, err.message);
+      }
+    })();
+
+    res.json({ success: true, status: 'in_progress' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/:id/dismiss — Dismiss a proposed assignment */
+router.post('/assignments/:id/dismiss', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    updateAgentAssignment(tenantId, id, { status: 'dismissed' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/generate — Manually trigger overnight analysis */
+router.post('/assignments/generate', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { runOvernightAnalysis } = await import('../jobs/overnightAnalysis.js');
+    // Run just for this tenant
+    const { runWithTenant, getDacpStats, clearOldAssignments, getAgentAssignments: getAssignments } = await import('../cache/database.js');
+    await runWithTenant(tenantId, async () => {
+      await runOvernightAnalysis();
+    });
+    const assignments = getAgentAssignments(tenantId, 'proposed');
+    res.json({ success: true, count: assignments.length, assignments });
+  } catch (error) {
+    console.error('Generate assignments error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

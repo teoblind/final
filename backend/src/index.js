@@ -288,6 +288,14 @@ try {
   console.warn('Scheduled task runner not started:', err.message);
 }
 
+// Overnight autonomous analysis (3 AM nightly)
+try {
+  const { startOvernightAnalysisJob } = await import('./jobs/overnightAnalysis.js');
+  startOvernightAnalysisJob({ runAtHour: 3, intervalHours: 24 });
+} catch (err) {
+  console.warn('Overnight analysis job not started:', err.message);
+}
+
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
 // POST /api/v1/insurance/schedulers/start to start them
 // POST /api/v1/insurance/schedulers/stop to stop them
