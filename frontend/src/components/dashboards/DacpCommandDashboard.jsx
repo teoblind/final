@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail, FileSpreadsheet, MessageSquare, Paperclip } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -48,6 +48,48 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [loadingExcel, setLoadingExcel] = useState(false);
   const [originalEmail, setOriginalEmail] = useState(null); // { approvalId, data }
   const [loadingOriginal, setLoadingOriginal] = useState(false);
+  const [editingApproval, setEditingApproval] = useState(null); // approval ID being edited
+  const [editBody, setEditBody] = useState('');
+  const [editSender, setEditSender] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
+
+  const SENDERS = [
+    { name: 'Marcel Castillo', title: 'CEO', label: 'Marcel Castillo — CEO' },
+    { name: 'David Castillo', title: 'VP Operations', label: 'David Castillo — VP Ops' },
+    { name: 'DACP Construction', title: '', label: 'DACP Construction (Company)' },
+  ];
+
+  const handleSaveEdit = useCallback(async (approvalId) => {
+    setSavingEdit(true);
+    try {
+      await fetch(`${API_BASE}/v1/approvals/${approvalId}/update-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ body: editBody }),
+      });
+      setEditingApproval(null);
+      fetchApprovals();
+    } catch (err) { console.error('Save failed:', err); }
+    finally { setSavingEdit(false); }
+  }, [editBody]);
+
+  const handleRewriteForSender = useCallback(async (approvalId, senderName, currentBody) => {
+    setRewriting(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/approvals/${approvalId}/rewrite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ senderName, currentBody }),
+      });
+      const data = await res.json();
+      if (data.body) {
+        setEditBody(data.body);
+        setEditingApproval(approvalId);
+      }
+    } catch (err) { console.error('Rewrite failed:', err); }
+    finally { setRewriting(false); }
+  }, []);
 
   const fetchApprovals = () => {
     fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
@@ -361,7 +403,25 @@ export default function DacpCommandDashboard({ onNavigate }) {
                     <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
                       {(payload.to || payload.subject) && (
                         <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
-                          <div className="text-[10px] font-semibold text-terminal-muted uppercase mb-1.5">Draft Reply Preview</div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="text-[10px] font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
+                            <div className="flex items-center gap-1.5">
+                              {editingApproval === item.id ? (
+                                <>
+                                  <button onClick={() => handleSaveEdit(item.id)} disabled={savingEdit} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-white bg-[#1a6b3c] hover:bg-[#155e33] disabled:opacity-50">
+                                    <Save size={10} /> {savingEdit ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button onClick={() => setEditingApproval(null)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] bg-[#e8e6e2] hover:bg-[#d5d3ce]">
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button onClick={() => { setEditBody(payload.body || ''); setEditingApproval(item.id); }} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] hover:bg-[#e8e6e2]">
+                                  <Pencil size={10} /> Edit
+                                </button>
+                              )}
+                            </div>
+                          </div>
                           {payload.to && (
                             <div className="text-[11px] text-[#6b6b65]">
                               <span className="font-medium text-terminal-text">To:</span> {payload.to}
@@ -372,10 +432,36 @@ export default function DacpCommandDashboard({ onNavigate }) {
                               <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
                             </div>
                           )}
+                          {/* Sender dropdown */}
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[11px] font-medium text-terminal-text">Sign as:</span>
+                            <select
+                              value={editSender || (payload.body?.match(/^(.+?)(?:\n|$)/m)?.[0]?.trim() === 'Best regards,' ? '' : '')}
+                              onChange={(e) => {
+                                setEditSender(e.target.value);
+                                if (e.target.value) {
+                                  handleRewriteForSender(item.id, e.target.value, payload.body || editBody);
+                                }
+                              }}
+                              className="text-[11px] px-2 py-0.5 rounded border border-[#e8e6e2] bg-white text-terminal-text"
+                            >
+                              <option value="">Select signer...</option>
+                              {SENDERS.map(s => (
+                                <option key={s.name} value={s.name}>{s.label}</option>
+                              ))}
+                            </select>
+                            {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}
+                          </div>
                         </div>
                       )}
                       <div className="p-4">
-                        {payload.html ? (
+                        {editingApproval === item.id ? (
+                          <textarea
+                            value={editBody}
+                            onChange={(e) => setEditBody(e.target.value)}
+                            className="w-full min-h-[200px] text-[12px] text-terminal-text leading-relaxed bg-white border border-[#e8e6e2] rounded-md p-3 resize-y focus:outline-none focus:border-[#1e3a5f]"
+                          />
+                        ) : payload.html ? (
                           <div
                             className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
                             dangerouslySetInnerHTML={{ __html: payload.html }}

@@ -614,6 +614,66 @@ function seedDemoInsights() {
   console.log(`Seeded ${insights.length} agent insights for tenant default`);
 }
 
+/**
+ * POST /:id/update-draft — Update the email body of a pending approval
+ */
+router.post('/:id/update-draft', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const { id } = req.params;
+    const { body } = req.body;
+    if (!body) return res.status(400).json({ error: 'body is required' });
+
+    const { getApprovalItem, updateApprovalPayload } = await import('../cache/database.js');
+    const { markdownToEmailHtml } = await import('../services/emailService.js');
+    const item = getApprovalItem(tenantId, parseInt(id));
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    if (item.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+
+    const payload = JSON.parse(item.payload_json || '{}');
+    payload.body = body;
+    payload.html = markdownToEmailHtml(body);
+
+    updateApprovalPayload(tenantId, parseInt(id), JSON.stringify(payload));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /:id/rewrite — Rewrite the email body for a different sender
+ */
+router.post('/:id/rewrite', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const { id } = req.params;
+    const { senderName, currentBody } = req.body;
+    if (!senderName || !currentBody) return res.status(400).json({ error: 'senderName and currentBody required' });
+
+    const { chat } = await import('../services/chatService.js');
+    const result = await chat(tenantId, 'estimating', 'system',
+      `Rewrite this email so it is signed by ${senderName} instead of whoever currently signs it. Keep the same content, tone, and structure — only change the signature/sign-off and any first-person references to match ${senderName}. Return ONLY the rewritten email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`,
+      null, { helpMode: false }
+    );
+
+    const { markdownToEmailHtml } = await import('../services/emailService.js');
+    const newBody = result.response || currentBody;
+    const { getApprovalItem, updateApprovalPayload } = await import('../cache/database.js');
+    const item = getApprovalItem(tenantId, parseInt(id));
+    if (item && item.status === 'pending') {
+      const payload = JSON.parse(item.payload_json || '{}');
+      payload.body = newBody;
+      payload.html = markdownToEmailHtml(newBody);
+      updateApprovalPayload(tenantId, parseInt(id), JSON.stringify(payload));
+    }
+
+    res.json({ body: newBody });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Run seeds on import
 try {
   seedDemoApprovals();
