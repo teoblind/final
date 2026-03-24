@@ -1741,7 +1741,8 @@ Notes:
 - For gws_docs_update, mode "replace" clears the document first; "append" adds to the end.
 - For gws_drive_create, use type "doc" or "sheet". After creating a sheet, use gws_sheets_update to populate cells.
 - For gws_workspace_command, use the service/resource/method pattern (e.g., service:"docs", resource:"documents", method:"get", params:{documentId:"..."})
-- Drive operations may fail if the agent's token lacks Drive scopes — use the existing generate_document tool for file creation instead.`;
+- Drive operations may fail if the agent's token lacks Drive scopes — use the existing generate_document tool for file creation instead.
+- IMPORTANT: When the user references a file, spreadsheet, or document, ALWAYS search Drive first using gws_drive_search before asking for a link. Try multiple search queries if needed. If you find candidates, present them to the user for confirmation.`;
 
 /**
  * Create an OAuth2 client for a tenant's Google API calls (Sheets, Docs, Drive).
@@ -2973,6 +2974,15 @@ MEETING CAPABILITIES:
 
 You can create Google Docs and Sheets for email templates, contact lists, meeting notes, and outreach tracking.
 When referencing meetings, cite specific dates, attendees, and action items.
+
+═══ FILE & DATA LOOKUP RULES ═══
+NEVER say "I don't have access" or ask the user for a file link/ID without trying first.
+When you need data from a spreadsheet, document, or file:
+1. ALWAYS use gws_drive_search to find the file first (try multiple search terms if the first fails)
+2. If you find matching files, list them and ask "Is one of these the right file?"
+3. Only after exhausting search should you ask the user for help
+This applies to leads sheets, trackers, pricing docs, contact lists — anything the user references.
+NEVER give up without searching. The user expects you to find files proactively.
 
 ═══ EMAIL STYLE RULES (MANDATORY) ═══
 ALL outbound emails MUST follow these rules exactly:
