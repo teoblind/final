@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -1182,21 +1182,69 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
 }
 
 // ─── Context Panel ──────────────────────────────────────────────────────────────
-function ContextSection({ title, meta, children, defaultOpen = true }) {
+function ContextSection({ title, meta, children, defaultOpen = true, onAdd }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="border-b border-[#f0eeea]">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f0eeea]/50 transition-colors">
-        <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.8px]">{title}</span>
-        <span className="text-[10px] text-[#c5c5bc]">{meta}</span>
-      </button>
+      <div className="flex items-center justify-between px-4 py-3 hover:bg-[#f0eeea]/50 transition-colors">
+        <button onClick={() => setOpen(!open)} className="flex-1 flex items-center justify-between min-w-0">
+          <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.8px]">{title}</span>
+          <span className="text-[10px] text-[#c5c5bc]">{meta}</span>
+        </button>
+        {onAdd && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAdd(); }}
+            className="ml-2 p-0.5 rounded hover:bg-[#e8e7e3] transition-colors shrink-0"
+            title="Add item"
+          >
+            <Plus className="w-3 h-3 text-[#9a9a92] hover:text-[#6b6b65]" />
+          </button>
+        )}
+      </div>
       {open && <div className="px-4 pb-3.5">{children}</div>}
     </div>
   );
 }
 
-function ContextPanel({ agentId, approvalContext }) {
-  const ctx = DEMO_CONTEXT[agentId];
+function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin, onPin, onNavigateThread }) {
+  const [showPinSearch, setShowPinSearch] = useState(false);
+  const [pinSearchQuery, setPinSearchQuery] = useState('');
+  const [pinSearchResults, setPinSearchResults] = useState([]);
+  const [pinSearchTab, setPinSearchTab] = useState('entities');
+  const [expandedEntity, setExpandedEntity] = useState(null);
+  const [addingNote, setAddingNote] = useState(false);
+  const [noteText, setNoteText] = useState('');
+
+  // Open pin search pre-filtered to a tab
+  const openPinSearch = (tab) => {
+    setPinSearchTab(tab || 'entities');
+    setPinSearchQuery('');
+    setPinSearchResults([]);
+    setShowPinSearch(true);
+    setAddingNote(false);
+  };
+
+  // Pin search debounce
+  useEffect(() => {
+    if (!pinSearchQuery || pinSearchQuery.length < 2) { setPinSearchResults([]); return; }
+    const timeout = setTimeout(async () => {
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      try {
+        if (pinSearchTab === 'entities') {
+          const res = await fetch(`${API_BASE}/v1/knowledge/entity/${encodeURIComponent(pinSearchQuery)}`, { headers });
+          const data = await res.json();
+          const results = data.entity ? [data.entity] : [];
+          setPinSearchResults(results);
+        } else if (pinSearchTab === 'files') {
+          const res = await fetch(`${API_BASE}/v1/files?search=${encodeURIComponent(pinSearchQuery)}&limit=10`, { headers });
+          const data = await res.json();
+          setPinSearchResults(data.files || data || []);
+        }
+      } catch { setPinSearchResults([]); }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [pinSearchQuery, pinSearchTab]);
 
   // Show approval context if navigated from "Edit in DACP Agent"
   if (approvalContext) {
@@ -1220,12 +1268,6 @@ function ContextPanel({ agentId, approvalContext }) {
             <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
               <span className="text-[#6b6b65]">Total Bid</span>
               <span className="font-mono font-bold text-[#1a6b3c] text-[12px]">${p.totalBid.toLocaleString()}</span>
-            </div>
-          )}
-          {p.attachments && p.attachments.length > 0 && (
-            <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
-              <span className="text-[#6b6b65]">Attachment</span>
-              <span className="font-medium text-terminal-text text-[10px]">{p.attachments[0].filename}</span>
             </div>
           )}
           {p.body && (
@@ -1269,216 +1311,342 @@ function ContextPanel({ agentId, approvalContext }) {
     );
   }
 
-  if (!ctx) {
+  const { entities = [], gcProfile, pinnedItems = [], relatedThreads = [], recentFiles = [] } = contextData || {};
+  const hasContent = entities.length > 0 || pinnedItems.length > 0 || relatedThreads.length > 0 || recentFiles.length > 0 || gcProfile;
+
+  if (!threadId) {
     return (
       <div className="p-6 text-center text-[13px] text-[#9a9a92]">
-        Context panel for this agent will appear here during active conversations.
+        Select a conversation to see context.
       </div>
     );
   }
 
   return (
     <>
-      {/* Current Estimate */}
-      {ctx.currentEstimate && (
-        <ContextSection title="Current Estimate" meta={ctx.currentEstimate.title}>
-          {ctx.currentEstimate.rows.map((r, i) => (
-            <div key={i} className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
-              <span className="text-[#6b6b65]">{r.label}</span>
-              <span className={`font-mono font-semibold text-[11px] ${r.danger ? 'text-[#c0392b]' : r.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{r.value}</span>
-            </div>
-          ))}
-        </ContextSection>
-      )}
-
-      {/* Similar Jobs */}
-      {ctx.similarJobs && (
-        <ContextSection title="Similar Jobs" meta="From history">
-          <div className="space-y-2">
-            {ctx.similarJobs.map((j, i) => (
-              <div key={i} className="p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg cursor-pointer hover:border-[#1e3a5f] transition-colors">
-                <div className="text-[12px] font-semibold text-terminal-text mb-0.5">{j.name}</div>
-                <div className="text-[11px] text-[#9a9a92] mb-1.5">{j.meta}</div>
-                {j.rows.map((r, ri) => (
-                  <div key={ri} className="flex justify-between text-[11px] mt-1">
-                    <span className="text-[#9a9a92]">{r.l}</span>
-                    <span className={`font-mono font-semibold ${r.green ? 'text-[#1a6b3c]' : r.danger ? 'text-[#c0392b]' : 'text-terminal-text'}`}>{r.v}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </ContextSection>
-      )}
-
-      {/* Agent Chain (collapsed by default) */}
-      <ContextSection title="Agent Chain" meta="Active session" defaultOpen={false}>
-        <div className="space-y-1.5">
-          {ctx.agentChain.map((a, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 px-2.5 py-2 bg-terminal-panel border border-[#f0eeea] rounded-lg text-[12px]"
-              style={{ marginLeft: a.indent * 16 }}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${a.active ? 'bg-[#2dd478]' : 'bg-[#c5c5bc]'}`} />
-              <span className="font-semibold text-terminal-text flex-1">{a.name}</span>
-              <span className="text-[10px] text-[#9a9a92]">{a.role}</span>
-            </div>
-          ))}
-        </div>
-      </ContextSection>
-
-      {/* Pricing Reference */}
-      {ctx.pricingRef && (
-        <ContextSection title="Pricing Reference" meta="Items used">
-          {ctx.pricingRef.map((p, i) => (
-            <div key={i} className="flex items-center justify-between py-[6px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
-              <span className="text-terminal-text font-medium">{p.item}</span>
-              <span className={`font-mono text-[11px] ${p.edited ? 'text-[#b8860b]' : 'text-[#6b6b65]'}`}>
-                {p.price}{p.edited ? ' ✎' : ''}
-              </span>
-            </div>
-          ))}
-        </ContextSection>
-      )}
-
-      {/* GC Profile */}
-      {ctx.gcProfile && (
-        <ContextSection title={ctx.gcProfile.title} meta="GC profile">
-          {ctx.gcProfile.rows.map((r, i) => (
-            <div key={i} className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
-              <span className="text-[#6b6b65]">{r.label}</span>
-              <span className={`font-mono font-semibold text-[11px] ${r.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{r.value}</span>
-            </div>
-          ))}
-        </ContextSection>
-      )}
-
-      {/* ── Mining-specific context sections ── */}
-
-      {/* Live Market */}
-      {ctx.liveMarket && (
-        <ContextSection title="Live Market" meta="ERCOT RT">
-          <div className="space-y-1.5">
-            {ctx.liveMarket.prices.map((p, i) => (
-              <div key={i} className="flex items-center justify-between py-[6px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
-                <span className="text-[#6b6b65] font-mono text-[11px]">{p.hub}</span>
-                <div className="flex items-center gap-2">
-                  <span className={`font-mono font-bold text-[12px] ${p.danger ? 'text-red-600' : p.warn ? 'text-amber-600' : 'text-terminal-text'}`}>{p.price}</span>
-                  <span className={`font-mono text-[10px] font-semibold ${p.danger ? 'text-red-500' : p.warn ? 'text-amber-500' : 'text-[#9a9a92]'}`}>{p.change}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </ContextSection>
-      )}
-
-      {/* Fleet Status */}
-      {ctx.fleetStatus && (
-        <ContextSection title="Fleet Status" meta={`${ctx.fleetStatus.summary.online}/${ctx.fleetStatus.summary.total} online`}>
-          <div className="flex gap-3 mb-2.5">
+      {/* GC Profile (DACP) */}
+      {gcProfile && gcProfile.bidCount + gcProfile.jobCount > 0 && (
+        <ContextSection title={gcProfile.name} meta="GC Profile">
+          <div className="flex gap-2 mb-2.5">
             {[
-              { l: 'Hashrate', v: ctx.fleetStatus.summary.hashrate },
-              { l: 'Power', v: ctx.fleetStatus.summary.power },
+              { l: 'Bids', v: gcProfile.bidCount },
+              { l: 'Jobs', v: gcProfile.jobCount },
+              { l: 'Win Rate', v: gcProfile.winRate ? `${Math.round(gcProfile.winRate * 100)}%` : '--' },
             ].map((s, i) => (
-              <div key={i} className="flex-1 bg-terminal-panel border border-[#f0eeea] rounded-lg px-2.5 py-2 text-center">
+              <div key={i} className="flex-1 bg-terminal-panel border border-[#f0eeea] rounded-lg px-2 py-1.5 text-center">
                 <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px]">{s.l}</div>
                 <div className="text-[13px] font-bold font-mono text-terminal-text mt-0.5">{s.v}</div>
               </div>
             ))}
           </div>
-          <div className="space-y-1">
-            {ctx.fleetStatus.rows.map((r, i) => (
-              <div key={i} className="flex items-center justify-between text-[11px] py-[5px] border-b border-[#f0eeea] last:border-b-0">
-                <span className="text-terminal-text font-medium">{r.group} <span className="text-[#9a9a92]">×{r.count}</span></span>
-                <span className={`font-mono font-semibold ${r.status === 'Curtailed' ? 'text-amber-600' : r.status === 'Mining' ? 'text-[#1a6b3c]' : 'text-[#9a9a92]'}`}>{r.status}</span>
-              </div>
-            ))}
-          </div>
-        </ContextSection>
-      )}
-
-      {/* Active Triggers */}
-      {ctx.activeTriggers && (
-        <ContextSection title="Active Triggers" meta={`${ctx.activeTriggers.filter(t => t.active).length} active`}>
-          <div className="space-y-1.5">
-            {ctx.activeTriggers.map((t, i) => (
-              <div key={i} className="flex items-center justify-between py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0">
-                <div className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full ${t.active ? 'bg-[#2dd478]' : 'bg-[#c5c5bc]'}`} />
-                  <span className="text-terminal-text font-medium">{t.label}</span>
-                </div>
-                <span className="font-mono text-[10px] text-[#6b6b65]">{t.value}</span>
-              </div>
-            ))}
-          </div>
-        </ContextSection>
-      )}
-
-      {/* Event Log */}
-      {ctx.eventLog && (
-        <ContextSection title="Event Log" meta="Today">
-          <div className="space-y-1">
-            {ctx.eventLog.map((e, i) => (
-              <div key={i} className="flex items-start gap-2 py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0">
-                <span className="font-mono text-[10px] text-[#9a9a92] shrink-0 pt-px">{e.time}</span>
-                <span className={`${
-                  e.type === 'curtail' ? 'text-amber-600' :
-                  e.type === 'alert' ? 'text-red-600' :
-                  e.type === 'start' ? 'text-[#1a6b3c]' :
-                  'text-[#6b6b65]'
-                }`}>{e.event}</span>
-              </div>
-            ))}
-          </div>
-        </ContextSection>
-      )}
-
-      {/* Hashprice */}
-      {ctx.hashprice && (
-        <ContextSection title="Hashprice" meta={ctx.hashprice.current}>
           {[
-            { l: 'Current', v: ctx.hashprice.current },
-            { l: '24h Change', v: ctx.hashprice.change, danger: ctx.hashprice.change.startsWith('-') },
-            { l: 'BTC Price', v: ctx.hashprice.btcPrice },
-            { l: 'Network Hash', v: ctx.hashprice.networkHash },
-            { l: 'Difficulty', v: ctx.hashprice.difficulty },
-            { l: 'Next Adj', v: ctx.hashprice.nextAdj },
+            { l: 'Total Revenue', v: gcProfile.totalRevenue ? `$${(gcProfile.totalRevenue / 1000).toFixed(0)}K` : '--', green: true },
+            { l: 'Avg Margin', v: gcProfile.avgMargin ? `${gcProfile.avgMargin.toFixed(1)}%` : '--' },
+            { l: 'Avg Bid Size', v: gcProfile.avgBidSize ? `$${(gcProfile.avgBidSize / 1000).toFixed(0)}K` : '--' },
+            { l: 'Active Jobs', v: gcProfile.activeJobs },
+            { l: 'Last Activity', v: gcProfile.lastActivity ? new Date(gcProfile.lastActivity).toLocaleDateString() : '--' },
           ].map((r, i) => (
-            <div key={i} className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea] last:border-b-0">
+            <div key={i} className="flex justify-between py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0">
               <span className="text-[#6b6b65]">{r.l}</span>
-              <span className={`font-mono font-semibold text-[11px] ${r.danger ? 'text-[#c0392b]' : 'text-terminal-text'}`}>{r.v}</span>
+              <span className={`font-mono font-semibold ${r.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{r.v}</span>
             </div>
           ))}
+          {gcProfile.openBids?.length > 0 && (
+            <div className="mt-2">
+              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1">Open Bids</div>
+              {gcProfile.openBids.map((b, i) => (
+                <div key={i} className="text-[11px] text-terminal-text py-1 border-b border-[#f0eeea] last:border-b-0">
+                  {b.subject?.slice(0, 40)}{b.subject?.length > 40 ? '...' : ''}
+                  {b.due_date && <span className="text-[10px] text-[#9a9a92] ml-1">Due {new Date(b.due_date).toLocaleDateString()}</span>}
+                </div>
+              ))}
+            </div>
+          )}
         </ContextSection>
       )}
 
-      {/* Pool Allocation */}
-      {ctx.poolAllocation && (
-        <ContextSection title="Pool Allocation" meta={`${ctx.poolAllocation.pools.length} pools`}>
-          <div className="space-y-2">
-            {ctx.poolAllocation.pools.map((p, i) => (
-              <div key={i} className="p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[12px] font-semibold text-terminal-text">{p.name}</span>
-                  <span className="text-[10px] font-mono text-[#9a9a92]">{p.share}</span>
-                </div>
-                {[
-                  { l: 'Hashrate', v: p.hashrate },
-                  { l: 'Method', v: `${p.method} (${p.fee} fee)` },
-                  { l: '24h Yield', v: p.yield24h },
-                  { l: 'Performance', v: p.performance, green: p.performance.startsWith('+'), danger: p.performance.startsWith('-') },
-                ].map((r, ri) => (
-                  <div key={ri} className="flex justify-between text-[11px] mt-1">
-                    <span className="text-[#9a9a92]">{r.l}</span>
-                    <span className={`font-mono font-semibold ${r.green ? 'text-[#1a6b3c]' : r.danger ? 'text-[#c0392b]' : 'text-terminal-text'}`}>{r.v}</span>
+      {/* Entity Profiles */}
+      {entities.length > 0 && (
+        <ContextSection title="Entities" meta={`${entities.length}`} onAdd={() => openPinSearch('entities')}>
+          <div className="space-y-1.5">
+            {entities.map((e) => (
+              <div key={e.id}
+                className="p-2 bg-terminal-panel border border-[#f0eeea] rounded-lg cursor-pointer hover:border-[#1e3a5f] transition-colors group/entity"
+                onClick={() => setExpandedEntity(expandedEntity === e.id ? null : e.id)}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-[#e8e7e3] flex items-center justify-center shrink-0">
+                    {e.entity_type === 'person' ? <User className="w-3 h-3 text-[#6b6b65]" /> :
+                     e.entity_type === 'company' ? <Building2 className="w-3 h-3 text-[#6b6b65]" /> :
+                     <FolderOpen className="w-3 h-3 text-[#6b6b65]" />}
                   </div>
-                ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-semibold text-terminal-text truncate">{e.name}</div>
+                    <div className="text-[10px] text-[#9a9a92] capitalize">{e.entity_type}</div>
+                  </div>
+                  {e._pinId && (
+                    <button
+                      onClick={(ev) => { ev.stopPropagation(); onUnpin?.(e._pinId); }}
+                      className="opacity-0 group-hover/entity:opacity-100 transition-opacity p-0.5 hover:bg-[#e8e7e3] rounded shrink-0"
+                      title="Remove"
+                    >
+                      <X className="w-3 h-3 text-[#9a9a92]" />
+                    </button>
+                  )}
+                </div>
+                {expandedEntity === e.id && e.metadata && Object.keys(e.metadata).length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-[#f0eeea]">
+                    {Object.entries(e.metadata).map(([k, v]) => (
+                      <div key={k} className="flex justify-between text-[10px] py-[3px]">
+                        <span className="text-[#9a9a92] capitalize">{k.replace(/_/g, ' ')}</span>
+                        <span className="text-terminal-text font-medium text-right ml-2 truncate max-w-[140px]">{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </ContextSection>
       )}
+
+      {/* Pinned Items */}
+      <ContextSection title="Pinned" meta={pinnedItems.length > 0 ? `${pinnedItems.length}` : ''} onAdd={() => { setAddingNote(true); setShowPinSearch(false); }}>
+        {pinnedItems.length > 0 ? (
+          <div className="space-y-1">
+            {pinnedItems.map((pin) => (
+              <div key={pin.id} className="flex items-start gap-2 py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0 group">
+                <Pin className="w-3 h-3 text-[#9a9a92] shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-terminal-text truncate">{pin.label}</div>
+                  {pin.metadata?.note && (
+                    <div className="text-[10px] text-[#9a9a92] mt-0.5 whitespace-pre-wrap">{pin.metadata.note}</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => onUnpin?.(pin.id)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-[#e8e7e3] rounded shrink-0"
+                  title="Remove"
+                >
+                  <X className="w-3 h-3 text-[#9a9a92]" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[11px] text-[#c5c5bc] text-center py-2">No pinned items yet</div>
+        )}
+
+        {/* Inline quick-add note */}
+        {addingNote && (
+          <div className="mt-2 border border-[#e8e7e3] rounded-lg bg-white overflow-hidden">
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Add a note..."
+              className="w-full px-2.5 py-2 text-[11px] text-terminal-text bg-transparent outline-none resize-none placeholder:text-[#c5c5bc]"
+              rows={2}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && noteText.trim()) {
+                  e.preventDefault();
+                  onPin?.({ pinType: 'note', refId: '', label: noteText.trim().slice(0, 60), metadata: { note: noteText.trim() } });
+                  setNoteText('');
+                  setAddingNote(false);
+                }
+                if (e.key === 'Escape') { setAddingNote(false); setNoteText(''); }
+              }}
+            />
+            <div className="flex items-center justify-between px-2.5 py-1.5 border-t border-[#f0eeea] bg-[#fafaf8]">
+              <span className="text-[9px] text-[#c5c5bc]">Enter to save, Esc to cancel</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => { setAddingNote(false); setNoteText(''); }}
+                  className="px-2 py-0.5 text-[10px] text-[#9a9a92] hover:text-terminal-text rounded transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (noteText.trim()) {
+                      onPin?.({ pinType: 'note', refId: '', label: noteText.trim().slice(0, 60), metadata: { note: noteText.trim() } });
+                      setNoteText('');
+                      setAddingNote(false);
+                    }
+                  }}
+                  className="px-2 py-0.5 text-[10px] text-white bg-[#1e3a5f] rounded hover:bg-[#2a4f7f] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </ContextSection>
+
+      {/* Related Chats */}
+      {relatedThreads.length > 0 && (
+        <ContextSection title="Related Chats" meta={`${relatedThreads.length}`} defaultOpen={false}>
+          <div className="space-y-1">
+            {relatedThreads.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onNavigateThread?.(t.id, t.agent_id)}
+                className="w-full text-left flex items-start gap-2 py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f0eeea]/50 transition-colors rounded px-1"
+              >
+                <MessageSquare className="w-3 h-3 text-[#9a9a92] shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-terminal-text font-medium truncate">{t.title || 'Untitled'}</div>
+                  {t.summary && <div className="text-[10px] text-[#9a9a92] truncate">{t.summary.slice(0, 60)}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </ContextSection>
+      )}
+
+      {/* Recent Files */}
+      {recentFiles.length > 0 && (
+        <ContextSection title="Files" meta={`${recentFiles.length}`} defaultOpen={false} onAdd={() => openPinSearch('files')}>
+          <div className="space-y-1">
+            {recentFiles.map((f, i) => (
+              <a
+                key={i}
+                href={f.drive_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 py-[5px] text-[11px] border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f0eeea]/50 transition-colors rounded px-1 group"
+              >
+                <FileText className="w-3 h-3 text-[#9a9a92] shrink-0" />
+                <span className="flex-1 text-terminal-text truncate">{f.name}</span>
+                <ExternalLink className="w-3 h-3 text-[#c5c5bc] group-hover:text-[#9a9a92]" />
+              </a>
+            ))}
+          </div>
+        </ContextSection>
+      )}
+
+      {/* Empty state when no content */}
+      {!hasContent && !addingNote && !showPinSearch && (
+        <div className="px-4 py-8 text-center">
+          <div className="text-[12px] text-[#9a9a92] mb-3">
+            No context yet for this thread.
+          </div>
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={() => { setAddingNote(true); setShowPinSearch(false); }}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] text-[#6b6b65] hover:text-terminal-text border border-[#d5d3ce] rounded-md hover:bg-[#e8e7e3] transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Note
+            </button>
+            <button
+              onClick={() => openPinSearch('entities')}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] text-[#6b6b65] hover:text-terminal-text border border-[#d5d3ce] rounded-md hover:bg-[#e8e7e3] transition-colors"
+            >
+              <Search className="w-3 h-3" /> Find
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom toolbar — always visible when thread is selected */}
+      <div className="px-4 py-2.5 border-t border-[#f0eeea]">
+        {/* Quick action buttons */}
+        {!showPinSearch && (
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => { setAddingNote(true); setShowPinSearch(false); }}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] text-[#6b6b65] hover:text-terminal-text hover:bg-[#e8e7e3] rounded transition-colors"
+              title="Add note"
+            >
+              <Plus className="w-3 h-3" /> Note
+            </button>
+            <button
+              onClick={() => openPinSearch('entities')}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] text-[#6b6b65] hover:text-terminal-text hover:bg-[#e8e7e3] rounded transition-colors"
+              title="Pin entity"
+            >
+              <User className="w-3 h-3" /> Entity
+            </button>
+            <button
+              onClick={() => openPinSearch('files')}
+              className="flex-1 flex items-center justify-center gap-1 py-1.5 text-[10px] text-[#6b6b65] hover:text-terminal-text hover:bg-[#e8e7e3] rounded transition-colors"
+              title="Pin file"
+            >
+              <FileText className="w-3 h-3" /> File
+            </button>
+          </div>
+        )}
+
+        {/* Search panel */}
+        {showPinSearch && (
+          <div className="border border-[#e8e7e3] rounded-lg bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center border-b border-[#f0eeea]">
+              {['entities', 'files'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => { setPinSearchTab(tab); setPinSearchResults([]); setPinSearchQuery(''); }}
+                  className={`flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.5px] transition-colors ${
+                    pinSearchTab === tab ? 'text-terminal-text border-b-2 border-terminal-text' : 'text-[#9a9a92] hover:text-[#6b6b65]'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+              <button
+                onClick={() => { setShowPinSearch(false); setPinSearchQuery(''); setPinSearchResults([]); }}
+                className="px-2 py-1.5 text-[#9a9a92] hover:text-terminal-text transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="p-2">
+              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-[#f5f4f0] rounded border border-[#e8e7e3]">
+                <Search className="w-3 h-3 text-[#9a9a92]" />
+                <input
+                  type="text"
+                  value={pinSearchQuery}
+                  onChange={(e) => setPinSearchQuery(e.target.value)}
+                  placeholder={`Search ${pinSearchTab}...`}
+                  className="flex-1 bg-transparent text-[11px] text-terminal-text outline-none placeholder:text-[#c5c5bc]"
+                  autoFocus
+                />
+                {pinSearchQuery && (
+                  <button onClick={() => { setPinSearchQuery(''); setPinSearchResults([]); }}>
+                    <X className="w-3 h-3 text-[#c5c5bc] hover:text-[#9a9a92]" />
+                  </button>
+                )}
+              </div>
+              {pinSearchResults.length > 0 && (
+                <div className="mt-1.5 max-h-[150px] overflow-y-auto">
+                  {pinSearchResults.map((r, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        onPin?.({
+                          pinType: pinSearchTab === 'entities' ? 'entity' : 'file',
+                          refId: r.id || r.drive_url || '',
+                          label: r.name || r.title || 'Untitled',
+                        });
+                        setShowPinSearch(false);
+                        setPinSearchQuery('');
+                      }}
+                      className="w-full text-left px-2 py-1.5 text-[11px] text-terminal-text hover:bg-[#f0eeea] rounded transition-colors flex items-center gap-2"
+                    >
+                      <Plus className="w-3 h-3 text-[#c5c5bc] shrink-0" />
+                      <span className="truncate">{r.name || r.title}</span>
+                      {r.entity_type && <span className="text-[10px] text-[#9a9a92] shrink-0 capitalize">({r.entity_type})</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {pinSearchQuery.length >= 2 && pinSearchResults.length === 0 && (
+                <div className="text-[10px] text-[#c5c5bc] text-center py-2">No results</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -1953,6 +2121,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [dragging, setDragging] = useState(false);
   const [contextPanelWidth, setContextPanelWidth] = useState(340); // px, 0 = minimized
   const [approvalCtx, setApprovalCtx] = useState(null); // approval context from "Edit in DACP Agent"
+  const [contextData, setContextData] = useState(null); // dynamic context panel data
   const contextDragRef = useRef(null);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -2188,6 +2357,30 @@ export default function AgentChat({ agentId = 'estimating' }) {
       })
       .catch(() => setMessages([]));
   }, [activeThreadId, agentId]);
+
+  // Load context panel data when thread changes
+  useEffect(() => {
+    if (!activeThreadId) { setContextData(null); return; }
+    const token = getAuthToken();
+    fetch(`${API_BASE}/v1/chat/context/${activeThreadId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setContextData(data); })
+      .catch(() => {});
+  }, [activeThreadId]);
+
+  // Refresh context data helper
+  const refreshContextData = useCallback(() => {
+    if (!activeThreadId) return;
+    const token = getAuthToken();
+    fetch(`${API_BASE}/v1/chat/context/${activeThreadId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setContextData(data); })
+      .catch(() => {});
+  }, [activeThreadId]);
 
   // Create new thread
   const handleNewThread = useCallback(async () => {
@@ -2605,6 +2798,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 ));
               } else if (event.type === 'progress') {
                 setProgressInfo({ iteration: event.iteration, maxTurns: event.maxTurns, tools: event.tools });
+              } else if (event.type === 'context_update') {
+                refreshContextData();
               } else if (event.type === 'thread' && event.threadId && !activeThreadId) {
                 const newThread = { id: event.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
                 setThreads(prev => [newThread, ...prev]);
@@ -2620,6 +2815,9 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
         // Clear progress indicator when streaming ends
         setProgressInfo(null);
+
+        // Refresh context panel after stream completes
+        refreshContextData();
 
         // Safeguard: if stream ended with empty content, show fallback
         setMessages(prev => prev.map(m =>
@@ -2914,7 +3112,33 @@ export default function AgentChat({ agentId = 'estimating' }) {
         >
           {contextPanelWidth > 0 && (
             <div className="h-full overflow-y-auto" style={{ minWidth: 200 }}>
-              <ContextPanel agentId={agentId} approvalContext={approvalCtx} />
+              <ContextPanel
+                agentId={agentId}
+                approvalContext={approvalCtx}
+                threadId={activeThreadId}
+                contextData={contextData}
+                onUnpin={async (pinId) => {
+                  const token = getAuthToken();
+                  await fetch(`${API_BASE}/v1/chat/context/pin/${pinId}`, {
+                    method: 'DELETE',
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  });
+                  refreshContextData();
+                }}
+                onPin={async ({ pinType, refId, label, metadata }) => {
+                  if (!activeThreadId) return;
+                  const token = getAuthToken();
+                  await fetch(`${API_BASE}/v1/chat/context/${activeThreadId}/pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    body: JSON.stringify({ pinType, refId, label, metadata }),
+                  });
+                  refreshContextData();
+                }}
+                onNavigateThread={(threadId) => {
+                  setActiveThreadId(threadId);
+                }}
+              />
             </div>
           )}
         </div>

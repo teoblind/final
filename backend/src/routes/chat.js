@@ -22,6 +22,8 @@ import {
   createThread, getThread, updateThreadVisibility, updateThreadTitle,
   deleteThread, listThreads, getPinnedThreads, pinThread, unpinThread,
   getOrphanMessageCount, backfillOrphanMessages,
+  getContextPins, addContextPin, removeContextPin,
+  getGcProfile, getRelatedThreads, getThreadEntities, upsertKnowledgeEntity,
 } from '../cache/database.js';
 
 const __filename_chat = fileURLToPath(import.meta.url);
@@ -522,12 +524,16 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     }
 
     await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
-      // Detect progress events from the tool loop
+      // Detect special events from the tool loop
       try {
-        if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
+        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"'))) {
           const parsed = JSON.parse(chunk);
           if (parsed._type === 'progress') {
             res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
+            return;
+          }
+          if (parsed._type === 'context_update') {
+            res.write(`data: ${JSON.stringify({ type: 'context_update', update: parsed })}\n\n`);
             return;
           }
         }
@@ -582,12 +588,16 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     const streamFn = useSdk ? chatStreamSdk : chatStream;
 
     await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
-      // Detect progress events from the tool loop
+      // Detect special events from the tool loop
       try {
-        if (chunk.startsWith('{') && chunk.includes('"_type":"progress"')) {
+        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"'))) {
           const parsed = JSON.parse(chunk);
           if (parsed._type === 'progress') {
             res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
+            return;
+          }
+          if (parsed._type === 'context_update') {
+            res.write(`data: ${JSON.stringify({ type: 'context_update', update: parsed })}\n\n`);
             return;
           }
         }
@@ -1001,6 +1011,133 @@ router.post('/send-estimate', async (req, res) => {
   } catch (err) {
     console.error('Chat send-estimate error:', err.message);
     res.json({ sent: true, note: 'Demo mode — email queued' });
+  }
+});
+
+// ─── Context Panel API ────────────────────────────────────────────────────────
+
+/**
+ * GET /context/:threadId — Get aggregated context for a thread
+ */
+router.get('/context/:threadId', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const { threadId } = req.params;
+
+    const thread = getThread(threadId);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    if (thread.tenant_id !== tenantId) return res.status(404).json({ error: 'Thread not found' });
+
+    // 1. Get entities mentioned in this thread
+    const entities = getThreadEntities(tenantId, threadId, 10);
+
+    // 2. Parse entity metadata
+    const parsedEntities = entities.map(e => {
+      let metadata = {};
+      try { metadata = e.metadata_json ? JSON.parse(e.metadata_json) : {}; } catch {}
+      return { ...e, metadata };
+    });
+
+    // 3. For GC-type entities, get aggregated profile
+    let gcProfile = null;
+    const gcEntity = parsedEntities.find(e =>
+      e.entity_type === 'company' || e.entity_type === 'gc'
+    );
+    if (gcEntity) {
+      gcProfile = getGcProfile(tenantId, gcEntity.name);
+    }
+
+    // 4. Get pinned items
+    const allPins = getContextPins(tenantId, threadId).map(pin => {
+      let metadata = null;
+      try { metadata = pin.metadata_json ? JSON.parse(pin.metadata_json) : null; } catch {}
+      return { ...pin, metadata };
+    });
+
+    // Separate entity pins from other pins, and attach _pinId to matching entities
+    const entityPinMap = {};
+    const pinnedItems = [];
+    for (const pin of allPins) {
+      if (pin.pin_type === 'entity' && pin.ref_id) {
+        entityPinMap[pin.ref_id] = pin.id;
+      } else {
+        pinnedItems.push(pin);
+      }
+    }
+    for (const e of parsedEntities) {
+      if (entityPinMap[e.id]) e._pinId = entityPinMap[e.id];
+    }
+
+    // Also add pinned entities not already in the auto-detected list
+    for (const pin of allPins) {
+      if (pin.pin_type === 'entity' && pin.ref_id && !parsedEntities.find(e => e.id === pin.ref_id)) {
+        parsedEntities.push({ id: pin.ref_id, name: pin.label, entity_type: 'unknown', metadata: pin.metadata || {}, _pinId: pin.id });
+      }
+    }
+
+    // 5. Get related threads (based on entity names)
+    const entityNames = parsedEntities.map(e => e.name);
+    const relatedThreads = getRelatedThreads(tenantId, entityNames, threadId, 5);
+
+    // 6. Get referenced files from Drive
+    let recentFiles = [];
+    try {
+      const { searchDriveContents } = await import('../cache/database.js');
+      if (thread.title) {
+        recentFiles = searchDriveContents(tenantId, thread.title, 5);
+      }
+    } catch {}
+
+    res.json({
+      entities: parsedEntities,
+      gcProfile,
+      pinnedItems,
+      relatedThreads,
+      recentFiles,
+    });
+  } catch (error) {
+    console.error('Context GET error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /context/:threadId/pin — Pin an item to a thread
+ */
+router.post('/context/:threadId/pin', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const { threadId } = req.params;
+    const { pinType, refId, label, metadata } = req.body;
+
+    if (!pinType || !label) {
+      return res.status(400).json({ error: 'pinType and label are required' });
+    }
+
+    const thread = getThread(threadId);
+    if (!thread) return res.status(404).json({ error: 'Thread not found' });
+    if (thread.tenant_id !== tenantId) return res.status(404).json({ error: 'Thread not found' });
+
+    const pin = addContextPin(tenantId, threadId, pinType, refId || '', label, metadata || null, 'user');
+    res.json(pin);
+  } catch (error) {
+    console.error('Context pin POST error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /context/pin/:pinId — Remove a pin
+ */
+router.delete('/context/pin/:pinId', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const { pinId } = req.params;
+    removeContextPin(tenantId, pinId);
+    res.json({ deleted: true });
+  } catch (error) {
+    console.error('Context pin DELETE error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

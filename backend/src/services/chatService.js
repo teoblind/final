@@ -558,6 +558,38 @@ const KNOWLEDGE_TOOLS = [
   },
 ];
 
+// ─── Context Panel Tools ────────────────────────────────────────────────────
+
+const CONTEXT_TOOLS = [
+  {
+    name: 'update_entity_profile',
+    description: 'Create or update a profile for a person, company, or project in the knowledge base. Use this when the user repeatedly discusses someone or you want to record key facts about them.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Entity name (person, company, or project name)' },
+        entity_type: { type: 'string', enum: ['person', 'company', 'project'], description: 'Type of entity' },
+        metadata: { type: 'object', description: 'Key-value pairs: email, phone, role, notes, tags, company, title, etc.' },
+      },
+      required: ['name', 'entity_type'],
+    },
+  },
+  {
+    name: 'pin_to_context',
+    description: 'Pin an entity, file, or note to the current conversation context panel so the user can reference it.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        pin_type: { type: 'string', enum: ['entity', 'file', 'thread', 'note'], description: 'Type of item to pin' },
+        ref_id: { type: 'string', description: 'ID of the item to pin (entity ID, file ID, thread ID). Optional for notes.' },
+        label: { type: 'string', description: 'Display label for the pin' },
+        note: { type: 'string', description: 'Note text content (for pin_type=note)' },
+      },
+      required: ['pin_type', 'label'],
+    },
+  },
+];
+
 // ─── Mining / IPP Tools (Sangha tenant) ─────────────────────────────────────
 
 // ─── Web Browsing Tools ──────────────────────────────────────────────────────
@@ -1420,6 +1452,14 @@ When asked to estimate concrete work, ALWAYS use lookup_pricing first to get cur
 DRAFT EDITING:
 - update_approval_draft: Update a pending email draft in the approval queue. When the user says they want to edit an estimate reply or email, use this tool with the approval_id and the new email body text. The text will be auto-converted to HTML. After updating, tell the user to check the Command Dashboard to review and approve.`;
 
+const CONTEXT_PROMPT_ADDON = `
+
+You have context panel tools for maintaining entity profiles and pinning items:
+- update_entity_profile: Create or update a profile for a person, company, or project. Use when the user repeatedly discusses someone or a company across the conversation. Profiles persist across sessions and appear in the context panel.
+- pin_to_context: Pin an entity, file, or note to the current conversation's context panel for quick reference.
+
+When the user discusses a person, company, or GC repeatedly (2+ mentions or detailed discussion), proactively create or update their profile using update_entity_profile. Pin relevant entities and files to the context panel using pin_to_context so the user can reference them. Do not create profiles for one-off mentions — only when a pattern of repeated discussion is observed.`;
+
 // ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
 
 const MINING_TOOLS = [
@@ -2130,6 +2170,33 @@ async function callKnowledgeTool(toolName, toolInput, tenantId) {
     return results;
   }
   throw new Error(`Unknown knowledge tool: ${toolName}`);
+}
+
+// ─── Context Tool Handler ────────────────────────────────────────────────────
+
+async function callContextTool(toolName, toolInput, tenantId, threadId, onContextUpdate) {
+  const { upsertKnowledgeEntity, addContextPin } = await import('../cache/database.js');
+
+  if (toolName === 'update_entity_profile') {
+    const { name, entity_type, metadata = {} } = toolInput;
+    const entity = upsertKnowledgeEntity(tenantId, name, entity_type, metadata);
+    if (onContextUpdate) {
+      onContextUpdate({ type: 'entity_updated', entity });
+    }
+    return { success: true, action: entity._action, entity: { id: entity.id, name: entity.name, type: entity.entity_type } };
+  }
+
+  if (toolName === 'pin_to_context') {
+    const { pin_type, ref_id, label, note } = toolInput;
+    const metadata = note ? { note } : null;
+    const pin = addContextPin(tenantId, threadId, pin_type, ref_id || '', label, metadata, 'agent');
+    if (onContextUpdate) {
+      onContextUpdate({ type: 'pin_added', pin });
+    }
+    return { success: true, pinId: pin.id, label };
+  }
+
+  throw new Error(`Unknown context tool: ${toolName}`);
 }
 
 // ─── Knowledge Context Builder ──────────────────────────────────────────────
@@ -3047,11 +3114,13 @@ const TOOL_CATEGORIES = {
   document: ['generate_document'],
   dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote', 'update_approval_draft'],
   scheduler: ['create_scheduled_task', 'list_scheduled_tasks', 'delete_scheduled_task'],
+  context: ['update_entity_profile', 'pin_to_context'],
 };
 
 // ─── Safe Tools (read-only, safe to retry on failure) ────────────────────────
 const SAFE_TOOLS = new Set([
-  'search_knowledge', 'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
+  'search_knowledge', 'update_entity_profile', 'pin_to_context',
+  'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
   'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
   'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
   'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
@@ -3096,12 +3165,20 @@ async function executeToolWithRetry(toolName, toolInput, tenantId) {
   return { toolResult, toolIsError };
 }
 
+// _toolContext is set per-request to provide threadId and onContextUpdate for context tools
+let _toolContext = { threadId: null, onContextUpdate: null };
+
+function setToolContext(threadId, onContextUpdate) {
+  _toolContext = { threadId, onContextUpdate };
+}
+
 async function routeToolCall(toolName, toolInput, tenantId) {
   // MCP tool dispatch — dynamically loaded external tools
   if (toolName.startsWith('mcp__')) {
     const { mcpManager } = await import('./mcpClientService.js');
     return await mcpManager.callTool(tenantId, toolName, toolInput);
   }
+  if (TOOL_CATEGORIES.context.includes(toolName)) return await callContextTool(toolName, toolInput, tenantId, _toolContext.threadId, _toolContext.onContextUpdate);
   if (toolName === 'execute_code') return await callCodeTool(toolInput, tenantId);
   if (TOOL_CATEGORIES.gws.includes(toolName)) return await callGwsTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.emailSecurity.includes(toolName)) return await callEmailSecurityTool(toolName, toolInput, tenantId);
@@ -3320,6 +3397,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
   const codeAddon = codeAgents.includes(agentId) ? CODE_EXECUTION_PROMPT_ADDON : '';
+  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating', 'workflow'];
+  const contextAddon = knAgents.includes(agentId) ? CONTEXT_PROMPT_ADDON : '';
   const FORMATTING_RULES = `
 
 ═══ FORMATTING RULES ═══
@@ -3357,17 +3436,20 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + knowledgeContext + siblingContext;
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + knowledgeContext + siblingContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
   if (leAgents.includes(agentId)) {
     tools.push(...LEAD_ENGINE_TOOLS);
   }
-  // Knowledge tools — all primary agents
-  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating', 'workflow'];
+  // Knowledge tools — all primary agents (knAgents defined above)
   if (knAgents.includes(agentId)) {
     tools.push(...KNOWLEDGE_TOOLS);
+  }
+  // Context panel tools — all agents with knowledge tools
+  if (knAgents.includes(agentId)) {
+    tools.push(...CONTEXT_TOOLS);
   }
   // HubSpot tools (when API key is configured)
   if (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) {
@@ -3431,6 +3513,9 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   } catch (e) {
     // MCP not configured or connection failed — continue without MCP tools
   }
+
+  // Set tool context for context panel tools (threadId needed for pin_to_context)
+  setToolContext(threadId, null);
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -3868,6 +3953,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
   const codeAddon = codeAgents.includes(agentId) ? CODE_EXECUTION_PROMPT_ADDON : '';
+  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating', 'workflow'];
+  const contextAddon = knAgents.includes(agentId) ? CONTEXT_PROMPT_ADDON : '';
 
   // Inject sibling thread context for cross-thread awareness
   let siblingContext = '';
@@ -3885,13 +3972,14 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + knowledgeContext + siblingContext;
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + knowledgeContext + siblingContext;
 
   // ─── Build tools list (must match chat()) ───────────────────────────────
   const tools = [...WORKSPACE_TOOLS];
   if (leAgents.includes(agentId)) tools.push(...LEAD_ENGINE_TOOLS);
-  const knAgents = ['sangha', 'hivemind', 'curtailment', 'pools', 'zhan', 'estimating', 'workflow'];
+  // knAgents already defined above for contextAddon
   if (knAgents.includes(agentId)) tools.push(...KNOWLEDGE_TOOLS);
+  if (knAgents.includes(agentId)) tools.push(...CONTEXT_TOOLS);
   if (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) tools.push(...HUBSPOT_TOOLS);
   const miningAgents = ['sangha', 'curtailment'];
   if (miningAgents.includes(agentId)) tools.push(...MINING_TOOLS);
@@ -3921,6 +4009,11 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   } catch (e) {
     // MCP not configured or connection failed — continue without MCP tools
   }
+
+  // Set tool context for context panel tools — emits SSE context_update events
+  setToolContext(threadId, (update) => {
+    onChunk(JSON.stringify({ _type: 'context_update', ...update }));
+  });
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';

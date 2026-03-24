@@ -4169,6 +4169,22 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entry ON knowledge_links(entry_id)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entity ON knowledge_links(entity_id)'); } catch (e) {}
 
+  // Context pins — items pinned to chat threads (entities, files, notes, threads)
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS context_pins (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      pin_type TEXT NOT NULL,
+      ref_id TEXT NOT NULL,
+      label TEXT,
+      metadata_json TEXT,
+      pinned_by TEXT NOT NULL DEFAULT 'user',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_context_pins_thread ON context_pins(tenant_id, thread_id)'); } catch (e) {}
+
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS action_items (
       id TEXT PRIMARY KEY,
@@ -6292,6 +6308,176 @@ export function updateMcpServer(id, tenantId, updates) {
 export function deleteMcpServer(id, tenantId) {
   const tdb = getTenantDb(tenantId);
   tdb.prepare('DELETE FROM mcp_servers WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+}
+
+// ─── Context Pins ──────────────────────────────────────────────────────────
+
+export function getContextPins(tenantId, threadId) {
+  return db.prepare('SELECT * FROM context_pins WHERE tenant_id = ? AND thread_id = ? ORDER BY created_at DESC').all(tenantId, threadId);
+}
+
+export function addContextPin(tenantId, threadId, pinType, refId, label, metadata = null, pinnedBy = 'user') {
+  const id = `pin_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO context_pins (id, tenant_id, thread_id, pin_type, ref_id, label, metadata_json, pinned_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, tenantId, threadId, pinType, refId, label, metadata ? JSON.stringify(metadata) : null, pinnedBy);
+  return { id, tenant_id: tenantId, thread_id: threadId, pin_type: pinType, ref_id: refId, label, metadata_json: metadata ? JSON.stringify(metadata) : null, pinned_by: pinnedBy, created_at: new Date().toISOString() };
+}
+
+export function removeContextPin(tenantId, pinId) {
+  return db.prepare('DELETE FROM context_pins WHERE tenant_id = ? AND id = ?').run(tenantId, pinId);
+}
+
+// ─── GC Profile Aggregation (DACP) ────────────────────────────────────────
+
+export function getGcProfile(tenantId, gcName) {
+  if (!gcName) return null;
+  const like = `%${gcName}%`;
+
+  const bids = db.prepare(`
+    SELECT COUNT(*) as total,
+           SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) as open_bids,
+           MAX(received_at) as last_bid_date
+    FROM dacp_bid_requests WHERE tenant_id = ? AND gc_name LIKE ?
+  `).get(tenantId, like);
+
+  const estimates = db.prepare(`
+    SELECT COUNT(*) as total,
+           AVG(total_bid) as avg_bid_size,
+           SUM(total_bid) as total_bid_value
+    FROM dacp_estimates WHERE tenant_id = ? AND gc_name LIKE ?
+  `).get(tenantId, like);
+
+  const jobs = db.prepare(`
+    SELECT COUNT(*) as total,
+           SUM(bid_amount) as total_revenue,
+           AVG(margin_pct) as avg_margin,
+           SUM(CASE WHEN status = 'complete' THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+           MAX(COALESCE(end_date, start_date)) as last_activity
+    FROM dacp_jobs WHERE tenant_id = ? AND gc_name LIKE ?
+  `).get(tenantId, like);
+
+  const recentProjects = db.prepare(`
+    SELECT project_name, status, bid_amount, margin_pct, start_date
+    FROM dacp_jobs WHERE tenant_id = ? AND gc_name LIKE ?
+    ORDER BY start_date DESC LIMIT 5
+  `).all(tenantId, like);
+
+  const openBids = db.prepare(`
+    SELECT id, subject, due_date, status, urgency
+    FROM dacp_bid_requests WHERE tenant_id = ? AND gc_name LIKE ? AND status IN ('new', 'reviewing')
+    ORDER BY due_date ASC LIMIT 5
+  `).all(tenantId, like);
+
+  const winRate = (estimates?.total > 0 && jobs?.total > 0)
+    ? (jobs.total / estimates.total) : null;
+
+  return {
+    name: gcName,
+    bidCount: bids?.total || 0,
+    openBids: openBids || [],
+    estimateCount: estimates?.total || 0,
+    jobCount: jobs?.total || 0,
+    totalRevenue: jobs?.total_revenue || 0,
+    avgMargin: jobs?.avg_margin || null,
+    avgBidSize: estimates?.avg_bid_size || null,
+    winRate,
+    activeJobs: jobs?.active || 0,
+    completedJobs: jobs?.completed || 0,
+    recentProjects: recentProjects || [],
+    lastActivity: jobs?.last_activity || bids?.last_bid_date || null,
+  };
+}
+
+// ─── Related Threads (entity overlap) ──────────────────────────────────────
+
+export function getRelatedThreads(tenantId, entityNames, excludeThreadId, limit = 5) {
+  if (!entityNames || entityNames.length === 0) return [];
+
+  // Search thread_summaries and chat_threads for mentions of entity names
+  const conditions = entityNames.map(() => '(ts.summary LIKE ? OR ct.title LIKE ?)').join(' OR ');
+  const params = [];
+  for (const name of entityNames) {
+    const like = `%${name}%`;
+    params.push(like, like);
+  }
+
+  try {
+    return db.prepare(`
+      SELECT ct.id, ct.title, ct.agent_id, ct.updated_at, ts.summary
+      FROM chat_threads ct
+      LEFT JOIN thread_summaries ts ON ts.thread_id = ct.id
+      WHERE ct.tenant_id = ? AND ct.id != ?
+        AND (${conditions})
+      ORDER BY ct.updated_at DESC LIMIT ?
+    `).all(tenantId, excludeThreadId, ...params, limit);
+  } catch (e) {
+    return [];
+  }
+}
+
+// ─── Upsert Knowledge Entity (merge semantics) ────────────────────────────
+
+export function upsertKnowledgeEntity(tenantId, name, entityType, metadata = {}) {
+  // Try to find existing entity by name + type (fuzzy)
+  const existing = db.prepare(`
+    SELECT * FROM knowledge_entities
+    WHERE tenant_id = ? AND entity_type = ?
+      AND (LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?))
+    LIMIT 1
+  `).get(tenantId, entityType, name, `%${name}%`);
+
+  if (existing) {
+    // Merge metadata
+    let existingMeta = {};
+    try { existingMeta = existing.metadata_json ? JSON.parse(existing.metadata_json) : {}; } catch {}
+    const merged = { ...existingMeta, ...metadata };
+    db.prepare('UPDATE knowledge_entities SET metadata_json = ? WHERE id = ?')
+      .run(JSON.stringify(merged), existing.id);
+    return { ...existing, metadata_json: JSON.stringify(merged), _action: 'updated' };
+  }
+
+  // Create new
+  const id = `ent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO knowledge_entities (id, tenant_id, entity_type, name, metadata_json)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, tenantId, entityType, name, JSON.stringify(metadata));
+  return { id, tenant_id: tenantId, entity_type: entityType, name, metadata_json: JSON.stringify(metadata), _action: 'created' };
+}
+
+// ─── Thread Entities (extract from messages) ───────────────────────────────
+
+export function getThreadEntities(tenantId, threadId, limit = 10) {
+  // Get recent messages from thread to extract entity names
+  const messages = db.prepare(`
+    SELECT content FROM chat_messages
+    WHERE tenant_id = ? AND thread_id = ?
+    ORDER BY created_at DESC LIMIT ?
+  `).all(tenantId, threadId, limit);
+
+  const thread = db.prepare('SELECT title FROM chat_threads WHERE id = ?').get(threadId);
+
+  // Collect all text to search against
+  const allText = [
+    thread?.title || '',
+    ...messages.map(m => m.content || ''),
+  ].join(' ');
+
+  if (!allText.trim()) return [];
+
+  // Find knowledge entities mentioned in the text
+  const entities = db.prepare(`
+    SELECT * FROM knowledge_entities WHERE tenant_id = ?
+  `).all(tenantId);
+
+  return entities.filter(e => {
+    const name = e.name.toLowerCase();
+    const text = allText.toLowerCase();
+    return text.includes(name);
+  });
 }
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────
