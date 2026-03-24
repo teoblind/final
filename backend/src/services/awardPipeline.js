@@ -187,14 +187,14 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
       `- Mention you will provide updated insurance certificates`,
       `- Ask about pre-construction meeting scheduling if not already mentioned`,
       `- Be concise and professional — 3-4 paragraphs max`,
-      `- Sign as DACP Construction`,
-      `\nReturn ONLY the email body text, no subject line or headers.`,
+      `- Do NOT include any sign-off, signature block, or closing name — the email system will automatically append the correct Coppice signature`,
+      `\nReturn ONLY the email body text. No subject line, no headers, no signature.`,
     ].filter(Boolean).join('\n'), null, { helpMode: false });
 
     agentResponse = result.response || '';
   } catch (err) {
     console.error(`[AwardPipeline] Draft generation failed:`, err.message);
-    agentResponse = `Thank you for the award notice on the ${projectName} project. We confirm receipt and are ready to proceed.\n\nWe will provide updated insurance certificates shortly. Please let us know the pre-construction meeting schedule.\n\nBest regards,\nDACP Construction`;
+    agentResponse = `Thank you for the award notice on the ${projectName} project. We confirm receipt and are ready to proceed.\n\nWe will provide updated insurance certificates shortly. Please let us know the pre-construction meeting schedule.`;
   }
 
   // 8. Queue for approval (copilot) or send directly

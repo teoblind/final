@@ -54,11 +54,20 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [rewriting, setRewriting] = useState(false);
 
-  const SENDERS = [
-    { name: 'Marcel Castillo', title: 'CEO', label: 'Marcel Castillo — CEO' },
-    { name: 'David Castillo', title: 'VP Operations', label: 'David Castillo — VP Ops' },
-    { name: 'DACP Construction', title: '', label: 'DACP Construction (Company)' },
-  ];
+  // Dynamic senders: Coppice (default) + currently logged-in user
+  const SENDERS = (() => {
+    const senders = [
+      { name: 'Coppice', label: 'Coppice (AI Agent)' },
+    ];
+    try {
+      const session = JSON.parse(sessionStorage.getItem('sangha_auth') || '{}');
+      const userName = session?.user?.name;
+      if (userName && userName !== 'Coppice') {
+        senders.push({ name: userName, label: userName });
+      }
+    } catch {}
+    return senders;
+  })();
 
   const handleSaveEdit = useCallback(async (approvalId) => {
     setSavingEdit(true);

@@ -278,7 +278,7 @@ export function draftClarificationEmail(bidRequest, missingItems) {
   return {
     to: bidRequest.from_email,
     subject: `RE: ${bidRequest.subject} — Clarification Needed`,
-    body: `Hi ${bidRequest.from_name},\n\nThank you for the opportunity to bid on this project. Before we can finalize our pricing, we need the following information:\n\n${missingItems.map((item, i) => `${i + 1}. ${item}`).join('\n')}\n\nPlease send these at your earliest convenience so we can meet the ${bidRequest.due_date} deadline.\n\nBest regards,\nDACP Construction Estimating`,
+    body: `Hi ${bidRequest.from_name},\n\nThank you for the opportunity to bid on this project. Before we can finalize our pricing, we need the following information:\n\n${missingItems.map((item, i) => `${i + 1}. ${item}`).join('\n')}\n\nPlease send these at your earliest convenience so we can meet the ${bidRequest.due_date} deadline.`,
   };
 }
 
@@ -308,9 +308,6 @@ Full estimate with line-item detail is in the attached Excel.
 
 Standard exclusions apply - subgrade prep, earthwork, waterproofing, and structural steel embeds are by others unless noted.
 
-Bid is good for 30 days. Happy to walk through any of the numbers if you want to jump on a call.
-
-Best,
-DACP Construction`,
+Bid is good for 30 days. Happy to walk through any of the numbers if you want to jump on a call.`,
   };
 }

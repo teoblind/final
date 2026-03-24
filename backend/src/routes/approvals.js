@@ -652,10 +652,11 @@ router.post('/:id/rewrite', async (req, res) => {
     if (!senderName || !currentBody) return res.status(400).json({ error: 'senderName and currentBody required' });
 
     const { chat } = await import('../services/chatService.js');
-    const result = await chat(tenantId, 'estimating', 'system',
-      `Rewrite this email so it is signed by ${senderName} instead of whoever currently signs it. Keep the same content, tone, and structure — only change the signature/sign-off and any first-person references to match ${senderName}. Return ONLY the rewritten email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`,
-      null, { helpMode: false }
-    );
+    const isCoppice = senderName === 'Coppice';
+    const prompt = isCoppice
+      ? `Remove any personal sign-off or signature from this email (like "Best regards, [Name]" or "Sincerely, [Name]"). The email system will automatically append the correct Coppice signature. Keep the same content, tone, and structure — just remove the closing name/signature. Return ONLY the email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`
+      : `Rewrite this email so it is signed by ${senderName} instead of whoever currently signs it. Keep the same content, tone, and structure — only change the signature/sign-off and any first-person references to match ${senderName}. Return ONLY the rewritten email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`;
+    const result = await chat(tenantId, 'estimating', 'system', prompt, null, { helpMode: false });
 
     const { markdownToEmailHtml } = await import('../services/emailService.js');
     const newBody = result.response || currentBody;
