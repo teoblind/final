@@ -351,6 +351,13 @@ function AppContent() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showSetPassword, setShowSetPassword] = useState(false);
 
+  // Clean query params from URL (e.g. ?email=... from login)
+  useEffect(() => {
+    if (user && window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    }
+  }, [user]);
+
   // Prompt OAuth-only users to set a password, or force password change if flagged
   useEffect(() => {
     if (user?.mustSetPassword) {

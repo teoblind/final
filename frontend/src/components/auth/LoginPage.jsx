@@ -120,6 +120,11 @@ export default function LoginPage({ onLogin }) {
         }
       }
 
+      // Clean query params from URL after successful login
+      if (window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+      }
+
       if (onLogin) {
         onLogin({ user: data.user, tokens: data.tokens, adminConsole: isAdmin });
       }
