@@ -8,6 +8,7 @@
 
 import { google } from 'googleapis';
 import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender } from '../cache/database.js';
+import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
@@ -925,6 +926,43 @@ async function pollSingleInbox(gmail, tenantId, label) {
       }
 
       const autoRespondAllowed = canAutoRespond(classification.verdict);
+
+      // Check if this is an award notice → route to award pipeline (BEFORE RFQ check)
+      if (isAwardNotice(subject, body) && canProcess(classification.verdict)) {
+        const awardTenant = tenantId || contact?.tenant_id || 'dacp-construction-001';
+        if (autoRespondAllowed) {
+          try {
+            const rfcMessageId = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
+            const result = await processAwardNotice({
+              messageId: rfcMessageId,
+              threadId: msgThreadId,
+              from: senderEmail,
+              fromName: senderName,
+              subject,
+              body,
+              tenantId: awardTenant,
+            });
+            if (result) {
+              console.log(`[GmailPoll] [${label}] Award processed: ${result.jobId} from ${result.gcName}`);
+            }
+          } catch (err) {
+            console.error(`[GmailPoll] [${label}] Award pipeline error:`, err.message);
+          }
+        } else {
+          insertActivity({
+            tenantId: awardTenant, type: 'in',
+            title: `Award notice from unknown sender: ${senderName || senderEmail}`,
+            subtitle: `${subject} (awaiting manual review)`,
+            detailJson: JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000) }),
+            sourceType: 'email', sourceId: msg.id, agentId: 'email-guard',
+          });
+        }
+        try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'award' : 'award-pending', tenantId: awardTenant });
+        repliedThreads.add(msgThreadId);
+        newReplies++;
+        continue;
+      }
 
       // Check if this is an RFQ/bid request email → route to estimate pipeline
       if (isRfqEmail(subject, body) && canProcess(classification.verdict)) {

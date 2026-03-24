@@ -4653,6 +4653,31 @@ export function getDacpJob(tenantId, id) {
   return db.prepare('SELECT * FROM dacp_jobs WHERE tenant_id = ? AND id = ?').get(tenantId, id);
 }
 
+export function createDacpJob(job) {
+  return db.prepare(`
+    INSERT INTO dacp_jobs (id, tenant_id, estimate_id, project_name, gc_name, project_type, location, status, estimated_cost, actual_cost, bid_amount, margin_pct, start_date, end_date, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    job.id, job.tenant_id, job.estimate_id || null, job.project_name, job.gc_name,
+    job.project_type || 'concrete', job.location || null, job.status || 'pending',
+    job.estimated_cost || null, job.actual_cost || null, job.bid_amount || null,
+    job.margin_pct || null, job.start_date || null, job.end_date || null,
+    job.notes || null
+  );
+}
+
+export function updateDacpJob(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_jobs SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
 export function getDacpFieldReports(tenantId, jobId) {
   if (jobId) {
     return db.prepare('SELECT * FROM dacp_field_reports WHERE tenant_id = ? AND job_id = ? ORDER BY date DESC').all(tenantId, jobId);

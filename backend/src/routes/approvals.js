@@ -261,9 +261,14 @@ router.post('/:id/approve', async (req, res) => {
             references: payload.references,
           });
           // Update bid request status from 'draft' to 'estimated'
-          if (payload.bidId) {
+          if (payload.bidId && !payload.awardConfirmation) {
             const { updateDacpBidRequest } = await import('../cache/database.js');
             updateDacpBidRequest(payload.tenantId || tenantId, payload.bidId, { status: 'estimated' });
+          }
+          // If this is an award confirmation, activate the job
+          if (payload.jobId) {
+            const { updateDacpJob } = await import('../cache/database.js');
+            updateDacpJob(payload.tenantId || tenantId, payload.jobId, { status: 'active' });
           }
         } else if (payload.attachment) {
           await sendEstimateEmail({
