@@ -1234,6 +1234,17 @@ const DACP_TOOLS = [
     },
   },
   {
+    name: 'get_approval_draft',
+    description: 'Read the current email draft from an approval item. Use this to see what the draft currently says before editing it with update_approval_draft.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        approval_id: { type: 'integer', description: 'The approval item ID to read' },
+      },
+      required: ['approval_id'],
+    },
+  },
+  {
     name: 'update_approval_draft',
     description: 'Update a pending approval item\'s email draft. Use this after the user asks you to edit an estimate reply or email draft. Updates the email body/HTML and optionally the subject line. The user can then review the updated draft on the Command Dashboard and approve it to send.',
     input_schema: {
@@ -1383,6 +1394,22 @@ async function callDacpTool(toolName, toolInput, tenantId) {
       return parseSupplierQuote(toolInput.email_body, toolInput.from_name || '', toolInput.from_email || '');
     }
 
+    case 'get_approval_draft': {
+      const { getApprovalItem } = await import('../cache/database.js');
+      const item = getApprovalItem(tid, toolInput.approval_id);
+      if (!item) throw new Error(`Approval item ${toolInput.approval_id} not found`);
+      const payload = item.payload_json ? JSON.parse(item.payload_json) : {};
+      return {
+        approval_id: toolInput.approval_id,
+        status: item.status,
+        to: payload.to || null,
+        subject: payload.subject || null,
+        total_bid: payload.totalBid || null,
+        body: payload.body || '',
+        attachment: payload.attachment || null,
+      };
+    }
+
     case 'update_approval_draft': {
       const { getApprovalItem, updateApprovalPayload } = await import('../cache/database.js');
       const { markdownToEmailHtml } = await import('./emailService.js');
@@ -1450,7 +1477,8 @@ For the demo ITB (BR-DEMO-001 — Riverside Commerce Center), you can walk throu
 When asked to estimate concrete work, ALWAYS use lookup_pricing first to get current rates, then create_estimate with proper line items. Be precise with quantities and units.
 
 DRAFT EDITING:
-- update_approval_draft: Update a pending email draft in the approval queue. When the user says they want to edit an estimate reply or email, use this tool with the approval_id and the new email body text. The text will be auto-converted to HTML. After updating, tell the user to check the Command Dashboard to review and approve.`;
+- get_approval_draft: Read the current email draft from an approval item. ALWAYS call this first when the user wants to edit a draft, so you can see the current content before making changes.
+- update_approval_draft: Update a pending email draft in the approval queue. Use this with the approval_id and the full new email body text. The text will be auto-converted to HTML. The user can review the updated draft in the context panel and approve it on the Command Dashboard.`;
 
 const CONTEXT_PROMPT_ADDON = `
 
@@ -3112,7 +3140,7 @@ const TOOL_CATEGORIES = {
   web: ['browse_url', 'web_research'],
   legal: ['generate_legal_doc'],
   document: ['generate_document'],
-  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote', 'update_approval_draft'],
+  dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote', 'get_approval_draft', 'update_approval_draft'],
   scheduler: ['create_scheduled_task', 'list_scheduled_tasks', 'delete_scheduled_task'],
   context: ['update_entity_profile', 'pin_to_context'],
 };
@@ -3120,6 +3148,7 @@ const TOOL_CATEGORIES = {
 // ─── Safe Tools (read-only, safe to retry on failure) ────────────────────────
 const SAFE_TOOLS = new Set([
   'search_knowledge', 'update_entity_profile', 'pin_to_context',
+  'get_approval_draft',
   'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
   'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
   'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',

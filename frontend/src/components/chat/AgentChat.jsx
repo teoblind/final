@@ -2310,17 +2310,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
               })
               .catch(() => {});
           }
-          // Build context message with the full draft for the agent
-          const parts = [
-            `I want to review and possibly edit this estimate reply before sending.`,
-            `\nApproval ID: ${approvalContext.approvalId}`,
-          ];
-          if (p.to) parts.push(`To: ${p.to}`);
-          if (p.subject) parts.push(`Subject: ${p.subject}`);
-          if (p.totalBid) parts.push(`Total Bid: $${p.totalBid.toLocaleString()}`);
-          if (p.body) parts.push(`\nCurrent email draft:\n---\n${p.body}\n---`);
-          parts.push(`\nThe full draft and RFQ details are in my context panel. I'll tell you what I want to change — use update_approval_draft with approval_id ${approvalContext.approvalId} to save edits.`);
-          setInput(parts.join('\n'));
+          // Build short context message — full draft & RFQ are visible in the context panel
+          setInput(`I want to review and possibly edit this estimate reply (approval_id ${approvalContext.approvalId}) before sending. The full draft and original RFQ are in the context panel. I'll tell you what I want to change — use update_approval_draft to save edits.`);
           setTimeout(() => inputRef.current?.focus(), 100);
         }
       })
@@ -2746,9 +2737,14 @@ export default function AgentChat({ agentId = 'estimating' }) {
           setMessages(prev => [...prev, agentMsg]);
         }
         if (data.threadId && !activeThreadId) {
-          const newThread = { id: data.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+          const newThread = { id: data.threadId, title: 'New chat', visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
           setThreads(prev => [newThread, ...prev]);
           setActiveThreadId(data.threadId);
+          // Refresh to get the AI-generated title
+          setTimeout(() => {
+            fetch(`${API_BASE}/v1/chat/${agentId}/threads`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+              .then(r => r.json()).then(d => { if (d.threads) setThreads(d.threads); }).catch(() => {});
+          }, 2000);
         }
       } else {
         // Text-only — use streaming SSE
@@ -2800,8 +2796,12 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 setProgressInfo({ iteration: event.iteration, maxTurns: event.maxTurns, tools: event.tools });
               } else if (event.type === 'context_update') {
                 refreshContextData();
+              } else if (event.type === 'title' && event.title) {
+                setThreads(prev => prev.map(t =>
+                  t.id === activeThreadId ? { ...t, title: event.title } : t
+                ));
               } else if (event.type === 'thread' && event.threadId && !activeThreadId) {
-                const newThread = { id: event.threadId, title: text.slice(0, 60), visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+                const newThread = { id: event.threadId, title: 'New chat', visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
                 setThreads(prev => [newThread, ...prev]);
                 setActiveThreadId(event.threadId);
               } else if (event.type === 'error') {
@@ -2827,14 +2827,12 @@ export default function AgentChat({ agentId = 'estimating' }) {
         ));
       }
 
-      // Update thread title in sidebar
+      // Update thread timestamp in sidebar (title comes from SSE 'title' event)
       if (activeThreadId) {
         setThreads(prev => prev.map(t =>
-          t.id === activeThreadId && !t.title
-            ? { ...t, title: text.slice(0, 60), updatedAt: new Date().toISOString() }
-            : t.id === activeThreadId
-              ? { ...t, updatedAt: new Date().toISOString() }
-              : t
+          t.id === activeThreadId
+            ? { ...t, updatedAt: new Date().toISOString() }
+            : t
         ));
       }
     } catch (err) {

@@ -54,6 +54,33 @@ function resolveIds(req) {
   return { tenantId, userId, agentId };
 }
 
+// Generate a short thread title from the first user message using Claude Haiku
+async function generateShortTitle(content) {
+  try {
+    const client = new Anthropic();
+    const res = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 30,
+      messages: [{ role: 'user', content: `Generate a 2-5 word title for this chat message. Return ONLY the title, no quotes or punctuation. Examples: "Email Draft Edit", "Concrete Pricing Lookup", "Turner Bid Review", "Capabilities Overview".\n\nMessage: ${content.slice(0, 300)}` }],
+    });
+    const title = (res.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+    if (title && title.length <= 50) return title;
+  } catch {}
+  // Fallback: truncate
+  const raw = content.trim().replace(/\s+/g, ' ');
+  return raw.length > 25 ? raw.slice(0, 25).replace(/\s\S*$/, '...') : raw;
+}
+
+// Generate title and emit SSE event if res is provided (streaming endpoints)
+function generateAndEmitTitle(content, threadId, res) {
+  generateShortTitle(content).then(title => {
+    updateThreadTitle(threadId, title);
+    if (res && !res.writableEnded) {
+      try { res.write(`data: ${JSON.stringify({ type: 'title', title })}\n\n`); } catch {}
+    }
+  }).catch(() => {});
+}
+
 // ─── Pinned Threads (cross-agent, for Command Dashboard) ────────────────────
 
 /**
@@ -218,11 +245,9 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    // Auto-title: use first ~60 chars of first user message
+    // Auto-title: generate short title from first user message
     if (!thread.title) {
-      const rawTitle = content.trim().replace(/\s+/g, ' ');
-      const shortTitle = rawTitle.length > 25 ? rawTitle.slice(0, 25).replace(/\s\S*$/, '...') : rawTitle;
-      updateThreadTitle(threadId, shortTitle);
+      generateShortTitle(content).then(t => updateThreadTitle(threadId, t)).catch(() => {});
     }
 
     const result = await chat(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode });
@@ -338,10 +363,9 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
     }
 
     if (!thread.title) {
-      const titleName = savedFiles.length === 1
-        ? savedFiles[0].name
-        : `${savedFiles.length} files`;
-      updateThreadTitle(threadId, `${titleName} — ${(userText || 'Analysis').slice(0, 40)}`);
+      const fileNames = savedFiles.map(f => f.name).join(', ');
+      const titleContext = userText ? `${fileNames}: ${userText}` : `Analyze ${fileNames}`;
+      generateShortTitle(titleContext).then(t => updateThreadTitle(threadId, t)).catch(() => {});
     }
 
     // Pass content blocks (multimodal) — chat() handles both string and array
@@ -503,9 +527,8 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     }
 
     if (!thread.title) {
-      const rawTitle = content.trim().replace(/\s+/g, ' ');
-      const shortTitle = rawTitle.length > 25 ? rawTitle.slice(0, 25).replace(/\s\S*$/, '...') : rawTitle;
-      updateThreadTitle(threadId, shortTitle);
+      // Title will be emitted as SSE event once generated
+      generateAndEmitTitle(content, threadId, res);
     }
 
     // Set up SSE
@@ -572,7 +595,8 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     }
 
     const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    createThread(threadId, tenantId, agentId, userId, content.trim().slice(0, 60), 'private');
+    createThread(threadId, tenantId, agentId, userId, null, 'private');
+    generateAndEmitTitle(content, threadId, res);
 
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
@@ -674,9 +698,8 @@ router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('
     for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
 
     if (!thread.title) {
-      const titleText = textContent || `File upload: ${uploadedFiles.map(f => f.originalname).join(', ')}`;
-      const shortUploadTitle = titleText.length > 25 ? titleText.slice(0, 25).replace(/\s\S*$/, '...') : titleText;
-      updateThreadTitle(threadId, shortUploadTitle);
+      const titleContext = textContent || `Analyze ${uploadedFiles.map(f => f.originalname).join(', ')}`;
+      generateAndEmitTitle(titleContext, threadId, res);
     }
 
     // SSE stream
@@ -773,7 +796,8 @@ router.post('/:agentId/messages', async (req, res) => {
 
     // Auto-create a thread for threadless messages so they persist
     const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    createThread(threadId, tenantId, agentId, userId, content.trim().slice(0, 60), 'private');
+    createThread(threadId, tenantId, agentId, userId, null, 'private');
+    generateShortTitle(content).then(t => updateThreadTitle(threadId, t)).catch(() => {});
 
     const result = await chat(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode });
 
