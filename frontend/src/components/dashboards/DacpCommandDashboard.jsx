@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -53,6 +53,16 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [editSender, setEditSender] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [rewriting, setRewriting] = useState(false);
+  // Leads sheet state
+  const [leadsSheet, setLeadsSheet] = useState(null); // { configured, sheetId, sheetTitle, sheetUrl, headers, totalRows, preview }
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkInput, setLinkInput] = useState('');
+  const [linkError, setLinkError] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [driveResults, setDriveResults] = useState([]);
+  const [driveSearching, setDriveSearching] = useState(false);
+  const [driveQuery, setDriveQuery] = useState('');
 
   // Dynamic senders: Coppice (default) + currently logged-in user
   const SENDERS = (() => {
@@ -68,6 +78,54 @@ export default function DacpCommandDashboard({ onNavigate }) {
     } catch {}
     return senders;
   })();
+
+  const fetchLeadsSheet = useCallback(() => {
+    setLeadsLoading(true);
+    fetch(`${API_BASE}/v1/estimates/leads-sheet`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => {
+        if (data.configured && data.sheetId !== '__unlinked__') setLeadsSheet(data);
+        else setLeadsSheet({ configured: false });
+      })
+      .catch(() => setLeadsSheet({ configured: false }))
+      .finally(() => setLeadsLoading(false));
+  }, []);
+
+  const handleLinkSheet = useCallback(async (url) => {
+    setLinking(true);
+    setLinkError('');
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/leads-sheet/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sheetUrl: url }),
+      });
+      const data = await res.json();
+      if (data.error) { setLinkError(data.error); return; }
+      setShowLinkModal(false);
+      setLinkInput('');
+      fetchLeadsSheet();
+    } catch (err) { setLinkError(err.message); }
+    finally { setLinking(false); }
+  }, [fetchLeadsSheet]);
+
+  const handleUnlinkSheet = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/unlink`, { method: 'DELETE', headers: getAuthHeaders() });
+      setLeadsSheet({ configured: false });
+    } catch {}
+  }, []);
+
+  const searchDrive = useCallback(async (q) => {
+    if (!q.trim()) return;
+    setDriveSearching(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/leads-sheet/search?q=${encodeURIComponent(q)}`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      setDriveResults(data.files || []);
+    } catch { setDriveResults([]); }
+    finally { setDriveSearching(false); }
+  }, []);
 
   const handleSaveEdit = useCallback(async (approvalId) => {
     setSavingEdit(true);
@@ -128,7 +186,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
       }
       if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
     }).catch(console.error).finally(() => setLoading(false));
-  }, [meetingRange]);
+    fetchLeadsSheet();
+  }, [meetingRange, fetchLeadsSheet]);
 
   const handleApprove = async (id) => {
     setProcessingApproval(id);
@@ -648,6 +707,153 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Leads Sheet */}
+      <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+        <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet size={14} className="text-[#1e3a5f]" />
+            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
+          </div>
+          {leadsSheet?.configured ? (
+            <div className="flex items-center gap-2">
+              <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-[#1e3a5f] hover:underline">
+                <ExternalLink size={10} /> {leadsSheet.sheetTitle}
+              </a>
+              <button onClick={() => setShowLinkModal(true)}
+                className="text-[10px] text-terminal-muted hover:text-terminal-text px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#f5f4f0]">
+                Change
+              </button>
+              <button onClick={handleUnlinkSheet}
+                className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
+                title="Unlink sheet">
+                <Unlink size={10} />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => { setShowLinkModal(true); searchDrive('leads'); }}
+              className="flex items-center gap-1.5 text-[11px] font-medium text-[#1e3a5f] px-3 py-1 rounded-md border border-[#c8d8e8] bg-[#eef3f8] hover:bg-[#dde8f2]">
+              <Link2 size={11} /> Link Sheet
+            </button>
+          )}
+        </div>
+        {leadsLoading ? (
+          <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading...</div>
+        ) : leadsSheet?.configured && leadsSheet.preview?.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-[#fafaf8]">
+                  {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
+                    <th key={i} className="px-3 py-2 text-left text-[10px] font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {leadsSheet.preview.slice(0, 8).map((row, i) => (
+                  <tr key={i} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#fafaf8]">
+                    {(leadsSheet.headers || []).slice(0, 6).map((h, j) => (
+                      <td key={j} className="px-3 py-1.5 text-terminal-text truncate max-w-[180px]">{row[h] || ''}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {leadsSheet.totalRows > 8 && (
+              <div className="px-3 py-2 text-[11px] text-terminal-muted text-center border-t border-[#f0eeea]">
+                + {leadsSheet.totalRows - 8} more rows
+                <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[#1e3a5f] hover:underline">Open in Sheets</a>
+              </div>
+            )}
+          </div>
+        ) : !leadsSheet?.configured ? (
+          <div className="px-[18px] py-8 text-center">
+            <div className="text-[13px] text-[#9a9a92] mb-2">No leads sheet linked</div>
+            <div className="text-[11px] text-terminal-muted">Link a Google Sheet to track your GC leads and pipeline here.</div>
+          </div>
+        ) : (
+          <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Sheet linked but no data found</div>
+        )}
+      </div>
+
+      {/* Link Sheet Modal */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowLinkModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-[480px] max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[#e8e6e2] flex items-center justify-between">
+              <span className="text-sm font-bold text-terminal-text">Link Leads Sheet</span>
+              <button onClick={() => setShowLinkModal(false)} className="text-terminal-muted hover:text-terminal-text"><X size={16} /></button>
+            </div>
+            <div className="p-5">
+              {/* Paste URL */}
+              <div className="mb-4">
+                <label className="text-[11px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Paste Sheet URL or ID</label>
+                <div className="flex gap-2">
+                  <input
+                    value={linkInput}
+                    onChange={e => setLinkInput(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-md focus:outline-none focus:border-[#1e3a5f]"
+                  />
+                  <button
+                    onClick={() => handleLinkSheet(linkInput)}
+                    disabled={!linkInput.trim() || linking}
+                    className="px-4 py-2 text-[12px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                  >
+                    {linking ? '...' : 'Link'}
+                  </button>
+                </div>
+                {linkError && <div className="text-[11px] text-red-500 mt-1">{linkError}</div>}
+              </div>
+
+              {/* Search Drive */}
+              <div className="border-t border-[#e8e6e2] pt-4">
+                <label className="text-[11px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Or search Google Drive</label>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    value={driveQuery}
+                    onChange={e => setDriveQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && searchDrive(driveQuery)}
+                    placeholder="Search for spreadsheets..."
+                    className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-md focus:outline-none focus:border-[#1e3a5f]"
+                  />
+                  <button
+                    onClick={() => searchDrive(driveQuery)}
+                    disabled={driveSearching}
+                    className="px-3 py-2 text-[12px] border border-[#e8e6e2] rounded-md hover:bg-[#f5f4f0]"
+                  >
+                    <Search size={13} />
+                  </button>
+                </div>
+                {driveSearching && <div className="text-[11px] text-terminal-muted italic">Searching...</div>}
+                {driveResults.length > 0 && (
+                  <div className="border border-[#e8e6e2] rounded-md overflow-hidden">
+                    {driveResults.map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => handleLinkSheet(f.id)}
+                        disabled={linking}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] text-left"
+                      >
+                        <FileSpreadsheet size={14} className="text-green-600 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] text-terminal-text font-medium truncate">{f.name}</div>
+                          <div className="text-[10px] text-terminal-muted">{f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString() : ''}</div>
+                        </div>
+                        <Link2 size={12} className="text-[#1e3a5f] shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!driveSearching && driveResults.length === 0 && driveQuery && (
+                  <div className="text-[11px] text-terminal-muted text-center py-2">No spreadsheets found</div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

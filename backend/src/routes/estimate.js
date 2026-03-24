@@ -31,6 +31,9 @@ import {
   getDacpPlanAnalyses,
   createDacpPlanAnalysis,
   updateDacpPlanAnalysis,
+  getKeyVaultValue,
+  upsertKeyVaultEntry,
+  getTenantEmailConfig,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -38,6 +41,7 @@ import {
   draftClarificationEmail,
   draftQuoteEmail,
 } from '../services/estimateBot.js';
+import { google } from 'googleapis';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -825,6 +829,150 @@ router.get('/stats', (req, res) => {
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── Leads Sheet Linking ──────────────────────────────────────────────────────
+
+const LEADS_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+const LEADS_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+
+function getLeadsAuth(tenantId) {
+  const token = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
+  const config = !token ? getTenantEmailConfig(tenantId) : null;
+  const refreshToken = token || config?.gmail_refresh_token;
+  if (!LEADS_CLIENT_ID || !LEADS_CLIENT_SECRET || !refreshToken) return null;
+  const client = new google.auth.OAuth2(LEADS_CLIENT_ID, LEADS_CLIENT_SECRET, 'http://localhost:8099');
+  client.setCredentials({ refresh_token: refreshToken });
+  return client;
+}
+
+/** GET /leads-sheet — Get linked leads sheet info + preview rows */
+router.get('/leads-sheet', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const sheetId = getKeyVaultValue(tenantId, 'dacp-leads', 'sheet_id');
+    if (!sheetId || sheetId === '__unlinked__') return res.json({ configured: false });
+
+    const auth = getLeadsAuth(tenantId);
+    if (!auth) return res.json({ configured: true, sheetId, sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`, error: 'No OAuth token', rows: [] });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Get sheet metadata for title
+    let sheetTitle = 'Leads Sheet';
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title' });
+      sheetTitle = meta.data.properties?.title || sheetTitle;
+    } catch {}
+
+    // Read first sheet's header + data rows
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: 'A1:Z200',
+    });
+    const allRows = result.data.values || [];
+    const headers = allRows[0] || [];
+    const dataRows = allRows.slice(1).filter(r => r.some(c => c?.trim()));
+
+    // Return summary: total rows, headers, last 10 rows preview
+    res.json({
+      configured: true,
+      sheetId,
+      sheetTitle,
+      sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`,
+      headers,
+      totalRows: dataRows.length,
+      preview: dataRows.slice(0, 10).map(row => {
+        const obj = {};
+        headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+        return obj;
+      }),
+    });
+  } catch (error) {
+    console.error('Leads sheet read error:', error.message);
+    res.status(500).json({ error: 'Failed to read leads sheet' });
+  }
+});
+
+/** POST /leads-sheet/link — Link a Google Sheet by URL or ID */
+router.post('/leads-sheet/link', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { sheetUrl } = req.body;
+    if (!sheetUrl) return res.status(400).json({ error: 'sheetUrl required' });
+
+    // Extract sheet ID from URL or use directly
+    const match = sheetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    const sheetId = match ? match[1] : sheetUrl.trim();
+
+    // Verify we can read it
+    const auth = getLeadsAuth(tenantId);
+    if (!auth) return res.status(400).json({ error: 'No Google OAuth configured for this tenant' });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    let sheetTitle = 'Leads Sheet';
+    try {
+      const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title' });
+      sheetTitle = meta.data.properties?.title || sheetTitle;
+    } catch (err) {
+      return res.status(400).json({ error: `Cannot access sheet: ${err.message}. Make sure it's shared with the agent.` });
+    }
+
+    // Store in key vault
+    upsertKeyVaultEntry({
+      tenantId,
+      service: 'dacp-leads',
+      keyName: 'sheet_id',
+      keyValue: sheetId,
+      addedBy: req.user?.email || 'user',
+    });
+
+    res.json({ success: true, sheetId, sheetTitle, sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit` });
+  } catch (error) {
+    console.error('Link leads sheet error:', error.message);
+    res.status(500).json({ error: 'Failed to link sheet' });
+  }
+});
+
+/** DELETE /leads-sheet/unlink — Remove the linked sheet */
+router.delete('/leads-sheet/unlink', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    // Overwrite with empty to effectively unlink
+    upsertKeyVaultEntry({
+      tenantId,
+      service: 'dacp-leads',
+      keyName: 'sheet_id',
+      keyValue: '__unlinked__',
+      addedBy: req.user?.email || 'user',
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to unlink sheet' });
+  }
+});
+
+/** GET /leads-sheet/search — Search Drive for candidate sheets */
+router.get('/leads-sheet/search', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const q = req.query.q || 'leads';
+    const auth = getLeadsAuth(tenantId);
+    if (!auth) return res.json({ files: [] });
+
+    const drive = google.drive({ version: 'v3', auth });
+    const result = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.spreadsheet' and name contains '${q.replace(/'/g, "\\'")}'`,
+      fields: 'files(id, name, modifiedTime, webViewLink)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 10,
+    });
+
+    res.json({ files: result.data.files || [] });
+  } catch (error) {
+    console.error('Search Drive error:', error.message);
+    res.json({ files: [] });
   }
 });
 
