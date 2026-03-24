@@ -167,16 +167,26 @@ function formatContent(text) {
     segments.push({ type: 'text', value: text });
   }
 
-  return segments.map((seg, si) => {
+  // Filter out whitespace-only text between consecutive tool segments
+  const filtered = segments.filter((seg, i) => {
+    if (seg.type === 'text' && !seg.value.trim()) {
+      const prev = segments[i - 1];
+      const next = segments[i + 1];
+      if ((prev?.type === 'tool' || i === 0) && (next?.type === 'tool' || i === segments.length - 1)) return false;
+    }
+    return true;
+  });
+
+  return filtered.map((seg, si) => {
     if (seg.type === 'tool') {
       const label = TOOL_LABELS[seg.name] || seg.name.replace(/_/g, ' ');
       return seg.done ? (
-        <div key={`tool-${si}`} className="my-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#f0f7f2] border border-[#d0e8d8] text-[11px] text-[#1a6b3c]">
+        <div key={`tool-${si}`} className="my-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#f0f7f2] border border-[#d0e8d8] text-[11px] text-[#1a6b3c]">
           <Check size={12} className="shrink-0" />
           <span className="font-medium">{label}</span>
         </div>
       ) : (
-        <div key={`tool-${si}`} className="my-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-[#f5f4f0] border border-[#e8e6e1] text-[11px] text-[#6b6b65]">
+        <div key={`tool-${si}`} className="my-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#f5f4f0] border border-[#e8e6e1] text-[11px] text-[#6b6b65]">
           <div className="w-3 h-3 rounded-full border-2 border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
           <span className="font-medium">{label}...</span>
         </div>
