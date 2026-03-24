@@ -1483,10 +1483,14 @@ DRAFT EDITING:
 const CONTEXT_PROMPT_ADDON = `
 
 You have context panel tools for maintaining entity profiles and pinning items:
-- update_entity_profile: Create or update a profile for a person, company, or project. Use when the user repeatedly discusses someone or a company across the conversation. Profiles persist across sessions and appear in the context panel.
+- update_entity_profile: Create or update a profile for a person, company, or project. Profiles persist across sessions and appear in the context panel sidebar.
 - pin_to_context: Pin an entity, file, or note to the current conversation's context panel for quick reference.
 
-When the user discusses a person, company, or GC repeatedly (2+ mentions or detailed discussion), proactively create or update their profile using update_entity_profile. Pin relevant entities and files to the context panel using pin_to_context so the user can reference them. Do not create profiles for one-off mentions — only when a pattern of repeated discussion is observed.`;
+IMPORTANT — Proactive profile enrichment:
+- Whenever you look up or discuss a company, GC, person, or project, ALWAYS call update_entity_profile with any useful metadata you found (contact info, bid history, project details, relationship notes, etc.)
+- Do this automatically after any tool call that returns data about an entity (e.g. after searching bids, jobs, emails, knowledge base)
+- Also pin relevant files or notes to the context panel using pin_to_context when they are directly relevant to the conversation
+- The user's context panel updates in real-time — enriching profiles makes the sidebar immediately more useful`;
 
 // ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
 
