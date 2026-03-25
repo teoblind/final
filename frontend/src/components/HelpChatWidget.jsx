@@ -97,23 +97,13 @@ export default function HelpChatWidget() {
     const token = getAuthToken();
 
     try {
-      // Use public help endpoint when not authenticated, authenticated endpoint when logged in
-      let postUrl;
-      if (token && threadId) {
-        postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/stream`;
-      } else if (token) {
-        postUrl = `${API_BASE}/v1/chat/${agentId}/messages/stream`;
-      } else {
-        // Public help endpoint — no auth required
-        postUrl = `${API_BASE}/v1/chat/help/${agentId}/messages/stream`;
-      }
+      // Always use the lightweight public help endpoint — no auth needed,
+      // avoids expired-token issues, and uses Haiku (fast + cheap).
+      const postUrl = `${API_BASE}/v1/chat/help/${agentId}/messages/stream`;
 
       const res = await fetch(postUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: text, helpMode: true }),
       });
 
