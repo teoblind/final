@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(__dirname, '..', 'data', 'app.db');
+const dbPath = join(__dirname, '..', 'data', 'dacp-construction-001', 'dacp-construction-001.db');
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 
