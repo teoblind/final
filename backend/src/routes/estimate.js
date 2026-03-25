@@ -1041,6 +1041,78 @@ router.post('/assignments/:id/confirm', async (req, res) => {
   }
 });
 
+/** POST /assignments/:id/chat — Refine an assignment via inline chat */
+router.post('/assignments/:id/chat', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Message required' });
+
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const { tunnelPrompt } = await import('../services/cliTunnel.js');
+
+    const prompt = `You are refining an autonomous task assignment for a construction company (DACP).
+
+CURRENT ASSIGNMENT:
+- Title: ${assignment.title}
+- Description: ${assignment.description}
+- Category: ${assignment.category}
+- Priority: ${assignment.priority}
+- Action Prompt: ${assignment.action_prompt || 'None'}
+
+USER'S MODIFICATION REQUEST:
+${message}
+
+Based on the user's request, update the assignment. Return a JSON object with the updated fields and a brief confirmation message:
+{
+  "title": "Updated title (keep concise, 5-10 words)",
+  "description": "Updated description (1-2 sentences, reflects the modification)",
+  "action_prompt": "Updated detailed execution prompt for the agent",
+  "reply": "Brief confirmation of what you changed (1-2 sentences, conversational)"
+}
+
+Return ONLY the JSON, no markdown or explanation.`;
+
+    const response = await tunnelPrompt({
+      tenantId,
+      agentId: assignment.agent_id || 'estimating',
+      prompt,
+      maxTurns: 3,
+      timeoutMs: 60_000,
+      label: 'Assignment Refinement',
+    });
+
+    // Parse JSON from response
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.json({ reply: response.slice(0, 500), assignment });
+    }
+
+    const updates = JSON.parse(jsonMatch[0]);
+    const { reply, ...fields } = updates;
+
+    // Update assignment in DB
+    const dbUpdates = {};
+    if (fields.title) dbUpdates.title = fields.title;
+    if (fields.description) dbUpdates.description = fields.description;
+    if (fields.action_prompt) dbUpdates.action_prompt = fields.action_prompt;
+
+    if (Object.keys(dbUpdates).length > 0) {
+      updateAgentAssignment(tenantId, id, dbUpdates);
+    }
+
+    // Return updated assignment
+    const updated = getAgentAssignment(tenantId, id);
+    res.json({ reply: reply || 'Updated.', assignment: updated });
+  } catch (error) {
+    console.error('[Assignments] Chat refinement error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** POST /assignments/:id/dismiss — Dismiss a proposed assignment */
 router.post('/assignments/:id/dismiss', (req, res) => {
   try {

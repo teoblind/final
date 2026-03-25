@@ -6338,7 +6338,7 @@ export function insertAgentAssignment(assignment) {
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {

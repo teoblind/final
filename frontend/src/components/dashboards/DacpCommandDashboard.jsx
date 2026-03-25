@@ -66,6 +66,11 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [processingAssignment, setProcessingAssignment] = useState(null);
+  // Inline assignment chat
+  const [chatOpenFor, setChatOpenFor] = useState(null);
+  const [chatMessages, setChatMessages] = useState({});
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
   const [driveQuery, setDriveQuery] = useState('');
 
   // Dynamic senders: Coppice (default) + currently logged-in user
@@ -169,6 +174,37 @@ export default function DacpCommandDashboard({ onNavigate }) {
       setAssignments(prev => prev.filter(a => a.id !== id));
     } catch {}
   }, []);
+
+  const handleAssignmentChat = useCallback(async (assignmentId) => {
+    if (!chatInput.trim()) return;
+    const msg = chatInput.trim();
+    setChatInput('');
+    setChatMessages(prev => ({
+      ...prev,
+      [assignmentId]: [...(prev[assignmentId] || []), { role: 'user', text: msg }],
+    }));
+    setChatLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${assignmentId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ message: msg }),
+      });
+      const data = await res.json();
+      if (data.assignment) {
+        setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, ...data.assignment } : a));
+      }
+      setChatMessages(prev => ({
+        ...prev,
+        [assignmentId]: [...(prev[assignmentId] || []), { role: 'agent', text: data.reply || 'Updated.' }],
+      }));
+    } catch {
+      setChatMessages(prev => ({
+        ...prev,
+        [assignmentId]: [...(prev[assignmentId] || []), { role: 'agent', text: 'Failed to refine. Try again.' }],
+      }));
+    } finally { setChatLoading(false); }
+  }, [chatInput]);
 
   const handleSaveEdit = useCallback(async (approvalId) => {
     setSavingEdit(true);
@@ -414,52 +450,96 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 document: 'bg-rose-50 text-rose-600 border-rose-200',
               };
               return (
-                <div key={a.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
-                      <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
-                        {a.category?.replace('_', ' ')}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
-                    {a.status === 'completed' && a.result_summary && (
-                      <div className="mt-1.5 text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                        Done: {a.result_summary.slice(0, 200)}{a.result_summary.length > 200 ? '...' : ''}
+                <div key={a.id} className="border-b border-[#f0eeea] last:border-b-0">
+                  <div className="flex items-start gap-3 px-[18px] py-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
+                        <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
+                          {a.category?.replace('_', ' ')}
+                        </span>
                       </div>
-                    )}
+                      <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
+                      {a.status === 'completed' && a.result_summary && (
+                        <div className="mt-1.5 text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                          Done: {a.result_summary.slice(0, 200)}{a.result_summary.length > 200 ? '...' : ''}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                      {a.status === 'proposed' && (
+                        <>
+                          <button
+                            onClick={() => { setChatOpenFor(chatOpenFor === a.id ? null : a.id); setChatInput(''); }}
+                            className={`p-1 rounded transition-colors ${chatOpenFor === a.id ? 'text-[#1e3a5f] bg-blue-50' : 'text-terminal-muted hover:text-[#1e3a5f]'}`}
+                            title="Refine task"
+                          >
+                            <MessageSquare size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleConfirmAssignment(a.id)}
+                            disabled={processingAssignment === a.id}
+                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                          >
+                            <Check size={11} /> Run
+                          </button>
+                          <button
+                            onClick={() => handleDismissAssignment(a.id)}
+                            className="p-1 text-terminal-muted hover:text-red-500 rounded"
+                            title="Dismiss"
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      )}
+                      {a.status === 'in_progress' && (
+                        <span className="flex items-center gap-1 text-[11px] text-[#1e3a5f] font-medium">
+                          <RotateCcw size={11} className="animate-spin" /> Working...
+                        </span>
+                      )}
+                      {a.status === 'completed' && (
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                          <CheckCircle size={11} /> Done
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                    {a.status === 'proposed' && (
-                      <>
-                        <button
-                          onClick={() => handleConfirmAssignment(a.id)}
-                          disabled={processingAssignment === a.id}
-                          className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
-                        >
-                          <Check size={11} /> Run
-                        </button>
-                        <button
-                          onClick={() => handleDismissAssignment(a.id)}
-                          className="p-1 text-terminal-muted hover:text-red-500 rounded"
-                          title="Dismiss"
-                        >
-                          <X size={13} />
-                        </button>
-                      </>
-                    )}
-                    {a.status === 'in_progress' && (
-                      <span className="flex items-center gap-1 text-[11px] text-[#1e3a5f] font-medium">
-                        <RotateCcw size={11} className="animate-spin" /> Working...
-                      </span>
-                    )}
-                    {a.status === 'completed' && (
-                      <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
-                        <CheckCircle size={11} /> Done
-                      </span>
-                    )}
-                  </div>
+                  {/* Inline chat for refining this assignment */}
+                  {chatOpenFor === a.id && a.status === 'proposed' && (
+                    <div className="px-[18px] pb-3">
+                      <div className="bg-[#f9f8f6] border border-[#e8e6e1] rounded-lg p-3">
+                        {(chatMessages[a.id] || []).length > 0 && (
+                          <div className="space-y-2 mb-3 max-h-[200px] overflow-y-auto">
+                            {(chatMessages[a.id] || []).map((m, i) => (
+                              <div key={i} className={`text-[11px] leading-relaxed ${m.role === 'user' ? 'text-terminal-text' : 'text-[#1e3a5f]'}`}>
+                                <span className="font-semibold">{m.role === 'user' ? 'You' : 'Coppice'}:</span>{' '}
+                                {m.text}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={chatInput}
+                            onChange={e => setChatInput(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !chatLoading) handleAssignmentChat(a.id); }}
+                            placeholder="e.g. Only use 2 of the 3 estimates..."
+                            className="flex-1 text-[11px] px-3 py-1.5 border border-[#ddd9d3] rounded-md bg-white focus:outline-none focus:border-[#1e3a5f] placeholder:text-[#b5b5ad]"
+                            disabled={chatLoading}
+                          />
+                          <button
+                            onClick={() => handleAssignmentChat(a.id)}
+                            disabled={chatLoading || !chatInput.trim()}
+                            className="px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                          >
+                            {chatLoading ? 'Refining...' : 'Send'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
