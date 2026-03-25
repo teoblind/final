@@ -97,12 +97,15 @@ export default function HelpChatWidget() {
     const token = getAuthToken();
 
     try {
-      // Use streaming endpoint
+      // Use public help endpoint when not authenticated, authenticated endpoint when logged in
       let postUrl;
-      if (threadId) {
+      if (token && threadId) {
         postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/stream`;
-      } else {
+      } else if (token) {
         postUrl = `${API_BASE}/v1/chat/${agentId}/messages/stream`;
+      } else {
+        // Public help endpoint — no auth required
+        postUrl = `${API_BASE}/v1/chat/help/${agentId}/messages/stream`;
       }
 
       const res = await fetch(postUrl, {

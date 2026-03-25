@@ -37,7 +37,79 @@ const upload = multer({
 
 const router = express.Router();
 
-// All chat routes require authentication
+// ─── Public Help Chat (no auth required) ──────────────────────────────────
+// This must be defined BEFORE router.use(authenticate) so unauthenticated
+// visitors on the landing page can use the help widget.
+
+const HELP_AGENTS = new Set(['hivemind', 'sangha', 'zhan']);
+
+// Simple per-IP rate limiter for public help chat (10 req/min)
+const helpRateLimit = new Map();
+function checkHelpRateLimit(ip) {
+  const now = Date.now();
+  let entry = helpRateLimit.get(ip);
+  if (!entry || now - entry.windowStart >= 60000) {
+    entry = { count: 0, windowStart: now };
+    helpRateLimit.set(ip, entry);
+  }
+  entry.count += 1;
+  return entry.count <= 10;
+}
+
+router.post('/help/:agentId/messages/stream', async (req, res) => {
+  try {
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    if (!checkHelpRateLimit(ip)) {
+      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    }
+
+    const agentId = req.params.agentId;
+    if (!HELP_AGENTS.has(agentId)) {
+      return res.status(400).json({ error: `Unknown agent: ${agentId}` });
+    }
+
+    const { content } = req.body;
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    // Cap message length for public endpoint
+    const text = content.trim().slice(0, 1000);
+
+    const tenantId = req.resolvedTenant?.id || 'default';
+    const visitorId = `visitor_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Create thread with visitor context
+    createThread(threadId, tenantId, agentId, visitorId, null, 'private');
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
+
+    await chatStream(tenantId, agentId, visitorId, text, threadId, { helpMode: true }, (chunk) => {
+      res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+    });
+
+    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+    res.end();
+  } catch (error) {
+    console.error('[HelpChat] Stream error:', error);
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: 'Failed to stream response' });
+    }
+  }
+});
+
+// All other chat routes require authentication
 router.use(authenticate);
 
 // Valid agent IDs
