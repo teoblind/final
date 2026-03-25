@@ -195,7 +195,10 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         if (joinedEvents.has(eventKey)) continue;
 
         const link = extractMeetingLink(event);
-        if (!link) continue;
+        if (!link) {
+          console.log(`[CalendarPoll] [${agentEmail}] Skipping "${event.summary}" — no meeting link found`);
+          continue;
+        }
 
         // Skip declined events
         const selfAttendee = (event.attendees || []).find(
@@ -579,7 +582,7 @@ ${transcript}`,
           summary,
           attendees,
         });
-        console.log(`[CalendarPoll] Post-processing done: ${result.actionItemsInserted} items, ${result.emailsSent.length} emails`);
+        console.log(`[CalendarPoll] Post-processing done: ${result.actionItemsInserted || 0} items, ${result.instructionsExecuted || 0} instructions`);
       } catch (err) {
         console.error(`[CalendarPoll] processMeetingComplete failed:`, err.message);
       }
