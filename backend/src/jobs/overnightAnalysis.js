@@ -21,6 +21,23 @@ let timer = null;
 
 // ─── Context Gathering ───────────────────────────────────────────────────────
 
+/** Clean up GC name — replace email addresses or coppice.ai placeholders with from_name or project-derived name */
+function cleanGcName(bid) {
+  const gc = bid.gc_name || '';
+  // If gc_name looks like an email or contains coppice/agent, use from_name or derive from project
+  if (gc.includes('@') || gc.includes('coppice') || gc.includes('agent') || gc.includes('localhost')) {
+    return bid.from_name || bid.gc_company || extractGcFromSubject(bid.subject) || 'Unknown GC';
+  }
+  return gc;
+}
+
+function extractGcFromSubject(subject) {
+  if (!subject) return null;
+  // Try to extract company name from common RFQ patterns
+  const match = subject.match(/(?:from|by|for)\s+([A-Z][A-Za-z\s&]+?)(?:\s*[-–—]|\s*$)/);
+  return match ? match[1].trim() : null;
+}
+
 function gatherDacpContext(tenantId) {
   const stats = getDacpStats(tenantId);
   const bids = getDacpBidRequests(tenantId);
@@ -58,31 +75,33 @@ function gatherDacpContext(tenantId) {
     return sent < twoWeeksAgo;
   });
 
-  // GC names we've worked with (for relationship context)
-  const gcNames = [...new Set(bids.map(b => b.gc_name).filter(Boolean))];
+  // GC names we've worked with (for relationship context) — cleaned
+  const gcNames = [...new Set(bids.map(b => cleanGcName(b)).filter(n => n && n !== 'Unknown GC'))];
 
   return {
     stats,
     bidsWithoutEstimates: bidsWithoutEstimates.map(b => ({
-      id: b.id, project_name: b.project_name, gc_name: b.gc_name,
-      due_date: b.due_date, from_email: b.from_email, subject: b.subject,
+      id: b.id, project_name: b.project_name, gc_name: cleanGcName(b),
+      due_date: b.due_date, subject: b.subject,
     })),
     draftEstimates: draftEstimates.map(e => ({
-      id: e.id, project_name: e.project_name, gc_name: e.gcName || e.gc_name,
+      id: e.id, project_name: e.project_name,
+      gc_name: cleanGcName({ gc_name: e.gcName || e.gc_name, from_name: e.from_name, subject: e.subject }),
       totalBid: e.totalBid, bid_request_id: e.bid_request_id,
     })),
     urgentBids: urgentBids.map(b => ({
-      id: b.id, project_name: b.project_name, gc_name: b.gc_name,
+      id: b.id, project_name: b.project_name, gc_name: cleanGcName(b),
       due_date: b.due_date, status: b.status,
     })),
     pendingJobs: pendingJobs.map(j => ({
-      id: j.id, project_name: j.project_name, gc_name: j.gc_name, status: j.status,
+      id: j.id, project_name: j.project_name, gc_name: j.gc_name || 'Unknown GC', status: j.status,
     })),
     activeJobs: activeJobs.map(j => ({
-      id: j.id, project_name: j.project_name, gc_name: j.gc_name,
+      id: j.id, project_name: j.project_name, gc_name: j.gc_name || 'Unknown GC',
     })),
     staleEstimates: staleEstimates.map(e => ({
-      id: e.id, project_name: e.project_name, gc_name: e.gcName || e.gc_name,
+      id: e.id, project_name: e.project_name,
+      gc_name: cleanGcName({ gc_name: e.gcName || e.gc_name, from_name: e.from_name, subject: e.subject }),
       totalBid: e.totalBid,
     })),
     gcNames,
@@ -120,7 +139,9 @@ RULES:
 5. Do NOT suggest "researching market rates" or generic industry research — DACP knows their pricing
 6. Do NOT suggest tasks that require information DACP doesn't have
 7. Each task must be completable in one agent session (draft an email, update a record, send a bid)
-8. Sign all emails as Coppice (the AI agent), not as individual people
+8. Sign all emails as Coppice (the AI agent), not as individual people — NEVER reference "David Castillo", "Marcel", or other employee names
+9. If a GC name is "Unknown GC" or looks like a placeholder, focus the task on the PROJECT NAME instead
+10. Do NOT suggest "cleaning up" or "updating" GC records that have placeholder data — just work with the project names
 
 Return a JSON array. Each object:
 {
