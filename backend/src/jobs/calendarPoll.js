@@ -377,9 +377,10 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
       startTime: new Date().toISOString(),
     });
 
-    // Start chat loop — bot stays silent, only responds via meeting text chat when addressed.
-    // Voice loop disabled: previously caused bot to speak over participants when wake word
-    // triggered an infinite active-window loop. Chat-only is the safe default.
+    // Start both loops — voice (wake-word-gated audio) + chat (text chat responses).
+    // Voice loop bugs fixed: no more infinite active window, no "copper" false positive,
+    // no auto-start from transcript events. Bot stays silent until "Coppice" is said.
+    startVoiceLoop(bot.id, tenantId);
     startChatLoop(bot.id);
 
     // Log activity to tenant's feed
@@ -388,7 +389,7 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
         tenantId,
         type: 'meet',
         title: `Joined: ${summary}`,
-        subtitle: `${attendees.length} attendees — silent mode, type "Coppice" in chat to ask`,
+        subtitle: `${attendees.length} attendees — say "Coppice" to activate`,
         sourceType: 'meeting',
         sourceId: eventKey,
         agentId: 'meetings',
