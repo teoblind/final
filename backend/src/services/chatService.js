@@ -3351,7 +3351,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Routes complex queries through `claude -p` (Max subscription, flat rate)
   // instead of per-token API calls. Feature-flagged via CLAUDE_CLI_ENABLED=true.
   // Simple queries stay on the API (Haiku/Sonnet, sub-second, cheap).
-  const cliAgents = ['sangha', 'hivemind', 'zhan', 'estimating'];
+  const cliAgents = ['sangha', 'hivemind', 'zhan', 'estimating', 'documents', 'email', 'workflow', 'comms'];
   const cliEnabled = process.env.CLAUDE_CLI_ENABLED === 'true';
   const agentConfig = getAgentConfig(agentId);
   const forceApi = agentConfig.force_api === true;

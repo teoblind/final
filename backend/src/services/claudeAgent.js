@@ -1,29 +1,40 @@
 /**
  * Claude Agent Service — Routes complex agent queries through Claude Code CLI
  *
- * Uses `claude -p` with Max subscription auth instead of per-token API calls.
- * Simple queries stay on Haiku API (pennies). Heavy research/analysis goes
- * through the CLI at a flat $200/mo.
+ * Architecture: VPS → SSH tunnel (port 2222) → Mac → claude-coppice.sh → claude -p
  *
- * Setup: `claude login` on VPS with a Max subscription account.
+ * The VPS is blocked by Cloudflare from reaching claude.ai directly.
+ * Instead, we SSH through the reverse tunnel to the user's Mac, which has
+ * a Claude Max subscription ($200/mo flat rate) authenticated via OAuth.
+ *
+ * The Mac runs a wrapper script (~/claude-coppice.sh) that:
+ *   1. Sets correct PATH for node/claude binaries
+ *   2. Unsets ANTHROPIC_API_KEY so OAuth/Max auth is used
+ *   3. Runs `claude -p` with all passed arguments
+ *
+ * Fallback: If the SSH tunnel is down, falls back to local `claude` binary
+ * (which requires ANTHROPIC_API_KEY or VPS-local auth).
+ *
+ * Tunnel: autossh reverse tunnel (Mac → VPS port 2222 → Mac port 22)
+ * launchd service: com.zhan.reverse-tunnel
  */
 
 import { spawn } from 'child_process';
 import { getTenantDb } from '../cache/database.js';
 
+// SSH tunnel configuration
+const SSH_KEY = process.env.CLAUDE_SSH_KEY || '/root/.ssh/id_ed25519';
+const SSH_USER = process.env.CLAUDE_SSH_USER || 'teoblind';
+const SSH_HOST = '127.0.0.1';  // Tunnel endpoint (reverse tunnel on VPS)
+const SSH_PORT = parseInt(process.env.CLAUDE_SSH_PORT, 10) || 2222;
+const MAC_WRAPPER = process.env.CLAUDE_MAC_WRAPPER || '/Users/teoblind/claude-coppice.sh';
+
+// Local fallback (if tunnel is down and VPS has its own claude auth)
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
+const USE_TUNNEL = process.env.CLAUDE_USE_TUNNEL !== 'false'; // default: true
+
 const DEFAULT_TIMEOUT_MS = parseInt(process.env.CLAUDE_AGENT_TIMEOUT_MS, 10) || 180_000; // 3 min
 const DEFAULT_MAX_TURNS = 25;
-
-// ─── Per-Tenant Claude Accounts ─────────────────────────────────────────────
-// Each tenant can have its own Claude Max subscription ($200/mo).
-// Auth is isolated via separate CLAUDE_CONFIG_DIR directories.
-// Setup per tenant: CLAUDE_CONFIG_DIR=/root/.claude-<tenant> claude login
-const TENANT_CLAUDE_CONFIG = {
-  'default':               '/root/.claude-sangha',
-  'dacp-construction-001': '/root/.claude-dacp',
-  'zhan-capital':          '/root/.claude-zhan',
-};
 
 // ─── Per-Tenant System Prompts ──────────────────────────────────────────────
 // Condensed versions — Claude Code adds its own base prompt, so we just
@@ -33,25 +44,16 @@ const TENANT_PROMPTS = {
   'default': `You are Coppice — the AI agent for Sangha Renewables, a Bitcoin mining + renewable energy company.
 Key facts: 8 years operating, co-locates mining behind-the-meter at 2.8-4.0¢/kWh, $14M raised, flagship 19.9 MW West Texas facility on TotalEnergies solar farm.
 Team: Spencer Marr (President), Colin Peirce (Partner), Marcel Pineda (BD), Teo Blind (quant modeling).
-You handle: ERCOT analysis, fleet ops, IPP evaluation, financial modeling, LP reporting, email, docs, research.
-Data directory: /root/coppice/backend/data/
-Tenant DB: /root/coppice/backend/data/tenants/default/sangha.db (SQLite)
-Codebase: /root/coppice/`,
+You handle: ERCOT analysis, fleet ops, IPP evaluation, financial modeling, LP reporting, email, docs, research.`,
 
   'dacp-construction-001': `You are Coppice — the AI agent for DACP Construction, a concrete subcontractor in Houston TX.
 Key facts: Foundations, slabs, curb & gutter, sidewalks, post-tension. Notable client: Riot Platforms.
 CEO: David Castillo. Standard pricing: SOG ~$14/SF, curb & gutter ~$26/LF, sidewalks ~$10-11/SF.
-You handle: estimating, bid management, GC relationships, field ops, email, docs, research.
-Data directory: /root/coppice/backend/data/
-Tenant DB: /root/coppice/backend/data/tenants/dacp-construction-001/dacp-construction-001.db (SQLite)
-Codebase: /root/coppice/`,
+You handle: estimating, bid management, GC relationships, field ops, email, docs, research.`,
 
   'zhan-capital': `You are Coppice — the AI agent for Zhan Capital LLC, a thesis-driven investment firm.
 Focus: sovereign AI infrastructure, energy systems, digital monetary networks. Founded by Teo Blind.
-Portfolio: Sangha Renewables, Volt Charging. You handle research, comms, ops, docs.
-Data directory: /root/coppice/backend/data/
-Tenant DB: /root/coppice/backend/data/tenants/zhan-capital/zhan-capital.db (SQLite)
-Codebase: /root/coppice/`,
+Portfolio: Sangha Renewables, Volt Charging. You handle research, comms, ops, docs.`,
 };
 
 // ─── Complexity Detection ───────────────────────────────────────────────────
@@ -68,8 +70,12 @@ const COMPLEX_PATTERNS = [
 ];
 
 export function isComplexQuery(message) {
-  if (message.length > 200) return true;
-  return COMPLEX_PATTERNS.some(p => p.test(message));
+  // message can be a string or array of content blocks
+  const text = Array.isArray(message)
+    ? message.filter(b => b.type === 'text').map(b => b.text).join(' ')
+    : String(message);
+  if (text.length > 200) return true;
+  return COMPLEX_PATTERNS.some(p => p.test(text));
 }
 
 // ─── Agent Config ───────────────────────────────────────────────────────────
@@ -83,10 +89,67 @@ function getAgentCliConfig(agentId) {
   return {};
 }
 
+// ─── Tunnel Health Check ────────────────────────────────────────────────────
+
+let _tunnelHealthy = null;      // null = unknown, true/false = cached
+let _tunnelCheckTime = 0;
+const TUNNEL_CHECK_INTERVAL = 60_000; // Re-check every 60s
+
+async function isTunnelHealthy() {
+  const now = Date.now();
+  if (_tunnelHealthy !== null && (now - _tunnelCheckTime) < TUNNEL_CHECK_INTERVAL) {
+    return _tunnelHealthy;
+  }
+
+  return new Promise((resolve) => {
+    const proc = spawn('ssh', [
+      '-4',
+      '-i', SSH_KEY,
+      '-p', String(SSH_PORT),
+      '-o', 'StrictHostKeyChecking=no',
+      '-o', 'ConnectTimeout=5',
+      '-o', 'BatchMode=yes',
+      `${SSH_USER}@${SSH_HOST}`,
+      'echo', 'TUNNEL_OK',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+    let out = '';
+    proc.stdout.on('data', (d) => { out += d; });
+
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM');
+      _tunnelHealthy = false;
+      _tunnelCheckTime = now;
+      console.warn('[ClaudeAgent] Tunnel health check timed out');
+      resolve(false);
+    }, 8000);
+
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      _tunnelHealthy = code === 0 && out.includes('TUNNEL_OK');
+      _tunnelCheckTime = now;
+      if (!_tunnelHealthy) {
+        console.warn(`[ClaudeAgent] Tunnel health check failed (code=${code}, out=${out.trim()})`);
+      }
+      resolve(_tunnelHealthy);
+    });
+
+    proc.on('error', () => {
+      clearTimeout(timer);
+      _tunnelHealthy = false;
+      _tunnelCheckTime = now;
+      resolve(false);
+    });
+  });
+}
+
 // ─── Main Query Function ────────────────────────────────────────────────────
 
 /**
- * Route a query through Claude Code CLI (Max subscription).
+ * Route a query through Claude Code CLI (Max subscription via SSH tunnel).
+ *
+ * Pipeline: VPS → SSH (port 2222) → Mac → claude-coppice.sh → claude -p
+ * Fallback: VPS → local claude binary (if tunnel is down)
  *
  * @param {object} opts
  * @param {string} opts.tenantId - Tenant ID for system prompt
@@ -95,7 +158,7 @@ function getAgentCliConfig(agentId) {
  * @param {Array} [opts.history] - Recent conversation history [{role, content}]
  * @param {number} [opts.maxTurns] - Override max turns
  * @param {number} [opts.timeoutMs] - Override timeout
- * @returns {Promise<{response: string, durationMs: number, timedOut?: boolean}>}
+ * @returns {Promise<{response: string, durationMs: number, timedOut?: boolean, route?: string}>}
  */
 export async function queryClaudeAgent({ tenantId, agentId, message, history, maxTurns, timeoutMs }) {
   const config = getAgentCliConfig(agentId);
@@ -105,6 +168,130 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
   const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
   const timeout = timeoutMs || config.cli_timeout_ms || DEFAULT_TIMEOUT_MS;
 
+  // Try tunnel first, fall back to local
+  let useTunnel = USE_TUNNEL;
+  if (useTunnel) {
+    useTunnel = await isTunnelHealthy();
+    if (!useTunnel) {
+      console.warn(`[ClaudeAgent] Tunnel down — falling back to local claude for ${agentId}@${resolvedTenantId}`);
+    }
+  }
+
+  if (useTunnel) {
+    return queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config });
+  } else {
+    return queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config });
+  }
+}
+
+// ─── SSH Tunnel Query ───────────────────────────────────────────────────────
+
+function queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config }) {
+  const start = Date.now();
+
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    // Build the remote claude command arguments
+    // We pass everything through the wrapper script on the Mac.
+    // The prompt and system prompt are passed via stdin/args.
+    // Shell-escape the arguments for remote execution.
+    const claudeArgs = [
+      '-p', fullMessage,
+      '--output-format', 'text',
+      '--max-turns', String(turns),
+      '--system-prompt', systemPrompt,
+      '--allowedTools',
+        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
+        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+    ];
+
+    if (config.cli_model) {
+      claudeArgs.push('--model', config.cli_model);
+    }
+
+    // Build the remote command: invoke the wrapper with all claude args
+    // We use single-quote escaping for the SSH remote command
+    const escapedArgs = claudeArgs.map(arg => shellEscape(arg));
+    const remoteCmd = `${MAC_WRAPPER} ${escapedArgs.join(' ')}`;
+
+    const sshArgs = [
+      '-4',
+      '-i', SSH_KEY,
+      '-p', String(SSH_PORT),
+      '-o', 'StrictHostKeyChecking=no',
+      '-o', 'ConnectTimeout=10',
+      '-o', 'BatchMode=yes',
+      '-o', 'ServerAliveInterval=30',
+      '-o', 'ServerAliveCountMax=3',
+      `${SSH_USER}@${SSH_HOST}`,
+      remoteCmd,
+    ];
+
+    console.log(`[ClaudeAgent] Tunneling ${agentId}@${resolvedTenantId} via SSH (port ${SSH_PORT})`);
+
+    const proc = spawn('ssh', sshArgs, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, LANG: 'en_US.UTF-8' },
+    });
+
+    proc.stdin.end();
+    proc.stdout.on('data', (chunk) => { stdout += chunk; });
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        proc.kill('SIGTERM');
+        const durationMs = Date.now() - start;
+        console.error(`[ClaudeAgent] ${agentId}@${resolvedTenantId} timed out via tunnel after ${durationMs}ms`);
+        resolve({
+          response: stdout.trim() || `The task timed out after ${Math.round(timeout / 1000)}s. The research may be partially complete — try breaking it into smaller steps.`,
+          durationMs,
+          timedOut: true,
+          route: 'tunnel',
+        });
+      }
+    }, timeout);
+
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const durationMs = Date.now() - start;
+
+      if (code !== 0 && !stdout.trim()) {
+        const errMsg = stderr.slice(0, 500);
+        console.error(`[ClaudeAgent] ${agentId} tunnel exited ${code}. stderr: ${errMsg}`);
+
+        // If SSH itself failed (not claude), mark tunnel as unhealthy
+        if (errMsg.includes('Connection refused') || errMsg.includes('Connection timed out') || errMsg.includes('No route to host')) {
+          _tunnelHealthy = false;
+          _tunnelCheckTime = Date.now();
+        }
+
+        reject(new Error(`Claude agent (tunnel) exited with code ${code}: ${stderr.slice(0, 200)}`));
+        return;
+      }
+
+      console.log(`[ClaudeAgent] ${agentId}@${resolvedTenantId} completed via tunnel in ${(durationMs / 1000).toFixed(1)}s`);
+      resolve({ response: stdout.trim() || 'No response generated.', durationMs, route: 'tunnel' });
+    });
+
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`Claude agent SSH spawn failed: ${err.message}`));
+    });
+  });
+}
+
+// ─── Local Fallback Query ───────────────────────────────────────────────────
+
+function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config }) {
   const start = Date.now();
 
   return new Promise((resolve, reject) => {
@@ -122,18 +309,16 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
         'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
     ];
 
-    // Add model override if configured
     if (config.cli_model) {
       args.push('--model', config.cli_model);
     }
 
-    // Use tenant-specific Claude config dir for account isolation
-    const claudeConfigDir = TENANT_CLAUDE_CONFIG[resolvedTenantId] || TENANT_CLAUDE_CONFIG['zhan-capital'];
+    console.log(`[ClaudeAgent] Running ${agentId}@${resolvedTenantId} locally (fallback)`);
+
     const proc = spawn(CLAUDE_BIN, args, {
       env: {
         ...process.env,
         LANG: 'en_US.UTF-8',
-        CLAUDE_CONFIG_DIR: claudeConfigDir,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: '/root/coppice',
@@ -148,11 +333,12 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
         settled = true;
         proc.kill('SIGTERM');
         const durationMs = Date.now() - start;
-        console.error(`[ClaudeAgent] ${agentId}@${resolvedTenantId} timed out after ${durationMs}ms`);
+        console.error(`[ClaudeAgent] ${agentId}@${resolvedTenantId} timed out locally after ${durationMs}ms`);
         resolve({
           response: stdout.trim() || `The task timed out after ${Math.round(timeout / 1000)}s. The research may be partially complete — try breaking it into smaller steps.`,
           durationMs,
           timedOut: true,
+          route: 'local',
         });
       }
     }, timeout);
@@ -164,13 +350,13 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
       const durationMs = Date.now() - start;
 
       if (code !== 0 && !stdout.trim()) {
-        console.error(`[ClaudeAgent] ${agentId} exited ${code}. stderr: ${stderr.slice(0, 500)}`);
+        console.error(`[ClaudeAgent] ${agentId} local exited ${code}. stderr: ${stderr.slice(0, 500)}`);
         reject(new Error(`Claude agent exited with code ${code}: ${stderr.slice(0, 200)}`));
         return;
       }
 
-      console.log(`[ClaudeAgent] ${agentId}@${resolvedTenantId} completed in ${(durationMs / 1000).toFixed(1)}s`);
-      resolve({ response: stdout.trim() || 'No response generated.', durationMs });
+      console.log(`[ClaudeAgent] ${agentId}@${resolvedTenantId} completed locally in ${(durationMs / 1000).toFixed(1)}s`);
+      resolve({ response: stdout.trim() || 'No response generated.', durationMs, route: 'local' });
     });
 
     proc.on('error', (err) => {
@@ -183,6 +369,15 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Shell-escape a string for safe inclusion in a remote SSH command.
+ * Wraps in single quotes, escaping any internal single quotes.
+ */
+function shellEscape(str) {
+  // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+  return "'" + str.replace(/'/g, "'\\''") + "'";
+}
 
 function buildSystemPrompt(tenantId, agentId, config) {
   const base = TENANT_PROMPTS[tenantId] || TENANT_PROMPTS.default;
@@ -202,6 +397,14 @@ STYLE:
 ${custom}`.trim();
 }
 
+function extractText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.filter(b => b.type === 'text').map(b => b.text).join(' ');
+  }
+  return String(content);
+}
+
 function buildUserMessage(message, history) {
   let msg = '';
   if (history && history.length > 0) {
@@ -209,11 +412,12 @@ function buildUserMessage(message, history) {
     const recent = history.slice(-8);
     for (const h of recent) {
       const role = h.role === 'assistant' ? 'Agent' : 'User';
-      const content = h.content.length > 500 ? h.content.slice(0, 500) + '...' : h.content;
+      const text = extractText(h.content);
+      const content = text.length > 500 ? text.slice(0, 500) + '...' : text;
       msg += `${role}: ${content}\n`;
     }
     msg += '\n---\nCurrent request:\n';
   }
-  msg += message;
+  msg += extractText(message);
   return msg;
 }
