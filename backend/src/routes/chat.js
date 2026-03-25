@@ -598,6 +598,22 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
+    // helpMode on existing thread — lightweight path
+    if (helpMode && HELP_AGENTS.has(agentId)) {
+      const text = content.trim().slice(0, 1000);
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+      await chatStream(tenantId, agentId, userId, text, threadId, { helpMode: true }, (chunk) => {
+        res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      });
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+      return;
+    }
+
     if (!thread.title) {
       // Title will be emitted as SSE event once generated
       generateAndEmitTitle(content, threadId, res);
@@ -664,6 +680,25 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     const { content, helpMode } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ error: 'Message content is required' });
+    }
+
+    // helpMode requests use the lightweight path (Haiku, no tools) — same as public help endpoint
+    if (helpMode && HELP_AGENTS.has(agentId)) {
+      const text = content.trim().slice(0, 1000);
+      const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      createThread(threadId, tenantId, agentId, userId, null, 'private');
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+      res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
+      await chatStream(tenantId, agentId, userId, text, threadId, { helpMode: true }, (chunk) => {
+        res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      });
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+      return;
     }
 
     const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
