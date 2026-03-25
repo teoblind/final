@@ -1053,17 +1053,4 @@ router.post('/assignments/:id/dismiss', (req, res) => {
   }
 });
 
-/** POST /assignments/generate — Manually trigger overnight analysis (clears old proposed) */
-router.post('/assignments/generate', async (req, res) => {
-  try {
-    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
-    const { generateForTenant } = await import('../jobs/overnightAnalysis.js');
-    const assignments = await generateForTenant(tenantId);
-    res.json({ success: true, count: assignments.length, assignments });
-  } catch (error) {
-    console.error('Generate assignments error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 export default router;

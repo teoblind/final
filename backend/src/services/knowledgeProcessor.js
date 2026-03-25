@@ -11,6 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { tunnelPrompt } from './cliTunnel.js';
 import { getCurrentTenantId, getTenantDb } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
@@ -162,12 +163,7 @@ export async function processKnowledgeEntry(entryId, tenantId) {
         topics: [],
       };
     } else {
-      const model = textContent.length > 3000 ? 'claude-sonnet-4-20250514' : 'claude-haiku-4-5-20251001';
-
-      const analysis = await anthropic.messages.create({
-        model,
-        max_tokens: 3000,
-        system: `You are a knowledge extraction agent. Given a transcript or document, output JSON with:
+      const systemInstructions = `You are a knowledge extraction agent. Given a transcript or document, output JSON with:
 
 - summary: A structured Fireflies-style meeting summary in markdown. Use these exact section headers:
 
@@ -195,11 +191,30 @@ export async function processKnowledgeEntry(entryId, tenantId) {
 - decisions: array of key decisions made
 - topics: array of topic tags (e.g. "pricing", "timeline", "legal", "technical")
 
-Output ONLY valid JSON. The summary field should be the full structured markdown.`,
-        messages: [{ role: 'user', content: textContent }],
-      });
+Output ONLY valid JSON. The summary field should be the full structured markdown.`;
 
-      parsed = JSON.parse(analysis.content[0].text);
+      // Short content → Haiku API (cheap, fast). Long content → CLI tunnel (Opus quality, flat rate).
+      let analysisText;
+      if (textContent.length <= 3000) {
+        const analysis = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 3000,
+          system: systemInstructions,
+          messages: [{ role: 'user', content: textContent }],
+        });
+        analysisText = analysis.content[0].text;
+      } else {
+        analysisText = await tunnelPrompt({
+          tenantId: tenantId || 'default',
+          agentId: 'knowledge',
+          prompt: `${systemInstructions}\n\n---\n\n${textContent}`,
+          maxTurns: 3,
+          timeoutMs: 120_000,
+          label: 'Knowledge Processing',
+        });
+      }
+
+      parsed = JSON.parse(analysisText);
     }
   } catch (err) {
     console.error(`Knowledge processing AI error for ${entryId}:`, err.message);

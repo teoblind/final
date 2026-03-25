@@ -12,7 +12,7 @@ import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js'
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
 import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
-import { chat } from '../services/chatService.js';
+import { tunnelOrChat } from '../services/cliTunnel.js';
 import { sendEmail, sendHtmlEmail, sendEmailWithAttachments, markdownToEmailHtml } from '../services/emailService.js';
 import { processKnowledgeEntry, getThreadKnowledge, getContactKnowledge } from '../services/knowledgeProcessor.js';
 
@@ -322,7 +322,15 @@ You are responding to an email. Your text response will be sent as the email rep
   let agentResponse;
   let allToolResults = [];
   try {
-    const result = await chat(resolvedTenant, agentId, 'system-auto-reply', prompt);
+    const result = await tunnelOrChat({
+      tenantId: resolvedTenant,
+      agentId,
+      userId: 'system-auto-reply',
+      prompt,
+      maxTurns: 15,
+      timeoutMs: 180_000,
+      label: `Email Reply: ${subject?.slice(0, 40)}`,
+    });
     agentResponse = result.response;
     allToolResults = result.all_tool_results || [];
     if (allToolResults.length === 0 && result.tool_result) {

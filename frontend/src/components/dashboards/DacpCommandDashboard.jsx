@@ -66,7 +66,6 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [processingAssignment, setProcessingAssignment] = useState(null);
-  const [generating, setGenerating] = useState(false);
   const [driveQuery, setDriveQuery] = useState('');
 
   // Dynamic senders: Coppice (default) + currently logged-in user
@@ -171,17 +170,6 @@ export default function DacpCommandDashboard({ onNavigate }) {
     } catch {}
   }, []);
 
-  const handleGenerateAssignments = useCallback(async () => {
-    setGenerating(true);
-    try {
-      const res = await fetch(`${API_BASE}/v1/estimates/assignments/generate`, { method: 'POST', headers: getAuthHeaders() });
-      const data = await res.json();
-      if (data.assignments) setAssignments(data.assignments);
-      else fetchAssignments();
-    } catch {}
-    finally { setGenerating(false); }
-  }, [fetchAssignments]);
-
   const handleSaveEdit = useCallback(async (approvalId) => {
     setSavingEdit(true);
     try {
@@ -221,28 +209,36 @@ export default function DacpCommandDashboard({ onNavigate }) {
   };
 
   useEffect(() => {
-    const headers = getAuthHeaders();
-    Promise.all([
-      fetch(`${API_BASE}/v1/estimates/stats`, { headers }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API_BASE}/v1/estimates/inbox`, { headers }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API_BASE}/v1/meetings?range=${meetingRange}`, { headers }).then(r => r.json()).catch(() => ({})),
-      fetch(`${API_BASE}/v1/approvals?status=pending`, { headers }).then(r => r.json()).catch(() => ({})),
-    ]).then(([statsRes, inboxRes, meetingsRes, approvalsRes]) => {
-      setStats(statsRes.stats || null);
-      setBids(inboxRes.bidRequests || []);
-      setApprovals(approvalsRes.items || []);
-      const mtgs = meetingsRes.meetings || [];
-      setMeetings(mtgs);
-      const alreadyInvited = new Set();
-      for (const m of mtgs) {
-        if (m.attendees?.some(a => a.email?.includes('coppice') || a.email?.includes('agent@'))) {
-          alreadyInvited.add(m.id);
+    const refreshDashboard = () => {
+      const headers = getAuthHeaders();
+      Promise.all([
+        fetch(`${API_BASE}/v1/estimates/stats`, { headers }).then(r => r.json()).catch(() => ({})),
+        fetch(`${API_BASE}/v1/estimates/inbox`, { headers }).then(r => r.json()).catch(() => ({})),
+        fetch(`${API_BASE}/v1/meetings?range=${meetingRange}`, { headers }).then(r => r.json()).catch(() => ({})),
+        fetch(`${API_BASE}/v1/approvals?status=pending`, { headers }).then(r => r.json()).catch(() => ({})),
+      ]).then(([statsRes, inboxRes, meetingsRes, approvalsRes]) => {
+        setStats(statsRes.stats || null);
+        setBids(inboxRes.bidRequests || []);
+        setApprovals(approvalsRes.items || []);
+        const mtgs = meetingsRes.meetings || [];
+        setMeetings(mtgs);
+        const alreadyInvited = new Set();
+        for (const m of mtgs) {
+          if (m.attendees?.some(a => a.email?.includes('coppice') || a.email?.includes('agent@'))) {
+            alreadyInvited.add(m.id);
+          }
         }
-      }
-      if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
-    }).catch(console.error).finally(() => setLoading(false));
+        if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
+      }).catch(console.error).finally(() => setLoading(false));
+      fetchAssignments();
+    };
+
+    refreshDashboard();
     fetchLeadsSheet();
-    fetchAssignments();
+
+    // Live polling — refresh every 10 seconds
+    const poll = setInterval(refreshDashboard, 10_000);
+    return () => clearInterval(poll);
   }, [meetingRange, fetchLeadsSheet, fetchAssignments]);
 
   const handleApprove = async (id) => {
@@ -399,22 +395,11 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </span>
             )}
           </div>
-          <button
-            onClick={handleGenerateAssignments}
-            disabled={generating}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-terminal-muted px-2.5 py-1 rounded-md border border-[#e8e6e2] hover:bg-[#f5f4f0] disabled:opacity-50"
-          >
-            {generating ? (
-              <><RotateCcw size={10} className="animate-spin" /> Analyzing...</>
-            ) : (
-              <><RotateCcw size={10} /> Run Analysis</>
-            )}
-          </button>
         </div>
         {assignments.filter(a => a.status !== 'dismissed').length === 0 ? (
           <div className="px-[18px] py-5 text-center">
             <div className="text-[12px] text-[#9a9a92] mb-1">No pending tasks</div>
-            <div className="text-[11px] text-terminal-muted">Click "Run Analysis" to generate suggestions, or they'll appear automatically each morning.</div>
+            <div className="text-[11px] text-terminal-muted">Coppice generates new tasks every morning at 3 AM based on your pipeline.</div>
           </div>
         ) : (
           <div>
@@ -425,6 +410,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 outreach: 'bg-purple-50 text-purple-600 border-purple-200',
                 admin: 'bg-gray-50 text-gray-600 border-gray-200',
                 research: 'bg-amber-50 text-amber-600 border-amber-200',
+                analysis: 'bg-indigo-50 text-indigo-600 border-indigo-200',
+                document: 'bg-rose-50 text-rose-600 border-rose-200',
               };
               return (
                 <div key={a.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0">

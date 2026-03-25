@@ -10,6 +10,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { tunnelPrompt, tunnelOrChat } from './cliTunnel.js';
 import { sendEmail } from './emailService.js';
 import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig, getAgentMode } from '../cache/database.js';
 
@@ -71,12 +72,7 @@ async function extractPersonTasks({ transcript, summary, meetingTitle, attendees
 
   const attendeeList = attendees.join(', ');
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 3000,
-    messages: [{
-      role: 'user',
-      content: `You are a meeting analyst for Sangha Systems. Analyze this meeting transcript and extract action items for each attendee.
+  const prompt = `You are a meeting analyst for Sangha Systems. Analyze this meeting transcript and extract action items for each attendee.
 
 MEETING: ${meetingTitle}
 ATTENDEES: ${attendeeList}
@@ -117,11 +113,17 @@ Rules:
 - If you can identify a person's name from the transcript, include it
 - If an attendee has no tasks, include them with an empty tasks array
 - Be specific — "Follow up with vendor" is too vague, "Send updated pricing proposal to Riot Platforms by Friday" is good
-- Only include actionable tasks, not observations`
-    }],
+- Only include actionable tasks, not observations`;
+
+  const text = await tunnelPrompt({
+    tenantId: getCurrentTenantId() || 'default',
+    agentId: 'knowledge',
+    prompt,
+    maxTurns: 3,
+    timeoutMs: 120_000,
+    label: 'Meeting Task Extraction',
   });
 
-  const text = response.content[0].text;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to parse Claude response as JSON');
   return JSON.parse(jsonMatch[0]);
@@ -363,8 +365,7 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
     return instructions.length;
   }
 
-  // Autonomous mode — execute directly
-  const { chat } = await import('./chatService.js');
+  // Autonomous mode — execute directly via CLI tunnel (with chat() fallback for tool use)
   let executed = 0;
 
   for (const instruction of instructions) {
@@ -384,7 +385,11 @@ ${summary}
 
 Execute this instruction now. If it involves sending an email, creating a document, updating a file, or any other action — do it using your available tools. Be concise and professional. If you cannot complete the instruction (missing information, ambiguous request), log what you attempted and what's needed.`;
 
-      const result = await chat(tenantId, agentId, 'meeting-bot', prompt);
+      const result = await tunnelOrChat({
+        tenantId, agentId, userId: 'meeting-bot', prompt,
+        maxTurns: 10, timeoutMs: 180_000,
+        label: `Meeting Instruction: ${instruction.task.slice(0, 40)}`,
+      });
 
       insertActivity({
         tenantId,
@@ -424,12 +429,7 @@ Execute this instruction now. If it involves sending an email, creating a docume
  * Returns an array of { task, context, requestedBy }.
  */
 async function extractInstructions({ meetingTitle, transcript, summary, attendees }) {
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
-    messages: [{
-      role: 'user',
-      content: `Analyze this meeting transcript and identify any instructions or requests directed at the AI agent/bot (referred to as "agent", "Coppice", "Sangha Agent", "bot", or similar).
+  const prompt = `Analyze this meeting transcript and identify any instructions or requests directed at the AI agent/bot (referred to as "agent", "Coppice", "Sangha Agent", "bot", or similar).
 
 MEETING: ${meetingTitle}
 ATTENDEES: ${attendees.join(', ')}
@@ -461,11 +461,17 @@ Output JSON only. If no agent instructions found, return empty array:
       "requestedBy": "Name or email of person who gave the instruction"
     }
   ]
-}`,
-    }],
+}`;
+
+  const text = await tunnelPrompt({
+    tenantId: getCurrentTenantId() || 'default',
+    agentId: 'knowledge',
+    prompt,
+    maxTurns: 3,
+    timeoutMs: 60_000,
+    label: 'Meeting Instruction Extraction',
   });
 
-  const text = response.content[0].text;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return [];
 

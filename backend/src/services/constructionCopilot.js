@@ -11,6 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { tunnelPrompt } from './cliTunnel.js';
 
 const anthropic = new Anthropic();
 
@@ -109,13 +110,15 @@ export async function analyzeItb(bidRequest) {
     .replace('{scope_items}', JSON.stringify(bidRequest.scope?.items || []))
     .replace('{missing_info}', JSON.stringify(bidRequest.missing_info || []));
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: prompt }],
+  const text = await tunnelPrompt({
+    tenantId: 'dacp-construction-001',
+    agentId: 'estimating',
+    prompt,
+    maxTurns: 3,
+    timeoutMs: 120_000,
+    label: 'ITB Analysis',
   });
 
-  const text = response.content[0]?.text || '{}';
   // Extract JSON from response (handle potential markdown wrapping)
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to parse ITB analysis response');
@@ -316,13 +319,15 @@ export async function compareContractProposal(proposalText, contractText) {
     .replace('{proposal_text}', proposalText)
     .replace('{contract_text}', contractText);
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: prompt }],
+  const text = await tunnelPrompt({
+    tenantId: 'dacp-construction-001',
+    agentId: 'estimating',
+    prompt,
+    maxTurns: 3,
+    timeoutMs: 120_000,
+    label: 'Contract Comparison',
   });
 
-  const text = response.content[0]?.text || '{}';
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to parse contract comparison response');
 
@@ -685,13 +690,15 @@ export async function analyzeDocuments(bidRequest, documents) {
     .replace('{due_date}', bidRequest.due_date || 'Not specified')
     .replace('{documents_text}', documentsText);
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
-    messages: [{ role: 'user', content: prompt }],
+  const text = await tunnelPrompt({
+    tenantId: 'dacp-construction-001',
+    agentId: 'estimating',
+    prompt,
+    maxTurns: 3,
+    timeoutMs: 120_000,
+    label: 'Document Analysis',
   });
 
-  const text = response.content[0]?.text || '{}';
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('Failed to parse document analysis response');
 

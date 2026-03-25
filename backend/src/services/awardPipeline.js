@@ -13,7 +13,7 @@ import {
   getDacpBidRequests, getDacpEstimate, updateDacpBidRequest,
   createDacpJob, insertApprovalItem, insertActivity, getAgentMode,
 } from '../cache/database.js';
-import { chat } from './chatService.js';
+import { tunnelPrompt } from './cliTunnel.js';
 import { markdownToEmailHtml } from './emailService.js';
 
 const DEFAULT_TENANT_ID = 'dacp-construction-001';
@@ -176,7 +176,7 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
   let agentResponse = '';
 
   try {
-    const result = await chat(tenantId, 'estimating', 'system', [
+    const draftPrompt = [
       `You are drafting a reply to a GC who just awarded DACP Construction a job. Write a professional confirmation email.`,
       `\nAward email from ${gcName}:\n---\n${body.slice(0, 3000)}\n---`,
       `\nProject: ${projectName}`,
@@ -189,9 +189,16 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
       `- Be concise and professional — 3-4 paragraphs max`,
       `- Do NOT include any sign-off, signature block, or closing name — the email system will automatically append the correct Coppice signature`,
       `\nReturn ONLY the email body text. No subject line, no headers, no signature.`,
-    ].filter(Boolean).join('\n'), null, { helpMode: false });
+    ].filter(Boolean).join('\n');
 
-    agentResponse = result.response || '';
+    agentResponse = await tunnelPrompt({
+      tenantId,
+      agentId: 'estimating',
+      prompt: draftPrompt,
+      maxTurns: 3,
+      timeoutMs: 60_000,
+      label: 'Award Confirmation Draft',
+    });
   } catch (err) {
     console.error(`[AwardPipeline] Draft generation failed:`, err.message);
     agentResponse = `Thank you for the award notice on the ${projectName} project. We confirm receipt and are ready to proceed.\n\nWe will provide updated insurance certificates shortly. Please let us know the pre-construction meeting schedule.`;

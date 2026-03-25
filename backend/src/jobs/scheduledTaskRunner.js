@@ -8,7 +8,7 @@
 
 import { CronExpressionParser } from 'cron-parser';
 import { getAllTenants, runWithTenant, getDueScheduledTasks, updateScheduledTask } from '../cache/database.js';
-import { chat } from '../services/chatService.js';
+import { tunnelOrChat } from '../services/cliTunnel.js';
 
 let pollInterval = null;
 
@@ -63,8 +63,17 @@ async function tick() {
           try {
             console.log(`[Scheduler] Running task "${task.title}" for tenant ${tenant.id}`);
 
-            // Execute the task prompt via chatService
-            await chat(tenant.id, task.agent_id, task.user_id, task.prompt, task.thread_id || null);
+            // Execute the task prompt via CLI tunnel (falls back to chatService)
+            await tunnelOrChat({
+              tenantId: tenant.id,
+              agentId: task.agent_id,
+              userId: task.user_id,
+              prompt: task.prompt,
+              threadId: task.thread_id || null,
+              maxTurns: 15,
+              timeoutMs: 180_000,
+              label: `Scheduled: ${task.title}`,
+            });
 
             // Compute next run
             const nextRun = computeNextRun(task.cron_expression, task.timezone);

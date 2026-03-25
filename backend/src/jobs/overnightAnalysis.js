@@ -12,9 +12,8 @@ import { randomUUID } from 'crypto';
 import {
   getAllTenants, runWithTenant,
   getDacpBidRequests, getDacpEstimates, getDacpJobs, getDacpStats,
-  insertAgentAssignment, clearOldAssignments, clearProposedAssignments,
+  insertAgentAssignment, clearOldAssignments,
   getAgentAssignments,
-  getKeyVaultValue,
 } from '../cache/database.js';
 
 let timer = null;
@@ -120,36 +119,57 @@ DACP BUSINESS CONTEXT:
 - Revenue model: bid on projects, win work, execute with crews
 - Key metrics: win rate, margins, bid pipeline volume, GC relationships
 
-Review DACP's current business state and propose 3-8 specific assignments for Coppice to execute.
+You have FULL ACCESS to Coppice's tool suite. Think big — you are not limited to emails. You can build anything.
 
 CURRENT BUSINESS STATE:
 ${JSON.stringify(context, null, 2)}
 
+YOUR CAPABILITIES (use all of these when proposing tasks):
+- Email: draft and send follow-ups, bid submissions, GC outreach, supplier quote requests
+- Excel/Spreadsheets: build cost models, bid comparison matrices, cash flow projections, pricing analysis
+- Documents/PDFs: generate proposals, scope letters, project reports, compliance summaries
+- Research & Analysis: web research on GCs, project pipelines, market conditions, competitor activity
+- Financial Analysis: project profitability models, margin analysis, revenue forecasts, bid-to-win ratios
+- Presentations: build PowerPoint/slide decks for bid presentations, project summaries, team briefings
+- Data & Reporting: weekly/monthly pipeline reports, win rate dashboards, GC relationship scorecards
+- Google Drive: organize bid documents, create shared folders for active projects
+
 ASSIGNMENT CATEGORIES:
-- follow_up: Email follow-ups on sent estimates or bids awaiting GC response. GCs award to whoever stays top of mind.
-- estimate: Finalize draft estimates, review pricing, prepare and send bid packages to GCs
-- outreach: Proactive emails to GCs about upcoming projects, relationship building, asking about bid opportunities
-- admin: Activate awarded jobs, update job statuses, clean up records, generate weekly summaries
+- follow_up: Email follow-ups on sent estimates or bids awaiting GC response
+- estimate: Finalize draft estimates, review pricing, prepare and send bid packages
+- outreach: Proactive emails to GCs about upcoming projects, relationship building
+- admin: Activate awarded jobs, update statuses, generate summaries
+- research: Investigate a GC, project, market trend, or competitor — produce a written report
+- analysis: Financial modeling, cash flow projections, bid profitability, margin optimization
+- document: Create a deliverable — Excel model, PDF report, PowerPoint deck, proposal letter
+
+THINK LIKE A BUSINESS STRATEGIST, not just a task manager. Ask yourself:
+- What intelligence would help DACP win more work?
+- What financial analysis would improve their margins?
+- What research on a GC or project would give DACP an edge before bidding?
+- What reports would help the owner understand where the business stands?
+- What proactive outreach would strengthen GC relationships?
+- Are there projects in the pipeline that need deeper analysis before bidding?
+
+Propose 3-10 specific assignments. Mix quick wins (emails, status updates) with high-value deliverables (reports, analysis, presentations).
 
 RULES:
-1. Every assignment must name the specific project and GC — no generic tasks
-2. Prioritize: urgent bid deadlines > pending job activations > stale follow-ups > outreach
-3. Follow-ups are HIGH value — a short "checking in on our bid for [project]" email wins jobs
-4. For estimates: focus on getting drafts finalized and sent, not research
-5. Do NOT suggest "researching market rates" or generic industry research — DACP knows their pricing
-6. Do NOT suggest tasks that require information DACP doesn't have
-7. Each task must be completable in one agent session (draft an email, update a record, send a bid)
-8. Sign all emails as Coppice (the AI agent), not as individual people — NEVER reference "David Castillo", "Marcel", or other employee names
-9. If a GC name is "Unknown GC" or looks like a placeholder, focus the task on the PROJECT NAME instead
-10. Do NOT suggest "cleaning up" or "updating" GC records that have placeholder data — just work with the project names
+1. Every assignment must reference specific projects, GCs, or data from the business state — no generic tasks
+2. Prioritize: urgent bid deadlines > financial analysis on active projects > stale follow-ups > research > outreach
+3. High-value deliverables (Excel models, research reports, presentations) should be marked high priority when they would directly impact a bid decision or revenue
+4. Each task must be completable in one agent session — the action_prompt should be detailed enough for an agent to execute it fully
+5. Sign all emails as Coppice (the AI agent) — NEVER reference "David Castillo", "Marcel", or other employee names
+6. If a GC name is "Unknown GC" or looks like a placeholder, focus on the PROJECT NAME instead
+7. Research tasks should produce a specific deliverable (PDF report, Excel sheet, summary doc) — not just "look into it"
+8. For financial analysis, specify what numbers to model and what format to deliver (Excel, PDF, etc.)
 
 Return a JSON array. Each object:
 {
   "title": "Short title (5-10 words)",
-  "description": "What to do and why (1-2 sentences)",
-  "category": "follow_up|estimate|outreach|admin",
+  "description": "What to do and why (1-2 sentences). Be specific about the deliverable.",
+  "category": "follow_up|estimate|outreach|admin|research|analysis|document",
   "priority": "high|medium|low",
-  "action_prompt": "The exact prompt to give the agent to execute this task",
+  "action_prompt": "Detailed prompt for the agent to execute this task. Include what to research, what to build, what format, and where to save it.",
   "agent_id": "estimating|comms|hivemind"
 }
 
@@ -157,13 +177,17 @@ Return ONLY the JSON array, no markdown or explanation.`;
 }
 
 async function generateAssignments(tenantId, context) {
-  const { chat } = await import('../services/chatService.js');
+  const { tunnelPrompt } = await import('../services/cliTunnel.js');
+  const prompt = buildAnalysisPrompt(context);
 
-  const result = await chat(tenantId, 'estimating', 'system',
-    buildAnalysisPrompt(context), null, { helpMode: false }
-  );
-
-  const response = result.response || '';
+  const response = await tunnelPrompt({
+    tenantId,
+    agentId: 'estimating',
+    prompt,
+    maxTurns: 5,
+    timeoutMs: 180_000,
+    label: 'Overnight Analysis',
+  });
 
   // Parse JSON from response (handle markdown code blocks)
   const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -277,36 +301,6 @@ export function stopOvernightAnalysisJob() {
   }
 }
 
-/**
- * Manual trigger — clears old proposed assignments, regenerates fresh.
- * Used by the "Run Analysis" button on the dashboard.
- */
-export async function generateForTenant(tenantId) {
-  // Clear all old proposed assignments
-  clearProposedAssignments(tenantId);
-
-  const context = gatherDacpContext(tenantId);
-  const generated = await generateAssignments(tenantId, context);
-  console.log(`[OvernightAnalysis] Manual: generated ${generated.length} assignments for ${tenantId}`);
-
-  const stored = [];
-  for (const a of generated) {
-    const assignment = {
-      id: `assign-${randomUUID().slice(0, 8)}`,
-      tenant_id: tenantId,
-      agent_id: a.agent_id || 'estimating',
-      title: a.title,
-      description: a.description,
-      category: a.category || 'general',
-      priority: a.priority || 'medium',
-      action_prompt: a.action_prompt || null,
-      context_json: JSON.stringify(context.stats),
-    };
-    insertAgentAssignment(assignment);
-    stored.push({ ...assignment, status: 'proposed' });
-  }
-  return stored;
-}
 
 // Nightly auto-run (used by scheduler)
 export { runOvernightAnalysis };
