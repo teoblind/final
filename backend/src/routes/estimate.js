@@ -1053,17 +1053,12 @@ router.post('/assignments/:id/dismiss', (req, res) => {
   }
 });
 
-/** POST /assignments/generate — Manually trigger overnight analysis */
+/** POST /assignments/generate — Manually trigger overnight analysis (clears old proposed) */
 router.post('/assignments/generate', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
-    const { runOvernightAnalysis } = await import('../jobs/overnightAnalysis.js');
-    // Run just for this tenant
-    const { runWithTenant, getDacpStats, clearOldAssignments, getAgentAssignments: getAssignments } = await import('../cache/database.js');
-    await runWithTenant(tenantId, async () => {
-      await runOvernightAnalysis();
-    });
-    const assignments = getAgentAssignments(tenantId, 'proposed');
+    const { generateForTenant } = await import('../jobs/overnightAnalysis.js');
+    const assignments = await generateForTenant(tenantId);
     res.json({ success: true, count: assignments.length, assignments });
   } catch (error) {
     console.error('Generate assignments error:', error);

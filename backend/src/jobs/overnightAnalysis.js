@@ -12,7 +12,8 @@ import { randomUUID } from 'crypto';
 import {
   getAllTenants, runWithTenant,
   getDacpBidRequests, getDacpEstimates, getDacpJobs, getDacpStats,
-  insertAgentAssignment, clearOldAssignments, getAgentAssignments,
+  insertAgentAssignment, clearOldAssignments, clearProposedAssignments,
+  getAgentAssignments,
   getKeyVaultValue,
 } from '../cache/database.js';
 
@@ -255,5 +256,36 @@ export function stopOvernightAnalysisJob() {
   }
 }
 
-// Manual trigger for testing
+/**
+ * Manual trigger — clears old proposed assignments, regenerates fresh.
+ * Used by the "Run Analysis" button on the dashboard.
+ */
+export async function generateForTenant(tenantId) {
+  // Clear all old proposed assignments
+  clearProposedAssignments(tenantId);
+
+  const context = gatherDacpContext(tenantId);
+  const generated = await generateAssignments(tenantId, context);
+  console.log(`[OvernightAnalysis] Manual: generated ${generated.length} assignments for ${tenantId}`);
+
+  const stored = [];
+  for (const a of generated) {
+    const assignment = {
+      id: `assign-${randomUUID().slice(0, 8)}`,
+      tenant_id: tenantId,
+      agent_id: a.agent_id || 'estimating',
+      title: a.title,
+      description: a.description,
+      category: a.category || 'general',
+      priority: a.priority || 'medium',
+      action_prompt: a.action_prompt || null,
+      context_json: JSON.stringify(context.stats),
+    };
+    insertAgentAssignment(assignment);
+    stored.push({ ...assignment, status: 'proposed' });
+  }
+  return stored;
+}
+
+// Nightly auto-run (used by scheduler)
 export { runOvernightAnalysis };

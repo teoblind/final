@@ -6353,6 +6353,10 @@ export function clearOldAssignments(tenantId, daysOld = 7) {
   db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status IN ('completed', 'dismissed') AND created_at < datetime('now', '-' || ? || ' days')`).run(tenantId, daysOld);
 }
 
+export function clearProposedAssignments(tenantId) {
+  db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status = 'proposed'`).run(tenantId);
+}
+
 // ─── MCP Server CRUD ──────────────────────────────────────────────────────
 
 export function getMcpServers(tenantId) {
