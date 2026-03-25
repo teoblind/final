@@ -1,4 +1,4 @@
-const CACHE_NAME = 'coppice-v2';
+const CACHE_NAME = 'coppice-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
