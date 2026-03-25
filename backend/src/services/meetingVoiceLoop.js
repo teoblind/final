@@ -79,11 +79,12 @@ export async function startVoiceLoop(botId, tenantId = 'default') {
 
 /**
  * Check if text contains the wake word "coppice" (with common misheard variants).
+ * NOTE: "copper" removed — too many false positives in construction/business meetings.
  */
 function checkWakeWord(text) {
   if (!text) return false;
   const lower = text.toLowerCase();
-  return /\bcoppice\b|\bcopice\b|\bcopis\b|\bcop ice\b|\bcopper\b|\bhey copp/.test(lower);
+  return /\bcoppice\b|\bcopice\b|\bcopis\b|\bcop ice\b|\bhey copp/.test(lower);
 }
 
 /**
@@ -104,12 +105,11 @@ function activateBot(state) {
  * This is called for EVERY utterance — we decide whether to respond based on wake word.
  */
 export function handleTranscriptEvent(botId, msg) {
-  let state = activeLoops.get(botId);
+  const state = activeLoops.get(botId);
   if (!state) {
-    // Auto-start with default config if webhook arrives before explicit start
-    startVoiceLoop(botId);
-    state = activeLoops.get(botId);
-    if (!state) return;
+    // Don't auto-start — voice loop must be explicitly started via startVoiceLoop().
+    // Auto-starting caused the bot to respond in meetings where only chat loop was intended.
+    return;
   }
 
   const data = msg.data || msg;
@@ -224,8 +224,8 @@ async function respondToSpeech(state, userMessage, speaker) {
 
     await speakText(state, responseText);
 
-    // Reset active timer on successful response
-    if (state.isActive) activateBot(state);
+    // Do NOT reset active timer — let it expire naturally.
+    // Previously this created an infinite loop: respond → reset timer → respond → reset...
   } catch (err) {
     console.error(`[VoiceLoop] Error:`, err.message);
   }

@@ -377,8 +377,10 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
       startTime: new Date().toISOString(),
     });
 
-    // Start voice loop — bot stays silent until wake word "Coppice"
-    startVoiceLoop(bot.id, tenantId);
+    // Start chat loop — bot stays silent, only responds via meeting text chat when addressed.
+    // Voice loop disabled: previously caused bot to speak over participants when wake word
+    // triggered an infinite active-window loop. Chat-only is the safe default.
+    startChatLoop(bot.id);
 
     // Log activity to tenant's feed
     runWithTenant(tenantId, () => {
@@ -386,7 +388,7 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
         tenantId,
         type: 'meet',
         title: `Joined: ${summary}`,
-        subtitle: `${attendees.length} attendees — listening for "hey Coppice"`,
+        subtitle: `${attendees.length} attendees — silent mode, type "Coppice" in chat to ask`,
         sourceType: 'meeting',
         sourceId: eventKey,
         agentId: 'meetings',
