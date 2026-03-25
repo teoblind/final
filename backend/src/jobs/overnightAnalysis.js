@@ -91,31 +91,41 @@ function gatherDacpContext(tenantId) {
 // ─── Assignment Generation ───────────────────────────────────────────────────
 
 function buildAnalysisPrompt(context) {
-  return `You are the overnight autonomous analyst for a construction subcontractor (concrete/masonry).
-Review the current business state below and propose 3-8 specific assignments that Coppice (the AI agent) should work on.
+  return `You are the overnight autonomous analyst for DACP Construction — a concrete and masonry subcontractor based in DFW (Dallas-Fort Worth), Texas.
+
+DACP BUSINESS CONTEXT:
+- Core work: concrete foundations, flatwork, structural concrete, masonry, site work
+- Clients: General Contractors (GCs) who send RFQs/ITBs for commercial and residential projects
+- Workflow: GC sends RFQ → DACP creates estimate → submits bid → wins/loses → job execution
+- Revenue model: bid on projects, win work, execute with crews
+- Key metrics: win rate, margins, bid pipeline volume, GC relationships
+
+Review DACP's current business state and propose 3-8 specific assignments for Coppice to execute.
 
 CURRENT BUSINESS STATE:
 ${JSON.stringify(context, null, 2)}
 
 ASSIGNMENT CATEGORIES:
-- follow_up: Email follow-ups on sent estimates, stale bids, or GC relationships
-- estimate: Create or finalize estimates for open bid requests
-- outreach: Proactive outreach to GCs, relationship building
-- admin: Update job records, clean up data, generate reports
-- research: Research GC companies, market rates, or competitor pricing
+- follow_up: Email follow-ups on sent estimates or bids awaiting GC response. GCs award to whoever stays top of mind.
+- estimate: Finalize draft estimates, review pricing, prepare and send bid packages to GCs
+- outreach: Proactive emails to GCs about upcoming projects, relationship building, asking about bid opportunities
+- admin: Activate awarded jobs, update job statuses, clean up records, generate weekly summaries
 
 RULES:
-1. Each assignment must be specific and actionable — include the project name, GC name, and exact action
-2. Prioritize urgent items (bids due soon, pending jobs needing activation)
-3. Follow-ups on stale estimates are high value — GCs often award to whoever follows up
-4. Don't propose assignments for things already completed
-5. Each assignment should be completable in one agent session (1-5 tool calls)
+1. Every assignment must name the specific project and GC — no generic tasks
+2. Prioritize: urgent bid deadlines > pending job activations > stale follow-ups > outreach
+3. Follow-ups are HIGH value — a short "checking in on our bid for [project]" email wins jobs
+4. For estimates: focus on getting drafts finalized and sent, not research
+5. Do NOT suggest "researching market rates" or generic industry research — DACP knows their pricing
+6. Do NOT suggest tasks that require information DACP doesn't have
+7. Each task must be completable in one agent session (draft an email, update a record, send a bid)
+8. Sign all emails as Coppice (the AI agent), not as individual people
 
-Return a JSON array of assignments. Each object:
+Return a JSON array. Each object:
 {
   "title": "Short title (5-10 words)",
   "description": "What to do and why (1-2 sentences)",
-  "category": "follow_up|estimate|outreach|admin|research",
+  "category": "follow_up|estimate|outreach|admin",
   "priority": "high|medium|low",
   "action_prompt": "The exact prompt to give the agent to execute this task",
   "agent_id": "estimating|comms|hivemind"
