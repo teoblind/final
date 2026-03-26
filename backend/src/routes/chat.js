@@ -78,10 +78,8 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
 
     const tenantId = req.resolvedTenant?.id || 'default';
     const visitorId = `visitor_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    // Help chat is ephemeral — no thread or message persistence
     const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-    // Create thread with visitor context
-    createThread(threadId, tenantId, agentId, visitorId, null, 'private');
 
     // Set up SSE
     res.setHeader('Content-Type', 'text/event-stream');
@@ -89,8 +87,6 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
-
-    res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
 
     await chatStream(tenantId, agentId, visitorId, text, threadId, { helpMode: true }, (chunk) => {
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
@@ -686,13 +682,12 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     if (helpMode && HELP_AGENTS.has(agentId)) {
       const text = content.trim().slice(0, 1000);
       const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      createThread(threadId, tenantId, agentId, userId, null, 'private');
+      // Help chat is ephemeral — no thread or message persistence
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
-      res.write(`data: ${JSON.stringify({ type: 'thread', threadId })}\n\n`);
       await chatStream(tenantId, agentId, userId, text, threadId, { helpMode: true }, (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
       });

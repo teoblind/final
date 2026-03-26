@@ -3940,13 +3940,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     : userContent;
 
   // Save user message (text only — base64 too large for SQLite)
+  // Skip persistence for help chat — ephemeral widget, no thread history needed
+  const skipPersist = !!options.helpMode;
   const messageMetadata = isMultimodal ? {
     multimodal: true,
     files: userContent
       .filter(b => b.type === 'image')
       .map(b => ({ name: b._fileName || 'image', type: b.source?.media_type || 'image/unknown' })),
   } : null;
-  saveMessage(tenantId, agentId, userId, 'user', displayContent, messageMetadata, threadId);
+  if (!skipPersist) saveMessage(tenantId, agentId, userId, 'user', displayContent, messageMetadata, threadId);
 
   const rows = db.prepare(SQL.getRecentHistory).all(tenantId, agentId, userId, threadId, threadId, MAX_HISTORY);
   const history = rows.reverse();
@@ -4262,17 +4264,19 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       fullText = fallback;
     }
 
-    saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
-      model: finalMessage.model,
-      input_tokens: totalInputTokens,
-      output_tokens: totalOutputTokens,
-      stop_reason: finalMessage.stop_reason,
-      streamed: true,
-    }, threadId);
+    if (!skipPersist) {
+      saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
+        model: finalMessage.model,
+        input_tokens: totalInputTokens,
+        output_tokens: totalOutputTokens,
+        stop_reason: finalMessage.stop_reason,
+        streamed: true,
+      }, threadId);
 
-    // Save thread summary for cross-thread awareness
-    if (threadId) {
-      try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${fullText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
+      // Save thread summary for cross-thread awareness
+      if (threadId) {
+        try { saveThreadSummary(threadId, tenantId, agentId, userId, `User: "${userContent.slice(0, 100)}" → Agent: "${fullText.slice(0, 200)}"`); } catch (e) { /* ignore */ }
+      }
     }
 
     _recordRun({ output: fullText, model: finalMessage.model, route: 'api', inputTokens: totalInputTokens, outputTokens: totalOutputTokens });
@@ -4281,7 +4285,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   } catch (error) {
     console.error(`ChatStream error (agent=${agentId}, tenant=${tenantId}):`, error.message, error.stack?.split('\n').slice(0, 3).join(' | '));
     _recordRun({ output: null, model: null, route: 'api', status: 'failed', errorMessage: error.message });
-    saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
+    if (!skipPersist) saveMessage(tenantId, agentId, userId, 'system', `Error: ${error.message}`, null, threadId);
     throw error;
   }
 }

@@ -2919,13 +2919,13 @@ export function listThreads(tenantId, agentId, userId, { isAdmin = false, limit 
   if (isAdmin) {
     return db.prepare(`
       SELECT * FROM chat_threads
-      WHERE tenant_id = ? AND agent_id = ?
+      WHERE tenant_id = ? AND agent_id = ? AND id NOT LIKE 'help_%'
       ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?
     `).all(tenantId, agentId, limit, offset);
   }
   return db.prepare(`
     SELECT * FROM chat_threads
-    WHERE tenant_id = ? AND agent_id = ?
+    WHERE tenant_id = ? AND agent_id = ? AND id NOT LIKE 'help_%'
       AND (user_id = ? OR visibility IN ('team', 'pinned'))
     ORDER BY is_pinned DESC, updated_at DESC LIMIT ? OFFSET ?
   `).all(tenantId, agentId, userId, limit, offset);
