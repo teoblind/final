@@ -29,6 +29,10 @@ export default {
       },
       fontFamily: {
         sans: ['Exo 2', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Bebas Neue', 'sans-serif'],
+        heading: ['Syne', 'sans-serif'],
+        body: ['DM Sans', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

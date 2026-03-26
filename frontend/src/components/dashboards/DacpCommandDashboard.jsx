@@ -358,7 +358,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
   }
 
   return (
-    <div className="p-6 lg:px-7 lg:py-6">
+    <div className="p-6 lg:px-7 lg:py-6 font-body">
       {/* Top row: Bids Due + Active Jobs — inline expandable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
@@ -371,8 +371,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 <ClipboardList size={18} className="text-[#b8860b]" />
               </div>
               <div>
-                <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Bids Due This Week</div>
-                <div className="text-xl font-bold text-terminal-text tabular-nums">{bidsThisWeek.length}</div>
+                <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px]">Bids Due This Week</div>
+                <div className="text-2xl font-display text-terminal-text tabular-nums">{bidsThisWeek.length}</div>
               </div>
             </div>
             {bidsThisWeek.length > 0 && (showBidsList ? <ChevronUp size={16} className="text-terminal-muted" /> : <ChevronDown size={16} className="text-terminal-muted" />)}
@@ -405,8 +405,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 <HardHat size={18} className="text-[#1a6b3c]" />
               </div>
               <div>
-                <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Active Jobs</div>
-                <div className="text-xl font-bold text-terminal-text tabular-nums">{stats?.activeJobs || 0}</div>
+                <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px]">Active Jobs</div>
+                <div className="text-2xl font-display text-terminal-text tabular-nums">{stats?.activeJobs || 0}</div>
               </div>
             </div>
             {(stats?.activeJobs > 0) && (showJobsList ? <ChevronUp size={16} className="text-terminal-muted" /> : <ChevronDown size={16} className="text-terminal-muted" />)}
@@ -424,9 +424,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
             <ClipboardList size={14} className="text-[#1e3a5f]" />
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Suggested Tasks</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Suggested Tasks</span>
             {assignments.filter(a => a.status === 'proposed').length > 0 && (
-              <span className="text-[10px] bg-[#1e3a5f] text-white px-1.5 py-0.5 rounded-full font-semibold">
+              <span className="text-[10px] font-mono bg-[#1e3a5f] text-white px-1.5 py-0.5 rounded-full font-semibold">
                 {assignments.filter(a => a.status === 'proposed').length}
               </span>
             )}
@@ -456,7 +456,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       <div className="flex items-center gap-2 mb-0.5">
                         {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
                         <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
+                        <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
                           {a.category?.replace('_', ' ')}
                         </span>
                       </div>
@@ -514,7 +514,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                           <button
                             onClick={() => handleConfirmAssignment(a.id)}
                             disabled={processingAssignment === a.id}
-                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
                           >
                             <Check size={11} /> Run
                           </button>
@@ -566,7 +566,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                           <button
                             onClick={() => handleAssignmentChat(a.id)}
                             disabled={chatLoading || !chatInput.trim()}
-                            className="px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                            className="px-3 py-1.5 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
                           >
                             {chatLoading ? 'Refining...' : 'Send'}
                           </button>
@@ -586,16 +586,16 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
             <Calendar size={14} className="text-[#1e3a5f]" />
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Meetings</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Meetings</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[11px] text-terminal-muted">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
             <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden">
               {MEETING_RANGES.map(r => (
                 <button
                   key={r.key}
                   onClick={() => setMeetingRange(r.key)}
-                  className={`px-2.5 py-1 text-[10px] font-semibold transition-colors ${meetingRange === r.key ? 'bg-[#1e3a5f] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}
+                  className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${meetingRange === r.key ? 'bg-[#1e3a5f] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}
                 >
                   {r.label}
                 </button>
@@ -616,8 +616,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 <div key={m.id} className="flex items-center gap-4 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] transition-colors">
                   {/* Time */}
                   <div className="w-[72px] shrink-0">
-                    <div className="text-[11px] font-semibold text-[#1e3a5f]">{formatMeetingDay(m.start)}</div>
-                    <div className="text-[11px] text-terminal-muted tabular-nums">
+                    <div className="text-[11px] font-heading font-semibold text-[#1e3a5f]">{formatMeetingDay(m.start)}</div>
+                    <div className="text-[11px] font-mono text-terminal-muted tabular-nums">
                       {formatMeetingTime(m.start)}
                     </div>
                   </div>
@@ -639,7 +639,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       href={m.meetLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] bg-[#e8eef5] border border-[#c5d5e8] hover:bg-[#dce6f0] transition-colors shrink-0"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-heading font-semibold text-[#2c5282] bg-[#e8eef5] border border-[#c5d5e8] hover:bg-[#dce6f0] transition-colors shrink-0"
                       onClick={e => e.stopPropagation()}
                     >
                       <Video size={10} /> Join
@@ -649,14 +649,14 @@ export default function DacpCommandDashboard({ onNavigate }) {
                   {/* Invite Coppice button */}
                   {!isPast && (
                     isInvited ? (
-                      <div className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] shrink-0">
+                      <div className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] shrink-0">
                         <Check size={10} /> Coppice Invited
                       </div>
                     ) : (
                       <button
                         onClick={() => handleInviteCoppice(m)}
                         disabled={isInviting}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-white bg-[#1e3a5f] hover:bg-[#162d4a] transition-colors disabled:opacity-50 shrink-0"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-white bg-[#1e3a5f] hover:bg-[#162d4a] transition-colors disabled:opacity-50 shrink-0"
                       >
                         {isInviting ? (
                           <><div className="spinner w-3 h-3 border-white" /> Inviting...</>
@@ -679,9 +679,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
               <CheckCircle size={14} className="text-[#b8860b]" />
-              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Pending Approvals</span>
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Pending Approvals</span>
             </div>
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#fdf6e8] text-[#b8860b] border border-[#f0d88a]">{approvals.length}</span>
+            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#fdf6e8] text-[#b8860b] border border-[#f0d88a]">{approvals.length}</span>
           </div>
           {approvals.map((item) => {
             const payload = item.payload || (item.payload_json ? JSON.parse(item.payload_json) : {});
@@ -702,14 +702,14 @@ export default function DacpCommandDashboard({ onNavigate }) {
                     <button
                       onClick={() => handleApprove(item.id)}
                       disabled={isProcessing}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-white bg-[#1a6b3c] hover:bg-[#155e33] transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-white bg-[#1a6b3c] hover:bg-[#155e33] transition-colors disabled:opacity-50"
                     >
                       <Check size={10} /> Approve
                     </button>
                     <button
                       onClick={() => handleReject(item.id)}
                       disabled={isProcessing}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-semibold text-terminal-red bg-red-50 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-terminal-red bg-red-50 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
                     >
                       <X size={10} /> Reject
                     </button>
@@ -722,7 +722,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       {(payload.to || payload.subject) && (
                         <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
                           <div className="flex items-center justify-between mb-1.5">
-                            <div className="text-[10px] font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
+                            <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
                             <div className="flex items-center gap-1.5">
                               {editingApproval === item.id ? (
                                 <>
@@ -831,7 +831,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                           <div className="bg-white border border-[#e8e6e2] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
                             {excelPreview.data.sheets.map((sheet, si) => (
                               <div key={si}>
-                                <div className="px-3 py-1.5 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[10px] font-semibold text-terminal-muted uppercase">{sheet.name}</div>
+                                <div className="px-3 py-1.5 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[10px] font-heading font-semibold text-terminal-muted uppercase">{sheet.name}</div>
                                 <table className="w-full text-[11px]">
                                   <tbody>
                                     {sheet.rows.map((row, ri) => (
@@ -887,7 +887,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         {originalEmail?.approvalId === item.id && originalEmail.data && (
                           <div className="mt-2 bg-white border border-[#e8e6e2] rounded-lg overflow-hidden">
                             <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
-                              <div className="text-[10px] font-semibold text-terminal-muted uppercase mb-1.5">Original RFQ Email</div>
+                              <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase mb-1.5">Original RFQ Email</div>
                               <div className="text-[11px] text-[#6b6b65]">
                                 <span className="font-medium text-terminal-text">From:</span> {originalEmail.data.from_name || originalEmail.data.from_email}
                                 {originalEmail.data.from_name && <span className="text-[#999]"> &lt;{originalEmail.data.from_email}&gt;</span>}
@@ -931,7 +931,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         sessionStorage.setItem('dacp_approval_context', JSON.stringify(context));
                         onNavigate?.('hivemind-chat');
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-[#1e3a5f] bg-[#eef3f8] border border-[#c8d8e8] hover:bg-[#dde8f2] transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-heading font-semibold text-[#1e3a5f] bg-[#eef3f8] border border-[#c8d8e8] hover:bg-[#dde8f2] transition-colors"
                     >
                       <MessageSquare size={12} />
                       Edit in DACP Agent
@@ -949,9 +949,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
           {metrics.map((m) => (
             <div key={m.label} className="bg-terminal-panel p-[18px_20px] relative">
-              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
-              <div className="text-2xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
-              <div className={`text-[11px] font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
+              <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
+              <div className="text-2xl font-display text-terminal-text tabular-nums leading-none">{m.value}</div>
+              <div className={`text-[11px] font-mono font-medium mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
               <div className="absolute bottom-0 left-5 right-5 h-[3px] rounded-[3px] bg-[#f0eeea] overflow-hidden">
                 <div className="h-full rounded-[3px] transition-all duration-1000" style={{ width: `${m.bar}%`, background: '#1e3a5f' }} />
               </div>
@@ -965,7 +965,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
             <FileSpreadsheet size={14} className="text-[#1e3a5f]" />
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
           </div>
           {leadsSheet?.configured ? (
             <div className="flex items-center gap-2">
@@ -985,7 +985,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
             </div>
           ) : (
             <button onClick={() => { setShowLinkModal(true); searchDrive('leads'); }}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-[#1e3a5f] px-3 py-1 rounded-md border border-[#c8d8e8] bg-[#eef3f8] hover:bg-[#dde8f2]">
+              className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#1e3a5f] px-3 py-1 rounded-md border border-[#c8d8e8] bg-[#eef3f8] hover:bg-[#dde8f2]">
               <Link2 size={11} /> Link Sheet
             </button>
           )}
@@ -998,7 +998,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
               <thead>
                 <tr className="bg-[#fafaf8]">
                   {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
-                    <th key={i} className="px-3 py-2 text-left text-[10px] font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
+                    <th key={i} className="px-3 py-2 text-left text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1013,7 +1013,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </tbody>
             </table>
             {leadsSheet.totalRows > 8 && (
-              <div className="px-3 py-2 text-[11px] text-terminal-muted text-center border-t border-[#f0eeea]">
+              <div className="px-3 py-2 text-[11px] font-mono text-terminal-muted text-center border-t border-[#f0eeea]">
                 + {leadsSheet.totalRows - 8} more rows
                 <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[#1e3a5f] hover:underline">Open in Sheets</a>
               </div>
@@ -1034,13 +1034,13 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowLinkModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-[480px] max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[#e8e6e2] flex items-center justify-between">
-              <span className="text-sm font-bold text-terminal-text">Link Leads Sheet</span>
+              <span className="text-sm font-heading font-bold text-terminal-text">Link Leads Sheet</span>
               <button onClick={() => setShowLinkModal(false)} className="text-terminal-muted hover:text-terminal-text"><X size={16} /></button>
             </div>
             <div className="p-5">
               {/* Paste URL */}
               <div className="mb-4">
-                <label className="text-[11px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Paste Sheet URL or ID</label>
+                <label className="text-[11px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Paste Sheet URL or ID</label>
                 <div className="flex gap-2">
                   <input
                     value={linkInput}
@@ -1051,7 +1051,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                   <button
                     onClick={() => handleLinkSheet(linkInput)}
                     disabled={!linkInput.trim() || linking}
-                    className="px-4 py-2 text-[12px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                    className="px-4 py-2 text-[12px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
                   >
                     {linking ? '...' : 'Link'}
                   </button>
@@ -1061,7 +1061,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
               {/* Search Drive */}
               <div className="border-t border-[#e8e6e2] pt-4">
-                <label className="text-[11px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Or search Google Drive</label>
+                <label className="text-[11px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Or search Google Drive</label>
                 <div className="flex gap-2 mb-3">
                   <input
                     value={driveQuery}
@@ -1112,8 +1112,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
         {/* Upcoming Deadlines */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Bid Deadlines</span>
-            <span className="text-[11px] text-terminal-muted">{upcoming.length} pending</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Bid Deadlines</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{upcoming.length} pending</span>
           </div>
           <div>
             {upcoming.length === 0 ? (
@@ -1129,7 +1129,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       <span className="text-[11px] text-terminal-muted">{bid.gc_name}</span>
                     )}
                   </div>
-                  <span className={`text-[11px] px-2 py-0.5 rounded border ${URGENCY_BADGE[urgClass]}`}>
+                  <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${URGENCY_BADGE[urgClass]}`}>
                     {days <= 0 ? 'Today' : `${days}d`}
                   </span>
                 </div>
@@ -1141,7 +1141,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
         {/* Summary */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Summary</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Summary</span>
             <span className="text-[11px] text-terminal-muted">All time</span>
           </div>
           <div>
@@ -1155,7 +1155,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
             ].map((item, i) => (
               <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
                 <span className="text-[#6b6b65]">{item.label}</span>
-                <span className={`font-semibold tabular-nums ${item.color || 'text-terminal-text'}`}>{item.value}</span>
+                <span className={`font-mono font-semibold tabular-nums ${item.color || 'text-terminal-text'}`}>{item.value}</span>
               </div>
             ))}
           </div>
