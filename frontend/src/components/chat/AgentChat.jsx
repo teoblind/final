@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -321,6 +321,140 @@ function EmailCard({ data }) {
 }
 
 // ─── Action Buttons ─────────────────────────────────────────────────────────────
+// ─── Task Proposal Card (inline in chat when agent proposes a background task) ─
+function TaskProposalCard({ data, onConfirm, onDismiss }) {
+  const [status, setStatus] = useState('proposed'); // proposed | running | completed | dismissed
+  const [result, setResult] = useState(null);
+  const [artifacts, setArtifacts] = useState([]);
+
+  const catColors = {
+    follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
+    estimate: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    outreach: 'bg-purple-50 text-purple-600 border-purple-200',
+    admin: 'bg-gray-50 text-gray-600 border-gray-200',
+    research: 'bg-amber-50 text-amber-600 border-amber-200',
+    analysis: 'bg-indigo-50 text-indigo-600 border-indigo-200',
+    document: 'bg-rose-50 text-rose-600 border-rose-200',
+  };
+
+  const handleRun = async () => {
+    setStatus('running');
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(() => { try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return { Authorization: `Bearer ${s.tokens.accessToken}` }; } catch {} const l = localStorage.getItem('auth_token'); return l ? { Authorization: `Bearer ${l}` } : {}; })() },
+      });
+      if (!res.ok) throw new Error('Failed to start task');
+      // Poll for completion
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch(`${API_BASE}/v1/estimates/assignments?status=all`, {
+            headers: (() => { try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return { Authorization: `Bearer ${s.tokens.accessToken}` }; } catch {} const l = localStorage.getItem('auth_token'); return l ? { Authorization: `Bearer ${l}` } : {}; })(),
+          });
+          const d = await r.json();
+          const a = d.assignments?.find(x => x.id === data.assignment_id);
+          if (a?.status === 'completed') {
+            clearInterval(poll);
+            setStatus('completed');
+            setResult(a.result_summary?.slice(0, 300));
+            try { setArtifacts(JSON.parse(a.output_artifacts_json || '[]')); } catch {}
+          } else if (a?.status === 'proposed' && a?.result_summary?.startsWith('Failed:')) {
+            clearInterval(poll);
+            setStatus('proposed');
+            setResult(a.result_summary);
+          }
+        } catch {}
+      }, 5000);
+      // Stop polling after 10 minutes
+      setTimeout(() => clearInterval(poll), 600000);
+    } catch (err) {
+      setStatus('proposed');
+      setResult(`Error: ${err.message}`);
+    }
+  };
+
+  const handleDismiss = async () => {
+    setStatus('dismissed');
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/dismiss`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(() => { try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return { Authorization: `Bearer ${s.tokens.accessToken}` }; } catch {} const l = localStorage.getItem('auth_token'); return l ? { Authorization: `Bearer ${l}` } : {}; })() },
+      });
+    } catch {}
+  };
+
+  if (status === 'dismissed') return null;
+
+  return (
+    <div className="mt-3 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
+      <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center gap-2">
+        <ClipboardList size={14} className="text-[#1e3a5f]" />
+        <span className="text-[12px] font-bold text-[#1e3a5f]">Proposed Task</span>
+        {data.priority === 'high' && <span className="text-[9px] font-bold text-red-500 ml-1">HIGH</span>}
+        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto ${catColors[data.category] || catColors.admin}`}>
+          {data.category?.replace('_', ' ')}
+        </span>
+      </div>
+      <div className="px-4 py-3">
+        <div className="text-[13px] font-medium text-terminal-text mb-1">{data.title}</div>
+        <div className="text-[11px] text-[#6b6b65] leading-relaxed">{data.description}</div>
+        {data.sources?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {data.sources.map((s, i) => (
+              <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-[#f5f4f0] border border-[#e8e6e1] text-[#6b6b65]">
+                {s.name || s.type}
+              </span>
+            ))}
+          </div>
+        )}
+        {status === 'completed' && result && (
+          <div className="mt-2 text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1.5 rounded leading-relaxed">
+            {result}
+          </div>
+        )}
+        {status === 'completed' && artifacts.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {artifacts.map((art, i) => (
+              <a key={i} href={art.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-blue-50 text-[#1e3a5f] border-[#d0cec8]">
+                {art.type === 'sheet' ? <FileSpreadsheet size={10} /> : art.type === 'email' ? <MailIcon size={10} /> : <ExternalLink size={10} />}
+                {art.title || art.type}
+              </a>
+            ))}
+          </div>
+        )}
+        {result && status === 'proposed' && (
+          <div className="mt-2 text-[11px] text-red-500">{result}</div>
+        )}
+      </div>
+      <div className="px-4 py-2.5 border-t border-[#f0eeea] flex items-center gap-2">
+        {status === 'proposed' && (
+          <>
+            <button onClick={handleRun}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a]">
+              <Check size={11} /> Run
+            </button>
+            <button onClick={handleDismiss}
+              className="p-1.5 text-[#9a9a92] hover:text-red-500 rounded" title="Dismiss">
+              <X size={13} />
+            </button>
+          </>
+        )}
+        {status === 'running' && (
+          <span className="flex items-center gap-1.5 text-[11px] text-[#1e3a5f] font-medium">
+            <RotateCcw size={11} className="animate-spin" /> Working on it...
+          </span>
+        )}
+        {status === 'completed' && (
+          <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+            <Check size={11} /> Completed
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ActionButtons({ actions, accentColor = '#1e3a5f', onAction, disabled }) {
   if (!actions?.length) return null;
   return (
@@ -1145,6 +1279,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
         {msg.estimate && <EstimateCard data={msg.estimate} />}
         {msg.email && <EmailCard data={msg.email} />}
         {msg.workspace && <WorkspaceCard data={msg.workspace} />}
+        {msg.taskProposal && <TaskProposalCard data={msg.taskProposal} />}
 
         {/* After-content text */}
         {msg.afterContent && (
@@ -2814,6 +2949,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 const newThread = { id: event.threadId, title: 'New chat', visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
                 setThreads(prev => [newThread, ...prev]);
                 setActiveThreadId(event.threadId);
+              } else if (event.type === 'task_proposal') {
+                // Add task proposal card to the current agent message
+                setMessages(prev => prev.map(m =>
+                  m.id === agentMsgId ? { ...m, taskProposal: { assignment_id: event.assignment_id, title: event.title, description: event.description, category: event.category, priority: event.priority, sources: event.sources } } : m
+                ));
               } else if (event.type === 'error') {
                 throw new Error(event.error);
               }

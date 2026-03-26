@@ -590,6 +590,33 @@ const CONTEXT_TOOLS = [
   },
 ];
 
+// ─── Task Proposal Tool ─────────────────────────────────────────────────────
+// Allows the agent to propose a background task during chat instead of
+// attempting a complex task inline. Creates an assignment the user can confirm.
+
+const TASK_PROPOSAL_TOOLS = [
+  {
+    name: 'propose_task',
+    description: `Propose a background task for the user to approve and run asynchronously. Use this when the user asks for something complex that requires multiple steps, research, document creation, or analysis that would take more than a quick answer. Instead of attempting it inline, propose it as a runnable task with a clear scope. The user will see an interactive card in the chat and can review, refine, or run it.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'Short task title (5-10 words)' },
+        description: { type: 'string', description: '1-2 sentence description of what will be done and what deliverables will be produced' },
+        category: { type: 'string', enum: ['research', 'analysis', 'estimate', 'outreach', 'document', 'admin', 'follow_up'], description: 'Task category' },
+        priority: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Priority level' },
+        action_prompt: { type: 'string', description: 'Detailed execution instructions for when the task runs. Include specific data sources, analysis steps, deliverable format, and who to email results to.' },
+        sources: {
+          type: 'array',
+          items: { type: 'object', properties: { type: { type: 'string' }, name: { type: 'string' }, id: { type: 'string' } } },
+          description: 'Files, knowledge entries, or data sources the task will use. Helps the user understand scope.',
+        },
+      },
+      required: ['title', 'description', 'category', 'action_prompt'],
+    },
+  },
+];
+
 // ─── Mining / IPP Tools (Sangha tenant) ─────────────────────────────────────
 
 // ─── Web Browsing Tools ──────────────────────────────────────────────────────
@@ -2232,6 +2259,39 @@ async function callContextTool(toolName, toolInput, tenantId, threadId, onContex
   throw new Error(`Unknown context tool: ${toolName}`);
 }
 
+// ─── Task Proposal Tool Handler ──────────────────────────────────────────────
+
+async function callTaskProposalTool(toolName, toolInput, tenantId) {
+  const { insertAgentAssignment } = await import('../cache/database.js');
+  const { randomUUID } = await import('crypto');
+  const { title, description, category = 'research', priority = 'medium', action_prompt, sources } = toolInput;
+
+  const id = `TASK-${randomUUID().slice(0, 8).toUpperCase()}`;
+  insertAgentAssignment({
+    id,
+    tenant_id: tenantId,
+    title,
+    description,
+    category,
+    priority,
+    action_prompt,
+    agent_id: 'estimating',
+    context_json: sources ? JSON.stringify({ sources }) : null,
+  });
+
+  return {
+    success: true,
+    assignment_id: id,
+    title,
+    description,
+    category,
+    priority,
+    sources: sources || [],
+    message: `Task "${title}" has been proposed. The user can review and run it from the chat or dashboard.`,
+    _task_proposal: true,
+  };
+}
+
 // ─── Knowledge Context Builder ──────────────────────────────────────────────
 
 function buildKnowledgeContext(tenantId, userMessage) {
@@ -3157,6 +3217,7 @@ const TOOL_CATEGORIES = {
   dacp: ['lookup_pricing', 'get_bid_requests', 'get_estimates', 'create_estimate', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'draft_supplier_quotes', 'compare_contract', 'generate_proposal', 'run_bid_checks', 'generate_takeoff_template', 'generate_compliance_forms', 'generate_contract_redline', 'parse_supplier_quote', 'get_approval_draft', 'update_approval_draft'],
   scheduler: ['create_scheduled_task', 'list_scheduled_tasks', 'delete_scheduled_task'],
   context: ['update_entity_profile', 'pin_to_context'],
+  taskProposal: ['propose_task'],
 };
 
 // ─── Safe Tools (read-only, safe to retry on failure) ────────────────────────
@@ -3236,6 +3297,7 @@ async function routeToolCall(toolName, toolInput, tenantId) {
   if (TOOL_CATEGORIES.document.includes(toolName)) return await callDocumentTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.dacp.includes(toolName)) return await callDacpTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.scheduler.includes(toolName)) return await callSchedulerTool(toolName, toolInput, tenantId);
+  if (TOOL_CATEGORIES.taskProposal.includes(toolName)) return await callTaskProposalTool(toolName, toolInput, tenantId);
   return await callWorkspaceTool(toolName, toolInput, tenantId);
 }
 
@@ -3518,6 +3580,11 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   }
   // Web browsing — available to all agents
   tools.push(...WEB_TOOLS);
+  // Task proposal — allows agent to propose background tasks during chat
+  const taskProposalAgents = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
+  if (taskProposalAgents.includes(agentId)) {
+    tools.push(...TASK_PROPOSAL_TOOLS);
+  }
   // Legal document tools
   if (legalAgents.includes(agentId)) {
     tools.push(...LEGAL_TOOLS);
@@ -4033,6 +4100,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (emailAgents.includes(agentId)) tools.push(...EMAIL_TOOLS);
   if (esAgents.includes(agentId)) tools.push(...EMAIL_SECURITY_TOOLS);
   tools.push(...WEB_TOOLS);
+  const taskProposalAgentsStream = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
+  if (taskProposalAgentsStream.includes(agentId)) tools.push(...TASK_PROPOSAL_TOOLS);
   if (legalAgents.includes(agentId)) tools.push(...LEGAL_TOOLS);
   if (docAgents.includes(agentId)) tools.push(...DOCUMENT_TOOLS);
   const calendarAgents = ['hivemind', 'sangha', 'zhan'];
@@ -4170,6 +4239,19 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
           lastToolName = toolName;
           lastToolInput = toolInput;
           lastToolResult = toolResult;
+
+          // Emit task proposal as a special SSE event so frontend can render an inline card
+          if (toolName === 'propose_task' && toolResult?._task_proposal) {
+            onChunk(JSON.stringify({
+              _type: 'task_proposal',
+              assignment_id: toolResult.assignment_id,
+              title: toolResult.title,
+              description: toolResult.description,
+              category: toolResult.category,
+              priority: toolResult.priority,
+              sources: toolResult.sources || [],
+            }));
+          }
 
           // Append the tool result to the tool_result content array
           toolResultContents.push({

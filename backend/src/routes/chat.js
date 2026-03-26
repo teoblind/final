@@ -633,7 +633,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
       // Detect special events from the tool loop
       try {
-        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"'))) {
+        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"') || chunk.includes('"_type":"task_proposal"'))) {
           const parsed = JSON.parse(chunk);
           if (parsed._type === 'progress') {
             res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
@@ -641,6 +641,10 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
           }
           if (parsed._type === 'context_update') {
             res.write(`data: ${JSON.stringify({ type: 'context_update', update: parsed })}\n\n`);
+            return;
+          }
+          if (parsed._type === 'task_proposal') {
+            res.write(`data: ${JSON.stringify({ type: 'task_proposal', ...parsed })}\n\n`);
             return;
           }
         }
@@ -716,7 +720,7 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
       // Detect special events from the tool loop
       try {
-        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"'))) {
+        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"') || chunk.includes('"_type":"task_proposal"'))) {
           const parsed = JSON.parse(chunk);
           if (parsed._type === 'progress') {
             res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
@@ -724,6 +728,10 @@ router.post('/:agentId/messages/stream', async (req, res) => {
           }
           if (parsed._type === 'context_update') {
             res.write(`data: ${JSON.stringify({ type: 'context_update', update: parsed })}\n\n`);
+            return;
+          }
+          if (parsed._type === 'task_proposal') {
+            res.write(`data: ${JSON.stringify({ type: 'task_proposal', ...parsed })}\n\n`);
             return;
           }
         }
