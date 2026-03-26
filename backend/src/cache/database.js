@@ -996,10 +996,12 @@ function initSchemaForDb(targetDb) {
       thread_id TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       confirmed_at TEXT,
-      completed_at TEXT
+      completed_at TEXT,
+      output_artifacts_json TEXT
     )
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_assignments_tenant ON agent_assignments(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN output_artifacts_json TEXT'); } catch (e) {}
 
   // MCP server configurations per tenant
   targetDb.exec(`
@@ -6338,7 +6340,7 @@ export function insertAgentAssignment(assignment) {
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {

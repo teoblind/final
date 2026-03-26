@@ -3422,19 +3422,19 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
   // Email tools for agents with email access
-  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms'];
+  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms', 'estimating'];
   const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
   // Email security tools — hivemind only
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
   // Document generation tools — all agents
-  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms'];
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms', 'estimating'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   // DACP estimation tools
   const dacpPromptAgents = ['hivemind', 'estimating', 'workflow'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
   // Google Workspace CLI tools
-  const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms'];
+  const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms', 'estimating'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
   // Scheduler tools — hivemind, workflow, comms, zhan, sangha
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
@@ -3985,15 +3985,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const webAddon = WEB_TOOLS_PROMPT_ADDON;
   const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
   const legalAddon = legalAgents.includes(agentId) ? LEGAL_TOOLS_PROMPT_ADDON : '';
-  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms'];
+  const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms', 'estimating'];
   const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
-  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms'];
+  const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms', 'estimating'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   const dacpPromptAgents = ['hivemind', 'estimating', 'workflow'];
   const dacpAddon = dacpPromptAgents.includes(agentId) ? DACP_TOOLS_PROMPT_ADDON : '';
-  const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms'];
+  const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms', 'estimating'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';

@@ -461,9 +461,43 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         </span>
                       </div>
                       <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
-                      {a.status === 'completed' && a.result_summary && (
-                        <div className="mt-1.5 text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                          Done: {a.result_summary.slice(0, 200)}{a.result_summary.length > 200 ? '...' : ''}
+                      {a.status === 'completed' && (
+                        <div className="mt-1.5 space-y-1.5">
+                          {a.result_summary && (
+                            <div className="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1.5 rounded leading-relaxed">
+                              {a.result_summary.slice(0, 300)}{a.result_summary.length > 300 ? '...' : ''}
+                            </div>
+                          )}
+                          {(() => {
+                            try {
+                              const artifacts = JSON.parse(a.output_artifacts_json || '[]');
+                              if (!artifacts.length) return null;
+                              return (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {artifacts.map((art, i) => (
+                                    <a
+                                      key={i}
+                                      href={art.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-blue-50 transition-colors text-[#1e3a5f] border-[#d0cec8]"
+                                    >
+                                      {art.type === 'sheet' ? <FileSpreadsheet size={10} /> : art.type === 'email' ? <Mail size={10} /> : <ExternalLink size={10} />}
+                                      {art.title || art.type}
+                                    </a>
+                                  ))}
+                                </div>
+                              );
+                            } catch { return null; }
+                          })()}
+                          {a.thread_id && (
+                            <button
+                              onClick={() => { window.location.href = `/agent/chat?thread=${a.thread_id}`; }}
+                              className="inline-flex items-center gap-1 text-[10px] text-[#1e3a5f] hover:underline"
+                            >
+                              <MessageSquare size={10} /> View full conversation
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
