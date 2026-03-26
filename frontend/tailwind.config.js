@@ -28,7 +28,7 @@ export default {
         '3xl': '2rem',
       },
       fontFamily: {
-        sans: ['Exo 2', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['DM Sans', 'system-ui', '-apple-system', 'sans-serif'],
         display: ['Bebas Neue', 'sans-serif'],
         heading: ['Syne', 'sans-serif'],
         body: ['DM Sans', 'sans-serif'],

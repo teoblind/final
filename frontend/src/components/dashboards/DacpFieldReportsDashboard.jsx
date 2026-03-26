@@ -65,9 +65,9 @@ export default function DacpFieldReportsDashboard() {
           { label: 'Issues Flagged', value: totalIssues, delta: totalIssues > 0 ? 'requires attention' : 'none' },
         ].map((m) => (
           <div key={m.label} className="bg-terminal-panel p-[18px_20px]">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
-            <div className="text-2xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
-            <div className="text-[11px] font-semibold mt-1 text-terminal-muted">{m.delta}</div>
+            <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
+            <div className="text-2xl font-display text-terminal-text tabular-nums leading-none">{m.value}</div>
+            <div className="text-[11px] font-mono font-semibold mt-1 text-terminal-muted">{m.delta}</div>
           </div>
         ))}
       </div>
@@ -84,7 +84,7 @@ export default function DacpFieldReportsDashboard() {
             <option key={j.id} value={j.id}>{j.id} — {j.project_name}</option>
           ))}
         </select>
-        <span className="text-[11px] text-terminal-muted">{filteredReports.length} reports</span>
+        <span className="text-[11px] font-mono text-terminal-muted">{filteredReports.length} reports</span>
       </div>
 
       {/* Report Cards */}
@@ -103,10 +103,10 @@ export default function DacpFieldReportsDashboard() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <span className="text-[13px] font-semibold text-terminal-text tabular-nums">{report.date}</span>
+                    <span className="text-[13px] font-mono font-semibold text-terminal-text tabular-nums">{report.date}</span>
                     <span className="text-[11px] text-terminal-muted">{report.reported_by}</span>
                     {job && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#e8eef5] text-[#1e3a5f]">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#e8eef5] text-[#1e3a5f]">
                         {job.project_name}
                       </span>
                     )}
@@ -144,7 +144,7 @@ export default function DacpFieldReportsDashboard() {
                   {labor.cost && (
                     <div className="text-[11px]">
                       <span className="text-terminal-muted">Labor $: </span>
-                      <span className="text-terminal-text font-medium tabular-nums">${labor.cost.toLocaleString()}</span>
+                      <span className="text-terminal-text font-mono font-medium tabular-nums">${labor.cost.toLocaleString()}</span>
                     </div>
                   )}
                   {materials.length > 0 && (
@@ -194,7 +194,7 @@ export default function DacpFieldReportsDashboard() {
       {filteredReports.length > 0 && (
         <div className="mt-6 bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Roll-Up Summary</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Roll-Up Summary</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-[#f0eeea]">
             {[
@@ -204,8 +204,8 @@ export default function DacpFieldReportsDashboard() {
               { label: 'Issues', value: totalIssues },
             ].map((m) => (
               <div key={m.label} className="p-4 text-center">
-                <div className="text-[10px] text-terminal-muted uppercase tracking-[1px] mb-1">{m.label}</div>
-                <div className="text-lg font-bold text-terminal-text tabular-nums">{m.value}</div>
+                <div className="text-[10px] font-heading text-terminal-muted uppercase tracking-[1px] mb-1">{m.label}</div>
+                <div className="text-lg font-display text-terminal-text tabular-nums">{m.value}</div>
               </div>
             ))}
           </div>

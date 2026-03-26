@@ -183,12 +183,12 @@ function formatContent(text) {
       return seg.done ? (
         <div key={`tool-${si}`} className="my-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#f0f7f2] border border-[#d0e8d8] text-[11px] text-[#1a6b3c]">
           <Check size={12} className="shrink-0" />
-          <span className="font-medium">{label}</span>
+          <span className="font-medium font-mono">{label}</span>
         </div>
       ) : (
         <div key={`tool-${si}`} className="my-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#f5f4f0] border border-[#e8e6e1] text-[11px] text-[#6b6b65]">
           <div className="w-3 h-3 rounded-full border-2 border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
-          <span className="font-medium">{label}...</span>
+          <span className="font-medium font-mono">{label}...</span>
         </div>
       );
     }
@@ -217,7 +217,7 @@ function AlertCard({ data }) {
     <div className={`mt-2.5 ${c.bg} border ${c.border} rounded-[10px] overflow-hidden`}>
       <div className={`px-3.5 py-2.5 border-b ${c.border} flex items-center gap-2`}>
         <span className={`w-2 h-2 rounded-full ${c.dot} ${data.type === 'danger' ? 'animate-pulse' : ''}`} />
-        <span className={`text-[12px] font-bold ${c.title}`}>{data.title}</span>
+        <span className={`text-[12px] font-bold ${c.title} font-heading`}>{data.title}</span>
       </div>
       {data.rows.map((r, i) => (
         <div key={i} className="flex justify-between px-3.5 py-[7px] text-[12px] border-b border-inherit last:border-b-0">
@@ -234,12 +234,12 @@ function DataCard({ data }) {
   return (
     <div className="mt-2.5 bg-[#f5f4f0] border border-[#f0eeea] rounded-[10px] overflow-hidden">
       <div className="px-3.5 py-2.5 bg-terminal-panel border-b border-[#f0eeea]">
-        <span className="text-[12px] font-bold text-terminal-text">{data.title}</span>
+        <span className="text-[12px] font-bold text-terminal-text font-heading">{data.title}</span>
       </div>
       {data.columns && (
         <div className="grid px-3.5 py-[6px] border-b border-[#e8e6e1] bg-[#f0eeea]/50" style={{ gridTemplateColumns: `repeat(${data.columns.length}, 1fr)` }}>
           {data.columns.map((col, i) => (
-            <span key={i} className="text-[9px] font-bold uppercase tracking-[0.5px] text-[#9a9a92]">{col}</span>
+            <span key={i} className="text-[9px] font-bold uppercase tracking-[0.5px] text-[#9a9a92] font-heading">{col}</span>
           ))}
         </div>
       )}
@@ -262,8 +262,8 @@ function DataCard({ data }) {
       ))}
       {data.footer && (
         <div className="px-3.5 py-2.5 bg-terminal-panel border-t border-[#e8e6e1] flex justify-between items-center">
-          <span className="text-[12px] font-semibold text-terminal-text">{data.footer.label}</span>
-          <span className={`font-mono text-[14px] font-bold ${data.footer.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{data.footer.value}</span>
+          <span className="text-[12px] font-semibold text-terminal-text font-heading">{data.footer.label}</span>
+          <span className={`font-display text-[14px] font-bold ${data.footer.green ? 'text-[#1a6b3c]' : 'text-terminal-text'}`}>{data.footer.value}</span>
         </div>
       )}
     </div>
@@ -275,8 +275,8 @@ function EstimateCard({ data }) {
   return (
     <div className="mt-2.5 bg-[#f5f4f0] border border-[#f0eeea] rounded-[10px] overflow-hidden">
       <div className="px-3.5 py-2.5 bg-terminal-panel border-b border-[#f0eeea] flex items-center justify-between">
-        <span className="text-[12px] font-bold text-terminal-text">{data.title}</span>
-        <span className={`text-[9px] font-bold px-2 py-[3px] rounded-[5px] uppercase tracking-[0.3px] ${
+        <span className="text-[12px] font-bold text-terminal-text font-heading">{data.title}</span>
+        <span className={`text-[9px] font-bold px-2 py-[3px] rounded-[5px] uppercase tracking-[0.3px] font-mono ${
           data.confidence >= 80 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
         }`}>{data.confidence}% confidence</span>
       </div>
@@ -299,8 +299,8 @@ function EstimateCard({ data }) {
         </div>
       ))}
       <div className="px-3.5 py-2.5 bg-terminal-panel border-t border-[#e8e6e1] flex justify-between items-center">
-        <span className="text-[13px] font-bold text-terminal-text">{data.total.label}</span>
-        <span className="font-mono text-[16px] font-bold text-[#1e3a5f]">{data.total.value}</span>
+        <span className="text-[13px] font-bold text-terminal-text font-heading">{data.total.label}</span>
+        <span className="font-display text-[16px] font-bold text-[#1e3a5f]">{data.total.value}</span>
       </div>
     </div>
   );
@@ -389,9 +389,9 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
     <div className="mt-3 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
       <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center gap-2">
         <ClipboardList size={14} className="text-[#1e3a5f]" />
-        <span className="text-[12px] font-bold text-[#1e3a5f]">Proposed Task</span>
-        {data.priority === 'high' && <span className="text-[9px] font-bold text-red-500 ml-1">HIGH</span>}
-        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto ${catColors[data.category] || catColors.admin}`}>
+        <span className="text-[12px] font-bold text-[#1e3a5f] font-heading">Proposed Task</span>
+        {data.priority === 'high' && <span className="text-[9px] font-bold text-red-500 ml-1 font-mono">HIGH</span>}
+        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto font-mono ${catColors[data.category] || catColors.admin}`}>
           {data.category?.replace('_', ' ')}
         </span>
       </div>
@@ -431,7 +431,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         {status === 'proposed' && (
           <>
             <button onClick={handleRun}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a]">
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] font-heading">
               <Check size={11} /> Run
             </button>
             <button onClick={handleDismiss}
@@ -441,12 +441,12 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
           </>
         )}
         {status === 'running' && (
-          <span className="flex items-center gap-1.5 text-[11px] text-[#1e3a5f] font-medium">
+          <span className="flex items-center gap-1.5 text-[11px] text-[#1e3a5f] font-medium font-mono">
             <RotateCcw size={11} className="animate-spin" /> Working on it...
           </span>
         )}
         {status === 'completed' && (
-          <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+          <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium font-mono">
             <Check size={11} /> Completed
           </span>
         )}
@@ -464,7 +464,7 @@ function ActionButtons({ actions, accentColor = '#1e3a5f', onAction, disabled })
           key={i}
           onClick={() => onAction?.(a.label, a.variant)}
           disabled={disabled}
-          className={`px-3.5 py-[6px] rounded-lg text-[11px] font-semibold transition-colors ${
+          className={`px-3.5 py-[6px] rounded-lg text-[11px] font-semibold transition-colors font-heading ${
             disabled ? 'opacity-50 cursor-not-allowed' : ''
           } ${
             a.variant === 'quick_reply'
@@ -533,8 +533,8 @@ function WorkspaceCard({ data }) {
     return (
       <div className="mt-2.5 bg-terminal-panel border border-[#e8e6e1] rounded-[14px] overflow-hidden">
         <div className="px-3.5 py-2.5 border-b border-[#f0eeea]">
-          <span className="text-[12px] font-bold text-terminal-text">
-            {data.results?.length || 0} file{(data.results?.length || 0) !== 1 ? 's' : ''} found
+          <span className="text-[12px] font-bold text-terminal-text font-heading">
+            <span className="font-mono">{data.results?.length || 0}</span> file{(data.results?.length || 0) !== 1 ? 's' : ''} found
           </span>
         </div>
         {(data.results || []).map((file, i) => {
@@ -600,7 +600,7 @@ function InvokeIndicator({ text, accentColor = '#1e3a5f' }) {
     <div className="flex items-center gap-2 py-2">
       <div className="flex-1 h-px bg-[#f0eeea]" />
       <span
-        className="text-[9px] font-bold uppercase tracking-[0.3px] px-2.5 py-[3px] rounded-md flex items-center gap-[5px]"
+        className="text-[9px] font-bold uppercase tracking-[0.3px] px-2.5 py-[3px] rounded-md flex items-center gap-[5px] font-mono"
         style={{ backgroundColor: accentColor + '12', color: accentColor }}
       >
         <span className="w-1 h-1 rounded-full" style={{ backgroundColor: accentColor }} />
@@ -903,7 +903,7 @@ function CallPanel({ agentDef, onClose }) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-terminal-border">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-semibold text-terminal-text">
+          <span className="text-[13px] font-semibold text-terminal-text font-heading">
             {mode === 'voice' ? 'Voice Chat' : 'Phone Call'}
           </span>
           {callState === 'idle' && (
@@ -927,7 +927,7 @@ function CallPanel({ agentDef, onClose }) {
             <Mic size={28} style={{ color: accent }} />
           </div>
           <div className="text-center">
-            <div className="text-[13px] font-semibold text-terminal-text">
+            <div className="text-[13px] font-semibold text-terminal-text font-heading">
               Talk to {agentDef?.name || 'Agent'}
             </div>
             <div className="text-[11px] text-[#9a9a92] mt-1">
@@ -936,7 +936,7 @@ function CallPanel({ agentDef, onClose }) {
           </div>
           <button
             onClick={startVoiceChat}
-            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-[10px] text-[13px] font-semibold text-white transition-opacity"
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-[10px] text-[13px] font-semibold text-white transition-opacity font-heading"
             style={{ backgroundColor: accent }}
           >
             <Mic size={16} />
@@ -960,7 +960,7 @@ function CallPanel({ agentDef, onClose }) {
           <button
             onClick={startPhoneCall}
             disabled={!phoneNumber.trim()}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-[12px] font-semibold text-white transition-opacity disabled:opacity-40"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-[12px] font-semibold text-white transition-opacity disabled:opacity-40 font-heading"
             style={{ backgroundColor: accent }}
           >
             <Phone size={14} />
@@ -975,7 +975,7 @@ function CallPanel({ agentDef, onClose }) {
           <div className="w-14 h-14 rounded-full flex items-center justify-center animate-pulse" style={{ backgroundColor: accent + '20' }}>
             {mode === 'voice' ? <Mic size={24} style={{ color: accent }} /> : <Phone size={24} style={{ color: accent }} />}
           </div>
-          <div className="text-[13px] font-semibold text-terminal-text">Connecting...</div>
+          <div className="text-[13px] font-semibold text-terminal-text font-mono">Connecting...</div>
           <div className="text-[11px] text-[#9a9a92]">Requesting microphone access</div>
         </div>
       )}
@@ -998,10 +998,10 @@ function CallPanel({ agentDef, onClose }) {
               <div className="absolute inset-0 rounded-full border-2 border-[#1a6b3c] animate-ping opacity-20" />
             )}
           </div>
-          <div className="text-[13px] font-semibold text-terminal-text">
+          <div className="text-[13px] font-semibold text-terminal-text font-mono">
             {muted ? 'Muted' : voicePhase === 'listening' ? 'Listening...' : voicePhase === 'thinking' ? 'Thinking...' : 'Speaking...'}
           </div>
-          <div className="text-[18px] font-mono text-terminal-text">{formatDuration(duration)}</div>
+          <div className="text-[18px] font-display text-terminal-text">{formatDuration(duration)}</div>
 
           {/* Live transcript */}
           {transcript && (
@@ -1037,7 +1037,7 @@ function CallPanel({ agentDef, onClose }) {
       {/* ── Ended State ── */}
       {callState === 'ended' && (
         <div className="p-6 flex flex-col items-center gap-2">
-          <div className="text-[13px] font-semibold text-terminal-text">Conversation Ended</div>
+          <div className="text-[13px] font-semibold text-terminal-text font-heading">Conversation Ended</div>
           <div className="text-[11px] text-[#9a9a92]">{formatDuration(duration)}</div>
         </div>
       )}
@@ -1045,11 +1045,11 @@ function CallPanel({ agentDef, onClose }) {
       {/* ── Error State ── */}
       {callState === 'error' && (
         <div className="p-5 flex flex-col items-center gap-3">
-          <div className="text-[13px] font-semibold text-red-600">Connection Failed</div>
+          <div className="text-[13px] font-semibold text-red-600 font-heading">Connection Failed</div>
           <div className="text-[11px] text-[#9a9a92] text-center px-2">{errorMsg}</div>
           <button
             onClick={() => { setCallState('idle'); setErrorMsg(''); }}
-            className="text-[12px] font-semibold underline"
+            className="text-[12px] font-semibold underline font-heading"
             style={{ color: accent }}
           >
             Try Again
@@ -1093,16 +1093,16 @@ function CopilotApprovalCard({ msg, accentColor, onApproval }) {
     <div className="mt-2.5 border border-[#e8e6e1] rounded-[10px] overflow-hidden bg-terminal-panel">
       <div className="px-3.5 py-2.5 border-b border-[#f0eeea] flex items-center gap-2">
         <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-        <span className="text-[11px] font-semibold text-[#6b6b65] uppercase tracking-[0.5px]">Approval Required</span>
+        <span className="text-[11px] font-semibold text-[#6b6b65] uppercase tracking-[0.5px] font-heading">Approval Required</span>
       </div>
       <div className="px-3.5 py-2.5 text-[12px] text-[#6b6b65]">
-        <span className="font-mono text-[11px] text-[#9a9a92]">{msg.tool_proposed}</span>
+        <span className="font-mono text-[11px] text-[#9a9a92] tabular-nums">{msg.tool_proposed}</span>
       </div>
       <div className="px-3.5 pb-3 flex gap-2">
         <button
           onClick={() => handleAction('approve')}
           disabled={status === 'loading'}
-          className="px-4 py-[6px] rounded-lg text-[11px] font-semibold text-white transition-colors disabled:opacity-50"
+          className="px-4 py-[6px] rounded-lg text-[11px] font-semibold text-white transition-colors disabled:opacity-50 font-heading"
           style={{ backgroundColor: accentColor }}
         >
           {status === 'loading' ? 'Processing...' : 'Approve'}
@@ -1110,7 +1110,7 @@ function CopilotApprovalCard({ msg, accentColor, onApproval }) {
         <button
           onClick={() => handleAction('reject')}
           disabled={status === 'loading'}
-          className="px-4 py-[6px] rounded-lg text-[11px] font-semibold bg-terminal-panel text-[#6b6b65] border-[1.5px] border-[#e8e6e1] hover:bg-[#f5f4f0] transition-colors disabled:opacity-50"
+          className="px-4 py-[6px] rounded-lg text-[11px] font-semibold bg-terminal-panel text-[#6b6b65] border-[1.5px] border-[#e8e6e1] hover:bg-[#f5f4f0] transition-colors disabled:opacity-50 font-heading"
         >
           Reject
         </button>
@@ -1188,8 +1188,8 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
       <div className="min-w-0">
         {/* Header */}
         <div className={`flex items-center gap-2 mb-1 ${isUser ? 'flex-row-reverse' : ''}`}>
-          <span className="text-[11px] font-semibold text-[#6b6b65]">{isUser ? (agentDef?.userName || 'You') : agentDef?.name}</span>
-          <span className="text-[10px] text-[#c5c5bc] font-mono">{msg.time}</span>
+          <span className="text-[11px] font-semibold text-[#6b6b65] font-heading">{isUser ? (agentDef?.userName || 'You') : agentDef?.name}</span>
+          <span className="text-[10px] text-[#c5c5bc] font-mono tabular-nums">{msg.time}</span>
         </div>
 
         {/* File attachments (image thumbnails + file icons) */}
@@ -1296,14 +1296,14 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
           <div className="flex gap-2 mt-2">
             <button
               onClick={() => onAction?.('Yes, send it', msg, 'confirm_silent')}
-              className="px-4 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="px-4 py-1.5 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90 font-heading"
               style={{ backgroundColor: accent }}
             >
               Yes, send it
             </button>
             <button
               onClick={() => onAction?.('No, don\'t send it', msg, 'quick_reply')}
-              className="px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors hover:bg-[#f5f4f0]"
+              className="px-4 py-1.5 rounded-lg text-[12px] font-semibold border transition-colors hover:bg-[#f5f4f0] font-heading"
               style={{ borderColor: '#e0ddd8', color: '#6b6b65' }}
             >
               No
@@ -1312,12 +1312,12 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
         )}
         {/* Inline confirmation status */}
         {msg.confirmed === 'sending' && (
-          <div className="flex items-center gap-1.5 mt-2 text-[12px] font-medium text-[#9ca3af]">
+          <div className="flex items-center gap-1.5 mt-2 text-[12px] font-medium text-[#9ca3af] font-mono">
             <div className="w-3 h-3 rounded-full border-2 border-[#9ca3af] border-t-transparent animate-spin" /> Sending...
           </div>
         )}
         {msg.confirmed === true && (
-          <div className="flex items-center gap-1.5 mt-2 text-[12px] font-medium" style={{ color: '#16a34a' }}>
+          <div className="flex items-center gap-1.5 mt-2 text-[12px] font-medium font-mono" style={{ color: '#16a34a' }}>
             <Check size={14} /> Sent
           </div>
         )}
@@ -1333,8 +1333,8 @@ function ContextSection({ title, meta, children, defaultOpen = true, onAdd }) {
     <div className="border-b border-[#f0eeea]">
       <div className="flex items-center justify-between px-4 py-3 hover:bg-[#f0eeea]/50 transition-colors">
         <button onClick={() => setOpen(!open)} className="flex-1 flex items-center justify-between min-w-0">
-          <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.8px]">{title}</span>
-          <span className="text-[10px] text-[#c5c5bc]">{meta}</span>
+          <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.8px] font-heading">{title}</span>
+          <span className="text-[10px] text-[#c5c5bc] font-mono">{meta}</span>
         </button>
         {onAdd && (
           <button
@@ -1412,12 +1412,12 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
           {p.totalBid && (
             <div className="flex justify-between py-[6px] text-[12px] border-b border-[#f0eeea]">
               <span className="text-[#6b6b65]">Total Bid</span>
-              <span className="font-mono font-bold text-[#1a6b3c] text-[12px]">${p.totalBid.toLocaleString()}</span>
+              <span className="font-mono font-bold text-[#1a6b3c] text-[12px] tabular-nums">${p.totalBid.toLocaleString()}</span>
             </div>
           )}
           {p.body && (
             <div className="mt-2 p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1.5">Email Body</div>
+              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1.5 font-heading">Email Body</div>
               <div className="text-[11px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[250px] overflow-y-auto">{p.body}</div>
             </div>
           )}
@@ -1446,7 +1446,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
             </div>
             {approvalContext.originalEmail.body && (
               <div className="mt-2 p-2.5 bg-terminal-panel border border-[#f0eeea] rounded-lg">
-                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1.5">RFQ Body</div>
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1.5 font-heading">RFQ Body</div>
                 <div className="text-[11px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[200px] overflow-y-auto">{approvalContext.originalEmail.body}</div>
               </div>
             )}
@@ -1479,7 +1479,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
               { l: 'Win Rate', v: gcProfile.winRate ? `${Math.round(gcProfile.winRate * 100)}%` : '--' },
             ].map((s, i) => (
               <div key={i} className="flex-1 bg-terminal-panel border border-[#f0eeea] rounded-lg px-2 py-1.5 text-center">
-                <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px]">{s.l}</div>
+                <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px] font-heading">{s.l}</div>
                 <div className="text-[13px] font-bold font-mono text-terminal-text mt-0.5">{s.v}</div>
               </div>
             ))}
@@ -1498,7 +1498,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
           ))}
           {gcProfile.openBids?.length > 0 && (
             <div className="mt-2">
-              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1">Open Bids</div>
+              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase mb-1 font-heading">Open Bids</div>
               {gcProfile.openBids.map((b, i) => (
                 <div key={i} className="text-[11px] text-terminal-text py-1 border-b border-[#f0eeea] last:border-b-0">
                   {b.subject?.slice(0, 40)}{b.subject?.length > 40 ? '...' : ''}
@@ -1731,7 +1731,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
                 <button
                   key={tab}
                   onClick={() => { setPinSearchTab(tab); setPinSearchResults([]); setPinSearchQuery(''); }}
-                  className={`flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.5px] transition-colors ${
+                  className={`flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.5px] transition-colors font-heading ${
                     pinSearchTab === tab ? 'text-terminal-text border-b-2 border-terminal-text' : 'text-[#9a9a92] hover:text-[#6b6b65]'
                   }`}
                 >
@@ -1836,7 +1836,7 @@ function InboxTab({ accent }) {
         {/* Filters + Search */}
         <div className="px-5 py-3 border-b border-terminal-border flex items-center gap-2 flex-wrap">
           {filters.map(f => (
-            <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors ${filter === f ? 'text-white border-transparent' : 'bg-terminal-panel text-[#9a9a92] border-terminal-border hover:bg-[#f5f4f0]'}`} style={filter === f ? { backgroundColor: accent } : undefined}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors font-heading ${filter === f ? 'text-white border-transparent' : 'bg-terminal-panel text-[#9a9a92] border-terminal-border hover:bg-[#f5f4f0]'}`} style={filter === f ? { backgroundColor: accent } : undefined}>{f}</button>
           ))}
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search bids..." className="ml-auto px-3 py-1.5 rounded-lg border border-terminal-border bg-[#f5f4f0] text-[11px] w-44 outline-none focus:border-[#9a9a92]" />
         </div>
@@ -1845,14 +1845,14 @@ function InboxTab({ accent }) {
           {filtered.map(item => (
             <div key={item.id} onClick={() => setSelected(item.id)} className={`px-5 py-3.5 border-b border-terminal-border cursor-pointer hover:bg-[#f5f4f0] transition-colors ${selected === item.id ? 'bg-[#f5f4f0]' : ''}`}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[13px] font-semibold text-terminal-text">{item.gc}</span>
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusColor(item.status)}`}>{item.status}</span>
+                <span className="text-[13px] font-semibold text-terminal-text font-heading">{item.gc}</span>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusColor(item.status)}`}>{item.status}</span>
               </div>
               <div className="text-[12px] text-terminal-text mb-1">{item.project}</div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-[#9a9a92]">Due {item.due}</span>
                 {item.amount && <span className="text-[11px] font-mono font-semibold text-terminal-text">{item.amount}</span>}
-                {item.urgent && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">URGENT</span>}
+                {item.urgent && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-mono">URGENT</span>}
               </div>
             </div>
           ))}
@@ -1863,33 +1863,33 @@ function InboxTab({ accent }) {
       {sel && (
         <div className="flex-[2] min-w-0 overflow-y-auto bg-[#f5f4f0] p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[15px] font-semibold text-terminal-text">{sel.project}</h3>
+            <h3 className="text-[15px] font-semibold text-terminal-text font-heading">{sel.project}</h3>
             <button onClick={() => setSelected(null)} className="text-[#9a9a92] hover:text-terminal-text"><X size={16} /></button>
           </div>
           <div className="space-y-3">
             <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
-              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2">General Contractor</div>
+              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">General Contractor</div>
               <div className="text-[13px] font-semibold text-terminal-text">{sel.gc}</div>
               <div className="text-[11px] text-[#9a9a92] mt-0.5">{sel.contact} &middot; {sel.email}</div>
             </div>
             <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
-              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2">Scope of Work</div>
+              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">Scope of Work</div>
               <div className="text-[12px] text-terminal-text leading-relaxed">{sel.scope}</div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
-                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1">Bid Due</div>
-                <div className="text-[15px] font-semibold text-terminal-text">{sel.due}</div>
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1 font-heading">Bid Due</div>
+                <div className="text-[15px] font-semibold text-terminal-text font-display">{sel.due}</div>
                 <div className="text-[11px] text-[#9a9a92]">{sel.daysLeft === 0 ? 'Today' : `${sel.daysLeft} days left`}</div>
               </div>
               <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
-                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1">Estimate</div>
-                <div className="text-[15px] font-semibold text-terminal-text">{sel.amount || '—'}</div>
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1 font-heading">Estimate</div>
+                <div className="text-[15px] font-semibold text-terminal-text font-display">{sel.amount || '—'}</div>
                 <div className={`text-[11px] ${statusColor(sel.status)} inline-block px-1.5 py-0.5 rounded mt-0.5`}>{sel.status}</div>
               </div>
             </div>
             {sel.status === 'New' && (
-              <button onClick={() => alert('Estimate generation started — the bot will analyze the scope and produce a draft estimate.')} className="w-full py-2.5 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: accent }}>Generate Estimate</button>
+              <button onClick={() => alert('Estimate generation started — the bot will analyze the scope and produce a draft estimate.')} className="w-full py-2.5 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90 font-heading" style={{ backgroundColor: accent }}>Generate Estimate</button>
             )}
           </div>
         </div>
@@ -1942,25 +1942,25 @@ function HistoryTab({ accent }) {
           { label: 'Total Bid Volume', value: `$${(totalBid / 1e6).toFixed(1)}M` },
         ].map((s, i) => (
           <div key={i} className="bg-terminal-panel px-5 py-4 text-center">
-            <div className="text-[18px] font-bold text-terminal-text">{s.value}</div>
-            <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-wider">{s.label}</div>
+            <div className="text-[18px] font-bold text-terminal-text font-display">{s.value}</div>
+            <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-wider font-heading">{s.label}</div>
           </div>
         ))}
       </div>
 
       {/* Table */}
       <div className="px-5 py-4">
-        <div className="text-[13px] font-semibold text-terminal-text mb-3">Past Estimates</div>
+        <div className="text-[13px] font-semibold text-terminal-text mb-3 font-heading">Past Estimates</div>
         <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
           <table className="w-full text-[11px]">
             <thead>
               <tr className="border-b border-terminal-border">
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Project</th>
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">GC</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Bid</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Actual</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Margin</th>
-                <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider">Status</th>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Project</th>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">GC</th>
+                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Bid</th>
+                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Actual</th>
+                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Margin</th>
+                <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -1971,7 +1971,7 @@ function HistoryTab({ accent }) {
                   <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.bid}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.actual || '—'}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.margin || '—'}</td>
-                  <td className="px-4 py-2.5 text-center"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${statusBadge(h.status)}`}>{h.status}</span></td>
+                  <td className="px-4 py-2.5 text-center"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusBadge(h.status)}`}>{h.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -1981,7 +1981,7 @@ function HistoryTab({ accent }) {
 
       {/* Bot Learning */}
       <div className="px-5 pb-5">
-        <div className="text-[13px] font-semibold text-terminal-text mb-3">Bot Learning</div>
+        <div className="text-[13px] font-semibold text-terminal-text mb-3 font-heading">Bot Learning</div>
         <div className="space-y-2">
           {LEARNING_ITEMS.map((item, i) => (
             <div key={i} className="bg-terminal-panel border border-terminal-border rounded-xl px-4 py-3 flex items-start gap-3">
@@ -2019,7 +2019,7 @@ function ConfigTab({ accent }) {
       <div className="max-w-2xl mx-auto px-5 py-5 space-y-5">
         {/* Operating Mode */}
         <div className="bg-terminal-panel border border-terminal-border rounded-xl p-5">
-          <div className="text-[13px] font-semibold text-terminal-text mb-1">Operating Mode</div>
+          <div className="text-[13px] font-semibold text-terminal-text mb-1 font-heading">Operating Mode</div>
           <div className="text-[11px] text-[#9a9a92] mb-4">Controls how much autonomy the Estimating Bot has</div>
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -2028,7 +2028,7 @@ function ConfigTab({ accent }) {
               { id: 'autonomous', label: 'Autonomous', desc: 'Acts independently' },
             ].map(m => (
               <button key={m.id} onClick={() => setMode(m.id)} className={`p-3 rounded-xl border text-center transition-colors ${mode === m.id ? 'border-transparent text-white' : 'bg-white border-terminal-border text-terminal-text hover:bg-[#f5f4f0]'}`} style={mode === m.id ? { backgroundColor: accent } : undefined}>
-                <div className="text-[12px] font-semibold">{m.label}</div>
+                <div className="text-[12px] font-semibold font-heading">{m.label}</div>
                 <div className={`text-[10px] mt-0.5 ${mode === m.id ? 'text-white/70' : 'text-[#9a9a92]'}`}>{m.desc}</div>
               </button>
             ))}
@@ -2037,7 +2037,7 @@ function ConfigTab({ accent }) {
 
         {/* Toggles */}
         <div className="bg-terminal-panel border border-terminal-border rounded-xl p-5 space-y-4">
-          <div className="text-[13px] font-semibold text-terminal-text mb-1">Behavior Settings</div>
+          <div className="text-[13px] font-semibold text-terminal-text mb-1 font-heading">Behavior Settings</div>
           {[
             { label: 'Auto-respond to new RFQs', desc: 'Send acknowledgment email when bid request arrives', on: autoRespond, setOn: setAutoRespond },
             { label: 'Auto-generate estimates', desc: 'Create estimate draft when scope is extracted', on: autoEstimate, setOn: setAutoEstimate },
@@ -2046,7 +2046,7 @@ function ConfigTab({ accent }) {
           ].map((t, i) => (
             <div key={i} className="flex items-center justify-between">
               <div>
-                <div className="text-[12px] font-semibold text-terminal-text">{t.label}</div>
+                <div className="text-[12px] font-semibold text-terminal-text font-heading">{t.label}</div>
                 <div className="text-[10px] text-[#9a9a92]">{t.desc}</div>
               </div>
               <Toggle on={t.on} setOn={t.setOn} />
@@ -2055,7 +2055,7 @@ function ConfigTab({ accent }) {
         </div>
 
         {/* Save */}
-        <button onClick={() => alert('Configuration saved.')} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: accent }}>Save Configuration</button>
+        <button onClick={() => alert('Configuration saved.')} className="w-full py-3 rounded-xl text-[13px] font-semibold text-white transition-opacity hover:opacity-90 font-heading" style={{ backgroundColor: accent }}>Save Configuration</button>
       </div>
     </div>
   );
@@ -2111,7 +2111,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
       <div className="px-3 py-3 border-b border-terminal-border flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <MessageSquare size={13} className="text-[#9a9a92]" />
-          <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.5px]">Threads</span>
+          <span className="text-[11px] font-bold text-[#6b6b65] uppercase tracking-[0.5px] font-heading">Threads</span>
         </div>
         <button
           onClick={onNewThread}
@@ -2201,7 +2201,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
                   >
                     <Trash2 size={9} />
                   </button>
-                  <span className="text-[10px] text-[#c5c5bc] tabular-nums ml-0.5">{formatRelativeTime(thread.updatedAt)}</span>
+                  <span className="text-[10px] text-[#c5c5bc] tabular-nums ml-0.5 font-mono">{formatRelativeTime(thread.updatedAt)}</span>
                 </div>
               </div>
               {isEditing ? (
@@ -2220,7 +2220,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
                 />
               ) : (
                 <div
-                  className="text-[12px] font-medium text-terminal-text truncate leading-[1.3]"
+                  className="text-[12px] font-medium text-terminal-text truncate leading-[1.3] font-heading"
                   onDoubleClick={(e) => startEditing(thread, e)}
                 >
                   {thread.title || 'Untitled thread'}
@@ -3021,10 +3021,10 @@ export default function AgentChat({ agentId = 'estimating' }) {
             <span className="text-[13px] font-bold" style={{ color: agent.color }}>{agent.initial}</span>
           </div>
           <div>
-            <div className="text-[15px] font-semibold text-terminal-text">{agent.name}</div>
+            <div className="text-[15px] font-semibold text-terminal-text font-heading">{agent.name}</div>
             <div className="text-[11px] text-[#9a9a92] flex items-center gap-[5px]">
               <span className="w-[5px] h-[5px] rounded-full bg-[#2dd478] animate-pulse" />
-              {agent.status}
+              <span className="font-mono">{agent.status}</span>
             </div>
           </div>
         </div>
@@ -3057,7 +3057,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 <button
                   key={t}
                   onClick={() => setActiveTab(t)}
-                  className={`px-2.5 py-[5px] rounded-[7px] text-[10px] font-semibold border transition-colors ${
+                  className={`px-2.5 py-[5px] rounded-[7px] text-[10px] font-semibold border transition-colors font-heading ${
                     activeTab === t
                       ? 'border-transparent'
                       : 'bg-terminal-panel text-[#9a9a92] border-terminal-border hover:bg-[#f5f4f0]'
@@ -3172,7 +3172,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
                     ))}
                   </div>
                   {progressInfo && (
-                    <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-[#8a8a82] font-medium">
+                    <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-[#8a8a82] font-medium font-mono">
                       <div className="w-2 h-2 rounded-full border border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
                       <span>Step {progressInfo.iteration}/{progressInfo.maxTurns} — {(progressInfo.tools || []).map(t => TOOL_LABELS[t] || t.replace(/_/g, ' ')).join(', ')}</span>
                     </div>

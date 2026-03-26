@@ -139,14 +139,14 @@ export default function OfficeDashboard() {
       {/* Stats bar */}
       <div className="flex items-center gap-6 mb-6">
         <div>
-          <p className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">{tenant?.name || 'Coppice'} Office</p>
-          <p className="text-xs text-terminal-text font-semibold">{filteredAgents.length} agents — {activeCount} active</p>
+          <p className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px]">{tenant?.name || 'Coppice'} Office</p>
+          <p className="text-xs font-mono text-terminal-text font-semibold">{filteredAgents.length} agents — {activeCount} active</p>
         </div>
         <div className="flex-1" />
         <button
           onClick={startMeeting}
           disabled={startingMeeting || !!activeMeeting}
-          className="px-4 py-2 text-[11px] font-semibold text-white rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
+          className="px-4 py-2 text-[11px] font-heading font-semibold text-white rounded-lg disabled:opacity-50 hover:opacity-90 transition-opacity"
           style={{ backgroundColor: '#1a6b3c' }}
         >
           {startingMeeting ? 'Starting...' : activeMeeting ? 'Meeting Active' : 'Start Meeting'}
@@ -159,7 +159,7 @@ export default function OfficeDashboard() {
           ].map(([label, color, pulse]) => (
             <div key={label} className="flex items-center gap-1.5">
               <div className={`w-2 h-2 rounded-full ${pulse ? 'animate-pulse' : ''}`} style={{ backgroundColor: color }} />
-              <span className="text-[10px] text-terminal-muted font-medium">{label}</span>
+              <span className="text-[10px] font-heading text-terminal-muted font-medium">{label}</span>
             </div>
           ))}
         </div>
@@ -182,8 +182,8 @@ export default function OfficeDashboard() {
         {/* Office floor plan */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center justify-between">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Office Floor</span>
-            <span className="text-[10px] text-terminal-muted">{data?.fetchedAt ? `Updated ${new Date(data.fetchedAt).toLocaleTimeString()}` : ''}</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Office Floor</span>
+            <span className="text-[10px] font-mono text-terminal-muted">{data?.fetchedAt ? `Updated ${new Date(data.fetchedAt).toLocaleTimeString()}` : ''}</span>
           </div>
           <div style={{ minHeight: '460px' }}>
             <FloorPlan
@@ -201,7 +201,7 @@ export default function OfficeDashboard() {
           {selectedAgent && (
             <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
               <div className="px-4 py-3 border-b border-[#f0eeea]">
-                <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agent Detail</span>
+                <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Agent Detail</span>
               </div>
               <div className="p-4">
                 <div className="flex items-center gap-3 mb-3">
@@ -236,7 +236,7 @@ export default function OfficeDashboard() {
           {/* Activity feed */}
           <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#f0eeea]">
-              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Activity Feed</span>
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Activity Feed</span>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               {activities.length === 0 && (
@@ -251,7 +251,7 @@ export default function OfficeDashboard() {
                     <p className="text-[12px] font-medium text-terminal-text truncate">{act.title}</p>
                     {act.subtitle && <p className="text-[10px] text-terminal-muted truncate mt-px">{act.subtitle}</p>}
                   </div>
-                  {act.tenant && <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-[#6b6b65] shrink-0">{act.tenant}</span>}
+                  {act.tenant && <span className="text-[9px] font-heading font-semibold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-[#6b6b65] shrink-0">{act.tenant}</span>}
                 </div>
               ))}
             </div>

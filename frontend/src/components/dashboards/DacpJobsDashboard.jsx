@@ -83,9 +83,9 @@ export default function DacpJobsDashboard() {
           { label: 'Overbudget', value: overbudget, delta: `of ${wonJobs.length} won` },
         ].map((m) => (
           <div key={m.label} className="bg-terminal-panel p-[18px_20px]">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
-            <div className="text-2xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
-            <div className="text-[11px] font-semibold mt-1 text-terminal-muted">{m.delta}</div>
+            <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
+            <div className="text-2xl font-display text-terminal-text tabular-nums leading-none">{m.value}</div>
+            <div className="text-[11px] font-mono font-semibold mt-1 text-terminal-muted">{m.delta}</div>
           </div>
         ))}
       </div>
@@ -96,13 +96,13 @@ export default function DacpJobsDashboard() {
           <button
             key={t.id}
             onClick={() => setFilterTab(t.id)}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-heading font-semibold transition-all ${
               filterTab === t.id
                 ? 'bg-[#1e3a5f] text-white'
                 : 'bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0]'
             }`}
           >
-            {t.label} ({t.count})
+            {t.label} (<span className="font-mono">{t.count}</span>)
           </button>
         ))}
       </div>
@@ -129,11 +129,11 @@ export default function DacpJobsDashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-[13px] font-semibold text-terminal-text">{job.project_name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded border ${STATUS_BADGE[job.status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${STATUS_BADGE[job.status] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
                         {job.status}
                       </span>
                       {job.project_type && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${PROJECT_TYPE_BADGE[job.project_type] || 'bg-gray-50 text-gray-600'}`}>
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${PROJECT_TYPE_BADGE[job.project_type] || 'bg-gray-50 text-gray-600'}`}>
                           {job.project_type}
                         </span>
                       )}
@@ -148,22 +148,22 @@ export default function DacpJobsDashboard() {
                   <div className="flex items-center gap-6 shrink-0">
                     {job.bid_amount && (
                       <div className="text-right">
-                        <div className="text-[10px] text-terminal-muted uppercase">Bid</div>
-                        <div className="text-[13px] font-semibold tabular-nums">${(job.bid_amount / 1000).toFixed(0)}K</div>
+                        <div className="text-[10px] font-heading text-terminal-muted uppercase">Bid</div>
+                        <div className="text-[13px] font-mono font-semibold tabular-nums">${(job.bid_amount / 1000).toFixed(0)}K</div>
                       </div>
                     )}
                     {budgetPct != null && (
                       <div className="text-right">
-                        <div className="text-[10px] text-terminal-muted uppercase">Budget</div>
-                        <div className={`text-[13px] font-semibold tabular-nums ${isOverBudget ? 'text-terminal-red' : 'text-green-600'}`}>
+                        <div className="text-[10px] font-heading text-terminal-muted uppercase">Budget</div>
+                        <div className={`text-[13px] font-mono font-semibold tabular-nums ${isOverBudget ? 'text-terminal-red' : 'text-green-600'}`}>
                           {budgetPct}%
                         </div>
                       </div>
                     )}
                     {job.margin_pct != null && (
                       <div className="text-right">
-                        <div className="text-[10px] text-terminal-muted uppercase">Margin</div>
-                        <div className={`text-[13px] font-semibold tabular-nums ${MARGIN_COLOR(job.margin_pct)}`}>
+                        <div className="text-[10px] font-heading text-terminal-muted uppercase">Margin</div>
+                        <div className={`text-[13px] font-mono font-semibold tabular-nums ${MARGIN_COLOR(job.margin_pct)}`}>
                           {job.margin_pct}%
                         </div>
                       </div>
@@ -179,18 +179,18 @@ export default function DacpJobsDashboard() {
                   {job.status === 'complete' && job.estimated_cost && (
                     <div className="grid grid-cols-3 gap-4 mb-4">
                       <div className="text-center p-3 bg-[#f5f4f0] rounded-lg">
-                        <div className="text-[10px] text-terminal-muted uppercase mb-1">Estimated</div>
-                        <div className="text-[14px] font-semibold tabular-nums">${job.estimated_cost?.toLocaleString()}</div>
+                        <div className="text-[10px] font-heading text-terminal-muted uppercase mb-1">Estimated</div>
+                        <div className="text-[14px] font-mono font-semibold tabular-nums">${job.estimated_cost?.toLocaleString()}</div>
                       </div>
                       <div className="text-center p-3 bg-[#f5f4f0] rounded-lg">
-                        <div className="text-[10px] text-terminal-muted uppercase mb-1">Actual</div>
-                        <div className={`text-[14px] font-semibold tabular-nums ${isOverBudget ? 'text-terminal-red' : 'text-green-600'}`}>
+                        <div className="text-[10px] font-heading text-terminal-muted uppercase mb-1">Actual</div>
+                        <div className={`text-[14px] font-mono font-semibold tabular-nums ${isOverBudget ? 'text-terminal-red' : 'text-green-600'}`}>
                           ${job.actual_cost?.toLocaleString()}
                         </div>
                       </div>
                       <div className="text-center p-3 bg-[#f5f4f0] rounded-lg">
-                        <div className="text-[10px] text-terminal-muted uppercase mb-1">Profit</div>
-                        <div className={`text-[14px] font-semibold tabular-nums ${MARGIN_COLOR(job.margin_pct)}`}>
+                        <div className="text-[10px] font-heading text-terminal-muted uppercase mb-1">Profit</div>
+                        <div className={`text-[14px] font-mono font-semibold tabular-nums ${MARGIN_COLOR(job.margin_pct)}`}>
                           ${((job.bid_amount || 0) - (job.actual_cost || 0)).toLocaleString()}
                         </div>
                       </div>
@@ -204,11 +204,11 @@ export default function DacpJobsDashboard() {
                   {/* Field Reports */}
                   {expandedReports[job.id] && expandedReports[job.id].length > 0 && (
                     <div>
-                      <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Field Reports</div>
+                      <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Field Reports</div>
                       <div className="space-y-1.5">
                         {expandedReports[job.id].slice(0, 5).map((r, i) => (
                           <div key={i} className="flex items-start gap-2 text-[12px] p-2 bg-[#f5f4f0] rounded-lg">
-                            <span className="text-terminal-muted shrink-0 tabular-nums">{r.date}</span>
+                            <span className="text-terminal-muted font-mono shrink-0 tabular-nums">{r.date}</span>
                             <div className="flex-1 min-w-0">
                               <span className="text-[#6b6b65]">{r.reported_by} — </span>
                               <span className="text-terminal-text">{(r.work || []).join('; ').slice(0, 100)}</span>

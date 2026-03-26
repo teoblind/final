@@ -86,7 +86,7 @@ function SummaryRenderer({ summary }) {
   if (sections.length === 0) {
     return (
       <div className="bg-[#f5f4f0] rounded-[10px] p-[14px_16px] border-l-[3px] border-l-[#1a6b3c]">
-        <div className="text-[10px] font-bold text-[#1a6b3c] tracking-[0.8px] uppercase mb-1.5">AI Summary</div>
+        <div className="text-[10px] font-bold text-[#1a6b3c] tracking-[0.8px] uppercase mb-1.5 font-heading">AI Summary</div>
         <div className="text-[13px] text-terminal-text leading-relaxed">{summary}</div>
       </div>
     );
@@ -106,7 +106,7 @@ function SummaryRenderer({ summary }) {
             className="rounded-[10px] p-[14px_16px] border-l-[3px]"
             style={{ borderLeftColor: colors.border, background: colors.bg }}
           >
-            <div className="text-[10px] font-bold tracking-[0.8px] uppercase mb-2 flex items-center gap-1.5" style={{ color: colors.label }}>
+            <div className="text-[10px] font-bold tracking-[0.8px] uppercase mb-2 flex items-center gap-1.5 font-heading" style={{ color: colors.label }}>
               <span>{icon}</span>
               {section.title}
             </div>
@@ -160,8 +160,8 @@ function Card({ title, meta, children }) {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">{title}</span>
-        {meta && <span className="text-[11px] text-terminal-muted">{meta}</span>}
+        <span className="text-xs font-bold text-terminal-text tracking-[0.3px] font-heading">{title}</span>
+        {meta && <span className="text-[11px] text-terminal-muted font-mono">{meta}</span>}
       </div>
       {children}
     </div>
@@ -267,7 +267,7 @@ export default function MeetingsDashboard() {
           <button
             key={f}
             onClick={() => { setFilter(f.toLowerCase()); setSelectedIdx(0); }}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all font-heading ${
               filter === f.toLowerCase()
                 ? 'bg-terminal-text text-white border-terminal-text'
                 : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:bg-[#f5f4f0]'
@@ -279,7 +279,7 @@ export default function MeetingsDashboard() {
         <div className="w-px h-5 bg-terminal-border mx-1" />
         <button
           onClick={() => searchRef.current?.focus()}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all"
+          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all font-heading"
         >
           Search Transcripts
         </button>
@@ -293,8 +293,8 @@ export default function MeetingsDashboard() {
             className="bg-terminal-panel p-[14px_18px] flex-1"
             style={s.highlight ? { background: 'linear-gradient(135deg, var(--t-panel, #fff), #edf7f0)' } : undefined}
           >
-            <div className="text-[9px] font-bold text-terminal-muted uppercase tracking-[1px] mb-[3px]">{s.label}</div>
-            <div className={`text-xl font-bold tabular-nums font-mono leading-none ${s.valCls || 'text-terminal-text'}`}>
+            <div className="text-[9px] font-bold text-terminal-muted uppercase tracking-[1px] mb-[3px] font-heading">{s.label}</div>
+            <div className={`text-xl font-bold tabular-nums leading-none font-display ${s.valCls || 'text-terminal-text'}`}>
               {s.val}{s.unit && <span className="text-[11px] font-medium text-terminal-muted">{s.unit}</span>}
             </div>
             <div className={`text-[10px] font-semibold mt-[3px] ${SUB_CLS[s.subCls]}`}>{s.sub}</div>
@@ -319,7 +319,7 @@ export default function MeetingsDashboard() {
           </div>
           {/* Header */}
           <div
-            className="grid px-[18px] py-[10px] text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] border-b border-terminal-border"
+            className="grid px-[18px] py-[10px] text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] border-b border-terminal-border font-heading"
             style={{ gridTemplateColumns: '3fr 1.2fr 0.8fr 1fr 80px' }}
           >
             <div>Title</div><div>Date</div><div>Duration</div><div>Actions</div><div />
@@ -347,7 +347,7 @@ export default function MeetingsDashboard() {
                     <div className={`w-2 h-2 rounded-[3px] shrink-0 ${TYPE_CLS[m.type] || 'bg-[#64748b]'}`} />
                     <span className="truncate">{m.title}</span>
                   </div>
-                  <div className="text-xs text-[#6b6b65]">{formatDate(m.recorded_at || m.created_at)}</div>
+                  <div className="text-xs text-[#6b6b65] font-mono">{formatDate(m.recorded_at || m.created_at)}</div>
                   <div className="font-mono text-xs text-terminal-text tabular-nums">{formatDuration(m.duration_seconds)}</div>
                   <div>
                     <span className={`text-[11px] font-semibold px-[9px] py-[3px] rounded-md ${actionCls}`}>{actionLabel}</span>
@@ -459,7 +459,7 @@ export default function MeetingsDashboard() {
                 {/* Action items for this entry */}
                 {selectedDetail.action_items?.length > 0 && (
                   <div className="mb-3.5">
-                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea]">
+                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">
                       Action Items ({selectedDetail.action_items.length})
                     </div>
                     {selectedDetail.action_items.map((ai) => (
@@ -479,7 +479,7 @@ export default function MeetingsDashboard() {
                 {/* Linked entities */}
                 {selectedDetail.entities?.length > 0 && (
                   <div className="mb-3.5">
-                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea]">
+                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">
                       Mentioned Entities
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -495,7 +495,7 @@ export default function MeetingsDashboard() {
                 {/* Transcript excerpt */}
                 {selectedDetail.transcript && (
                   <div>
-                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea]">Transcript</div>
+                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">Transcript</div>
                     <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
                       {selectedDetail.transcript.length > 3000
                         ? selectedDetail.transcript.slice(0, 3000) + '\n\n[Truncated — view full transcript in Drive]'
@@ -507,7 +507,7 @@ export default function MeetingsDashboard() {
                 {/* Content (for non-transcript entries) */}
                 {!selectedDetail.transcript && selectedDetail.content && (
                   <div>
-                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea]">Content</div>
+                    <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">Content</div>
                     <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
                       {selectedDetail.content.length > 3000
                         ? selectedDetail.content.slice(0, 3000) + '\n\n[Truncated]'

@@ -163,12 +163,12 @@ export default function DacpPricingDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-lg font-bold text-terminal-text tracking-tight">Pricing Table</h1>
-          <p className="text-[12px] text-terminal-muted mt-0.5">{pricing.length} items across {allCategories.length} categories</p>
+          <h1 className="text-lg font-heading font-bold text-terminal-text tracking-tight">Pricing Table</h1>
+          <p className="text-[12px] text-terminal-muted mt-0.5"><span className="font-mono">{pricing.length}</span> items across <span className="font-mono">{allCategories.length}</span> categories</p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="px-3.5 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] transition-colors"
+          className="px-3.5 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] transition-colors"
         >
           + Add Item
         </button>
@@ -181,9 +181,9 @@ export default function DacpPricingDashboard() {
           const avgPrice = items.length > 0 ? items.reduce((s, p) => s + (p.unit_price || 0), 0) / items.length : 0;
           return (
             <div key={cat} className="bg-terminal-panel p-[14px_16px]">
-              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1">{cat}</div>
-              <div className="text-xl font-bold text-terminal-text tabular-nums leading-none">{items.length}</div>
-              <div className="text-[11px] font-semibold mt-1 text-[#1e3a5f]">avg {fmt(avgPrice)}/{items[0]?.unit || 'unit'}</div>
+              <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">{cat}</div>
+              <div className="text-xl font-display text-terminal-text tabular-nums leading-none">{items.length}</div>
+              <div className="text-[11px] font-mono font-semibold mt-1 text-[#1e3a5f]">avg {fmt(avgPrice)}/{items[0]?.unit || 'unit'}</div>
             </div>
           );
         })}
@@ -202,7 +202,7 @@ export default function DacpPricingDashboard() {
                 className="w-full pl-3 pr-3 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] text-terminal-text placeholder:text-terminal-muted outline-none focus:border-[#1e3a5f] transition-colors"
               />
             </div>
-            <span className="text-[11px] text-terminal-muted">{filtered.length} items</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{filtered.length} items</span>
           </div>
           <div className="flex gap-1 flex-wrap">
             {tabs.map(cat => {
@@ -211,13 +211,13 @@ export default function DacpPricingDashboard() {
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-heading font-semibold transition-all ${
                     activeCategory === cat
                       ? 'bg-[#1e3a5f] text-white'
                       : 'bg-[#f5f4f0] text-terminal-muted hover:bg-[#eeedea]'
                   }`}
                 >
-                  {cat} ({count})
+                  {cat} (<span className="font-mono">{count}</span>)
                 </button>
               );
             })}
@@ -231,10 +231,10 @@ export default function DacpPricingDashboard() {
               {/* Category Header */}
               <div className="px-[18px] py-2 bg-[#f5f4f0] border-b border-[#f0eeea] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-[#1e3a5f] uppercase tracking-[0.5px]">{category}</span>
-                  <span className="text-[10px] text-terminal-muted">{items.length} items</span>
+                  <span className="text-[11px] font-heading font-bold text-[#1e3a5f] uppercase tracking-[0.5px]">{category}</span>
+                  <span className="text-[10px] font-mono text-terminal-muted">{items.length} items</span>
                 </div>
-                <span className="text-[10px] text-terminal-muted font-medium tabular-nums">
+                <span className="text-[10px] text-terminal-muted font-mono font-medium tabular-nums">
                   avg unit price: {fmt(items.reduce((s, p) => s + (p.unit_price || 0), 0) / items.length)}
                 </span>
               </div>
@@ -242,14 +242,14 @@ export default function DacpPricingDashboard() {
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="border-b border-[#f0eeea] bg-terminal-panel">
-                    <th className="text-left py-2 px-[18px] font-semibold text-terminal-muted w-8">ID</th>
-                    <th className="text-left py-2 px-2 font-semibold text-terminal-muted">Item</th>
-                    <th className="text-left py-2 px-2 font-semibold text-terminal-muted w-14">Unit</th>
-                    <th className="text-right py-2 px-2 font-semibold text-terminal-muted w-24">Material $</th>
-                    <th className="text-right py-2 px-2 font-semibold text-terminal-muted w-24">Labor $</th>
-                    <th className="text-right py-2 px-2 font-semibold text-terminal-muted w-24">Equipment $</th>
-                    <th className="text-right py-2 px-2 font-semibold text-terminal-muted w-24">Total $/Unit</th>
-                    <th className="text-left py-2 px-2 font-semibold text-terminal-muted">Notes</th>
+                    <th className="text-left py-2 px-[18px] font-heading font-semibold text-terminal-muted w-8">ID</th>
+                    <th className="text-left py-2 px-2 font-heading font-semibold text-terminal-muted">Item</th>
+                    <th className="text-left py-2 px-2 font-heading font-semibold text-terminal-muted w-14">Unit</th>
+                    <th className="text-right py-2 px-2 font-heading font-semibold text-terminal-muted w-24">Material $</th>
+                    <th className="text-right py-2 px-2 font-heading font-semibold text-terminal-muted w-24">Labor $</th>
+                    <th className="text-right py-2 px-2 font-heading font-semibold text-terminal-muted w-24">Equipment $</th>
+                    <th className="text-right py-2 px-2 font-heading font-semibold text-terminal-muted w-24">Total $/Unit</th>
+                    <th className="text-left py-2 px-2 font-heading font-semibold text-terminal-muted">Notes</th>
                     <th className="py-2 px-2 w-10"></th>
                   </tr>
                 </thead>
@@ -263,16 +263,16 @@ export default function DacpPricingDashboard() {
                       <td className="py-2 px-2 text-terminal-muted">
                         <EditableCell value={p.unit} onSave={(v) => handleUpdate(p.id, 'unit', v)} />
                       </td>
-                      <td className="py-2 px-2 text-right tabular-nums text-terminal-text">
+                      <td className="py-2 px-2 text-right font-mono tabular-nums text-terminal-text">
                         <EditableCell value={p.material_cost} type="number" align="right" onSave={(v) => handleUpdate(p.id, 'material_cost', v)} />
                       </td>
-                      <td className="py-2 px-2 text-right tabular-nums text-terminal-text">
+                      <td className="py-2 px-2 text-right font-mono tabular-nums text-terminal-text">
                         <EditableCell value={p.labor_cost} type="number" align="right" onSave={(v) => handleUpdate(p.id, 'labor_cost', v)} />
                       </td>
-                      <td className="py-2 px-2 text-right tabular-nums text-terminal-text">
+                      <td className="py-2 px-2 text-right font-mono tabular-nums text-terminal-text">
                         <EditableCell value={p.equipment_cost} type="number" align="right" onSave={(v) => handleUpdate(p.id, 'equipment_cost', v)} />
                       </td>
-                      <td className="py-2 px-2 text-right tabular-nums font-semibold text-[#1e3a5f]">
+                      <td className="py-2 px-2 text-right font-mono tabular-nums font-semibold text-[#1e3a5f]">
                         <EditableCell value={p.unit_price} type="number" align="right" onSave={(v) => handleUpdate(p.id, 'unit_price', v)} />
                       </td>
                       <td className="py-2 px-2 text-[#6b6b65] max-w-[200px]">
@@ -314,14 +314,14 @@ export default function DacpPricingDashboard() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAdd(false)}>
           <div className="bg-terminal-panel border border-terminal-border rounded-[14px] w-full max-w-lg p-6 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold text-terminal-text">Add Pricing Item</h2>
+              <h2 className="text-sm font-heading font-bold text-terminal-text">Add Pricing Item</h2>
               <button onClick={() => setShowAdd(false)} className="text-terminal-muted hover:text-terminal-text text-lg">&times;</button>
             </div>
 
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Category</label>
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Category</label>
                   <select
                     value={newItem.category || (activeCategory !== 'All' ? activeCategory : '')}
                     onChange={e => setNewItem(p => ({ ...p, category: e.target.value }))}
@@ -333,7 +333,7 @@ export default function DacpPricingDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Unit</label>
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Unit</label>
                   <input
                     type="text"
                     placeholder="SF, LF, EA, CY..."
@@ -346,7 +346,7 @@ export default function DacpPricingDashboard() {
 
               {newItem.category === '__new' && (
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">New Category Name</label>
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">New Category Name</label>
                   <input
                     type="text"
                     placeholder="e.g. Waterproofing"
@@ -357,7 +357,7 @@ export default function DacpPricingDashboard() {
               )}
 
               <div>
-                <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Item Description</label>
+                <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Item Description</label>
                 <input
                   type="text"
                   placeholder='e.g. 4" Slab on Grade'
@@ -369,25 +369,25 @@ export default function DacpPricingDashboard() {
 
               <div className="grid grid-cols-4 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Material $</label>
-                  <input type="number" step="0.01" value={newItem.material_cost} onChange={e => setNewItem(p => ({ ...p, material_cost: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Material $</label>
+                  <input type="number" step="0.01" value={newItem.material_cost} onChange={e => setNewItem(p => ({ ...p, material_cost: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] font-mono text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Labor $</label>
-                  <input type="number" step="0.01" value={newItem.labor_cost} onChange={e => setNewItem(p => ({ ...p, labor_cost: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Labor $</label>
+                  <input type="number" step="0.01" value={newItem.labor_cost} onChange={e => setNewItem(p => ({ ...p, labor_cost: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] font-mono text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Equip $</label>
-                  <input type="number" step="0.01" value={newItem.equipment_cost} onChange={e => setNewItem(p => ({ ...p, equipment_cost: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Equip $</label>
+                  <input type="number" step="0.01" value={newItem.equipment_cost} onChange={e => setNewItem(p => ({ ...p, equipment_cost: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] font-mono text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Unit Price</label>
-                  <input type="number" step="0.01" value={newItem.unit_price} onChange={e => setNewItem(p => ({ ...p, unit_price: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
+                  <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Unit Price</label>
+                  <input type="number" step="0.01" value={newItem.unit_price} onChange={e => setNewItem(p => ({ ...p, unit_price: parseFloat(e.target.value) || 0 }))} className="w-full px-2.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] font-mono text-terminal-text outline-none focus:border-[#1e3a5f] text-right tabular-nums" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Notes</label>
+                <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1 block">Notes</label>
                 <input
                   type="text"
                   placeholder="Mix spec, rebar, finish..."
@@ -399,13 +399,13 @@ export default function DacpPricingDashboard() {
             </div>
 
             <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => setShowAdd(false)} className="px-3.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] font-semibold text-terminal-muted hover:bg-[#eeedea]">
+              <button onClick={() => setShowAdd(false)} className="px-3.5 py-1.5 bg-[#f5f4f0] border border-terminal-border rounded-lg text-[12px] font-heading font-semibold text-terminal-muted hover:bg-[#eeedea]">
                 Cancel
               </button>
               <button
                 onClick={handleCreate}
                 disabled={!newItem.item || !newItem.unit || (!newItem.category && activeCategory === 'All')}
-                className="px-3.5 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-40 transition-colors"
+                className="px-3.5 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] disabled:opacity-40 transition-colors"
               >
                 Add Item
               </button>

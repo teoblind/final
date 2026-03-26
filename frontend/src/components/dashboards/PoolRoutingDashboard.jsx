@@ -25,8 +25,8 @@ function Card({ title, meta, children }) {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">{title}</span>
-        {meta && <span className="text-[11px] text-terminal-muted">{meta}</span>}
+        <span className="text-xs font-bold text-terminal-text tracking-[0.3px] font-heading">{title}</span>
+        {meta && <span className="text-[11px] text-terminal-muted font-mono">{meta}</span>}
       </div>
       <div>{children}</div>
     </div>
@@ -307,10 +307,10 @@ export default function PoolRoutingDashboard() {
         <div className="flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-[#1a6b3c] animate-pulse shrink-0" />
           <div>
-            <div className="text-sm font-bold text-terminal-text">
+            <div className="text-sm font-bold text-terminal-text font-heading">
               Pool connected — {cfg.provider || 'Unknown'}
             </div>
-            <div className="text-[11px] text-terminal-muted mt-0.5">
+            <div className="text-[11px] text-terminal-muted mt-0.5 font-mono">
               Worker: {cfg.workerPrefix || '—'} · Wallet: {cfg.walletAddress ? cfg.walletAddress.slice(0, 8) + '...' + cfg.walletAddress.slice(-6) : '—'}
               {cfg.subAccount ? ` · Sub-account: ${cfg.subAccount}` : ''}
             </div>
@@ -318,7 +318,7 @@ export default function PoolRoutingDashboard() {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0] transition-all"
+          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0] transition-all font-heading"
         >
           Edit Config
         </button>

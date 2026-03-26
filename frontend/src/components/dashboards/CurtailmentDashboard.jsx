@@ -22,8 +22,8 @@ function Card({ title, meta, children }) {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">{title}</span>
-        {meta && <span className="text-[11px] text-terminal-muted">{meta}</span>}
+        <span className="text-xs font-bold text-terminal-text tracking-[0.3px] font-heading">{title}</span>
+        {meta && <span className="text-[11px] text-terminal-muted font-mono">{meta}</span>}
       </div>
       <div>{children}</div>
     </div>
@@ -96,7 +96,7 @@ function FleetConfigModal({ onClose, onSaved, existing }) {
   const inputCls =
     'w-full px-3 py-2 text-[13px] bg-terminal-panel border border-terminal-border rounded-lg text-terminal-text placeholder-terminal-muted focus:outline-none focus:ring-1 focus:ring-[#1a6b3c] focus:border-[#1a6b3c] transition-colors';
 
-  const labelCls = 'block text-[11px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5';
+  const labelCls = 'block text-[11px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 font-heading';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -108,7 +108,7 @@ function FleetConfigModal({ onClose, onSaved, existing }) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-terminal-border flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-terminal-text">Connect Fleet</h2>
+            <h2 className="text-sm font-bold text-terminal-text font-heading">Connect Fleet</h2>
             <p className="text-[11px] text-terminal-muted mt-0.5">Enter your ERCOT credentials and fleet details</p>
           </div>
           <button
@@ -243,14 +243,14 @@ function FleetConfigModal({ onClose, onSaved, existing }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-[12px] font-semibold text-terminal-muted bg-terminal-panel border border-terminal-border rounded-lg hover:bg-[#f5f4f0] transition-colors"
+              className="px-4 py-2 text-[12px] font-semibold text-terminal-muted bg-terminal-panel border border-terminal-border rounded-lg hover:bg-[#f5f4f0] transition-colors font-heading"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-[12px] font-semibold text-white bg-[#1a6b3c] border border-[#1a6b3c] rounded-lg hover:opacity-90 transition-all disabled:opacity-50"
+              className="px-4 py-2 text-[12px] font-semibold text-white bg-[#1a6b3c] border border-[#1a6b3c] rounded-lg hover:opacity-90 transition-all disabled:opacity-50 font-heading"
             >
               {saving ? 'Saving...' : 'Connect Fleet'}
             </button>
@@ -285,20 +285,20 @@ function ConnectedDashboard({ config }) {
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-terminal-border border-t border-terminal-border">
           <div className="bg-terminal-panel px-[18px] py-3">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px]">Machines</div>
-            <div className="text-lg font-bold text-terminal-text tabular-nums">{config.machineCount}</div>
+            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] font-heading">Machines</div>
+            <div className="text-lg font-bold text-terminal-text tabular-nums font-display">{config.machineCount}</div>
           </div>
           <div className="bg-terminal-panel px-[18px] py-3">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px]">Model</div>
-            <div className="text-lg font-bold text-terminal-text">{config.machineModel}</div>
+            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] font-heading">Model</div>
+            <div className="text-lg font-bold text-terminal-text font-display">{config.machineModel}</div>
           </div>
           <div className="bg-terminal-panel px-[18px] py-3">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px]">Breakeven</div>
-            <div className="text-lg font-bold text-[#b8860b] tabular-nums">${config.breakevenPrice}<span className="text-[11px] font-medium text-terminal-muted ml-0.5">/MWh</span></div>
+            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] font-heading">Breakeven</div>
+            <div className="text-lg font-bold text-[#b8860b] tabular-nums font-display">${config.breakevenPrice}<span className="text-[11px] font-medium text-terminal-muted ml-0.5">/MWh</span></div>
           </div>
           <div className="bg-terminal-panel px-[18px] py-3">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px]">Auto-curtail</div>
-            <div className="text-lg font-bold text-[#1a6b3c] tabular-nums">${config.curtailThreshold}<span className="text-[11px] font-medium text-terminal-muted ml-0.5">/MWh</span></div>
+            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[0.8px] font-heading">Auto-curtail</div>
+            <div className="text-lg font-bold text-[#1a6b3c] tabular-nums font-display">${config.curtailThreshold}<span className="text-[11px] font-medium text-terminal-muted ml-0.5">/MWh</span></div>
           </div>
         </div>
       </div>
@@ -309,7 +309,7 @@ function ConnectedDashboard({ config }) {
           <button
             key={r}
             onClick={() => setTimeRange(r)}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all font-heading ${
               timeRange === r
                 ? 'bg-terminal-text text-white border-terminal-text'
                 : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:bg-[#f5f4f0]'
@@ -321,13 +321,13 @@ function ConnectedDashboard({ config }) {
         <div className="w-px h-5 bg-terminal-border mx-1" />
         <button
           onClick={() => alert('Backtest initiated — analyzing last 30 days of ERCOT pricing against curtailment decisions.')}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all"
+          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all font-heading"
         >
           Run Backtest
         </button>
         <button
           onClick={() => alert('All curtailment recommendations paused. Resume manually when ready.')}
-          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:opacity-90 transition-all"
+          className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:opacity-90 transition-all font-heading"
         >
           Pause All
         </button>

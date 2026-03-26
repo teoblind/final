@@ -5,7 +5,7 @@ export default function Sidebar({ onClose }) {
   return (
     <div className="absolute left-0 top-0 bottom-0 w-64 bg-terminal-panel border-r border-terminal-border">
       <div className="flex items-center justify-between p-4 border-b border-terminal-border">
-        <span className="font-bold">Menu</span>
+        <span className="font-bold font-heading">Menu</span>
         <button onClick={onClose} className="p-1 hover:bg-terminal-border rounded">
           <X size={20} />
         </button>
@@ -21,7 +21,7 @@ export default function Sidebar({ onClose }) {
 
       <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-terminal-border">
         <div className="text-xs text-terminal-muted space-y-2">
-          <p className="font-bold text-terminal-green">ZHAN MACRO</p>
+          <p className="font-bold text-terminal-green font-heading">ZHAN MACRO</p>
           <p>Atoms &gt; Bits</p>
           <p>Tracking the rotation from asset-light software to energy-intensive industries.</p>
         </div>
@@ -46,7 +46,7 @@ function NavItem({ icon, label, active }) {
       }`}
     >
       {icon}
-      <span>{label}</span>
+      <span className="font-heading">{label}</span>
     </button>
   );
 }
@@ -60,7 +60,7 @@ function SidebarLink({ label, href }) {
       className="flex items-center gap-2 text-xs text-terminal-muted hover:text-terminal-green"
     >
       <ExternalLink size={12} />
-      {label}
+      <span className="font-heading">{label}</span>
     </a>
   );
 }

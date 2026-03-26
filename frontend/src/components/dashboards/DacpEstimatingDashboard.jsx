@@ -61,7 +61,7 @@ function WorkflowStepper({ currentStep }) {
                 }`}>
                   {isDone ? '\u2713' : step.num}
                 </div>
-                <span className={`text-[10px] whitespace-nowrap ${
+                <span className={`text-[10px] font-heading whitespace-nowrap ${
                   isCurrent ? 'font-bold text-[#1e3a5f]' :
                   isDone ? 'font-medium text-terminal-text' :
                   'text-terminal-muted'
@@ -137,7 +137,7 @@ function DocumentOrganizationPanel({ bid, token, onAdvance }) {
 
   return (
     <div className="px-[18px] py-3">
-      <div className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-[1px] mb-3">Document Organization</div>
+      <div className="text-[10px] font-heading font-bold text-[#1e3a5f] uppercase tracking-[1px] mb-3">Document Organization</div>
 
       {/* Drop zone */}
       <div
@@ -180,7 +180,7 @@ function DocumentOrganizationPanel({ bid, token, onAdvance }) {
         <button
           onClick={handleAnalyzeDocs}
           disabled={analyzing || files.length === 0}
-          className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors mb-3"
+          className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors mb-3"
         >
           {analyzing ? 'Analyzing Documents...' : 'Analyze Documents'}
         </button>
@@ -189,7 +189,7 @@ function DocumentOrganizationPanel({ bid, token, onAdvance }) {
       {/* CSI Division breakdown */}
       {divisions && (
         <>
-          <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-2 mt-2">CSI Divisions</div>
+          <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2 mt-2">CSI Divisions</div>
           <div className="space-y-0.5 mb-4 max-h-[350px] overflow-y-auto">
             {divisions.map((div, idx) => (
               <div key={idx} className={`border rounded-lg transition-colors ${div.relevant ? 'border-[#1e3a5f]/20 bg-white' : 'border-[#e0deda] bg-[#f9f9f7] opacity-60'}`}>
@@ -202,7 +202,7 @@ function DocumentOrganizationPanel({ bid, token, onAdvance }) {
                   >
                     {div.relevant && '\u2713'}
                   </button>
-                  <span className="text-[11px] font-mono text-[#1e3a5f] font-semibold flex-shrink-0">{div.code}</span>
+                  <span className="text-[11px] font-mono text-[#1e3a5f] font-semibold flex-shrink-0 tabular-nums">{div.code}</span>
                   <span className="text-[11px] text-terminal-text flex-1 truncate">&mdash; {div.name}</span>
                   <span className={`text-[10px] text-terminal-muted transition-transform ${expandedDiv === idx ? 'rotate-180' : ''}`}>&#9660;</span>
                 </div>
@@ -226,7 +226,7 @@ function DocumentOrganizationPanel({ bid, token, onAdvance }) {
           <button
             onClick={handleConfirmScope}
             disabled={confirming || divisions.filter(d => d.relevant).length === 0}
-            className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
           >
             {confirming ? 'Confirming...' : `Confirm Scope (${divisions.filter(d => d.relevant).length} divisions)`}
           </button>
@@ -307,7 +307,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
 
   return (
     <div className="px-[18px] py-3">
-      <div className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-[1px] mb-3">Plan Analysis</div>
+      <div className="text-[10px] font-heading font-bold text-[#1e3a5f] uppercase tracking-[1px] mb-3">Plan Analysis</div>
 
       {/* Drop zone */}
       <div
@@ -350,7 +350,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
         <button
           onClick={handleAnalyzePlans}
           disabled={analyzing || files.length === 0}
-          className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors mb-3"
+          className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors mb-3"
         >
           {analyzing ? 'Analyzing Plans...' : 'Analyze Plans'}
         </button>
@@ -359,7 +359,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
       {/* Analysis results — grouped by type */}
       {analysis && (
         <div className="mb-4">
-          <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Identified Elements</div>
+          <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Identified Elements</div>
           <div className="space-y-3 max-h-[300px] overflow-y-auto">
             {Object.entries(
               analysis.reduce((groups, el) => {
@@ -370,7 +370,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
               }, {})
             ).map(([group, items]) => (
               <div key={group}>
-                <div className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-[0.5px] mb-1">{group}</div>
+                <div className="text-[10px] font-heading font-bold text-[#1e3a5f] uppercase tracking-[0.5px] mb-1">{group}</div>
                 <div className="space-y-0.5">
                   {items.map((item, i) => (
                     <div key={i} className="flex items-start gap-2 text-[11px]">
@@ -388,7 +388,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
 
       {/* PlanSwift import */}
       <div className="border-t border-[#f0eeea] pt-3 mt-3">
-        <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-2">PlanSwift Import</div>
+        <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2">PlanSwift Import</div>
         <div className="flex items-center gap-2 mb-2">
           <button
             onClick={() => psFileInputRef.current?.click()}
@@ -411,17 +411,17 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-[#f0eeea]">
-                  <th className="text-left py-1 font-semibold text-terminal-muted">Item</th>
-                  <th className="text-right py-1 font-semibold text-terminal-muted w-16">Qty</th>
-                  <th className="text-right py-1 font-semibold text-terminal-muted w-14">Unit</th>
+                  <th className="text-left py-1 font-heading font-semibold text-terminal-muted">Item</th>
+                  <th className="text-right py-1 font-heading font-semibold text-terminal-muted w-16">Qty</th>
+                  <th className="text-right py-1 font-heading font-semibold text-terminal-muted w-14">Unit</th>
                 </tr>
               </thead>
               <tbody>
                 {parsedQuantities.map((q, i) => (
                   <tr key={i} className="border-b border-[#f0eeea] last:border-b-0">
                     <td className="py-1 text-[#6b6b65] truncate max-w-[200px]">{q.item || q.description}</td>
-                    <td className="py-1 text-right tabular-nums text-terminal-text">{q.quantity?.toLocaleString()}</td>
-                    <td className="py-1 text-right text-terminal-muted">{q.unit}</td>
+                    <td className="py-1 text-right font-mono tabular-nums text-terminal-text">{q.quantity?.toLocaleString()}</td>
+                    <td className="py-1 text-right font-mono text-terminal-muted">{q.unit}</td>
                   </tr>
                 ))}
               </tbody>
@@ -434,7 +434,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
       {(analysis || parsedQuantities) && (
         <button
           onClick={handleContinue}
-          className="mt-3 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] transition-colors"
+          className="mt-3 px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] transition-colors"
         >
           Continue to Pricing
         </button>
@@ -622,9 +622,9 @@ export default function DacpEstimatingDashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
           {statMetrics.map((m) => (
             <div key={m.label} className="bg-terminal-panel p-[14px_16px]">
-              <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1">{m.label}</div>
-              <div className="text-xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
-              <div className={`text-[11px] font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
+              <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">{m.label}</div>
+              <div className="text-xl font-display text-terminal-text tabular-nums leading-none">{m.value}</div>
+              <div className={`text-[11px] font-mono font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
             </div>
           ))}
         </div>
@@ -636,21 +636,21 @@ export default function DacpEstimatingDashboard() {
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] border-b border-[#f0eeea]">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Inbox</span>
-              <span className="text-[11px] text-terminal-muted">{bids.length} RFQs</span>
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Inbox</span>
+              <span className="text-[11px] font-mono text-terminal-muted">{bids.length} RFQs</span>
             </div>
             <div className="flex gap-1">
               {tabs.map(t => (
                 <button
                   key={t.id}
                   onClick={() => setFilterTab(t.id)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-heading font-semibold transition-all ${
                     filterTab === t.id
                       ? 'bg-[#1e3a5f] text-white'
                       : 'bg-[#f5f4f0] text-terminal-muted hover:bg-[#eeedea]'
                   }`}
                 >
-                  {t.label} ({t.count})
+                  {t.label} (<span className="font-mono">{t.count}</span>)
                 </button>
               ))}
             </div>
@@ -669,7 +669,7 @@ export default function DacpEstimatingDashboard() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-[13px] font-medium text-terminal-text truncate flex-1 mr-2">{bid.gc_name}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${STATUS_BADGE[bid.status] || STATUS_BADGE.new}`}>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border shrink-0 ${STATUS_BADGE[bid.status] || STATUS_BADGE.new}`}>
                       {bid.status}
                     </span>
                   </div>
@@ -677,10 +677,10 @@ export default function DacpEstimatingDashboard() {
                     {bid.subject.replace(/^(RFQ|ITB|RFP|Pricing Request|Budget Pricing|Budget Request|Quick Turn|Bid|Pre-Qual \+ RFQ|FYI):?\s*/i, '')}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border ${URGENCY_BADGE[bid.urgency]}`}>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${URGENCY_BADGE[bid.urgency]}`}>
                       {bid.urgency}
                     </span>
-                    <span className="text-[10px] text-terminal-muted">
+                    <span className="text-[10px] font-mono text-terminal-muted">
                       {days <= 0 ? 'Due today' : `${days}d left`}
                     </span>
                   </div>
@@ -700,8 +700,8 @@ export default function DacpEstimatingDashboard() {
               {/* Header — always visible */}
               <div className="px-[18px] py-[14px] border-b border-[#f0eeea]">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-terminal-text">{selected.gc_name}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded border ${URGENCY_BADGE[selected.urgency]}`}>
+                  <span className="text-xs font-heading font-bold text-terminal-text">{selected.gc_name}</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${URGENCY_BADGE[selected.urgency]}`}>
                     Due {selected.due_date}
                   </span>
                 </div>
@@ -733,7 +733,7 @@ export default function DacpEstimatingDashboard() {
                 <>
                   {/* Scope Summary */}
                   <div className="px-[18px] py-3 border-b border-[#f0eeea]">
-                    <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Scope</div>
+                    <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Scope</div>
                     {(() => {
                       const scope = selected.scope || (selected.scope_json ? JSON.parse(selected.scope_json) : {});
                       const items = scope.items || [];
@@ -758,7 +758,7 @@ export default function DacpEstimatingDashboard() {
                     if (missing.length === 0) return null;
                     return (
                       <div className="px-[18px] py-3 border-b border-[#f0eeea] bg-amber-50/50">
-                        <div className="text-[10px] font-bold text-terminal-amber uppercase tracking-[1px] mb-1">Missing Info</div>
+                        <div className="text-[10px] font-heading font-bold text-terminal-amber uppercase tracking-[1px] mb-1">Missing Info</div>
                         {missing.map((m, i) => (
                           <div key={i} className="text-[12px] text-terminal-amber">{m}</div>
                         ))}
@@ -771,8 +771,8 @@ export default function DacpEstimatingDashboard() {
                     <>
                       <div className="px-[18px] py-3 border-b border-[#f0eeea]">
                         <div className="flex items-center justify-between mb-2">
-                          <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Estimate</div>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${CONFIDENCE_BADGE[selectedEstimate.confidence] || CONFIDENCE_BADGE.medium}`}>
+                          <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px]">Estimate</div>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${CONFIDENCE_BADGE[selectedEstimate.confidence] || CONFIDENCE_BADGE.medium}`}>
                             {selectedEstimate.confidence} confidence
                           </span>
                         </div>
@@ -780,21 +780,21 @@ export default function DacpEstimatingDashboard() {
                           <table className="w-full text-[12px]">
                             <thead>
                               <tr className="border-b border-[#f0eeea]">
-                                <th className="text-left py-1.5 font-semibold text-terminal-muted">Item</th>
-                                <th className="text-right py-1.5 font-semibold text-terminal-muted w-16">Qty</th>
-                                <th className="text-right py-1.5 font-semibold text-terminal-muted w-14">Unit</th>
-                                <th className="text-right py-1.5 font-semibold text-terminal-muted w-20">Unit $</th>
-                                <th className="text-right py-1.5 font-semibold text-terminal-muted w-24">Extended</th>
+                                <th className="text-left py-1.5 font-heading font-semibold text-terminal-muted">Item</th>
+                                <th className="text-right py-1.5 font-heading font-semibold text-terminal-muted w-16">Qty</th>
+                                <th className="text-right py-1.5 font-heading font-semibold text-terminal-muted w-14">Unit</th>
+                                <th className="text-right py-1.5 font-heading font-semibold text-terminal-muted w-20">Unit $</th>
+                                <th className="text-right py-1.5 font-heading font-semibold text-terminal-muted w-24">Extended</th>
                               </tr>
                             </thead>
                             <tbody>
                               {(selectedEstimate.line_items || (selectedEstimate.line_items_json ? JSON.parse(selectedEstimate.line_items_json) : [])).map((li, i) => (
                                 <tr key={i} className="border-b border-[#f0eeea] last:border-b-0">
                                   <td className="py-1.5 text-[#6b6b65] truncate max-w-[200px]">{li.pricingItem || li.description}</td>
-                                  <td className="py-1.5 text-right tabular-nums text-terminal-text">{li.quantity?.toLocaleString()}</td>
-                                  <td className="py-1.5 text-right text-terminal-muted">{li.unit}</td>
-                                  <td className="py-1.5 text-right tabular-nums text-terminal-text">${li.unitPrice?.toFixed(2)}</td>
-                                  <td className="py-1.5 text-right tabular-nums font-medium text-terminal-text">${li.extended?.toLocaleString()}</td>
+                                  <td className="py-1.5 text-right font-mono tabular-nums text-terminal-text">{li.quantity?.toLocaleString()}</td>
+                                  <td className="py-1.5 text-right font-mono text-terminal-muted">{li.unit}</td>
+                                  <td className="py-1.5 text-right font-mono tabular-nums text-terminal-text">${li.unitPrice?.toFixed(2)}</td>
+                                  <td className="py-1.5 text-right font-mono tabular-nums font-medium text-terminal-text">${li.extended?.toLocaleString()}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -805,13 +805,13 @@ export default function DacpEstimatingDashboard() {
                       {/* Totals */}
                       <div className="px-[18px] py-3 border-b border-[#f0eeea]">
                         <div className="space-y-1 text-[12px]">
-                          <div className="flex justify-between"><span className="text-[#6b6b65]">Subtotal</span><span className="tabular-nums">${selectedEstimate.subtotal?.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-[#6b6b65]">Overhead ({selectedEstimate.overhead_pct}%)</span><span className="tabular-nums">${Math.round(selectedEstimate.subtotal * (selectedEstimate.overhead_pct / 100))?.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-[#6b6b65]">Profit ({selectedEstimate.profit_pct}%)</span><span className="tabular-nums">${Math.round((selectedEstimate.subtotal * (1 + selectedEstimate.overhead_pct / 100)) * (selectedEstimate.profit_pct / 100))?.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-[#6b6b65]">Mobilization + Testing</span><span className="tabular-nums">${selectedEstimate.mobilization?.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-[#6b6b65]">Subtotal</span><span className="font-mono tabular-nums">${selectedEstimate.subtotal?.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-[#6b6b65]">Overhead (<span className="font-mono">{selectedEstimate.overhead_pct}%</span>)</span><span className="font-mono tabular-nums">${Math.round(selectedEstimate.subtotal * (selectedEstimate.overhead_pct / 100))?.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-[#6b6b65]">Profit (<span className="font-mono">{selectedEstimate.profit_pct}%</span>)</span><span className="font-mono tabular-nums">${Math.round((selectedEstimate.subtotal * (1 + selectedEstimate.overhead_pct / 100)) * (selectedEstimate.profit_pct / 100))?.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-[#6b6b65]">Mobilization + Testing</span><span className="font-mono tabular-nums">${selectedEstimate.mobilization?.toLocaleString()}</span></div>
                           <div className="flex justify-between pt-2 border-t border-[#f0eeea] text-[14px] font-bold">
-                            <span className="text-terminal-text">Total Bid</span>
-                            <span className="text-[#1e3a5f] tabular-nums">${selectedEstimate.total_bid?.toLocaleString()}</span>
+                            <span className="font-heading text-terminal-text">Total Bid</span>
+                            <span className="text-[#1e3a5f] font-display tabular-nums">${selectedEstimate.total_bid?.toLocaleString()}</span>
                           </div>
                         </div>
                       </div>
@@ -822,7 +822,7 @@ export default function DacpEstimatingDashboard() {
                       <button
                         onClick={handleGenerate}
                         disabled={generating}
-                        className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 bg-[#1e3a5f] text-white rounded-lg text-sm font-heading font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
                       >
                         {generating ? 'Generating...' : 'Generate Estimate'}
                       </button>
@@ -833,7 +833,7 @@ export default function DacpEstimatingDashboard() {
                   {showAnalysis && itbAnalysis && (
                     <div className="px-[18px] py-3 border-b border-[#f0eeea] bg-blue-50/30">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-[1px]">ITB Analysis</div>
+                        <div className="text-[10px] font-heading font-bold text-[#1e3a5f] uppercase tracking-[1px]">ITB Analysis</div>
                         <button onClick={() => setShowAnalysis(false)} className="text-[10px] text-terminal-muted hover:text-terminal-text">Close</button>
                       </div>
 
@@ -947,12 +947,12 @@ export default function DacpEstimatingDashboard() {
                   {/* Bid / Pass Decision Buttons */}
                   {selected.status === 'new' && (showAnalysis || itbAnalysis) && (
                     <div className="px-[18px] py-3 border-b border-[#f0eeea]">
-                      <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Decision</div>
+                      <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Decision</div>
                       <div className="flex items-start gap-2">
                         <button
                           onClick={() => handleBidDecision('bid')}
                           disabled={bidDecisionLoading}
-                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-[12px] font-bold hover:bg-green-700 disabled:opacity-50 transition-colors"
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg text-[12px] font-heading font-bold hover:bg-green-700 disabled:opacity-50 transition-colors"
                         >
                           {bidDecisionLoading ? '...' : 'Bid on This'}
                         </button>
@@ -960,7 +960,7 @@ export default function DacpEstimatingDashboard() {
                           <button
                             onClick={() => setShowPassReason(true)}
                             disabled={bidDecisionLoading}
-                            className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-[12px] font-bold hover:bg-gray-200 border border-gray-300 disabled:opacity-50 transition-colors"
+                            className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-[12px] font-heading font-bold hover:bg-gray-200 border border-gray-300 disabled:opacity-50 transition-colors"
                           >
                             Pass
                           </button>
@@ -978,7 +978,7 @@ export default function DacpEstimatingDashboard() {
                             <button
                               onClick={() => handleBidDecision('pass', passReason)}
                               disabled={bidDecisionLoading}
-                              className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[12px] font-bold hover:bg-red-600 disabled:opacity-50 transition-colors"
+                              className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[12px] font-heading font-bold hover:bg-red-600 disabled:opacity-50 transition-colors"
                             >
                               Confirm Pass
                             </button>
@@ -997,7 +997,7 @@ export default function DacpEstimatingDashboard() {
                   {/* Passed banner */}
                   {selected.status === 'passed' && (
                     <div className="px-[18px] py-3 border-b border-[#f0eeea] bg-gray-50">
-                      <div className="text-[11px] font-bold text-gray-500 uppercase tracking-[1px]">Passed</div>
+                      <div className="text-[11px] font-heading font-bold text-gray-500 uppercase tracking-[1px]">Passed</div>
                       {selected.pass_reason && <div className="text-[11px] text-gray-400 mt-0.5">{selected.pass_reason}</div>}
                     </div>
                   )}
@@ -1007,7 +1007,7 @@ export default function DacpEstimatingDashboard() {
                     <button
                       onClick={handleAnalyzeItb}
                       disabled={analyzing}
-                      className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
+                      className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a] disabled:opacity-50 transition-colors"
                     >
                       {analyzing ? 'Analyzing...' : showAnalysis ? 'Re-Analyze' : 'Analyze ITB'}
                     </button>
@@ -1015,24 +1015,24 @@ export default function DacpEstimatingDashboard() {
                       <button
                         onClick={handleGenerate}
                         disabled={generating}
-                        className="px-3 py-1.5 bg-terminal-panel border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-[12px] font-semibold hover:bg-[#e8eef5] disabled:opacity-50"
+                        className="px-3 py-1.5 bg-terminal-panel border border-[#1e3a5f] text-[#1e3a5f] rounded-lg text-[12px] font-heading font-semibold hover:bg-[#e8eef5] disabled:opacity-50"
                       >
                         {generating ? 'Generating...' : 'Generate Estimate'}
                       </button>
                     )}
                     {selectedEstimate && (
                       <>
-                        <button onClick={() => alert('Opening estimate editor...')} className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] font-semibold text-terminal-text hover:bg-[#f5f4f0]">
+                        <button onClick={() => alert('Opening estimate editor...')} className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] font-heading font-semibold text-terminal-text hover:bg-[#f5f4f0]">
                           Edit
                         </button>
                         <button
                           onClick={handleSanityCheck}
                           disabled={checkingBid}
-                          className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] font-semibold text-terminal-text hover:bg-[#f5f4f0] disabled:opacity-50"
+                          className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] font-heading font-semibold text-terminal-text hover:bg-[#f5f4f0] disabled:opacity-50"
                         >
                           {checkingBid ? 'Checking...' : 'Sanity Check'}
                         </button>
-                        <button onClick={() => alert('Quote sent to GC.')} className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-semibold hover:bg-[#2a4f7a]">
+                        <button onClick={() => alert('Quote sent to GC.')} className="px-3 py-1.5 bg-[#1e3a5f] text-white rounded-lg text-[12px] font-heading font-semibold hover:bg-[#2a4f7a]">
                           Send Quote
                         </button>
                       </>
@@ -1041,7 +1041,7 @@ export default function DacpEstimatingDashboard() {
 
                   {/* Document Generation Toolbar */}
                   <div className="px-[18px] py-2 border-t border-[#f0eeea] flex gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] self-center mr-1">Generate</span>
+                    <span className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] self-center mr-1">Generate</span>
                     <button
                       onClick={() => handleGenerateDoc('takeoff')}
                       disabled={generatingDoc === 'takeoff'}
@@ -1071,8 +1071,8 @@ export default function DacpEstimatingDashboard() {
                   {sanityResult && (
                     <div className="px-[18px] py-3 border-t border-[#f0eeea]">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Sanity Check</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        <span className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px]">Sanity Check</span>
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
                           sanityResult.verdict === 'pass' ? 'bg-green-100 text-green-700' :
                           sanityResult.verdict === 'warn' ? 'bg-amber-100 text-amber-700' :
                           'bg-red-100 text-red-700'

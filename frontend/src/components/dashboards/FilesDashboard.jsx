@@ -2258,20 +2258,20 @@ export default function FilesDashboard() {
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
-        <h2 className="text-sm font-bold text-terminal-text tracking-[0.3px]">Files</h2>
+        <h2 className="text-sm font-bold text-terminal-text tracking-[0.3px] font-heading">Files</h2>
         {liveMode && (
-          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-full bg-[#edf7f0] text-[#1a6b3c] border border-[#d0e8d8]">
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-full bg-[#edf7f0] text-[#1a6b3c] border border-[#d0e8d8] font-mono">
             <span className="w-[5px] h-[5px] rounded-full bg-[#1a6b3c] animate-pulse" />
             Live
           </span>
         )}
         {totalFiles > 0 && (
-          <span className="text-[11px] text-terminal-muted">{totalFiles} files</span>
+          <span className="text-[11px] text-terminal-muted font-mono">{totalFiles} files</span>
         )}
         <button
           onClick={refreshFiles}
           disabled={loading}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-terminal-muted bg-[#f5f4f0] border border-terminal-border hover:bg-[#eeede8] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-terminal-muted bg-[#f5f4f0] border border-terminal-border hover:bg-[#eeede8] transition-colors disabled:opacity-50 font-heading"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           Refresh
@@ -2279,7 +2279,7 @@ export default function FilesDashboard() {
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-[#2c5282] border border-[#1e3a5f] hover:bg-[#1e3a5f] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-[#2c5282] border border-[#1e3a5f] hover:bg-[#1e3a5f] transition-colors disabled:opacity-50 font-heading"
         >
           <Upload size={12} className={uploading ? 'animate-spin' : ''} />
           {uploading ? 'Uploading...' : 'Upload'}
@@ -2288,7 +2288,7 @@ export default function FilesDashboard() {
         <button
           onClick={handleSyncDrive}
           disabled={syncing}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-terminal-muted bg-[#f5f4f0] border border-terminal-border hover:bg-[#eeede8] transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-terminal-muted bg-[#f5f4f0] border border-terminal-border hover:bg-[#eeede8] transition-colors disabled:opacity-50 font-heading"
           title="Scan your connected Google Drive and index all files for AI context"
         >
           <DriveIcon />
@@ -2337,7 +2337,7 @@ export default function FilesDashboard() {
         <div className="w-52 shrink-0">
           <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
             <div className="px-[14px] py-[10px] border-b border-[#f0eeea]">
-              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Folders</span>
+              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] font-heading">Folders</span>
             </div>
             <div className="py-1">
               {Object.keys(folders).map(name => {
@@ -2359,7 +2359,7 @@ export default function FilesDashboard() {
                     }
                     <FolderOpen size={14} className={`shrink-0 ${isSelected ? 'text-terminal-green' : 'opacity-50'}`} />
                     <span className="truncate">{name}</span>
-                    <span className="ml-auto text-[10px] text-terminal-muted tabular-nums">
+                    <span className="ml-auto text-[10px] text-terminal-muted tabular-nums font-mono">
                       {folders[name].files.length}
                     </span>
                   </button>
@@ -2374,9 +2374,9 @@ export default function FilesDashboard() {
           <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
             {/* Column headers */}
             <div className="grid grid-cols-[1fr_100px_140px] gap-2 px-[18px] py-[10px] border-b border-[#f0eeea]">
-              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Name</span>
-              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">Modified</span>
-              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] text-right">Actions</span>
+              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] font-heading">Name</span>
+              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] font-heading">Modified</span>
+              <span className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] text-right font-heading">Actions</span>
             </div>
 
             {/* Path breadcrumb */}
@@ -2439,7 +2439,7 @@ export default function FilesDashboard() {
                         </span>
                       )}
                       {file.agent && (
-                        <span className="text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f3eef8] text-[#5b3a8c] border-[#d8cce8] shrink-0">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f3eef8] text-[#5b3a8c] border-[#d8cce8] shrink-0 font-mono">
                           agent
                         </span>
                       )}
@@ -2447,19 +2447,19 @@ export default function FilesDashboard() {
                         const rid = file.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || file.name;
                         const cnt = commentCounts[rid];
                         return cnt > 0 ? (
-                          <span className="flex items-center gap-1 text-[10px] font-semibold shrink-0" style={{ color: '#1a6b3c' }}>
+                          <span className="flex items-center gap-1 text-[10px] font-semibold shrink-0 font-mono" style={{ color: '#1a6b3c' }}>
                             <MessageCircle size={10} />
                             {cnt}
                           </span>
                         ) : null;
                       })()}
                       {file.size > 0 && (
-                        <span className="text-[10px] text-terminal-muted shrink-0">{formatSize(file.size)}</span>
+                        <span className="text-[10px] text-terminal-muted shrink-0 font-mono">{formatSize(file.size)}</span>
                       )}
                     </div>
 
                     {/* Modified */}
-                    <span className="text-[12px] text-terminal-muted tabular-nums">{file.modified}</span>
+                    <span className="text-[12px] text-terminal-muted tabular-nums font-mono">{file.modified}</span>
 
                     {/* Action buttons */}
                     <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2472,7 +2472,7 @@ export default function FilesDashboard() {
                             const body = encodeURIComponent(`Hi,\n\nPlease find the latest ${file.name}.\n\n${file.url ? 'View in Drive: ' + file.url + '\n\n' : ''}Generated by Coppice on ${file.modified || new Date().toLocaleDateString()}.\n\nBest,\nCoppice Agent`);
                             window.open(`mailto:${teamEmail}?subject=${subject}&body=${body}`, '_self');
                           }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] hover:bg-[#dff0e5] transition-colors"
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] hover:bg-[#dff0e5] transition-colors font-heading"
                           title="Send to team"
                         >
                           <Send size={9} /> Send
@@ -2487,7 +2487,7 @@ export default function FilesDashboard() {
                             const body = encodeURIComponent(`Please find attached our estimate for ${gcName}.\n\n${file.url ? 'View: ' + file.url + '\n\n' : ''}Best regards,\nDACP Construction`);
                             window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
                           }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] bg-[#e8eef5] border border-[#c5d5e8] hover:bg-[#dce6f0] transition-colors"
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] bg-[#e8eef5] border border-[#c5d5e8] hover:bg-[#dce6f0] transition-colors font-heading"
                           title="Send to GC"
                         >
                           <Mail size={9} /> Send to GC
@@ -2499,7 +2499,7 @@ export default function FilesDashboard() {
                             e.stopPropagation();
                             setViewingReport(file);
                           }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] hover:bg-[#dff0e5] transition-colors"
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] hover:bg-[#dff0e5] transition-colors font-heading"
                         >
                           View Report <FileText size={9} />
                         </button>
@@ -2515,7 +2515,7 @@ export default function FilesDashboard() {
                               showToast('Sample file — upload real files with the Upload button above');
                             }
                           }}
-                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] hover:bg-[#e8eef5] transition-colors"
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] hover:bg-[#e8eef5] transition-colors font-heading"
                         >
                           Open <ExternalLink size={9} />
                         </button>

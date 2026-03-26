@@ -358,7 +358,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
   }
 
   return (
-    <div className="p-6 lg:px-7 lg:py-6 font-body">
+    <div className="p-6 lg:px-7 lg:py-6">
       {/* Top row: Bids Due + Active Jobs — inline expandable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">

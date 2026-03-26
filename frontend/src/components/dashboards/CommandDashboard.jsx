@@ -138,7 +138,7 @@ function ActivityDetail({ detail, type }) {
         )}
         {detail.actionItems?.length > 0 && (
           <div className="mt-1.5">
-            <span className="text-terminal-muted text-[11px] font-semibold uppercase tracking-[0.5px]">Action Items</span>
+            <span className="text-terminal-muted text-[11px] font-heading font-semibold uppercase tracking-[0.5px]">Action Items</span>
             <ul className="mt-1 space-y-0.5">
               {detail.actionItems.map((item, i) => (
                 <li key={i} className="text-[11px] text-terminal-text pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-terminal-muted">{item}</li>
@@ -167,7 +167,7 @@ function ActivityDetail({ detail, type }) {
                 <tr key={i} className="border-t border-[#f0eeea]">
                   <td className="py-1 text-terminal-text">{lead.company}</td>
                   <td className="py-1 text-terminal-muted">{lead.location}</td>
-                  <td className="py-1 text-right font-semibold text-terminal-text">{lead.score}</td>
+                  <td className="py-1 text-right font-mono font-semibold text-terminal-text">{lead.score}</td>
                 </tr>
               ))}
             </tbody>
@@ -265,8 +265,8 @@ function UpcomingMeetingsPanel() {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Upcoming Meetings</span>
-        <span className="text-[11px] text-terminal-muted">{visibleEvents.length} this week</span>
+        <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Upcoming Meetings</span>
+        <span className="text-[11px] font-mono text-terminal-muted">{visibleEvents.length} this week</span>
       </div>
       <div>
         {loading ? (
@@ -283,7 +283,7 @@ function UpcomingMeetingsPanel() {
               <div key={event.id} className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
                 <div className="shrink-0 text-center w-[46px]">
                   <div className="text-[10px] text-terminal-muted font-medium">{formatDate(event.start)}</div>
-                  <div className="text-[12px] font-semibold text-terminal-text tabular-nums">{formatTime(event.start, event.allDay)}</div>
+                  <div className="text-[12px] font-mono font-semibold text-terminal-text tabular-nums">{formatTime(event.start, event.allDay)}</div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[13px] font-medium text-terminal-text truncate">{event.title}</div>
@@ -303,13 +303,13 @@ function UpcomingMeetingsPanel() {
                     <button
                       onClick={() => handleInvite(event.id)}
                       disabled={inviting === event.id}
-                      className="px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity disabled:opacity-50"
+                      className="px-2 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity disabled:opacity-50"
                     >
                       {inviting === event.id ? '...' : 'Invite Coppice'}
                     </button>
                   ))}
                   {event.meetLink && (
-                    <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
+                    <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
                       Join
                     </a>
                   )}
@@ -645,7 +645,7 @@ export default function CommandDashboard({ onNavigate }) {
           <button
             key={r}
             onClick={() => setTimeRange(r)}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-heading font-semibold border transition-all ${
               timeRange === r
                 ? 'bg-terminal-text text-white border-terminal-text'
                 : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:bg-[#f5f4f0]'
@@ -660,9 +660,9 @@ export default function CommandDashboard({ onNavigate }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
         {METRICS.map((m, i) => (
           <div key={m.label} className="bg-terminal-panel p-[18px_20px] relative">
-            <div className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
-            <div className="text-2xl font-bold text-terminal-text tabular-nums leading-none">{m.value}</div>
-            <div className={`text-[11px] font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
+            <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1.5">{m.label}</div>
+            <div className="text-2xl font-display text-terminal-text tabular-nums leading-none">{m.value}</div>
+            <div className={`text-[11px] font-mono font-semibold mt-1 ${DELTA_COLORS[m.type]}`}>{m.delta}</div>
             <div className="absolute bottom-0 left-5 right-5 h-[3px] rounded-[3px] bg-[#f0eeea] overflow-hidden">
               <div
                 className="h-full rounded-[3px] transition-all duration-1000"
@@ -708,8 +708,8 @@ export default function CommandDashboard({ onNavigate }) {
             <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
               <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Team Action Items</span>
-                  <span className="text-[10px] font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{openCount}</span>
+                  <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Team Action Items</span>
+                  <span className="text-[10px] font-mono font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{openCount}</span>
                 </div>
                 <span className="text-[11px] text-terminal-muted">From leadership sync</span>
               </div>
@@ -749,7 +749,7 @@ export default function CommandDashboard({ onNavigate }) {
                             }`}>
                               {item.title}
                             </span>
-                            <span className={`text-[10px] px-2 py-[2px] rounded-md shrink-0 tabular-nums ${getDuePillClass(item.due_date)}`}>
+                            <span className={`text-[10px] font-mono px-2 py-[2px] rounded-md shrink-0 tabular-nums ${getDuePillClass(item.due_date)}`}>
                               {formatDue(item.due_date)}
                             </span>
                           </div>
@@ -767,8 +767,8 @@ export default function CommandDashboard({ onNavigate }) {
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Approval Queue</span>
-              <span className="text-[10px] font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{approvals.length}</span>
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Approval Queue</span>
+              <span className="text-[10px] font-mono font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{approvals.length}</span>
             </div>
           </div>
           <div>
@@ -786,13 +786,13 @@ export default function CommandDashboard({ onNavigate }) {
                   <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
                   <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
-                    <span className="text-[10px] text-[#c5c5bc] tabular-nums">{item.time}</span>
+                    <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
+                    <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
-                  <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
+                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
+                  <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
                 </div>
               </div>
             ))}
@@ -809,8 +809,8 @@ export default function CommandDashboard({ onNavigate }) {
         {insights.length > 0 && <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agent Insights</span>
-              <span className="text-[9px] font-bold text-[#5b3a8c] bg-[#f3eef8] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">New</span>
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Agent Insights</span>
+              <span className="text-[9px] font-heading font-bold text-[#5b3a8c] bg-[#f3eef8] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">New</span>
             </div>
           </div>
           <div>
@@ -821,9 +821,9 @@ export default function CommandDashboard({ onNavigate }) {
               return (
                 <div key={item.id} className="px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
-                    <span className={`text-[9px] font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded ${INSIGHT_TYPE_STYLES[item.type]}`}>{item.type}</span>
-                    <span className="text-[10px] text-[#c5c5bc] tabular-nums ml-auto">{item.time}</span>
+                    <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
+                    <span className={`text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded ${INSIGHT_TYPE_STYLES[item.type]}`}>{item.type}</span>
+                    <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums ml-auto">{item.time}</span>
                   </div>
                   <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
                   <div className="text-[11px] text-terminal-muted mt-0.5" dangerouslySetInnerHTML={{ __html: item.body }} />
@@ -832,7 +832,7 @@ export default function CommandDashboard({ onNavigate }) {
                       <button
                         key={action}
                         onClick={() => handleInsightAction(item.id, action)}
-                        className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-opacity ${
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold transition-opacity ${
                           action === 'Dismiss' || action === 'Snooze'
                             ? 'bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0]'
                             : 'bg-[var(--t-ui-accent)] text-white hover:opacity-90'
@@ -851,7 +851,7 @@ export default function CommandDashboard({ onNavigate }) {
         {/* Deal Pipeline */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Deal Pipeline</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Deal Pipeline</span>
             {(crmData || hubspotPipeline) && (
               <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
                 {crmData?.sheetUrl && (
@@ -873,16 +873,16 @@ export default function CommandDashboard({ onNavigate }) {
               <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
                 <span className="text-[#6b6b65]">{row.stage}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-terminal-muted tabular-nums">{row.value}</span>
-                  <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
+                  <span className="text-[11px] font-mono text-terminal-muted tabular-nums">{row.value}</span>
+                  <span className="font-mono font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
                 </div>
               </div>
             )) : hubspotPipeline ? hubspotPipeline.map((row, i) => (
               <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
                 <span className="text-[#6b6b65]">{row.stage}</span>
                 <div className="flex items-center gap-3">
-                  <span className="text-[11px] text-terminal-muted tabular-nums">{row.value}</span>
-                  <span className="font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
+                  <span className="text-[11px] font-mono text-terminal-muted tabular-nums">{row.value}</span>
+                  <span className="font-mono font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
                 </div>
               </div>
             )) : crmData?.rows?.length === 0 ? (
@@ -928,7 +928,7 @@ export default function CommandDashboard({ onNavigate }) {
                       setCrmLoading(false);
                     }}
                     disabled={crmLoading}
-                    className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-text text-white hover:opacity-90 transition-all disabled:opacity-50"
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-heading font-semibold bg-terminal-text text-white hover:opacity-90 transition-all disabled:opacity-50"
                   >
                     {crmLoading ? 'Creating...' : 'Connect Google Sheets'}
                   </button>
@@ -944,8 +944,8 @@ export default function CommandDashboard({ onNavigate }) {
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Activity</span>
-              <span className="text-[9px] font-bold text-[var(--t-ui-accent)] bg-[var(--t-ui-accent-bg)] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">Live</span>
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Activity</span>
+              <span className="text-[9px] font-heading font-bold text-[var(--t-ui-accent)] bg-[var(--t-ui-accent-bg)] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">Live</span>
             </div>
             <span className="text-[11px] text-terminal-muted">All agents</span>
           </div>
@@ -976,7 +976,7 @@ export default function CommandDashboard({ onNavigate }) {
                       <div className="text-[11px] text-terminal-muted mt-0.5">{item.subtitle}</div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                      <span className="text-[10px] text-[#c5c5bc] font-medium tabular-nums">
+                      <span className="text-[10px] font-mono text-[#c5c5bc] font-medium tabular-nums">
                         {item.times.length > 1
                           ? item.times.join(', ')
                           : item.time}
@@ -1007,8 +1007,8 @@ export default function CommandDashboard({ onNavigate }) {
         {/* Pipeline */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Pipeline</span>
-            <span className="text-[11px] text-terminal-muted">{leadStats ? `${leadStats.totalLeads || 0} total` : '—'}</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Pipeline</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{leadStats ? `${leadStats.totalLeads || 0} total` : '—'}</span>
           </div>
           <div className="py-1">
             {PIPELINE.map((row, i) => (
@@ -1020,7 +1020,7 @@ export default function CommandDashboard({ onNavigate }) {
                     style={{ width: `${Math.max(row.pct, 1)}%` }}
                   />
                 </div>
-                <span className="text-xs font-semibold text-terminal-text w-9 text-right tabular-nums">{row.value}</span>
+                <span className="text-xs font-mono font-semibold text-terminal-text w-9 text-right tabular-nums">{row.value}</span>
               </div>
             ))}
           </div>
@@ -1029,8 +1029,8 @@ export default function CommandDashboard({ onNavigate }) {
         {/* Follow-Ups */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Follow-Ups</span>
-            <span className="text-[11px] text-terminal-muted">{FOLLOWUPS.length} pending</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Follow-Ups</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{FOLLOWUPS.length} pending</span>
           </div>
           <div>
             {FOLLOWUPS.map((item, i) => (
@@ -1045,18 +1045,18 @@ export default function CommandDashboard({ onNavigate }) {
         {/* Agents Table */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">Agents</span>
-            <span className="text-[11px] text-terminal-muted">{AGENTS.filter(a => a.status === 'on').length} of {AGENTS.length} active</span>
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Agents</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{AGENTS.filter(a => a.status === 'on').length} of {AGENTS.length} active</span>
           </div>
           <div>
             {AGENTS.map((agent, i) => (
               <div key={i} onClick={() => onNavigate?.(agent.tabId)} className="flex items-center gap-3 px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] cursor-pointer transition-colors">
                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_STYLES[agent.status]}`} />
                 <div className="text-[13px] font-medium text-terminal-text flex-1">{agent.name}</div>
-                <span className={`text-[10px] font-semibold px-2.5 py-[3px] rounded-md uppercase tracking-[0.3px] ${MODE_STYLES[agent.mode]}`}>
+                <span className={`text-[10px] font-heading font-semibold px-2.5 py-[3px] rounded-md uppercase tracking-[0.3px] ${MODE_STYLES[agent.mode]}`}>
                   {agent.mode}
                 </span>
-                <span className="text-xs text-[#6b6b65] font-medium min-w-[56px] text-right tabular-nums">{agent.stat}</span>
+                <span className="text-xs font-mono text-[#6b6b65] font-medium min-w-[56px] text-right tabular-nums">{agent.stat}</span>
                 <span className="text-[#c5c5bc] text-sm">&rsaquo;</span>
               </div>
             ))}
@@ -1073,7 +1073,7 @@ export default function CommandDashboard({ onNavigate }) {
             <div className="px-7 pt-6 pb-5 border-b border-[#f0eeea] flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-1.5 mb-2.5">
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-[2px] rounded bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)]">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-heading font-semibold uppercase tracking-[0.06em] px-2 py-[2px] rounded bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)]">
                     <span className="w-[5px] h-[5px] rounded-full bg-[var(--t-ui-accent)]" />
                     {insightModal.agentLabel} · {insightModal.type}
                   </span>
@@ -1092,17 +1092,17 @@ export default function CommandDashboard({ onNavigate }) {
 
             {/* Footer */}
             <div className="px-7 py-[18px] flex items-center justify-between">
-              <span className="text-[10px] text-[#c5c5bc] tabular-nums">{insightModal.time}</span>
+              <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{insightModal.time}</span>
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => { setInsightModal(null); handleInsightAction(insightModal.id, 'Dismiss'); }}
-                  className="px-4 py-2 rounded-lg text-[12px] font-medium text-[var(--t-ui-accent)] border border-[#f0eeea] hover:border-[var(--t-ui-accent-border)] hover:bg-[var(--t-ui-accent-bg)]/30 transition-all"
+                  className="px-4 py-2 rounded-lg text-[12px] font-heading font-medium text-[var(--t-ui-accent)] border border-[#f0eeea] hover:border-[var(--t-ui-accent-border)] hover:bg-[var(--t-ui-accent-bg)]/30 transition-all"
                 >
                   Dismiss
                 </button>
                 <button
                   onClick={() => setInsightModal(null)}
-                  className="px-4 py-2 rounded-lg text-[12px] font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-colors flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-lg text-[12px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-colors flex items-center gap-1.5"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                   Got it
@@ -1124,7 +1124,7 @@ export default function CommandDashboard({ onNavigate }) {
             {/* Header */}
             <div className="px-[26px] pt-[22px] pb-[18px] flex items-start justify-between gap-4 shrink-0" style={{ borderBottom: '1px solid #1e3028' }}>
               <div>
-                <div className="inline-flex items-center gap-1.5 mb-2.5 px-2 py-[3px] rounded text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ background: 'rgba(45,106,79,0.2)', border: '1px solid rgba(64,145,108,0.25)', color: '#74c69d', letterSpacing: '0.08em' }}>
+                <div className="inline-flex items-center gap-1.5 mb-2.5 px-2 py-[3px] rounded text-[10px] font-heading font-semibold uppercase tracking-[0.08em]" style={{ background: 'rgba(45,106,79,0.2)', border: '1px solid rgba(64,145,108,0.25)', color: '#74c69d', letterSpacing: '0.08em' }}>
                   <span className="w-[5px] h-[5px] rounded-full" style={{ background: '#74c69d' }} />
                   {threadModal.agentLabel} · {threadModal.type || 'Thread'}
                 </div>
@@ -1165,7 +1165,7 @@ export default function CommandDashboard({ onNavigate }) {
                       </div>
                       {/* Bubble */}
                       <div className={`flex-1 max-w-[78%] ${isAgent ? 'flex flex-col items-end' : ''}`}>
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.05em] mb-[5px]" style={{ color: isAgent ? '#52796f' : '#3d6b57', textAlign: isAgent ? 'right' : 'left' }}>
+                        <div className="text-[10px] font-heading font-semibold uppercase tracking-[0.05em] mb-[5px]" style={{ color: isAgent ? '#52796f' : '#3d6b57', textAlign: isAgent ? 'right' : 'left' }}>
                           {isAgent ? (threadModal.agentLabel || 'Agent') : 'User'}
                         </div>
                         <div
@@ -1189,7 +1189,7 @@ export default function CommandDashboard({ onNavigate }) {
 
             {/* Footer — open in chat */}
             <div className="px-[26px] py-[14px] flex items-center justify-between shrink-0" style={{ borderTop: '1px solid #1e3028' }}>
-              <span className="text-[10px] tabular-nums" style={{ color: '#2d4a3e' }}>{threadModal.messages.length} messages</span>
+              <span className="text-[10px] font-mono tabular-nums" style={{ color: '#2d4a3e' }}>{threadModal.messages.length} messages</span>
               <button
                 onClick={() => {
                   localStorage.setItem('open_thread_id', threadModal.threadId);
@@ -1197,7 +1197,7 @@ export default function CommandDashboard({ onNavigate }) {
                   setThreadModal(null);
                   onNavigate?.(targetTab);
                 }}
-                className="px-4 py-2 rounded-lg text-[12px] font-semibold flex items-center gap-1.5 transition-colors"
+                className="px-4 py-2 rounded-lg text-[12px] font-heading font-semibold flex items-center gap-1.5 transition-colors"
                 style={{ background: '#2d6a4f', border: '1px solid #40916c', color: '#d8f3dc' }}
                 onMouseEnter={e => e.target.style.background = '#40916c'}
                 onMouseLeave={e => e.target.style.background = '#2d6a4f'}

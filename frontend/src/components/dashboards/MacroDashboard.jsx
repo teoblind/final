@@ -24,7 +24,7 @@ export default function MacroDashboard() {
   return (
     <div className="p-4">
       <div className="mb-4">
-        <h2 className="text-lg font-bold text-terminal-green">Macro Intelligence</h2>
+        <h2 className="text-lg font-bold text-terminal-green font-heading">Macro Intelligence</h2>
         <p className="text-xs text-terminal-muted">
           Capital rotation tracking: Atoms &gt; Bits thesis monitoring
         </p>

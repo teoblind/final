@@ -39,15 +39,15 @@ function Sidebar({ activeTab, setActiveTab, user, logout }) {
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-[22px] py-5">
         <CoppiceLogo color="#111110" size={32} />
-        <span className="text-[14px] font-bold text-white tracking-[0.5px]">Coppice</span>
-        <span className="text-[8px] font-bold text-white/30 bg-white/[0.06] px-1.5 py-0.5 rounded ml-1 uppercase tracking-[1px]">Admin</span>
+        <span className="text-[14px] font-bold text-white tracking-[0.5px] font-heading">Coppice</span>
+        <span className="text-[8px] font-bold text-white/30 bg-white/[0.06] px-1.5 py-0.5 rounded ml-1 uppercase tracking-[1px] font-heading">Admin</span>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-2.5 py-2 space-y-4">
         {NAV.map((group) => (
           <div key={group.section}>
-            <p className="text-[9px] font-bold uppercase tracking-[1.5px] text-white/20 px-3 mb-1.5">{group.section}</p>
+            <p className="text-[9px] font-bold uppercase tracking-[1.5px] text-white/20 px-3 mb-1.5 font-heading">{group.section}</p>
             {group.items.map((item) => (
               <button
                 key={item.id}
@@ -238,11 +238,11 @@ function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111110]">Platform Dashboard</h1>
+          <h1 className="text-[22px] font-bold text-[#111110] font-heading">Platform Dashboard</h1>
           <p className="text-[13px] text-[#9a9a92] mt-0.5">Coppice Super Admin — All tenants, all metrics</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => alert('Report export started.')} className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0]">
+          <button onClick={() => alert('Report export started.')} className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0] font-heading">
             Export Report
           </button>
         </div>
@@ -285,7 +285,7 @@ function DashboardPage() {
               <thead>
                 <tr>
                   {['Model', 'Calls', 'Input Tokens', 'Output Tokens', 'Cost'].map((h) => (
-                    <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+                    <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px] font-heading">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -387,7 +387,7 @@ function DashboardPage() {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setConfirmDelete(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[16px] font-bold text-[#111110] mb-2">Remove User</h3>
+            <h3 className="text-[16px] font-bold text-[#111110] mb-2 font-heading">Remove User</h3>
             <p className="text-[13px] text-[#6b6b65] mb-4">
               Are you sure you want to remove <strong>{confirmDelete.name || confirmDelete.email}</strong>? This cannot be undone.
             </p>
@@ -449,7 +449,7 @@ function OpusUsageCard() {
             <FileText size={16} className="text-[#7c3aed]" />
           </div>
           <div>
-            <p className="text-[14px] font-bold text-[#111110]">Opus 4.6 Reports — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+            <p className="text-[14px] font-bold text-[#111110] font-heading">Opus 4.6 Reports — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
             <p className="text-[11px] text-[#9a9a92]">{totalMonthly} reports generated · ~${(totalMonthly * opusCostPerReport).toFixed(2)} estimated spend</p>
           </div>
         </div>
@@ -499,10 +499,10 @@ function TenantsPage() {
     <div className="p-6 lg:px-8 lg:py-6 max-w-[1200px]">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111110]">Tenants</h1>
+          <h1 className="text-[22px] font-bold text-[#111110] font-heading">Tenants</h1>
           <p className="text-[13px] text-[#9a9a92] mt-0.5">{tenants.length} organization{tenants.length !== 1 ? 's' : ''} on the platform</p>
         </div>
-        <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#3b82f6] text-white hover:bg-[#2563eb]">+ Add Tenant</button>
+        <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#3b82f6] text-white hover:bg-[#2563eb] font-heading">+ Add Tenant</button>
       </div>
 
       {tenants.length === 0 ? (
@@ -513,7 +513,7 @@ function TenantsPage() {
             <thead>
               <tr>
                 {['Tenant', 'Slug', 'Plan', 'Status', 'Users', 'Sites', 'Created'].map(h => (
-                  <th key={h} className="text-left px-4 py-3 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+                  <th key={h} className="text-left px-4 py-3 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px] font-heading">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -614,7 +614,7 @@ function UsersPage() {
     <div className="p-6 lg:px-8 lg:py-6 max-w-[1200px]">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111110]">Users</h1>
+          <h1 className="text-[22px] font-bold text-[#111110] font-heading">Users</h1>
           <p className="text-[13px] text-[#9a9a92] mt-0.5">{users.length} user{users.length !== 1 ? 's' : ''} across {tenants.length} tenants</p>
         </div>
         <div className="flex items-center gap-2">
@@ -641,7 +641,7 @@ function UsersPage() {
           <thead>
             <tr>
               {['User', 'Email', 'Tenant', 'Role', 'Status', 'Last Login', ''].map(h => (
-                <th key={h} className="text-left px-4 py-3 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+                <th key={h} className="text-left px-4 py-3 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px] font-heading">{h}</th>
               ))}
             </tr>
           </thead>
@@ -701,7 +701,7 @@ function UsersPage() {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setConfirmDelete(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[16px] font-bold text-[#111110] mb-2">Remove User</h3>
+            <h3 className="text-[16px] font-bold text-[#111110] mb-2 font-heading">Remove User</h3>
             <p className="text-[13px] text-[#6b6b65] mb-4">
               Are you sure you want to remove <strong>{confirmDelete.name || confirmDelete.email}</strong>? This cannot be undone.
             </p>
@@ -721,9 +721,9 @@ function UsersPage() {
 function KPI({ label, value, sub }) {
   return (
     <div className="bg-white border border-[#e8e6e1] rounded-[14px] p-[18px]">
-      <div className="text-[11px] text-[#9a9a92] font-semibold mb-1.5">{label}</div>
-      <div className="font-mono text-[28px] font-bold text-[#111110] leading-none">{value}</div>
-      <div className="text-[11px] text-[#c5c5bc] font-semibold mt-1">{sub}</div>
+      <div className="text-[11px] text-[#9a9a92] font-semibold mb-1.5 font-heading">{label}</div>
+      <div className="text-[28px] font-bold text-[#111110] leading-none font-display">{value}</div>
+      <div className="text-[11px] text-[#c5c5bc] font-semibold mt-1 font-mono">{sub}</div>
     </div>
   );
 }
@@ -731,7 +731,7 @@ function KPI({ label, value, sub }) {
 function Section({ title, children }) {
   return (
     <div className="mb-7">
-      <h2 className="text-[16px] font-bold text-[#111110] mb-3.5">{title}</h2>
+      <h2 className="text-[16px] font-bold text-[#111110] mb-3.5 font-heading">{title}</h2>
       {children}
     </div>
   );
@@ -752,7 +752,7 @@ function TenantCard({ tenant, userCount, cost, requests, fmtCost }) {
             {letter}
           </div>
           <div>
-            <div className="text-[15px] font-bold text-[#111110]">{tenant.name}</div>
+            <div className="text-[15px] font-bold text-[#111110] font-heading">{tenant.name}</div>
             <div className="text-[11px] text-[#9a9a92] font-mono">{slug}</div>
           </div>
         </div>
@@ -766,19 +766,19 @@ function TenantCard({ tenant, userCount, cost, requests, fmtCost }) {
       <div className="grid grid-cols-4 gap-2 mb-3.5">
         <div className="text-center">
           <div className="font-mono text-[16px] font-bold text-[#111110]">{userCount}</div>
-          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px]">Users</div>
+          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px] font-heading">Users</div>
         </div>
         <div className="text-center">
           <div className="font-mono text-[16px] font-bold text-[#111110]">{requests}</div>
-          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px]">API Calls</div>
+          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px] font-heading">API Calls</div>
         </div>
         <div className="text-center">
           <div className="font-mono text-[16px] font-bold text-[#111110]">{tenant.siteCount || 0}</div>
-          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px]">Sites</div>
+          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px] font-heading">Sites</div>
         </div>
         <div className="text-center">
           <div className="font-mono text-[16px] font-bold text-[#111110]">{tenant.workloadCount || 0}</div>
-          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px]">Workloads</div>
+          <div className="text-[9px] text-[#9a9a92] uppercase tracking-[0.5px] font-heading">Workloads</div>
         </div>
       </div>
 
@@ -882,14 +882,14 @@ function ApiLogsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-[20px] font-bold text-[#111110]">API Logs</h1>
+          <h1 className="text-[20px] font-bold text-[#111110] font-heading">API Logs</h1>
           <p className="text-[12px] text-[#9a9a92] mt-0.5">Every API call across all tenants and agents — real-time</p>
         </div>
         <div className="flex gap-2 items-center">
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#1a6b3c] bg-[#edf7f0] border border-[rgba(26,107,60,0.15)] px-3 py-1.5 rounded-lg">
             <div className="w-1.5 h-1.5 rounded-full bg-[#1a6b3c] animate-pulse" /> Live
           </div>
-          <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0]">
+          <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0] font-heading">
             Export CSV
           </button>
         </div>
@@ -934,7 +934,7 @@ function ApiLogsPage() {
           <thead>
             <tr>
               {['Time', 'Tenant', 'Model', 'Agent / Action', 'Input', 'Output', 'Cost', 'Latency'].map(h => (
-                <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px] sticky top-0 z-[2]">{h}</th>
+                <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px] sticky top-0 z-[2] font-heading">{h}</th>
               ))}
               <th className="w-[30px] bg-[#f5f4f0] border-b border-[#e8e6e1]" />
             </tr>
@@ -1041,7 +1041,7 @@ function ApiLogsPage() {
 function FilterGroup({ label, children }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[0.5px]">{label}</span>
+      <span className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[0.5px] font-heading">{label}</span>
       {children}
     </div>
   );
@@ -1136,11 +1136,11 @@ function ApiSpendPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-[20px] font-bold text-[#111110]">API Spend</h1>
+          <h1 className="text-[20px] font-bold text-[#111110] font-heading">API Spend</h1>
           <p className="text-[12px] text-[#9a9a92] mt-0.5">Cost analytics across all models, tenants, and agents</p>
         </div>
         <div className="flex gap-2">
-          <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0]">Export CSV</button>
+          <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0] font-heading">Export CSV</button>
         </div>
       </div>
 
@@ -1148,7 +1148,7 @@ function ApiSpendPage() {
       <div className="flex gap-1 mb-5">
         {PERIOD_OPTIONS.map(p => (
           <button key={p.value} onClick={() => setPeriod(p.value)}
-            className={`px-4 py-[7px] rounded-lg text-[11px] font-semibold border transition-colors ${
+            className={`px-4 py-[7px] rounded-lg text-[11px] font-semibold border transition-colors font-heading ${
               period === p.value ? 'bg-[#3b82f6] text-white border-[#3b82f6]' : 'bg-white text-[#9a9a92] border-[#e8e6e1] hover:bg-[#f5f4f0]'
             }`}>
             {p.label}
@@ -1171,7 +1171,7 @@ function ApiSpendPage() {
           {/* Daily Chart */}
           {chartData.length > 0 && (
             <div className="bg-white border border-[#e8e6e1] rounded-2xl p-5 mb-6">
-              <h3 className="text-[14px] font-bold text-[#111110] mb-3">
+              <h3 className="text-[14px] font-bold text-[#111110] mb-3 font-heading">
                 Daily Spend — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </h3>
               <ResponsiveContainer width="100%" height={220}>
@@ -1204,7 +1204,7 @@ function ApiSpendPage() {
                 <thead>
                   <tr>
                     {['Model', 'Calls', '% of Total', 'Cost'].map(h => (
-                      <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px]">{h}</th>
+                      <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px] font-heading">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1239,7 +1239,7 @@ function ApiSpendPage() {
                 <thead>
                   <tr>
                     {['Tenant', 'Calls', 'API Cost'].map(h => (
-                      <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px]">{h}</th>
+                      <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px] font-heading">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1273,7 +1273,7 @@ function ApiSpendPage() {
                 <thead>
                   <tr>
                     {['Metric', 'Value'].map(h => (
-                      <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px]">{h}</th>
+                      <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px] font-heading">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1297,9 +1297,9 @@ function ApiSpendPage() {
 function SpendKPI({ label, value, sub, valueColor }) {
   return (
     <div className="bg-white border border-[#e8e6e1] rounded-[14px] p-[18px]">
-      <div className="text-[11px] text-[#9a9a92] font-semibold mb-1.5">{label}</div>
-      <div className="font-mono text-[28px] font-bold leading-none" style={{ color: valueColor || '#111110' }}>{value}</div>
-      <div className="text-[11px] text-[#c5c5bc] font-semibold mt-1">{sub}</div>
+      <div className="text-[11px] text-[#9a9a92] font-semibold mb-1.5 font-heading">{label}</div>
+      <div className="text-[28px] font-bold leading-none font-display" style={{ color: valueColor || '#111110' }}>{value}</div>
+      <div className="text-[11px] text-[#c5c5bc] font-semibold mt-1 font-mono">{sub}</div>
     </div>
   );
 }
@@ -1308,7 +1308,7 @@ function BreakdownCard({ title, children }) {
   return (
     <div className="bg-white border border-[#e8e6e1] rounded-2xl overflow-hidden">
       <div className="px-4 py-3 border-b border-[#f0eeea]">
-        <h3 className="text-[14px] font-bold text-[#111110]">{title}</h3>
+        <h3 className="text-[14px] font-bold text-[#111110] font-heading">{title}</h3>
       </div>
       {children}
     </div>
@@ -1340,7 +1340,7 @@ function SettingsPage() {
   return (
     <div className="p-6 lg:px-8 lg:py-6 max-w-[800px]">
       <div className="mb-5">
-        <h1 className="text-[20px] font-bold text-[#111110]">Settings</h1>
+        <h1 className="text-[20px] font-bold text-[#111110] font-heading">Settings</h1>
         <p className="text-[12px] text-[#9a9a92] mt-0.5">Platform configuration — API keys, model routing, tenant defaults, and system settings</p>
       </div>
 
@@ -1348,7 +1348,7 @@ function SettingsPage() {
       <div className="flex gap-1 border-b border-[#e8e6e1] mb-6">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-5 py-2.5 text-[12px] font-semibold border-b-2 transition-colors ${
+            className={`px-5 py-2.5 text-[12px] font-semibold border-b-2 transition-colors font-heading ${
               tab === t.id ? 'text-[#3b82f6] border-[#3b82f6]' : 'text-[#9a9a92] border-transparent hover:text-[#333]'
             }`}>
             {t.label}
@@ -1505,12 +1505,12 @@ function SettingsPage() {
       {/* Danger Zone */}
       {tab === 'danger' && (
         <div className="bg-white border-2 border-[rgba(192,57,43,0.2)] rounded-2xl p-5">
-          <h3 className="text-[14px] font-bold text-[#c0392b] mb-1">Danger Zone</h3>
+          <h3 className="text-[14px] font-bold text-[#c0392b] mb-1 font-heading">Danger Zone</h3>
           <p className="text-[12px] text-[#9a9a92] mb-4">These actions are irreversible. Proceed with caution.</p>
           <div className="flex gap-2">
-            <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:bg-[#a93226]">Reset All Demo Data</button>
-            <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:bg-[#a93226]">Purge API Logs</button>
-            <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:bg-[#a93226]">Delete Tenant</button>
+            <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:bg-[#a93226] font-heading">Reset All Demo Data</button>
+            <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:bg-[#a93226] font-heading">Purge API Logs</button>
+            <button className="px-4 py-2 rounded-[10px] text-[12px] font-semibold bg-[#c0392b] text-white border border-[#c0392b] hover:bg-[#a93226] font-heading">Delete Tenant</button>
           </div>
         </div>
       )}
@@ -1521,7 +1521,7 @@ function SettingsPage() {
 function SettingsSection({ title, desc, children }) {
   return (
     <div className="mb-7">
-      <h2 className="text-[15px] font-bold text-[#111110] mb-1">{title}</h2>
+      <h2 className="text-[15px] font-bold text-[#111110] mb-1 font-heading">{title}</h2>
       {desc && <p className="text-[12px] text-[#9a9a92] mb-4">{desc}</p>}
       {children}
     </div>
@@ -1628,7 +1628,7 @@ function SystemHealthPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#111110]">System Health</h1>
+          <h1 className="text-[22px] font-bold text-[#111110] font-heading">System Health</h1>
           <p className="text-[13px] text-[#9a9a92] mt-0.5">
             Real-time infrastructure monitoring
             {lastRefresh && <span className="ml-2 text-[11px]">· Updated {lastRefresh.toLocaleTimeString()}</span>}
@@ -1689,7 +1689,7 @@ function SystemHealthPage() {
               <thead>
                 <tr>
                   {['ID', 'Name', 'Mode', 'PID', 'Status', 'CPU', 'Memory', 'Uptime', 'Restarts'].map(h => (
-                    <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+                    <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px] font-heading">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1724,7 +1724,7 @@ function SystemHealthPage() {
             <thead>
               <tr>
                 {['Variable', 'Status', 'Value'].map(h => (
-                  <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px]">{h}</th>
+                  <th key={h} className="text-left px-3.5 py-2.5 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[10px] uppercase tracking-[0.5px] font-heading">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1784,13 +1784,13 @@ function ServiceCard({ name, type, icon: Icon, iconColor, status, metrics, usage
             <Icon size={16} style={{ color: iconColor }} />
           </div>
           <div>
-            <div className="text-[13px] font-bold text-[#111110]">{name}</div>
+            <div className="text-[13px] font-bold text-[#111110] font-heading">{name}</div>
             <div className="text-[10px] text-[#9a9a92]">{type}</div>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
           <div className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-          <span className={`text-[10px] font-bold py-[2px] px-2 rounded-[5px] ${st.cls}`}>{st.label}</span>
+          <span className={`text-[10px] font-bold py-[2px] px-2 rounded-[5px] font-mono ${st.cls}`}>{st.label}</span>
         </div>
       </div>
 
@@ -1832,13 +1832,13 @@ function Pm2StatusBadge({ status }) {
   if (s === 'online') cls = 'bg-[#edf7f0] text-[#1a6b3c]';
   else if (s === 'stopping' || s === 'launching') cls = 'bg-[#fdf6e8] text-[#b8860b]';
   else if (s === 'errored' || s === 'stopped') cls = 'bg-[#fbeae8] text-[#c0392b]';
-  return <span className={`text-[10px] font-bold py-[2px] px-2 rounded-[5px] uppercase ${cls}`}>{status}</span>;
+  return <span className={`text-[10px] font-bold py-[2px] px-2 rounded-[5px] uppercase font-mono ${cls}`}>{status}</span>;
 }
 
 function MiniStat({ label, value }) {
   return (
     <div className="bg-white border border-[#e8e6e1] rounded-[14px] p-4">
-      <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-[0.5px] mb-1">{label}</div>
+      <div className="text-[10px] text-[#9a9a92] font-semibold uppercase tracking-[0.5px] mb-1 font-heading">{label}</div>
       <div className="font-mono text-[14px] font-bold text-[#111110]">{value}</div>
     </div>
   );
@@ -1849,7 +1849,7 @@ function MiniStat({ label, value }) {
 function DemoRequestsPage() {
   return (
     <div className="p-6 lg:px-8 lg:py-6 max-w-[1200px]">
-      <h1 className="text-[22px] font-bold text-[#111110] mb-6">Demo Requests</h1>
+      <h1 className="text-[22px] font-bold text-[#111110] mb-6 font-heading">Demo Requests</h1>
       <EmptyCard>No demo requests yet. They'll show up here when someone fills out the form on coppice.ai.</EmptyCard>
     </div>
   );
@@ -1858,7 +1858,7 @@ function DemoRequestsPage() {
 function PlaceholderPage({ title }) {
   return (
     <div className="p-6 lg:px-8 lg:py-6 max-w-[1200px]">
-      <h1 className="text-[22px] font-bold text-[#111110] mb-6">{title}</h1>
+      <h1 className="text-[22px] font-bold text-[#111110] mb-6 font-heading">{title}</h1>
       <EmptyCard>Coming soon</EmptyCard>
     </div>
   );

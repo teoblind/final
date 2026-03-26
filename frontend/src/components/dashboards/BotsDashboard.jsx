@@ -108,7 +108,7 @@ function TeamBotsPanel() {
       headerRight={
         <button
           onClick={() => setShowRegister(!showRegister)}
-          className="text-[10px] px-2 py-1 bg-terminal-bg border border-terminal-border rounded text-terminal-text hover:border-terminal-green/50"
+          className="text-[10px] px-2 py-1 bg-terminal-bg border border-terminal-border rounded text-terminal-text hover:border-terminal-green/50 font-heading"
         >
           + Register Bot
         </button>
@@ -141,7 +141,7 @@ function TeamBotsPanel() {
           <button
             type="submit"
             disabled={!newName.trim() || submitting}
-            className="px-3 py-1 text-[11px] bg-terminal-panel border border-terminal-green/30 rounded text-terminal-green hover:bg-terminal-green/10 disabled:opacity-40"
+            className="px-3 py-1 text-[11px] bg-terminal-panel border border-terminal-green/30 rounded text-terminal-green hover:bg-terminal-green/10 disabled:opacity-40 font-heading"
           >
             Register
           </button>
@@ -169,10 +169,10 @@ function TeamBotsPanel() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-medium text-terminal-text">{bot.name}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 bg-terminal-border/40 rounded text-terminal-muted">
+                  <span className="text-[9px] px-1.5 py-0.5 bg-terminal-border/40 rounded text-terminal-muted font-mono">
                     {bot.bot_type}
                   </span>
-                  <span className={`text-[9px] ${bot.status === 'active' ? 'text-terminal-green' : 'text-terminal-muted'}`}>
+                  <span className={`text-[9px] font-mono ${bot.status === 'active' ? 'text-terminal-green' : 'text-terminal-muted'}`}>
                     {bot.status}
                   </span>
                 </div>
@@ -203,7 +203,7 @@ export default function BotsDashboard() {
   return (
     <div className="p-4">
       <div className="mb-6">
-        <h2 className="text-lg font-bold text-terminal-green">Bots</h2>
+        <h2 className="text-lg font-bold text-terminal-green font-heading">Bots</h2>
         <p className="text-xs text-terminal-muted">Activity feed from Charger-Bot, MeetingBot, and Auto-Recorder</p>
       </div>
 
