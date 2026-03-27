@@ -763,7 +763,7 @@ function AppContent() {
                 <Menu size={20} />
               </button>
               <div className="flex items-center gap-2.5">
-                <h1 className="text-lg font-semibold">{tabLabels[activeTab] || 'Overview'}</h1>
+                <h1 className="text-lg font-heading font-bold tracking-[0.3px]">{tabLabels[activeTab] || 'Overview'}</h1>
               </div>
             </div>
 
@@ -786,7 +786,7 @@ function AppContent() {
               {hasPermission('exportData') && (
                 <button
                   onClick={() => setManualEntryOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg hover:border-terminal-muted text-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg hover:border-terminal-muted text-sm font-heading"
                 >
                   <Database size={14} />
                   <span className="hidden sm:inline">Data Entry</span>

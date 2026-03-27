@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 import {
   getAllTenants, runWithTenant,
   getDacpBidRequests, getDacpEstimates, getDacpJobs, getDacpStats,
-  insertAgentAssignment, clearOldAssignments,
+  insertAgentAssignment, clearOldAssignments, clearProposedAssignments,
   getAgentAssignments,
 } from '../cache/database.js';
 
@@ -226,14 +226,8 @@ async function runOvernightAnalysis() {
         // Clean old completed/dismissed assignments
         clearOldAssignments(tenant.id, 7);
 
-        // Check if we already ran today
-        const existing = getAgentAssignments(tenant.id, 'proposed');
-        const today = new Date().toISOString().slice(0, 10);
-        const alreadyRanToday = existing.some(a => a.created_at?.startsWith(today));
-        if (alreadyRanToday) {
-          console.log(`[OvernightAnalysis] Already ran today for ${tenant.id}`);
-          return;
-        }
+        // Clear stale proposed assignments before generating fresh ones
+        clearProposedAssignments(tenant.id);
 
         // Gather context
         const context = gatherDacpContext(tenant.id);
