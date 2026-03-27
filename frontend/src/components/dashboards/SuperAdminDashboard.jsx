@@ -1621,6 +1621,11 @@ function SystemHealthPage() {
       { label: 'Domains', value: (services.cloudflare?.domains || []).length },
       { label: 'SSL', value: 'Active' },
     ], usage: null },
+    { key: 'tunnel', icon: Terminal, color: '#8b5cf6', metrics: [
+      { label: 'Host', value: `${services.tunnel?.host || '127.0.0.1'}:${services.tunnel?.port || 2222}` },
+      { label: 'Target', value: services.tunnel?.target || 'Mac (claude CLI)' },
+      { label: 'CLI Enabled', value: services.tunnel?.cliEnabled ? 'Yes' : 'No' },
+    ], usage: null },
   ];
 
   return (

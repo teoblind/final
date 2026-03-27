@@ -69,6 +69,8 @@ const COMPLEX_PATTERNS = [
   /\b(summarize|digest|brief me|catch me up|what happened)\b.*\b(meeting|call|email|thread)\b/i,
 ];
 
+export { isTunnelHealthy };
+
 export function isComplexQuery(message) {
   // message can be a string or array of content blocks
   const text = Array.isArray(message)

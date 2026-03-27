@@ -38,6 +38,7 @@ import {
   getOpusDailyCount,
   checkOpusLimit,
 } from '../cache/database.js';
+import { isTunnelHealthy } from '../services/claudeAgent.js';
 
 const router = express.Router();
 
@@ -842,6 +843,31 @@ router.get('/system/health', async (req, res) => {
       } catch (e) {
         console.error('Vultr API error:', e.message);
       }
+    }
+
+    // Tunnel health check (SSH reverse tunnel to Mac for Claude CLI)
+    try {
+      const tunnelUp = await isTunnelHealthy();
+      health.services.tunnel = {
+        name: 'CLI Tunnel',
+        type: 'SSH Reverse Tunnel',
+        status: tunnelUp ? 'healthy' : 'down',
+        host: '127.0.0.1',
+        port: 2222,
+        target: 'Mac (claude CLI)',
+        cliEnabled: process.env.CLAUDE_CLI_ENABLED === 'true',
+      };
+    } catch (e) {
+      health.services.tunnel = {
+        name: 'CLI Tunnel',
+        type: 'SSH Reverse Tunnel',
+        status: 'down',
+        host: '127.0.0.1',
+        port: 2222,
+        target: 'Mac (claude CLI)',
+        cliEnabled: process.env.CLAUDE_CLI_ENABLED === 'true',
+        error: e.message,
+      };
     }
 
     // Check if any service is down
