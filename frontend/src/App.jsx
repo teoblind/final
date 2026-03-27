@@ -233,7 +233,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
           ) : (
             <CoppiceLogo color={tenant?.branding?.hideSanghaBranding ? 'transparent' : (tenant?.branding?.sidebarColor || '#1a2e1a')} size={32} />
           )}
-          <span className="text-[13px] font-bold tracking-[2.5px] text-white/70 uppercase">{brandName}</span>
+          <span className="text-[13px] font-heading font-bold tracking-[2.5px] text-white/70 uppercase">{brandName}</span>
           <button onClick={() => setSidebarOpen(false)} className="ml-auto lg:hidden text-white/50 hover:text-white">
             <X size={18} />
           </button>
@@ -243,7 +243,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
           {navGroups.map(group => (
             <div key={group.label}>
-              <p className="text-[9px] font-bold uppercase tracking-[2px] text-white/20 px-2 mb-1">
+              <p className="text-[9px] font-heading font-bold uppercase tracking-[2px] text-white/20 px-2 mb-1">
                 {group.label}
               </p>
               <div className="space-y-0.5">
@@ -263,7 +263,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
                   >
                     <span className="w-2 h-2 rounded-full animate-pulse shrink-0" style={{ backgroundColor: 'var(--t-sidebar-accent)' }} />
                     <div className="text-left">
-                      <div className="text-[12px] font-semibold" style={{ color: 'var(--t-sidebar-accent)' }}>{item.label}</div>
+                      <div className="text-[12px] font-heading font-semibold" style={{ color: 'var(--t-sidebar-accent)' }}>{item.label}</div>
                       <div className="text-[10px] text-white/30">Hivemind — always on</div>
                     </div>
                   </button>
@@ -271,7 +271,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
                   <button
                     key={item.id}
                     onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+                    className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-[13px] font-heading font-medium transition-colors ${
                       activeTab === item.id
                         ? ''
                         : 'text-white/45 hover:bg-white/[0.04] hover:text-white/85'
