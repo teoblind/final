@@ -133,12 +133,12 @@ export default function NotificationBell({ onNavigate }) {
       {/* Bell Button */}
       <button
         onClick={() => { setOpen(!open); if (!open) refetch(); }}
-        className="relative p-2 hover:bg-terminal-panel rounded transition-colors"
+        className="relative p-2 border border-terminal-border rounded-lg hover:bg-terminal-bg/50 transition-colors"
         title="Notifications"
       >
-        <Bell size={18} className={unreadCount > 0 ? 'text-terminal-amber' : 'text-terminal-muted'} />
+        <Bell size={18} className="text-terminal-muted" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-terminal-red text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}

@@ -1,6 +1,6 @@
 import React, { Component, useState, useEffect, Suspense, lazy } from 'react';
 import {
-  Menu, X, Bell, FileText, Database, TrendingUp, Activity,
+  Menu, X, Bell, FileText, Database, Plus, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
   HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2,
@@ -786,9 +786,9 @@ function AppContent() {
               {hasPermission('exportData') && (
                 <button
                   onClick={() => setManualEntryOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg hover:border-terminal-muted text-sm font-heading"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-white rounded-lg hover:bg-black text-sm font-heading font-semibold transition-colors"
                 >
-                  <Database size={14} />
+                  <Plus size={16} strokeWidth={2.5} />
                   <span className="hidden sm:inline">Data Entry</span>
                 </button>
               )}
