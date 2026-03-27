@@ -781,7 +781,6 @@ function AppContent() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-terminal-red'}`} title={wsConnected ? 'Connected' : 'Disconnected'} />
               <NotificationBell onNavigate={handleSetActiveTab} />
               {hasPermission('exportData') && (
                 <button

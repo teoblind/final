@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -65,6 +65,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
   // Agent assignments state
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignmentsPage, setAssignmentsPage] = useState(0);
   const [processingAssignment, setProcessingAssignment] = useState(null);
   // Inline assignment chat
   const [chatOpenFor, setChatOpenFor] = useState(null);
@@ -432,14 +433,21 @@ export default function DacpCommandDashboard({ onNavigate }) {
             )}
           </div>
         </div>
-        {assignments.filter(a => a.status !== 'dismissed').length === 0 ? (
+        {(() => {
+          const TASKS_PER_PAGE = 5;
+          const visible = assignments.filter(a => a.status !== 'dismissed');
+          const totalPages = Math.max(1, Math.ceil(visible.length / TASKS_PER_PAGE));
+          const safePage = Math.min(assignmentsPage, totalPages - 1);
+          const paged = visible.slice(safePage * TASKS_PER_PAGE, (safePage + 1) * TASKS_PER_PAGE);
+          if (visible.length === 0) return (
           <div className="px-[18px] py-5 text-center">
             <div className="text-[12px] text-[#9a9a92] mb-1">No pending tasks</div>
             <div className="text-[11px] text-terminal-muted">Coppice generates new tasks every morning at 3 AM based on your pipeline.</div>
           </div>
-        ) : (
+          );
+          return (
           <div>
-            {assignments.filter(a => a.status !== 'dismissed').map(a => {
+            {paged.map(a => {
               const catColors = {
                 follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
                 estimate: 'bg-emerald-50 text-emerald-600 border-emerald-200',
@@ -577,8 +585,31 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 </div>
               );
             })}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-[18px] py-2.5 border-t border-[#f0eeea]">
+                <span className="text-[11px] text-[#9a9a92]">{safePage * TASKS_PER_PAGE + 1}–{Math.min((safePage + 1) * TASKS_PER_PAGE, visible.length)} of {visible.length}</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setAssignmentsPage(Math.max(0, safePage - 1))}
+                    disabled={safePage === 0}
+                    className="p-1 rounded hover:bg-[#f0eeea] disabled:opacity-25 transition-colors"
+                  >
+                    <ChevronLeft size={14} className="text-[#6b6b65]" />
+                  </button>
+                  <span className="text-[11px] text-[#6b6b65] font-mono px-1">{safePage + 1}/{totalPages}</span>
+                  <button
+                    onClick={() => setAssignmentsPage(Math.min(totalPages - 1, safePage + 1))}
+                    disabled={safePage >= totalPages - 1}
+                    className="p-1 rounded hover:bg-[#f0eeea] disabled:opacity-25 transition-colors"
+                  >
+                    <ChevronRight size={14} className="text-[#6b6b65]" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Meetings This Week — expanded */}
