@@ -66,6 +66,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assignmentsPage, setAssignmentsPage] = useState(0);
+  const [taskTab, setTaskTab] = useState('suggested'); // 'suggested' | 'active' | 'completed'
   const [processingAssignment, setProcessingAssignment] = useState(null);
   // Inline assignment chat
   const [chatOpenFor, setChatOpenFor] = useState(null);
@@ -425,24 +426,45 @@ export default function DacpCommandDashboard({ onNavigate }) {
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
             <ClipboardList size={14} className="text-[#1e3a5f]" />
-            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Suggested Tasks</span>
-            {assignments.filter(a => a.status === 'proposed').length > 0 && (
-              <span className="text-[10px] font-mono bg-[#1e3a5f] text-white px-1.5 py-0.5 rounded-full font-semibold">
-                {assignments.filter(a => a.status === 'proposed').length}
-              </span>
-            )}
+            <div className="flex items-center gap-0.5 bg-[#f5f4f0] rounded-lg p-0.5">
+              {[
+                { id: 'suggested', label: 'Suggested', count: assignments.filter(a => a.status === 'proposed').length },
+                { id: 'active', label: 'Active', count: assignments.filter(a => a.status === 'in_progress' || a.status === 'confirmed').length },
+                { id: 'completed', label: 'Completed', count: assignments.filter(a => a.status === 'completed').length },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => { setTaskTab(t.id); setAssignmentsPage(0); }}
+                  className={`text-[11px] font-heading font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                    taskTab === t.id
+                      ? 'bg-white text-[#1e3a5f] shadow-sm'
+                      : 'text-[#9a9a92] hover:text-[#6b6b65]'
+                  }`}
+                >
+                  {t.label}{t.count > 0 ? ` (${t.count})` : ''}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {(() => {
           const TASKS_PER_PAGE = 5;
-          const visible = assignments.filter(a => a.status !== 'dismissed');
+          const statusFilter = taskTab === 'suggested' ? ['proposed']
+            : taskTab === 'active' ? ['confirmed', 'in_progress']
+            : ['completed'];
+          const visible = assignments.filter(a => statusFilter.includes(a.status));
           const totalPages = Math.max(1, Math.ceil(visible.length / TASKS_PER_PAGE));
           const safePage = Math.min(assignmentsPage, totalPages - 1);
           const paged = visible.slice(safePage * TASKS_PER_PAGE, (safePage + 1) * TASKS_PER_PAGE);
+          const emptyMessages = {
+            suggested: { title: 'No pending tasks', sub: 'Coppice generates new tasks every morning at 3 AM based on your pipeline.' },
+            active: { title: 'No active tasks', sub: 'Run a suggested task to see it here while it executes.' },
+            completed: { title: 'No completed tasks yet', sub: 'Completed tasks and their results will appear here.' },
+          };
           if (visible.length === 0) return (
           <div className="px-[18px] py-5 text-center">
-            <div className="text-[12px] text-[#9a9a92] mb-1">No pending tasks</div>
-            <div className="text-[11px] text-terminal-muted">Coppice generates new tasks every morning at 3 AM based on your pipeline.</div>
+            <div className="text-[12px] text-[#9a9a92] mb-1">{emptyMessages[taskTab].title}</div>
+            <div className="text-[11px] text-terminal-muted">{emptyMessages[taskTab].sub}</div>
           </div>
           );
           return (
