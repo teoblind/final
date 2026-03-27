@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink } from 'lucide-react';
+import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -563,9 +563,20 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         </span>
                       )}
                       {a.status === 'completed' && (
-                        <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
-                          <CheckCircle size={11} /> Done
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {a.result_summary?.startsWith('Failed') && (
+                            <button
+                              onClick={() => handleConfirmAssignment(a.id)}
+                              disabled={processingAssignment === a.id}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                            >
+                              <RotateCcw size={10} /> Retry
+                            </button>
+                          )}
+                          <span className={`flex items-center gap-1 text-[11px] font-medium ${a.result_summary?.startsWith('Failed') ? 'text-red-500' : 'text-emerald-600'}`}>
+                            {a.result_summary?.startsWith('Failed') ? <><XCircle size={11} /> Failed</> : <><CheckCircle size={11} /> Done</>}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

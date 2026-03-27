@@ -162,6 +162,7 @@ RULES:
 6. If a GC name is "Unknown GC" or looks like a placeholder, focus on the PROJECT NAME instead
 7. Research tasks should produce a specific deliverable (PDF report, Excel sheet, summary doc) — not just "look into it"
 8. For financial analysis, specify what numbers to model and what format to deliver (Excel, PDF, etc.)
+9. NEVER propose a task that duplicates an existing active/completed task listed in the business state under "existingTasks". Find different, fresh work to do.
 
 Return a JSON array. Each object:
 {
@@ -229,8 +230,15 @@ async function runOvernightAnalysis() {
         // Clear stale proposed assignments before generating fresh ones
         clearProposedAssignments(tenant.id);
 
-        // Gather context
+        // Gather context + existing tasks to avoid duplicates
         const context = gatherDacpContext(tenant.id);
+        const existingAssignments = getAgentAssignments(tenant.id);
+        const existingTitles = existingAssignments
+          .filter(a => ['confirmed', 'in_progress', 'completed'].includes(a.status))
+          .map(a => a.title);
+        if (existingTitles.length > 0) {
+          context.existingTasks = existingTitles;
+        }
 
         // Generate assignments
         const assignments = await generateAssignments(tenant.id, context);

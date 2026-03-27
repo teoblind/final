@@ -1000,7 +1000,7 @@ router.post('/assignments/:id/confirm', async (req, res) => {
     const { id } = req.params;
     const assignment = getAgentAssignment(tenantId, id);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
-    if (assignment.status !== 'proposed') return res.status(400).json({ error: 'Assignment not in proposed state' });
+    if (!['proposed', 'completed'].includes(assignment.status)) return res.status(400).json({ error: 'Assignment cannot be run in current state' });
 
     // Mark as confirmed
     updateAgentAssignment(tenantId, id, {
