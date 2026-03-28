@@ -1019,6 +1019,14 @@ export default function CommandDashboard({ onNavigate }) {
                           {a.result_summary?.startsWith('Failed') ? <><XCircle size={11} /> Failed</> : <><CheckCircle size={11} /> Done</>}
                         </span>
                         {!a.result_summary?.startsWith('Failed') && (
+                          <>
+                          <button
+                            onClick={() => { window.location.href = `/agent/chat?prompt=${encodeURIComponent(`Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`)}`; }}
+                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text transition-colors"
+                            title="Chat about this report"
+                          >
+                            <MessageSquare size={10} /> Chat
+                          </button>
                           <button
                             onClick={() => handleShareToHivemind(a.id, 'assignment')}
                             disabled={!!sharedAssignments[a.id]}
@@ -1028,6 +1036,7 @@ export default function CommandDashboard({ onNavigate }) {
                             <Share2 size={10} />
                             {sharedAssignments[a.id] === 'shared' ? 'Shared' : sharedAssignments[a.id] === 'sharing' ? '...' : 'Share'}
                           </button>
+                          </>
                         )}
                       </div>
                     )}

@@ -26,6 +26,7 @@ import {
   respondToJobMessage,
   getTenant,
   getUsersByTenant,
+  insertNotification,
 } from '../cache/database.js';
 import { tunnelOrChat } from '../services/cliTunnel.js';
 import { getThreadKnowledge, searchKnowledge } from '../services/knowledgeProcessor.js';
@@ -496,6 +497,21 @@ async function handleResponse(tenantId, assignment, jobId, response) {
   });
 
   addJobMessage(jobId, 'agent', 'Task completed successfully.', 'info');
+
+  // Send notification
+  try {
+    const hasArtifacts = artifacts && artifacts.length > 0;
+    const docArtifact = hasArtifacts ? artifacts.find(a => a.type === 'gdoc' || a.type === 'pdf' || a.type === 'docx') : null;
+    insertNotification(
+      assignment.agent_id || 'coppice',
+      'task_complete',
+      `Report ready: ${assignment.title}`,
+      cleanResponse.slice(0, 200),
+      docArtifact?.url || docArtifact?.path || null,
+    );
+  } catch (notifErr) {
+    console.warn(`[AssignmentExecutor] Notification failed: ${notifErr.message}`);
+  }
 
   console.log(`[AssignmentExecutor] Assignment ${assignment.id} completed`);
 }
