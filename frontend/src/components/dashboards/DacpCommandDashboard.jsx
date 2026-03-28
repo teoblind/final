@@ -660,7 +660,10 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             try {
                               const artifacts = JSON.parse(a.output_artifacts_json || '[]');
                               if (!artifacts.length) return null;
-                              const docArtifacts = artifacts.filter(art => art.type !== 'email_draft');
+                              const artifactOrder = { pdf: 0, docx: 1, gdoc: 2, sheet: 3, document: 2 };
+                              const docArtifacts = artifacts
+                                .filter(art => art.type !== 'email_draft')
+                                .sort((a, b) => (artifactOrder[a.type] ?? 9) - (artifactOrder[b.type] ?? 9));
                               const emailDrafts = artifacts.filter(art => art.type === 'email_draft');
                               return (
                                 <>
