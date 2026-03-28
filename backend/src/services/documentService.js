@@ -98,52 +98,58 @@ function googleDocToMarkdown(text) {
     }
 
     // Detect Google Doc table blocks.
-    // Format: header line with tabs (e.g. "Name\tTitle\tPhone\tEmail"),
-    // then optional blank line, then cell values each on own tab-indented line.
-    // We group every N tab-indented lines into a row (N = header column count).
-    if (/\t/.test(line) && line.trim().length > 0) {
-      const headerCols = line.split('\t').map(c => c.trim()).filter(c => c);
-      const numCols = headerCols.length;
+    // Google Docs export format:
+    //   First column header (NO tab): "Detail"
+    //   Remaining column headers (tab-indented): "\tInfo"
+    //   Blank line
+    //   All data cells (tab-indented): "\tDelivery Method", "\tCMAR", ...
+    // Data cells are grouped into rows by column count.
+    if (line.trim().length > 0 && line.trim().length < 80 && !/^\t/.test(line) &&
+        i + 1 < lines.length && /^\t/.test(lines[i + 1])) {
+      // Potential table: non-tab line followed by tab-indented line(s)
+      const headerCols = [line.trim()];
+      let j = i + 1;
 
-      if (numCols >= 2) {
-        // Skip blank/whitespace lines after header
-        let j = i + 1;
-        while (j < lines.length && lines[j].trim() === '') j++;
+      // Collect remaining header columns (tab-indented, before blank line)
+      while (j < lines.length && /^\t/.test(lines[j]) && lines[j].trim().length > 0) {
+        headerCols.push(lines[j].trim());
+        j++;
+      }
 
-        // Collect all subsequent tab-indented cell values
-        const cellValues = [];
-        while (j < lines.length) {
-          const ln = lines[j];
-          if (/^\t/.test(ln) && ln.trim().length > 0) {
-            cellValues.push(ln.trim());
-            j++;
-          } else if (ln.trim() === '' || ln.trim() === ' ') {
-            // Skip blank lines between rows
-            j++;
-          } else {
-            break;
-          }
-        }
+      // Skip blank/whitespace lines
+      while (j < lines.length && lines[j].trim() === '') j++;
 
-        if (cellValues.length >= numCols) {
-          // Build markdown table
-          md.push('| ' + headerCols.join(' | ') + ' |');
-          md.push('| ' + headerCols.map(() => '---').join(' | ') + ' |');
-
-          // Group cells into rows of numCols
-          for (let c = 0; c + numCols - 1 < cellValues.length; c += numCols) {
-            const row = cellValues.slice(c, c + numCols);
-            while (row.length < numCols) row.push('');
-            md.push('| ' + row.join(' | ') + ' |');
-          }
-          md.push('');
-          i = j;
-          continue;
+      // Collect all subsequent tab-indented cell values
+      const cellValues = [];
+      while (j < lines.length) {
+        const ln = lines[j];
+        if (/^\t/.test(ln) && ln.trim().length > 0) {
+          cellValues.push(ln.trim());
+          j++;
+        } else if (ln.trim() === '') {
+          j++; // skip blank lines between rows
+        } else {
+          break;
         }
       }
 
-      // If we got here, it's a tab-containing line that's not a table header.
-      // Fall through to default handling.
+      const numCols = headerCols.length;
+      if (numCols >= 2 && cellValues.length >= numCols) {
+        // Build markdown table
+        md.push('| ' + headerCols.join(' | ') + ' |');
+        md.push('| ' + headerCols.map(() => '---').join(' | ') + ' |');
+
+        // Group cells into rows of numCols
+        for (let c = 0; c + numCols - 1 < cellValues.length; c += numCols) {
+          const row = cellValues.slice(c, c + numCols);
+          while (row.length < numCols) row.push('');
+          md.push('| ' + row.join(' | ') + ' |');
+        }
+        md.push('');
+        i = j;
+        continue;
+      }
+      // Not a table — fall through to other handlers
     }
 
     // Numbered section headings: "1. Title" or "2. Title" at start of line
