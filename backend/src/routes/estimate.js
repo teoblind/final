@@ -5,7 +5,7 @@
 import express from 'express';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync, createReadStream } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -1098,6 +1098,37 @@ router.post('/assignments/:id/dismiss', (req, res) => {
     const { id } = req.params;
     updateAgentAssignment(tenantId, id, { status: 'dismissed' });
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /assignments/:id/download/:format — Download a generated document */
+router.get('/assignments/:id/download/:format', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id, format } = req.params;
+
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const artifacts = assignment.output_artifacts_json ? JSON.parse(assignment.output_artifacts_json) : [];
+    const artifact = artifacts.find(a => a.type === format);
+    if (!artifact || !artifact.filename) return res.status(404).json({ error: `No ${format} artifact found` });
+
+    const docDir = join(__dirname, '../../data/generated-docs');
+    const filePath = join(docDir, artifact.filename);
+
+    if (!existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
+
+    const mimeTypes = {
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      pdf: 'application/pdf',
+    };
+
+    res.setHeader('Content-Type', mimeTypes[format] || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${artifact.filename}"`);
+    createReadStream(filePath).pipe(res);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

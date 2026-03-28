@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 
@@ -946,6 +946,37 @@ export default function CommandDashboard({ onNavigate }) {
                         {a.result_summary.slice(0, 500)}{a.result_summary.length > 500 ? '...' : ''}
                       </div>
                     )}
+                    {assignmentExpanded === a.id && a.status === 'completed' && (() => {
+                      try {
+                        const artifacts = JSON.parse(a.output_artifacts_json || '[]');
+                        if (!artifacts.length) return null;
+                        return (
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {artifacts.map((art, i) => {
+                              const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
+                              const isDownload = art.type === 'docx' || art.type === 'pdf';
+                              const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
+                                : art.type === 'pdf' ? <FileText size={10} />
+                                : art.type === 'docx' ? <Download size={10} />
+                                : <ExternalLink size={10} />;
+                              return (
+                                <a key={i} href={href} target={isDownload ? '_self' : '_blank'} rel="noopener noreferrer"
+                                  download={isDownload ? (art.filename || true) : undefined}
+                                  className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+                                    art.type === 'gdoc' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                                    : art.type === 'pdf' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+                                    : art.type === 'docx' ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                                    : 'bg-white hover:bg-blue-50 text-[var(--t-ui-accent)] border-[var(--t-border)]'
+                                  }`}
+                                >
+                                  {icon} {art.label || art.title || art.type}
+                                </a>
+                              );
+                            })}
+                          </div>
+                        );
+                      } catch { return null; }
+                    })()}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
                     {a.status === 'proposed' && (

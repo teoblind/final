@@ -24,9 +24,12 @@ import {
   addJobMessage,
   getJobMessages,
   respondToJobMessage,
+  getTenant,
+  getUsersByTenant,
 } from '../cache/database.js';
 import { tunnelOrChat } from '../services/cliTunnel.js';
 import { getThreadKnowledge, searchKnowledge } from '../services/knowledgeProcessor.js';
+import { generateReport } from '../services/documentService.js';
 
 let pollInterval = null;
 
@@ -446,6 +449,37 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     .replace(/<!--INFO_REQUEST\{[\s\S]*?\}INFO_REQUEST-->/g, '')
     .replace(/<!--ARTIFACTS\[[\s\S]*?\]ARTIFACTS-->/g, '')
     .trim();
+
+  // Generate formatted documents for research/analysis/document tasks
+  const docCategories = ['research', 'analysis', 'document'];
+  if (docCategories.includes(assignment.category) && cleanResponse.length > 200) {
+    try {
+      updateBackgroundJob(jobId, { progressPct: 85, progressMessage: 'Generating documents...' });
+
+      const tenant = getTenant(tenantId);
+      const users = getUsersByTenant(tenantId);
+      const assignedUser = assignment.user_id ? users.find(u => u.id === assignment.user_id) : null;
+      const userEmail = assignedUser?.email && !assignedUser.email.includes('localhost') ? assignedUser.email : null;
+
+      const report = await generateReport({
+        title: assignment.title,
+        content: cleanResponse,
+        tenantName: tenant?.name || tenantId,
+        agentName: 'Coppice AI',
+        userEmail,
+        assignmentId: assignment.id,
+      });
+
+      // Merge generated artifacts with any agent-emitted artifacts
+      const allArtifacts = [...(artifacts || []), ...report.artifacts];
+      artifacts = allArtifacts;
+
+      console.log(`[AssignmentExecutor] Generated documents for ${assignment.id}: DOCX=${!!report.docxPath} PDF=${!!report.pdfPath} GDoc=${!!report.gdocUrl}`);
+    } catch (docErr) {
+      console.error(`[AssignmentExecutor] Document generation failed for ${assignment.id}: ${docErr.message}`);
+      // Continue — don't fail the task over doc generation
+    }
+  }
 
   // Complete the assignment
   updateAgentAssignment(tenantId, assignment.id, {

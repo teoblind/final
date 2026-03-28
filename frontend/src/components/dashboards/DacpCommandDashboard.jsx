@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2 } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -544,18 +544,34 @@ export default function DacpCommandDashboard({ onNavigate }) {
                               if (!artifacts.length) return null;
                               return (
                                 <div className="flex flex-wrap gap-1.5">
-                                  {artifacts.map((art, i) => (
-                                    <a
-                                      key={i}
-                                      href={art.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-blue-50 transition-colors text-[#1e3a5f] border-[#d0cec8]"
-                                    >
-                                      {art.type === 'sheet' ? <FileSpreadsheet size={10} /> : art.type === 'email' ? <Mail size={10} /> : <ExternalLink size={10} />}
-                                      {art.title || art.type}
-                                    </a>
-                                  ))}
+                                  {artifacts.map((art, i) => {
+                                    const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
+                                    const isDownload = art.type === 'docx' || art.type === 'pdf';
+                                    const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
+                                      : art.type === 'pdf' ? <FileText size={10} />
+                                      : art.type === 'docx' ? <Download size={10} />
+                                      : art.type === 'sheet' ? <FileSpreadsheet size={10} />
+                                      : art.type === 'email' ? <Mail size={10} />
+                                      : <ExternalLink size={10} />;
+                                    return (
+                                      <a
+                                        key={i}
+                                        href={href}
+                                        target={isDownload ? '_self' : '_blank'}
+                                        rel="noopener noreferrer"
+                                        download={isDownload ? (art.filename || true) : undefined}
+                                        className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+                                          art.type === 'gdoc' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                                          : art.type === 'pdf' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+                                          : art.type === 'docx' ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                                          : 'bg-white hover:bg-blue-50 text-[#1e3a5f] border-[#d0cec8]'
+                                        }`}
+                                      >
+                                        {icon}
+                                        {art.label || art.title || art.type}
+                                      </a>
+                                    );
+                                  })}
                                 </div>
                               );
                             } catch { return null; }
