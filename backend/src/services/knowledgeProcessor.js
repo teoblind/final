@@ -8,11 +8,13 @@
  * 4. Extract action items
  * 5. Upload formatted doc to Google Drive
  * 6. Send notification
+ * 7. Contradiction detection — if a meeting transcript contradicts a prior report,
+ *    auto-propose a copilot assignment to redo the analysis
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { tunnelPrompt } from './cliTunnel.js';
-import { getCurrentTenantId, getTenantDb } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, insertAgentAssignment, updateAgentAssignment } from '../cache/database.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -346,6 +348,155 @@ Output ONLY valid JSON. The summary field should be the full structured markdown
   }
 
   console.log(`Knowledge entry ${entryId} processed: "${parsed.title || entry.title}" — ${(parsed.action_items || []).length} action items`);
+
+  // ─── Step 7: Contradiction detection (meeting transcripts only) ───
+  if (entry.type === 'meeting-transcript' && parsed.summary) {
+    try {
+      await detectContradictions(tenantId, entryId, entry, parsed);
+    } catch (err) {
+      console.warn(`[KnowledgeProcessor] Contradiction detection failed (non-fatal): ${err.message}`);
+    }
+  }
+}
+
+// ─── Contradiction Detection ─────────────────────────────────────────────────
+// When a meeting transcript is ingested, check if it contradicts any prior
+// completed assignments (reports, analyses). If so, auto-propose a copilot
+// assignment to redo the report with corrected information.
+
+async function detectContradictions(tenantId, entryId, entry, parsed) {
+  // 1. Find completed assignments that overlap with this transcript's topics/entities
+  const completedAssignments = db.prepare(`
+    SELECT * FROM agent_assignments
+    WHERE tenant_id = ? AND status = 'completed' AND result_summary IS NOT NULL
+    ORDER BY completed_at DESC LIMIT 20
+  `).all(tenantId);
+
+  if (completedAssignments.length === 0) return;
+
+  // 2. Build a concise representation of the new transcript
+  const meetingContent = parsed.summary || '';
+  const meetingTitle = parsed.title || entry.title || '';
+  const meetingEntities = [
+    ...(parsed.people || []),
+    ...(parsed.companies || []),
+    ...(parsed.projects || []),
+  ];
+
+  // 3. Find assignments that share entities or topics with this transcript
+  const candidates = completedAssignments.filter(a => {
+    const titleLower = (a.title || '').toLowerCase();
+    const descLower = (a.description || '').toLowerCase();
+    const resultLower = (a.result_summary || '').toLowerCase();
+    const combined = `${titleLower} ${descLower} ${resultLower}`;
+
+    // Check for entity overlap
+    for (const entity of meetingEntities) {
+      if (combined.includes(entity.toLowerCase())) return true;
+    }
+    // Check for topic keyword overlap
+    for (const topic of parsed.topics || []) {
+      if (combined.includes(topic.toLowerCase())) return true;
+    }
+    return false;
+  });
+
+  if (candidates.length === 0) return;
+
+  // 4. Ask Claude to identify contradictions
+  const candidateSummaries = candidates.slice(0, 5).map(a =>
+    `REPORT ID: ${a.id}\nTITLE: ${a.title}\nDATE: ${a.completed_at}\nSUMMARY: ${(a.result_summary || '').slice(0, 2000)}`
+  ).join('\n\n---\n\n');
+
+  const contradictionPrompt = `You are a fact-checking agent. A new meeting transcript has been ingested. Compare its content against prior reports/analyses to find factual contradictions.
+
+MEETING TRANSCRIPT SUMMARY:
+Title: ${meetingTitle}
+${meetingContent.slice(0, 4000)}
+
+PRIOR REPORTS:
+${candidateSummaries}
+
+OUTPUT VALID JSON with this structure:
+{
+  "hasContradictions": true/false,
+  "contradictions": [
+    {
+      "reportId": "the assignment ID",
+      "reportTitle": "title of the contradicted report",
+      "claim": "what the prior report stated",
+      "correction": "what the meeting transcript reveals instead",
+      "severity": "high" or "medium" or "low"
+    }
+  ]
+}
+
+Only flag genuine factual contradictions (wrong names, wrong numbers, wrong locations, wrong assumptions). NOT differences in opinion or emphasis. Output ONLY valid JSON.`;
+
+  let contradictionResult;
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) return;
+
+    const analysis = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: contradictionPrompt }],
+    });
+    contradictionResult = JSON.parse(analysis.content[0].text);
+  } catch (err) {
+    console.warn(`[KnowledgeProcessor] Contradiction analysis failed: ${err.message}`);
+    return;
+  }
+
+  if (!contradictionResult?.hasContradictions || !contradictionResult.contradictions?.length) return;
+
+  // 5. Create a proposed copilot assignment to redo the report
+  const contradictions = contradictionResult.contradictions;
+  const highSeverity = contradictions.filter(c => c.severity === 'high');
+  const affectedReports = [...new Set(contradictions.map(c => c.reportTitle))];
+
+  const contradictionList = contradictions.map(c =>
+    `- **${c.severity.toUpperCase()}**: Report "${c.reportTitle}" stated: "${c.claim}" → Meeting reveals: "${c.correction}"`
+  ).join('\n');
+
+  const assignmentId = `assign-contradict-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  insertAgentAssignment({
+    id: assignmentId,
+    tenant_id: tenantId,
+    agent_id: 'coppice',
+    title: `⚠ Report Correction Needed: ${affectedReports[0] || 'Prior Analysis'}`,
+    description: `A meeting transcript ("${meetingTitle}") contains information that contradicts ${contradictions.length} finding(s) in prior report(s). ${highSeverity.length > 0 ? `${highSeverity.length} HIGH severity contradiction(s).` : ''}\n\n### Contradictions Found:\n${contradictionList}\n\n### Recommendation:\nRedo the analysis with corrected information from the meeting. The original report may have been based on outdated or incorrect assumptions.`,
+    category: 'analysis',
+    priority: highSeverity.length > 0 ? 'high' : 'medium',
+    action_prompt: `A recent meeting transcript ("${meetingTitle}") contradicts a previous report. Your job is to redo the analysis with the correct information.
+
+CONTRADICTIONS IDENTIFIED:
+${contradictions.map(c => `- Report "${c.reportTitle}" said: "${c.claim}"\n  Correct per meeting: "${c.correction}" (severity: ${c.severity})`).join('\n')}
+
+INSTRUCTIONS:
+1. Review ALL knowledge entries related to this topic (use the context provided)
+2. Identify everything that needs to change based on the new information
+3. Create a corrected report as a Google Doc, clearly marking what changed and why
+4. Include a "Corrections" section at the top listing each change from the original report
+5. If you are missing any information needed for the corrected report, use INFO_REQUEST
+
+This is a copilot task — produce the deliverable for human review before any external communication.`,
+    context_json: JSON.stringify({
+      sourceEntryId: entryId,
+      contradictions,
+      affectedReportIds: contradictions.map(c => c.reportId),
+    }),
+  });
+
+  // Set source fields
+  try {
+    updateAgentAssignment(tenantId, assignmentId, {
+      source_type: 'contradiction-detection',
+      knowledge_entry_ids_json: JSON.stringify([entryId]),
+    });
+  } catch {}
+
+  console.log(`[KnowledgeProcessor] Contradiction detected! Created proposed assignment ${assignmentId} — ${contradictions.length} contradiction(s) vs ${affectedReports.length} report(s)`);
 }
 
 // ─── Knowledge Search (used by chat context injection) ──────────────────────
