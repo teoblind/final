@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink } from 'lucide-react';
+import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 
@@ -631,6 +631,27 @@ export default function CommandDashboard({ onNavigate }) {
     }
   }, []);
 
+  const handleArchiveAssignment = useCallback(async (id) => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${id}/archive`, { method: 'POST', headers: getAuthHeaders() });
+      setAssignments(prev => prev.filter(a => a.id !== id));
+    } catch {}
+  }, []);
+
+  const handleShareInternal = useCallback(async (id) => {
+    try {
+      setSharedAssignments(prev => ({ ...prev, [`internal-${id}`]: 'sharing' }));
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${id}/share-internal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      if (res.ok) {
+        setSharedAssignments(prev => ({ ...prev, [`internal-${id}`]: 'shared' }));
+        setAssignments(prev => prev.map(a => a.id === id ? { ...a, visibility: 'shared' } : a));
+      }
+    } catch {}
+  }, []);
+
   const handleApprove = useCallback(async (id) => {
     const item = approvals.find(a => a.id === id);
     try {
@@ -1010,37 +1031,53 @@ export default function CommandDashboard({ onNavigate }) {
                       </span>
                     )}
                     {a.status === 'completed' && (
-                      <div className="flex items-center gap-2">
-                        {a.result_summary?.startsWith('Failed') && (
-                          <button
-                            onClick={() => handleConfirmAssignment(a.id)}
-                            disabled={processingAssignment === a.id}
-                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50"
-                          >
-                            <RotateCcw size={10} /> Retry
-                          </button>
-                        )}
-                        <span className={`flex items-center gap-1 text-[11px] font-medium ${a.result_summary?.startsWith('Failed') ? 'text-red-500' : 'text-emerald-600'}`}>
-                          {a.result_summary?.startsWith('Failed') ? <><XCircle size={11} /> Failed</> : <><CheckCircle size={11} /> Done</>}
-                        </span>
-                        {!a.result_summary?.startsWith('Failed') && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {a.result_summary?.startsWith('Failed') ? (
                           <>
-                          <button
-                            onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
-                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text transition-colors"
-                            title="Chat about this report"
-                          >
-                            <MessageSquare size={10} /> Chat
-                          </button>
-                          <button
-                            onClick={() => handleShareToHivemind(a.id, 'assignment')}
-                            disabled={!!sharedAssignments[a.id]}
-                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text disabled:opacity-50 transition-colors"
-                            title="Share to Hivemind"
-                          >
-                            <Share2 size={10} />
-                            {sharedAssignments[a.id] === 'shared' ? 'Shared' : sharedAssignments[a.id] === 'sharing' ? '...' : 'Share'}
-                          </button>
+                            <button
+                              onClick={() => handleConfirmAssignment(a.id)}
+                              disabled={processingAssignment === a.id}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50"
+                            >
+                              <RotateCcw size={10} /> Retry
+                            </button>
+                            <span className="flex items-center gap-1 text-[11px] font-medium text-red-500">
+                              <XCircle size={11} /> Failed
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                              <CheckCircle size={11} /> Done
+                            </span>
+                            {a.visibility === 'shared' && (
+                              <span className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
+                                <Users size={8} /> Shared
+                              </span>
+                            )}
+                            <button
+                              onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text transition-colors"
+                              title="Chat about this report"
+                            >
+                              <MessageSquare size={10} /> Chat
+                            </button>
+                            <button
+                              onClick={() => handleShareInternal(a.id)}
+                              disabled={a.visibility === 'shared' || sharedAssignments[`internal-${a.id}`] === 'sharing'}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text disabled:opacity-50 transition-colors"
+                              title="Share with team"
+                            >
+                              <Users size={10} />
+                              {a.visibility === 'shared' ? 'Shared' : sharedAssignments[`internal-${a.id}`] === 'sharing' ? '...' : 'Share'}
+                            </button>
+                            <button
+                              onClick={() => handleArchiveAssignment(a.id)}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-amber-600 transition-colors"
+                              title="Archive this task"
+                            >
+                              <Archive size={10} /> Archive
+                            </button>
                           </>
                         )}
                       </div>

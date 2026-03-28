@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -217,6 +217,27 @@ export default function DacpCommandDashboard({ onNavigate }) {
     } catch {
       setSharedAssignments(prev => ({ ...prev, [sourceId]: 'error' }));
     }
+  }, []);
+
+  const handleArchiveAssignment = useCallback(async (id) => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${id}/archive`, { method: 'POST', headers: getAuthHeaders() });
+      setAssignments(prev => prev.filter(a => a.id !== id));
+    } catch {}
+  }, []);
+
+  const handleShareInternal = useCallback(async (id) => {
+    try {
+      setSharedAssignments(prev => ({ ...prev, [`internal-${id}`]: 'sharing' }));
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${id}/share-internal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      if (res.ok) {
+        setSharedAssignments(prev => ({ ...prev, [`internal-${id}`]: 'shared' }));
+        setAssignments(prev => prev.map(a => a.id === id ? { ...a, visibility: 'shared' } : a));
+      }
+    } catch {}
   }, []);
 
   const handleAssignmentChat = useCallback(async (assignmentId) => {
@@ -628,21 +649,30 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         </span>
                       )}
                       {a.status === 'completed' && (
-                        <div className="flex items-center gap-2">
-                          {a.result_summary?.startsWith('Failed') && (
-                            <button
-                              onClick={() => handleConfirmAssignment(a.id)}
-                              disabled={processingAssignment === a.id}
-                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
-                            >
-                              <RotateCcw size={10} /> Retry
-                            </button>
-                          )}
-                          <span className={`flex items-center gap-1 text-[11px] font-medium ${a.result_summary?.startsWith('Failed') ? 'text-red-500' : 'text-emerald-600'}`}>
-                            {a.result_summary?.startsWith('Failed') ? <><XCircle size={11} /> Failed</> : <><CheckCircle size={11} /> Done</>}
-                          </span>
-                          {!a.result_summary?.startsWith('Failed') && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {a.result_summary?.startsWith('Failed') ? (
                             <>
+                              <button
+                                onClick={() => handleConfirmAssignment(a.id)}
+                                disabled={processingAssignment === a.id}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                              >
+                                <RotateCcw size={10} /> Retry
+                              </button>
+                              <span className="flex items-center gap-1 text-[11px] font-medium text-red-500">
+                                <XCircle size={11} /> Failed
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                                <CheckCircle size={11} /> Done
+                              </span>
+                              {a.visibility === 'shared' && (
+                                <span className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
+                                  <Users size={8} /> Shared
+                                </span>
+                              )}
                               <button
                                 onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
                                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] transition-colors"
@@ -651,13 +681,20 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                 <MessageSquare size={10} /> Chat
                               </button>
                               <button
-                                onClick={() => handleShareToHivemind(a.id, 'assignment')}
-                                disabled={!!sharedAssignments[a.id]}
+                                onClick={() => handleShareInternal(a.id)}
+                                disabled={a.visibility === 'shared' || sharedAssignments[`internal-${a.id}`] === 'sharing'}
                                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] disabled:opacity-50 transition-colors"
-                                title="Share to Hivemind"
+                                title="Share with team"
                               >
-                                <Share2 size={10} />
-                                {sharedAssignments[a.id] === 'shared' ? 'Shared' : sharedAssignments[a.id] === 'sharing' ? 'Sharing...' : 'Share'}
+                                <Users size={10} />
+                                {a.visibility === 'shared' ? 'Shared' : sharedAssignments[`internal-${a.id}`] === 'sharing' ? '...' : 'Share'}
+                              </button>
+                              <button
+                                onClick={() => handleArchiveAssignment(a.id)}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-amber-600 transition-colors"
+                                title="Archive this task"
+                              >
+                                <Archive size={10} /> Archive
                               </button>
                             </>
                           )}

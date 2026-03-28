@@ -996,6 +996,7 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN source_thread_id TEXT'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN knowledge_entry_ids_json TEXT'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN info_requests_pending INTEGER DEFAULT 0'); } catch (e) {}
+  try { targetDb.exec("ALTER TABLE agent_assignments ADD COLUMN visibility TEXT DEFAULT 'private'"); } catch (e) {}
 
   // CC thread tracking — auto-trigger assignments from accumulated observations
   targetDb.exec(`
@@ -6336,16 +6337,22 @@ export function getDueScheduledTasks() {
 // ─── Agent Assignments CRUD ───────────────────────────────────────────────
 
 export function getAgentAssignments(tenantId, status = null, userId = null) {
+  const excludeArchived = "AND status != 'archived'";
+  const orderBy = "ORDER BY CASE status WHEN 'proposed' THEN 0 WHEN 'confirmed' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'completed' THEN 3 WHEN 'dismissed' THEN 4 END, created_at DESC";
+  if (status === 'archived') {
+    // Explicit archived query — show only archived for this tenant
+    return db.prepare(`SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = 'archived' ORDER BY completed_at DESC, created_at DESC`).all(tenantId);
+  }
   if (status && userId) {
-    return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? AND (user_id = ? OR user_id IS NULL) ORDER BY priority DESC, created_at DESC').all(tenantId, status, userId);
+    return db.prepare(`SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? AND (user_id = ? OR user_id IS NULL OR visibility = 'shared') ORDER BY priority DESC, created_at DESC`).all(tenantId, status, userId);
   }
   if (status) {
-    return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? ORDER BY priority DESC, created_at DESC').all(tenantId, status);
+    return db.prepare(`SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? ORDER BY priority DESC, created_at DESC`).all(tenantId, status);
   }
   if (userId) {
-    return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND (user_id = ? OR user_id IS NULL) ORDER BY CASE status WHEN \'proposed\' THEN 0 WHEN \'confirmed\' THEN 1 WHEN \'in_progress\' THEN 2 WHEN \'completed\' THEN 3 WHEN \'dismissed\' THEN 4 END, created_at DESC').all(tenantId, userId);
+    return db.prepare(`SELECT * FROM agent_assignments WHERE tenant_id = ? AND (user_id = ? OR user_id IS NULL OR visibility = 'shared') ${excludeArchived} ${orderBy}`).all(tenantId, userId);
   }
-  return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? ORDER BY CASE status WHEN \'proposed\' THEN 0 WHEN \'confirmed\' THEN 1 WHEN \'in_progress\' THEN 2 WHEN \'completed\' THEN 3 WHEN \'dismissed\' THEN 4 END, created_at DESC').all(tenantId);
+  return db.prepare(`SELECT * FROM agent_assignments WHERE tenant_id = ? ${excludeArchived} ${orderBy}`).all(tenantId);
 }
 
 export function getAgentAssignment(tenantId, id) {
@@ -6362,7 +6369,7 @@ export function insertAgentAssignment(assignment) {
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {
@@ -6374,7 +6381,9 @@ export function updateAgentAssignment(tenantId, id, updates) {
 }
 
 export function clearOldAssignments(tenantId, daysOld = 7) {
-  db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status IN ('completed', 'dismissed') AND created_at < datetime('now', '-' || ? || ' days')`).run(tenantId, daysOld);
+  db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status IN ('dismissed') AND created_at < datetime('now', '-' || ? || ' days')`).run(tenantId, daysOld);
+  // Archived tasks cleaned after 90 days
+  db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status = 'archived' AND created_at < datetime('now', '-90 days')`).run(tenantId);
 }
 
 export function clearProposedAssignments(tenantId) {

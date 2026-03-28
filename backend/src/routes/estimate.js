@@ -1103,6 +1103,50 @@ router.post('/assignments/:id/dismiss', (req, res) => {
   }
 });
 
+/** POST /assignments/:id/archive — Archive a completed assignment */
+router.post('/assignments/:id/archive', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    if (assignment.status !== 'completed') return res.status(400).json({ error: 'Only completed tasks can be archived' });
+    updateAgentAssignment(tenantId, id, { status: 'archived' });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/:id/share-internal — Share a completed task with all tenant users */
+router.post('/assignments/:id/share-internal', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    if (assignment.status !== 'completed' && assignment.status !== 'archived') {
+      return res.status(400).json({ error: 'Only completed tasks can be shared' });
+    }
+    updateAgentAssignment(tenantId, id, { visibility: 'shared' });
+    res.json({ success: true, visibility: 'shared' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/:id/unshare — Make a shared task private again */
+router.post('/assignments/:id/unshare', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    updateAgentAssignment(tenantId, id, { visibility: 'private' });
+    res.json({ success: true, visibility: 'private' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** GET /assignments/:id/download/:format — Download a generated document */
 router.get('/assignments/:id/download/:format', (req, res) => {
   try {
