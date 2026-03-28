@@ -45,6 +45,7 @@ import {
   draftQuoteEmail,
 } from '../services/estimateBot.js';
 import { google } from 'googleapis';
+import { generateReport } from '../services/documentService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1147,6 +1148,39 @@ router.post('/assignments/:id/unshare', (req, res) => {
   }
 });
 
+/** POST /assignments/:id/regenerate-report — Regenerate PDF/DOC artifacts for a completed task */
+router.post('/assignments/:id/regenerate-report', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    if (assignment.status !== 'completed') return res.status(400).json({ error: 'Only completed tasks can be regenerated' });
+
+    const content = assignment.full_response || assignment.result_summary;
+    if (!content) return res.status(400).json({ error: 'No content available to generate report' });
+
+    const result = await generateReport({
+      title: assignment.title,
+      content,
+      tenantName: 'DACP Construction',
+      assignmentId: id,
+      theme: 'construction',
+      label: 'Intelligence Brief',
+      tenantId,
+    });
+
+    updateAgentAssignment(tenantId, id, {
+      output_artifacts_json: JSON.stringify(result.artifacts),
+    });
+
+    res.json({ success: true, artifacts: result.artifacts });
+  } catch (error) {
+    console.error('[Assignments] Regenerate report error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** GET /assignments/:id/download/:format — Download a generated document */
 router.get('/assignments/:id/download/:format', (req, res) => {
   try {
@@ -1166,7 +1200,8 @@ router.get('/assignments/:id/download/:format', (req, res) => {
     if (!existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
 
     const mimeTypes = {
-      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      docx: 'application/msword',
+      doc: 'application/msword',
       pdf: 'application/pdf',
     };
 

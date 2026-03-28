@@ -596,9 +596,20 @@ export async function generateReport({ title, content, tenantName, agentName, us
   const pdf = await generatePdf({ title, content, filename: safeName, meta, theme });
   if (!pdf) {
     console.error('[DocumentService] PDF generation failed');
-    return { pdfPath: null, gdocUrl: null, gdocId: null, artifacts: [] };
+    return { pdfPath: null, docxPath: null, gdocUrl: null, gdocId: null, artifacts: [] };
   }
   console.log(`[DocumentService] Generated PDF: ${pdf.filePath}`);
+
+  // Generate Word doc (HTML saved as .doc — Word opens natively)
+  const docxFilename = `${safeName}.doc`;
+  const docxPath = join(OUTPUT_DIR, docxFilename);
+  try {
+    const docHtml = generateHtml({ title, content, meta, theme });
+    writeFileSync(docxPath, docHtml);
+    console.log(`[DocumentService] Generated DOC: ${docxPath}`);
+  } catch (docErr) {
+    console.warn(`[DocumentService] DOC generation failed: ${docErr.message}`);
+  }
 
   // Upload PDF to Google Drive
   const shareEmails = userEmail ? [userEmail] : [];
@@ -613,11 +624,13 @@ export async function generateReport({ title, content, tenantName, agentName, us
 
   const artifacts = [
     { type: 'pdf', label: 'PDF Report', path: `/v1/estimates/assignments/${assignmentId}/download/pdf`, filename: pdf.filename },
-    ...(gdoc ? [{ type: 'gdrive', label: 'Google Drive', url: gdoc.webViewLink, fileId: gdoc.fileId }] : []),
+    ...(existsSync(docxPath) ? [{ type: 'docx', label: 'Word Doc', path: `/v1/estimates/assignments/${assignmentId}/download/docx`, filename: docxFilename }] : []),
+    ...(gdoc ? [{ type: 'gdoc', label: 'Google Docs', url: gdoc.webViewLink, fileId: gdoc.fileId }] : []),
   ];
 
   return {
     pdfPath: pdf.filePath,
+    docxPath: existsSync(docxPath) ? docxPath : null,
     gdocUrl: gdoc?.webViewLink || null,
     gdocId: gdoc?.fileId || null,
     artifacts,
