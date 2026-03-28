@@ -97,40 +97,53 @@ function googleDocToMarkdown(text) {
       continue;
     }
 
-    // Detect tab-separated table blocks:
-    // Pattern: a header line followed by lines starting with tab
-    // Google Docs exports 2-column tables as alternating key/value on separate lines
-    // OR as tab-separated columns on a single line
-    if (i + 1 < lines.length && /\t/.test(lines[i]) && /\t/.test(lines[i + 1])) {
-      // Collect all consecutive lines with tabs
-      const tableLines = [];
-      while (i < lines.length && (/\t/.test(lines[i]) || lines[i].trim() === '')) {
-        if (lines[i].trim() !== '') tableLines.push(lines[i]);
-        i++;
-      }
+    // Detect Google Doc table blocks.
+    // Format: header line with tabs (e.g. "Name\tTitle\tPhone\tEmail"),
+    // then optional blank line, then cell values each on own tab-indented line.
+    // We group every N tab-indented lines into a row (N = header column count).
+    if (/\t/.test(line) && line.trim().length > 0) {
+      const headerCols = line.split('\t').map(c => c.trim()).filter(c => c);
+      const numCols = headerCols.length;
 
-      if (tableLines.length >= 2) {
-        // Split each line by tab to get columns
-        const rows = tableLines.map(l => l.split('\t').map(c => c.trim()).filter(c => c));
-        const maxCols = Math.max(...rows.map(r => r.length));
+      if (numCols >= 2) {
+        // Skip blank/whitespace lines after header
+        let j = i + 1;
+        while (j < lines.length && lines[j].trim() === '') j++;
 
-        if (maxCols >= 2) {
-          // Render as markdown table
-          const header = rows[0];
-          while (header.length < maxCols) header.push('');
-          md.push('| ' + header.join(' | ') + ' |');
-          md.push('| ' + header.map(() => '---').join(' | ') + ' |');
-          for (let r = 1; r < rows.length; r++) {
-            while (rows[r].length < maxCols) rows[r].push('');
-            md.push('| ' + rows[r].join(' | ') + ' |');
+        // Collect all subsequent tab-indented cell values
+        const cellValues = [];
+        while (j < lines.length) {
+          const ln = lines[j];
+          if (/^\t/.test(ln) && ln.trim().length > 0) {
+            cellValues.push(ln.trim());
+            j++;
+          } else if (ln.trim() === '' || ln.trim() === ' ') {
+            // Skip blank lines between rows
+            j++;
+          } else {
+            break;
+          }
+        }
+
+        if (cellValues.length >= numCols) {
+          // Build markdown table
+          md.push('| ' + headerCols.join(' | ') + ' |');
+          md.push('| ' + headerCols.map(() => '---').join(' | ') + ' |');
+
+          // Group cells into rows of numCols
+          for (let c = 0; c + numCols - 1 < cellValues.length; c += numCols) {
+            const row = cellValues.slice(c, c + numCols);
+            while (row.length < numCols) row.push('');
+            md.push('| ' + row.join(' | ') + ' |');
           }
           md.push('');
-        } else {
-          // Single-column tab data -> just output as text
-          for (const tl of tableLines) md.push(tl.replace(/^\t+/, ''));
+          i = j;
+          continue;
         }
       }
-      continue;
+
+      // If we got here, it's a tab-containing line that's not a table header.
+      // Fall through to default handling.
     }
 
     // Numbered section headings: "1. Title" or "2. Title" at start of line
