@@ -79,6 +79,12 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [driveQuery, setDriveQuery] = useState('');
   // Document preview modal
   const [docPreview, setDocPreview] = useState(null); // { type, url, title, assignment }
+  // Share modal state
+  const [shareModal, setShareModal] = useState(null); // assignment id
+  const [shareUsers, setShareUsers] = useState([]); // tenant users list
+  const [shareSearch, setShareSearch] = useState('');
+  const [shareSelected, setShareSelected] = useState([]); // selected user ids
+  const [shareLoading, setShareLoading] = useState(false);
 
   // Dynamic senders: Coppice (default) + currently logged-in user
   const SENDERS = (() => {
@@ -226,19 +232,37 @@ export default function DacpCommandDashboard({ onNavigate }) {
     } catch {}
   }, []);
 
-  const handleShareInternal = useCallback(async (id) => {
+  const openShareModal = useCallback(async (id) => {
+    setShareModal(id);
+    setShareSearch('');
+    setShareSelected([]);
     try {
-      setSharedAssignments(prev => ({ ...prev, [`internal-${id}`]: 'sharing' }));
-      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${id}/share-internal`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      });
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/team-members`, { headers: getAuthHeaders() });
       if (res.ok) {
-        setSharedAssignments(prev => ({ ...prev, [`internal-${id}`]: 'shared' }));
-        setAssignments(prev => prev.map(a => a.id === id ? { ...a, visibility: 'shared' } : a));
+        const data = await res.json();
+        setShareUsers((data.users || []).filter(u => u.status === 'active'));
       }
     } catch {}
   }, []);
+
+  const handleShareInternal = useCallback(async () => {
+    if (!shareModal || shareSelected.length === 0) return;
+    try {
+      setShareLoading(true);
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${shareModal}/share-internal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ shared_with: shareSelected }),
+      });
+      if (res.ok) {
+        setSharedAssignments(prev => ({ ...prev, [`internal-${shareModal}`]: 'shared' }));
+        setAssignments(prev => prev.map(a => a.id === shareModal ? { ...a, visibility: 'shared' } : a));
+        setShareModal(null);
+      }
+    } catch {} finally {
+      setShareLoading(false);
+    }
+  }, [shareModal, shareSelected]);
 
   const handleAssignmentChat = useCallback(async (assignmentId) => {
     if (!chatInput.trim()) return;
@@ -691,13 +715,13 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                 <MessageSquare size={10} /> Chat
                               </button>
                               <button
-                                onClick={() => handleShareInternal(a.id)}
-                                disabled={a.visibility === 'shared' || sharedAssignments[`internal-${a.id}`] === 'sharing'}
+                                onClick={() => openShareModal(a.id)}
+                                disabled={a.visibility === 'shared'}
                                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] disabled:opacity-50 transition-colors"
                                 title="Share with team"
                               >
                                 <Users size={10} />
-                                {a.visibility === 'shared' ? 'Shared' : sharedAssignments[`internal-${a.id}`] === 'sharing' ? '...' : 'Share'}
+                                {a.visibility === 'shared' ? 'Shared' : 'Share'}
                               </button>
                               <button
                                 onClick={() => handleArchiveAssignment(a.id)}
@@ -1433,6 +1457,74 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Share Modal */}
+    {shareModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShareModal(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[500px] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e6e1] bg-[#faf9f7]">
+            <div className="flex items-center gap-2">
+              <Users size={16} className="text-[#1e3a5f]" />
+              <h3 className="text-[14px] font-bold text-[#111110] font-heading">Share with team</h3>
+            </div>
+            <button onClick={() => setShareModal(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="px-5 py-3 border-b border-[#e8e6e1]">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9a9a92]" />
+              <input
+                type="text"
+                value={shareSearch}
+                onChange={e => setShareSearch(e.target.value)}
+                placeholder="Search members..."
+                className="w-full pl-9 pr-3 py-2 text-[12px] bg-[#f5f5f0] border border-[#e8e6e1] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] text-[#333]"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-2">
+            {shareUsers
+              .filter(u => {
+                if (!shareSearch) return true;
+                const q = shareSearch.toLowerCase();
+                return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+              })
+              .map(u => (
+                <label key={u.id} className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-[#f5f5f0] cursor-pointer transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={shareSelected.includes(u.id)}
+                    onChange={e => {
+                      if (e.target.checked) setShareSelected(prev => [...prev, u.id]);
+                      else setShareSelected(prev => prev.filter(id => id !== u.id));
+                    }}
+                    className="w-4 h-4 rounded border-[#d4d4cf] text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold text-[#111110] truncate">{u.name || u.email}</div>
+                    {u.name && <div className="text-[11px] text-[#9a9a92] truncate">{u.email}</div>}
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0f0ec] text-[#6b6b65] uppercase font-semibold">{u.role}</span>
+                </label>
+              ))}
+            {shareUsers.length === 0 && (
+              <div className="text-center text-[12px] text-[#9a9a92] py-6">Loading members...</div>
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-[#e8e6e1] bg-[#faf9f7] flex items-center justify-between">
+            <span className="text-[11px] text-[#9a9a92]">{shareSelected.length} selected</span>
+            <button
+              onClick={handleShareInternal}
+              disabled={shareSelected.length === 0 || shareLoading}
+              className="px-4 py-2 text-[12px] font-semibold font-heading rounded-lg bg-[#1e3a5f] text-white hover:bg-[#2a4a6f] disabled:opacity-50 transition-colors"
+            >
+              {shareLoading ? 'Sharing...' : 'Share'}
+            </button>
           </div>
         </div>
       </div>

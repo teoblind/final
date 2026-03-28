@@ -37,6 +37,7 @@ import {
   getAgentAssignments,
   getAgentAssignment,
   updateAgentAssignment,
+  getUsersByTenant,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -1104,6 +1105,19 @@ router.post('/assignments/:id/dismiss', (req, res) => {
   }
 });
 
+/** GET /assignments/team-members — List tenant members for sharing (minimal: id, name, email, role) */
+router.get('/assignments/team-members', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const users = getUsersByTenant(tenantId)
+      .filter(u => u.status === 'active')
+      .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role }));
+    res.json({ users });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** POST /assignments/:id/archive — Archive a completed assignment */
 router.post('/assignments/:id/archive', (req, res) => {
   try {
@@ -1119,18 +1133,23 @@ router.post('/assignments/:id/archive', (req, res) => {
   }
 });
 
-/** POST /assignments/:id/share-internal — Share a completed task with all tenant users */
+/** POST /assignments/:id/share-internal — Share a completed task with specific tenant users */
 router.post('/assignments/:id/share-internal', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
     const { id } = req.params;
+    const { shared_with } = req.body || {};
     const assignment = getAgentAssignment(tenantId, id);
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
     if (assignment.status !== 'completed' && assignment.status !== 'archived') {
       return res.status(400).json({ error: 'Only completed tasks can be shared' });
     }
-    updateAgentAssignment(tenantId, id, { visibility: 'shared' });
-    res.json({ success: true, visibility: 'shared' });
+    const updates = { visibility: 'shared' };
+    if (shared_with && Array.isArray(shared_with)) {
+      updates.shared_with_json = JSON.stringify(shared_with);
+    }
+    updateAgentAssignment(tenantId, id, updates);
+    res.json({ success: true, visibility: 'shared', shared_with: shared_with || [] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -998,6 +998,7 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN info_requests_pending INTEGER DEFAULT 0'); } catch (e) {}
   try { targetDb.exec("ALTER TABLE agent_assignments ADD COLUMN visibility TEXT DEFAULT 'private'"); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN full_response TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN shared_with_json TEXT'); } catch (e) {}
 
   // CC thread tracking — auto-trigger assignments from accumulated observations
   targetDb.exec(`
@@ -6370,7 +6371,7 @@ export function insertAgentAssignment(assignment) {
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility', 'full_response'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility', 'full_response', 'shared_with_json'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {
