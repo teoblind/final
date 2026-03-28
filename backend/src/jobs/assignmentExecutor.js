@@ -570,8 +570,18 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       });
 
       // Merge generated artifacts with any agent-emitted artifacts
-      const allArtifacts = [...(artifacts || []), ...report.artifacts];
-      artifacts = allArtifacts;
+      // Deduplicate: skip agent artifacts that overlap with generated ones (e.g. agent emitted a "document" type pointing to same Google Doc URL)
+      const generatedUrls = new Set(report.artifacts.filter(a => a.url).map(a => a.url));
+      const generatedTypes = new Set(report.artifacts.map(a => a.type));
+      const dedupedAgentArtifacts = (artifacts || []).filter(a => {
+        if (a.url && generatedUrls.has(a.url)) return false;
+        // Skip agent pdf/docx/gdoc if we generated our own
+        if (['pdf', 'docx', 'gdoc'].includes(a.type) && generatedTypes.has(a.type)) return false;
+        // Skip "document" type pointing to Google Docs URLs
+        if (a.type === 'document' && a.url && a.url.includes('docs.google.com')) return false;
+        return true;
+      });
+      artifacts = [...dedupedAgentArtifacts, ...report.artifacts];
 
       console.log(`[AssignmentExecutor] Generated documents for ${assignment.id}: DOCX=${!!report.docxPath} PDF=${!!report.pdfPath} GDoc=${!!report.gdocUrl}`);
     } catch (docErr) {
