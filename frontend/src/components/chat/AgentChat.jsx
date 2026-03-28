@@ -2262,7 +2262,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
   })() : {};
   const agent = { ...rawAgent, ...themeResolved, userName: authUser?.name || rawAgent.userName, userInitial: userInitials };
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => {
+    const prefill = localStorage.getItem('coppice_chat_prefill');
+    if (prefill) { localStorage.removeItem('coppice_chat_prefill'); return prefill; }
+    return '';
+  });
   const [sending, setSending] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null); // { iteration, maxTurns, tools }
   const [activeTab, setActiveTab] = useState('Chat');

@@ -638,7 +638,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                           {!a.result_summary?.startsWith('Failed') && (
                             <>
                               <button
-                                onClick={() => { window.location.href = `/agent/chat?prompt=${encodeURIComponent(`Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`)}`; }}
+                                onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
                                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] transition-colors"
                                 title="Chat about this report"
                               >
