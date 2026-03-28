@@ -1157,7 +1157,9 @@ router.post('/assignments/:id/regenerate-report', async (req, res) => {
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
     if (assignment.status !== 'completed') return res.status(400).json({ error: 'Only completed tasks can be regenerated' });
 
-    const content = assignment.full_response || assignment.result_summary;
+    // Use full_response if available, fall back to result_summary
+    // Also accept content override from request body
+    const content = req.body.content || assignment.full_response || assignment.result_summary;
     if (!content) return res.status(400).json({ error: 'No content available to generate report' });
 
     const result = await generateReport({
@@ -1169,6 +1171,13 @@ router.post('/assignments/:id/regenerate-report', async (req, res) => {
       label: 'Intelligence Brief',
       tenantId,
     });
+
+    // Preserve existing Google Doc artifacts that weren't regenerated
+    const oldArtifacts = assignment.output_artifacts_json ? JSON.parse(assignment.output_artifacts_json) : [];
+    const oldGdoc = oldArtifacts.find(a => a.type === 'gdoc' || a.type === 'gdrive');
+    if (oldGdoc && !result.artifacts.find(a => a.type === 'gdoc')) {
+      result.artifacts.push({ type: 'gdoc', label: 'Google Docs', url: oldGdoc.url, fileId: oldGdoc.fileId });
+    }
 
     updateAgentAssignment(tenantId, id, {
       output_artifacts_json: JSON.stringify(result.artifacts),

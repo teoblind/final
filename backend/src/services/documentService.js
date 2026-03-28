@@ -185,7 +185,8 @@ function buildResearchHtml(title, bodyHtml, meta = {}, theme = 'default') {
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  font-family: 'Inter', -apple-system, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 11px !important;
   color: #1a1a2e;
   line-height: 1.5;
   background: #fff;
@@ -250,7 +251,7 @@ body {
   padding: 30px 36px;
 }
 h2 {
-  font-size: 18px;
+  font-size: 16px !important;
   font-weight: 700;
   color: #1a1a2e;
   margin: 20px 0 4px;
@@ -259,22 +260,22 @@ h2 {
 }
 h2:first-child { margin-top: 0; }
 h3 {
-  font-size: 13px;
+  font-size: 12px !important;
   font-weight: 600;
   color: ${t.h3Color};
   margin: 12px 0 3px;
 }
 h4 {
-  font-size: 11px;
+  font-size: 10px !important;
   font-weight: 600;
   color: #64748b;
   margin: 8px 0 2px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-p { margin: 3px 0; font-size: 11px; line-height: 1.5; }
-ul, ol { margin: 3px 0 3px 18px; font-size: 11px; }
-li { margin: 1px 0; line-height: 1.45; }
+p { margin: 3px 0; font-size: 11px !important; line-height: 1.5; }
+ul, ol { margin: 3px 0 3px 18px; font-size: 11px !important; }
+li { margin: 1px 0; line-height: 1.45; font-size: 11px !important; }
 strong { font-weight: 600; }
 code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
 hr { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
