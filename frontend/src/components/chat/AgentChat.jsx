@@ -25,8 +25,8 @@ function getAuthToken() {
 // ─── Agent Definitions ──────────────────────────────────────────────────────────
 const AGENTS = {
   // DACP Construction agents
-  hivemind: { name: 'DACP Agent', initial: 'D', color: '#3b82f6', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Hivemind — always on', placeholder: 'Ask the DACP Agent anything...', hint: 'The DACP Agent can route tasks to any sub-agent, search your knowledge base, and manage email.', userInitial: 'A', userName: 'Admin', multiInstance: true },
-  estimating: { name: 'Estimating Bot', initial: 'E', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online — 8 open RFQs', placeholder: 'Message Estimating Bot...', hint: 'Estimating Bot can read bid requests, generate estimates, draft emails, and reference your pricing table and job history.', tabs: ['Chat', 'Inbox', 'History', 'Config'], userInitial: 'A', userName: 'Admin' },
+  hivemind: { name: 'DACP Agent', initial: 'D', color: '#3b82f6', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Hivemind - always on', placeholder: 'Ask the DACP Agent anything...', hint: 'The DACP Agent can route tasks to any sub-agent, search your knowledge base, and manage email.', userInitial: 'A', userName: 'Admin', multiInstance: true },
+  estimating: { name: 'Estimating Bot', initial: 'E', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online - 8 open RFQs', placeholder: 'Message Estimating Bot...', hint: 'Estimating Bot can read bid requests, generate estimates, draft emails, and reference your pricing table and job history.', tabs: ['Chat', 'Inbox', 'History', 'Config'], userInitial: 'A', userName: 'Admin' },
   documents: { name: 'Documents', initial: 'D', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Upload a document or ask about your files...', hint: 'Documents agent processes PDFs, extracts data from drawings, and searches your file library.', userInitial: 'A', userName: 'Admin' },
   meetings: { name: 'Meeting Bot', initial: 'M', color: '#1e3a5f', bgColor: '#eef3f9', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Ask about any past meeting...', hint: 'Meeting Bot searches transcripts, summarizes calls, and tracks action items.', userInitial: 'A', userName: 'Admin' },
   email: { name: 'Email Agent', initial: 'E', color: '#f59e0b', bgColor: '#fdf6e8', accentColor: '#1e3a5f', status: 'Online', placeholder: 'Draft an email or search your inbox...', hint: 'Email Agent drafts professional emails, searches your inbox, and manages correspondence.', userInitial: 'A', userName: 'Admin' },
@@ -35,11 +35,11 @@ const AGENTS = {
   // Lead Engine
   'lead-engine': { name: 'Lead Engine', initial: 'L', useTheme: true, status: 'Online', placeholder: 'Ask about leads, pipeline, outreach, follow-ups...', hint: 'Lead Engine can discover leads, manage outreach campaigns, track replies, and handle follow-ups.', userInitial: 'SP', userName: 'Spencer' },
   // Coppice / Mining agents
-  sangha: { name: 'Sangha Agent', initial: 'S', useTheme: true, status: 'Hivemind — always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer', multiInstance: true },
-  curtailment: { name: 'Curtailment Agent', initial: 'C', useTheme: true, status: 'Online — monitoring ERCOT', placeholder: 'Ask about curtailment, pricing, fleet status...', hint: 'Curtailment Agent monitors ERCOT real-time pricing, manages fleet power states, and optimizes pool routing for maximum revenue.', tabs: ['Chat', 'Fleet', 'Market', 'Config'], userInitial: 'SP', userName: 'Spencer' },
-  pools: { name: 'Pool Routing', initial: 'P', color: '#2563eb', bgColor: '#eef3f9', useTheme: true, status: 'Online — 3 pools active', placeholder: 'Ask about pool performance, hashrate allocation...', hint: 'Pool Routing agent optimizes hashrate distribution across mining pools for maximum yield.', userInitial: 'SP', userName: 'Spencer' },
+  sangha: { name: 'Sangha Agent', initial: 'S', useTheme: true, status: 'Hivemind - always on', placeholder: 'Ask the Sangha Agent anything...', hint: 'Sangha Agent coordinates all sub-agents, monitors fleet operations, and manages energy market positions.', userInitial: 'SP', userName: 'Spencer', multiInstance: true },
+  curtailment: { name: 'Curtailment Agent', initial: 'C', useTheme: true, status: 'Online - monitoring ERCOT', placeholder: 'Ask about curtailment, pricing, fleet status...', hint: 'Curtailment Agent monitors ERCOT real-time pricing, manages fleet power states, and optimizes pool routing for maximum revenue.', tabs: ['Chat', 'Fleet', 'Market', 'Config'], userInitial: 'SP', userName: 'Spencer' },
+  pools: { name: 'Pool Routing', initial: 'P', color: '#2563eb', bgColor: '#eef3f9', useTheme: true, status: 'Online - 3 pools active', placeholder: 'Ask about pool performance, hashrate allocation...', hint: 'Pool Routing agent optimizes hashrate distribution across mining pools for maximum yield.', userInitial: 'SP', userName: 'Spencer' },
   'pitch-deck': { name: 'Pitch Deck Agent', initial: 'P', color: '#7c3aed', bgColor: '#f3f0ff', accentColor: '#7c3aed', status: 'Online', placeholder: 'Describe a deck you need or paste a brief...', hint: 'Pitch Deck Agent creates investor-grade HTML presentations. It will ask about detail level, slide count, and backgrounds before building.', userInitial: 'A', userName: 'Admin' },
-  sales: { name: 'Sales Agent', initial: 'S', color: '#dc2626', bgColor: '#fef2f2', accentColor: '#991b1b', status: 'Online — Triple Aikido', placeholder: 'Practice a sales call, prep for a meeting, or ask for objection handling...', hint: 'Sales Agent uses the Triple Aikido technique. It can roleplay sales calls, prep you for meetings, and generate question playbooks for specific prospects.', userInitial: 'A', userName: 'Admin' },
+  sales: { name: 'Sales Agent', initial: 'S', color: '#dc2626', bgColor: '#fef2f2', accentColor: '#991b1b', status: 'Online - Triple Aikido', placeholder: 'Practice a sales call, prep for a meeting, or ask for objection handling...', hint: 'Sales Agent uses the Triple Aikido technique. It can roleplay sales calls, prep you for meetings, and generate question playbooks for specific prospects.', userInitial: 'A', userName: 'Admin' },
 };
 
 // ─── Demo Conversation ──────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ function formatContent(text) {
         </div>
       );
     }
-    // Regular text — render with bold/line breaks
+    // Regular text - render with bold/line breaks
     return seg.value.split('\n').map((line, i, arr) => {
       const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
         if (part.startsWith('**') && part.endsWith('**')) {
@@ -1077,7 +1077,7 @@ function CopilotApprovalCard({ msg, accentColor, onApproval }) {
   if (status === 'approved') {
     return (
       <div className="mt-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-[12px] text-green-700 font-medium">
-        Approved — executing now
+        Approved - executing now
       </div>
     );
   }
@@ -1209,7 +1209,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
           </div>
         )}
 
-        {/* Bubble — only render if there's text content */}
+        {/* Bubble - only render if there's text content */}
         {msg.content && !editing && (
           <div className="group/bubble relative">
             <div
@@ -1224,7 +1224,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
             >
               {formatContent(msg.content)}
             </div>
-            {/* Copy / Edit buttons — appear on hover */}
+            {/* Copy / Edit buttons - appear on hover */}
             <div className={`flex items-center gap-0.5 mt-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity ${isUser ? 'justify-end' : ''}`}>
               <button onClick={handleCopy} className="p-1 rounded hover:bg-[#e8e6e1] transition-colors" title="Copy">
                 {copied ? <ClipboardCheck size={12} className="text-green-600" /> : <Copy size={12} className="text-[#9a9a92]" />}
@@ -1694,7 +1694,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
         </div>
       )}
 
-      {/* Bottom toolbar — always visible when thread is selected */}
+      {/* Bottom toolbar - always visible when thread is selected */}
       <div className="px-4 py-2.5 border-t border-[#f0eeea]">
         {/* Quick action buttons */}
         {!showPinSearch && (
@@ -1798,12 +1798,12 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
 
 // ─── Inbox Tab ──────────────────────────────────────────────────────────────────
 const INBOX_ITEMS = [
-  { id: 1, gc: 'Turner Construction', project: 'Memorial Hermann Phase 2', scope: 'Concrete foundation package — 8,500 SF slab, 1,200 LF curb, 450 LF sidewalk', amount: '$266,000', status: 'Estimated', due: 'Mar 8', daysLeft: 0, urgent: true, contact: 'Mike Rodriguez', email: 'mrodriguez@turner.com' },
-  { id: 2, gc: 'McCarthy Building', project: 'Samsung Fab Expansion', scope: 'Structural concrete — grade beams, piers, elevated slab. Cleanroom specs required.', amount: '$1,850,000', status: 'In Progress', due: 'Mar 14', daysLeft: 6, urgent: false, contact: 'James Chen', email: 'jchen@mccarthy.com' },
-  { id: 3, gc: 'Hensel Phelps', project: 'I-35 Retaining Walls', scope: 'Cast-in-place retaining walls — 2,400 LF, heights 6-14 ft, TxDOT specs', amount: null, status: 'New', due: 'Mar 22', daysLeft: 14, urgent: false, contact: 'Sarah Davis', email: 'sdavis@henselphelps.com' },
-  { id: 4, gc: 'DPR Construction', project: 'Legacy West Tower', scope: 'Post-tension slab package — 42 floors, PT slabs, shear walls, core', amount: null, status: 'New', due: 'Mar 16', daysLeft: 8, urgent: true, contact: 'Tom Walsh', email: 'twalsh@dpr.com' },
-  { id: 5, gc: 'Rogers-O\'Brien', project: 'McKinney Town Center', scope: 'Site concrete — parking garage slab, sidewalks, loading docks, curb cuts', amount: '$420,000', status: 'Estimated', due: 'Mar 18', daysLeft: 10, urgent: false, contact: 'Lisa Park', email: 'lpark@r-o.com' },
-  { id: 6, gc: 'Balfour Beatty', project: 'UT Dallas Science Bldg', scope: 'Foundation and SOG — drilled piers, grade beams, 12,000 SF lab floor', amount: null, status: 'New', due: 'Mar 25', daysLeft: 17, urgent: false, contact: 'Kevin Brown', email: 'kbrown@balfourbeatty.us' },
+  { id: 1, gc: 'Turner Construction', project: 'Memorial Hermann Phase 2', scope: 'Concrete foundation package - 8,500 SF slab, 1,200 LF curb, 450 LF sidewalk', amount: '$266,000', status: 'Estimated', due: 'Mar 8', daysLeft: 0, urgent: true, contact: 'Mike Rodriguez', email: 'mrodriguez@turner.com' },
+  { id: 2, gc: 'McCarthy Building', project: 'Samsung Fab Expansion', scope: 'Structural concrete - grade beams, piers, elevated slab. Cleanroom specs required.', amount: '$1,850,000', status: 'In Progress', due: 'Mar 14', daysLeft: 6, urgent: false, contact: 'James Chen', email: 'jchen@mccarthy.com' },
+  { id: 3, gc: 'Hensel Phelps', project: 'I-35 Retaining Walls', scope: 'Cast-in-place retaining walls - 2,400 LF, heights 6-14 ft, TxDOT specs', amount: null, status: 'New', due: 'Mar 22', daysLeft: 14, urgent: false, contact: 'Sarah Davis', email: 'sdavis@henselphelps.com' },
+  { id: 4, gc: 'DPR Construction', project: 'Legacy West Tower', scope: 'Post-tension slab package - 42 floors, PT slabs, shear walls, core', amount: null, status: 'New', due: 'Mar 16', daysLeft: 8, urgent: true, contact: 'Tom Walsh', email: 'twalsh@dpr.com' },
+  { id: 5, gc: 'Rogers-O\'Brien', project: 'McKinney Town Center', scope: 'Site concrete - parking garage slab, sidewalks, loading docks, curb cuts', amount: '$420,000', status: 'Estimated', due: 'Mar 18', daysLeft: 10, urgent: false, contact: 'Lisa Park', email: 'lpark@r-o.com' },
+  { id: 6, gc: 'Balfour Beatty', project: 'UT Dallas Science Bldg', scope: 'Foundation and SOG - drilled piers, grade beams, 12,000 SF lab floor', amount: null, status: 'New', due: 'Mar 25', daysLeft: 17, urgent: false, contact: 'Kevin Brown', email: 'kbrown@balfourbeatty.us' },
 ];
 
 function InboxTab({ accent }) {
@@ -1884,12 +1884,12 @@ function InboxTab({ accent }) {
               </div>
               <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
                 <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1 font-heading">Estimate</div>
-                <div className="text-[15px] font-semibold text-terminal-text font-display">{sel.amount || '—'}</div>
+                <div className="text-[15px] font-semibold text-terminal-text font-display">{sel.amount || '-'}</div>
                 <div className={`text-[11px] ${statusColor(sel.status)} inline-block px-1.5 py-0.5 rounded mt-0.5`}>{sel.status}</div>
               </div>
             </div>
             {sel.status === 'New' && (
-              <button onClick={() => alert('Estimate generation started — the bot will analyze the scope and produce a draft estimate.')} className="w-full py-2.5 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90 font-heading" style={{ backgroundColor: accent }}>Generate Estimate</button>
+              <button onClick={() => alert('Estimate generation started - the bot will analyze the scope and produce a draft estimate.')} className="w-full py-2.5 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90 font-heading" style={{ backgroundColor: accent }}>Generate Estimate</button>
             )}
           </div>
         </div>
@@ -1911,10 +1911,10 @@ const HISTORY_DATA = [
 ];
 
 const LEARNING_ITEMS = [
-  { text: 'Ready-mix concrete pricing up 8% — recommend updating base rate from $142 to $153/CY', action: 'Update Pricing', type: 'price' },
-  { text: 'Win rate on foundation-only bids is 62% vs 38% overall — consider specializing', action: 'View Analysis', type: 'insight' },
-  { text: 'Turner Construction repeat bids have 75% win rate — prioritize their RFQs', action: 'View Details', type: 'pattern' },
-  { text: 'Overhead at 15% may be too high for jobs under $200K — competitors using 12-13%', action: 'Adjust Model', type: 'price' },
+  { text: 'Ready-mix concrete pricing up 8% - recommend updating base rate from $142 to $153/CY', action: 'Update Pricing', type: 'price' },
+  { text: 'Win rate on foundation-only bids is 62% vs 38% overall - consider specializing', action: 'View Analysis', type: 'insight' },
+  { text: 'Turner Construction repeat bids have 75% win rate - prioritize their RFQs', action: 'View Details', type: 'pattern' },
+  { text: 'Overhead at 15% may be too high for jobs under $200K - competitors using 12-13%', action: 'Adjust Model', type: 'price' },
 ];
 
 function HistoryTab({ accent }) {
@@ -1969,8 +1969,8 @@ function HistoryTab({ accent }) {
                   <td className="px-4 py-2.5 font-semibold text-terminal-text">{h.project}</td>
                   <td className="px-4 py-2.5 text-[#9a9a92]">{h.gc}</td>
                   <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.bid}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.actual || '—'}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.margin || '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.actual || '-'}</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.margin || '-'}</td>
                   <td className="px-4 py-2.5 text-center"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusBadge(h.status)}`}>{h.status}</span></td>
                 </tr>
               ))}
@@ -2167,7 +2167,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
                   </span>
                 )}
 
-                {/* Action icons — visible on hover (or always for pinned icon when pinned) */}
+                {/* Action icons - visible on hover (or always for pinned icon when pinned) */}
                 <div className="ml-auto flex items-center gap-0.5">
                   {thread.isPinned && (
                     <button
@@ -2441,7 +2441,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
             setActiveInstanceId(id);
           }
         } else {
-          // No threads — fall back to demo messages (only for agents that have them)
+          // No threads - fall back to demo messages (only for agents that have them)
           const demo = DEMO_MESSAGES[agentId];
           if (demo) {
             setMessages(demo.map(m => ({ ...m, content: m.content?.replace('{USER}', firstName) })));
@@ -2468,8 +2468,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
               })
               .catch(() => {});
           }
-          // Build short context message — full draft & RFQ are visible in the context panel
-          setInput(`I want to review and possibly edit this estimate reply (approval_id ${approvalContext.approvalId}) before sending. The full draft and original RFQ are in the context panel. I'll tell you what I want to change — use update_approval_draft to save edits.`);
+          // Build short context message - full draft & RFQ are visible in the context panel
+          setInput(`I want to review and possibly edit this estimate reply (approval_id ${approvalContext.approvalId}) before sending. The full draft and original RFQ are in the context panel. I'll tell you what I want to change - use update_approval_draft to save edits.`);
           setTimeout(() => inputRef.current?.focus(), 100);
         }
       })
@@ -2634,7 +2634,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
         body: JSON.stringify({ source_type: 'thread', source_id: threadId }),
       });
       if (res.ok) {
-        // Brief visual feedback — could use toast in future
+        // Brief visual feedback - could use toast in future
         console.log('[Hivemind] Thread shared successfully');
       }
     } catch (err) {
@@ -2645,7 +2645,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   // Keep ref in sync with state (so callbacks see latest value)
   useEffect(() => { autoVoiceRef.current = autoVoice; }, [autoVoice]);
 
-  // Scroll to bottom on new messages — only if user hasn't scrolled up
+  // Scroll to bottom on new messages - only if user hasn't scrolled up
   useEffect(() => {
     if (!userScrolledUpRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2852,7 +2852,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
     setPendingFiles([]);
     setSending(true);
 
-    // Store message via API — use upload endpoint when files are attached
+    // Store message via API - use upload endpoint when files are attached
     const token = getAuthToken();
     const hasFiles = filesToSend.length > 0;
 
@@ -2879,7 +2879,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
     try {
       if (hasFiles) {
-        // File upload — non-streaming
+        // File upload - non-streaming
         let postUrl;
         if (threadId) {
           postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/upload`;
@@ -2921,7 +2921,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
           }, 2000);
         }
       } else {
-        // Text-only — use streaming SSE
+        // Text-only - use streaming SSE
         let postUrl;
         if (threadId) {
           postUrl = `${API_BASE}/v1/chat/${agentId}/threads/${threadId}/messages/stream`;
@@ -3020,7 +3020,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
         return [...filtered, {
           id: Date.now() + 2, role: 'agent',
           content: err?.message === 'Unauthorized'
-            ? 'Session expired — please refresh the page and log in again.'
+            ? 'Session expired - please refresh the page and log in again.'
             : `Error: ${err?.message || 'Connection failed. Please try again.'}`,
           error: true,
           time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
@@ -3060,7 +3060,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setAutoVoice(v => !v)}
-            title={autoVoice ? 'Auto-voice on — click to mute' : 'Auto-voice off — click to enable'}
+            title={autoVoice ? 'Auto-voice on - click to mute' : 'Auto-voice off - click to enable'}
             className={`p-1.5 rounded-[7px] border transition-colors ${
               autoVoice
                 ? 'text-[#1a6b3c] bg-[#edf7f0] border-[#1a6b3c33]'
@@ -3204,7 +3204,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   {progressInfo && (
                     <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-[#8a8a82] font-medium font-mono">
                       <div className="w-2 h-2 rounded-full border border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
-                      <span>Step {progressInfo.iteration}/{progressInfo.maxTurns} — {(progressInfo.tools || []).map(t => TOOL_LABELS[t] || t.replace(/_/g, ' ')).join(', ')}</span>
+                      <span>Step {progressInfo.iteration}/{progressInfo.maxTurns} - {(progressInfo.tools || []).map(t => TOOL_LABELS[t] || t.replace(/_/g, ' ')).join(', ')}</span>
                     </div>
                   )}
                 </div>

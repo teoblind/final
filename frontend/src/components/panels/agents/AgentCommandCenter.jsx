@@ -99,7 +99,7 @@ export default function AgentCommandCenter() {
       <div className="space-y-3">
         {system.paused && (
           <div className="bg-terminal-red/10 border border-terminal-red/30 rounded p-2 text-center">
-            <p className="text-xs text-terminal-red font-bold">ALL AGENTS PAUSED — Emergency stop active</p>
+            <p className="text-xs text-terminal-red font-bold">ALL AGENTS PAUSED - Emergency stop active</p>
           </div>
         )}
 

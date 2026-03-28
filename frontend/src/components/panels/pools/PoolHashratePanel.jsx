@@ -5,7 +5,7 @@ import { formatNumber } from '../../../utils/formatters';
 
 /**
  * Panel 6a: Pool Hashrate Overview
- * Hero panel showing mining output — reported vs expected hashrate,
+ * Hero panel showing mining output - reported vs expected hashrate,
  * worker health summary, reject/stale rates, 24h hashrate chart.
  */
 export default function PoolHashratePanel() {
@@ -32,7 +32,7 @@ export default function PoolHashratePanel() {
 
   if (data && !data.configured) {
     return (
-      <Panel title="Pool Hashrate" source="—" loading={false}>
+      <Panel title="Pool Hashrate" source="-" loading={false}>
         <div className="flex flex-col items-center justify-center py-8 text-terminal-muted text-sm space-y-2">
           <p className="text-lg">Connect Your Pool</p>
           <p className="text-xs text-center">
@@ -61,7 +61,7 @@ export default function PoolHashratePanel() {
       <div className="space-y-4">
         {data?.isMock && (
           <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-            Demo mode — connect pool API keys for live data
+            Demo mode - connect pool API keys for live data
           </div>
         )}
 

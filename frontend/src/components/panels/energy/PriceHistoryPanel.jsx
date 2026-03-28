@@ -104,7 +104,7 @@ export default function PriceHistoryPanel() {
           <div key={label} className="bg-terminal-bg/50 rounded p-2 text-center">
             <p className="text-[10px] text-terminal-muted">{label}</p>
             <p className={`font-sans text-xs ${color}`}>
-              {value != null ? (noPrefix ? value : `$${formatNumber(value, 2)}`) : '—'}
+              {value != null ? (noPrefix ? value : `$${formatNumber(value, 2)}`) : '-'}
             </p>
           </div>
         ))}
@@ -165,7 +165,7 @@ export default function PriceHistoryPanel() {
 
       {/* Data count */}
       <p className="text-xs text-terminal-muted mt-2">
-        {node} — {stats.count || 0} data points over {days} day{days > 1 ? 's' : ''}
+        {node} - {stats.count || 0} data points over {days} day{days > 1 ? 's' : ''}
       </p>
     </Panel>
   );

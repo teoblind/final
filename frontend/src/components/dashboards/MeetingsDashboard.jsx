@@ -8,7 +8,7 @@ const SUB_CLS = { green: 'text-[#1a6b3c]', warn: 'text-[#b8860b]', flat: 'text-t
 const PERSON_COLORS = ['bg-[#1a6b3c]', 'bg-[#2563eb]', 'bg-[#7c3aed]', 'bg-[#b8860b]', 'bg-[#64748b]', 'bg-[#c0392b]'];
 
 function formatDuration(seconds) {
-  if (!seconds) return '—';
+  if (!seconds) return '-';
   const mins = Math.round(seconds / 60);
   if (mins < 60) return `${mins} min`;
   const hrs = Math.floor(mins / 60);
@@ -17,7 +17,7 @@ function formatDuration(seconds) {
 }
 
 function formatDate(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   const d = new Date(dateStr);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
@@ -40,7 +40,7 @@ function dueMeta(item) {
   const now = new Date();
   const due = new Date(item.due_date);
   const diffDays = Math.round((due - now) / 86400000);
-  if (diffDays < 0) return { text: `Overdue — ${formatDate(item.due_date)}`, cls: 'text-[#c0392b]' };
+  if (diffDays < 0) return { text: `Overdue - ${formatDate(item.due_date)}`, cls: 'text-[#c0392b]' };
   if (diffDays === 0) return { text: 'Due today', cls: 'text-[#b8860b]' };
   return { text: formatDate(item.due_date), cls: 'text-[#9a9a92]' };
 }
@@ -332,7 +332,7 @@ export default function MeetingsDashboard() {
           <div className="max-h-[420px] overflow-y-auto">
             {filteredMeetings.map((m, i) => {
               const ac = actionCountByEntry[m.id];
-              const actionLabel = ac ? (ac.open > 0 ? `${ac.open} open` : 'All done') : '—';
+              const actionLabel = ac ? (ac.open > 0 ? `${ac.open} open` : 'All done') : '-';
               const actionCls = ac ? (ac.open > 0 ? 'bg-[#fdf6e8] text-[#b8860b]' : 'bg-[#edf7f0] text-[#1a6b3c]') : 'bg-[#f5f4f0] text-[#9a9a92]';
               return (
                 <div
@@ -406,7 +406,7 @@ export default function MeetingsDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-[5fr_3fr] gap-4 mb-4">
         {/* Transcript / Summary Preview */}
         <Card
-          title={selectedDetail ? `Detail — ${selectedDetail.title}` : 'Select an entry'}
+          title={selectedDetail ? `Detail - ${selectedDetail.title}` : 'Select an entry'}
           meta={selectedDetail ? (
             <div className="flex items-center gap-2">
               {selectedDetail.drive_url && (
@@ -427,8 +427,8 @@ export default function MeetingsDashboard() {
                   <div className="font-serif text-lg text-terminal-text mb-1">{selectedDetail.title}</div>
                   <div className="text-xs text-terminal-muted">
                     {formatFullDate(selectedDetail.recorded_at || selectedDetail.created_at)}
-                    {selectedDetail.duration_seconds ? ` — ${formatDuration(selectedDetail.duration_seconds)}` : ''}
-                    {selectedDetail.source ? ` — ${selectedDetail.source}` : ''}
+                    {selectedDetail.duration_seconds ? ` - ${formatDuration(selectedDetail.duration_seconds)}` : ''}
+                    {selectedDetail.source ? ` - ${selectedDetail.source}` : ''}
                   </div>
                   <div className="flex gap-1.5 mt-2">
                     <span className={`text-[10px] font-semibold px-[10px] py-[3px] rounded-md ${
@@ -449,7 +449,7 @@ export default function MeetingsDashboard() {
                   </div>
                 </div>
 
-                {/* AI Summary — Fireflies style */}
+                {/* AI Summary - Fireflies style */}
                 {selectedDetail.summary && (
                   <div className="mb-4">
                     <SummaryRenderer summary={selectedDetail.summary} />
@@ -498,7 +498,7 @@ export default function MeetingsDashboard() {
                     <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">Transcript</div>
                     <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
                       {selectedDetail.transcript.length > 3000
-                        ? selectedDetail.transcript.slice(0, 3000) + '\n\n[Truncated — view full transcript in Drive]'
+                        ? selectedDetail.transcript.slice(0, 3000) + '\n\n[Truncated - view full transcript in Drive]'
                         : selectedDetail.transcript}
                     </div>
                   </div>
@@ -521,7 +521,7 @@ export default function MeetingsDashboard() {
         </Card>
 
         {/* People */}
-        <Card title="People — Knowledge Graph" meta={`${entities.length} tracked`}>
+        <Card title="People - Knowledge Graph" meta={`${entities.length} tracked`}>
           <div className="flex flex-wrap gap-2 p-[18px]">
             {entities.length === 0 && (
               <div className="text-sm text-terminal-muted text-center py-4 w-full">No entities extracted yet.</div>

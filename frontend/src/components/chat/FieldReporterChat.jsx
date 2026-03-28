@@ -65,7 +65,7 @@ const DEMO_MESSAGES = [
   {
     id: 4,
     role: 'agent',
-    content: 'Total concrete poured on Westpark Retail (J-009): **312 CY** out of **780 CY** estimated. 40% complete, matching schedule. Running at **$152/CY** actual vs **$158/CY** estimated — currently $6/CY under budget on concrete.\n\nAt current pace (avg 48 CY/day), remaining 468 CY will take approximately 10 working days.',
+    content: 'Total concrete poured on Westpark Retail (J-009): **312 CY** out of **780 CY** estimated. 40% complete, matching schedule. Running at **$152/CY** actual vs **$158/CY** estimated - currently $6/CY under budget on concrete.\n\nAt current pace (avg 48 CY/day), remaining 468 CY will take approximately 10 working days.',
     time: '9:15 AM',
   },
   {
@@ -77,7 +77,7 @@ const DEMO_MESSAGES = [
   {
     id: 6,
     role: 'agent',
-    content: 'St. Luke\'s Parking (J-010) is at **20% complete**. Pier drilling starts next week. Geotech flags potential rock at 22\' — this could require rock auger attachment and add $8,500-$12,000 to drilling costs.\n\nI recommend requesting a supplemental geotech boring before mobilizing the drill rig. Want me to flag this as a potential change order?',
+    content: 'St. Luke\'s Parking (J-010) is at **20% complete**. Pier drilling starts next week. Geotech flags potential rock at 22\' - this could require rock auger attachment and add $8,500-$12,000 to drilling costs.\n\nI recommend requesting a supplemental geotech boring before mobilizing the drill rig. Want me to flag this as a potential change order?',
     time: '9:22 AM',
     actions: [
       { label: 'Flag Change Order', variant: 'primary' },
@@ -353,7 +353,7 @@ function ContextPanel({ jobs, fieldReports, loading }) {
                   <span className="text-[10px] text-[#9a9a92]">{r.date}</span>
                 </div>
                 <div className="text-[10px] text-[#9a9a92] mt-0.5">
-                  {job ? job.project_name : r.job_id} — {r.weather ? `${r.weather}` : 'Daily log'}
+                  {job ? job.project_name : r.job_id} - {r.weather ? `${r.weather}` : 'Daily log'}
                 </div>
               </div>
             );
@@ -472,7 +472,7 @@ function ReportsTab({ fieldReports, jobs, loading }) {
           <>
             <div className="mb-4">
               <h3 className="text-[15px] font-semibold text-terminal-text">
-                {selected.job} — {selected.title}
+                {selected.job} - {selected.title}
               </h3>
               <div className="text-[11px] text-[#9a9a92] mt-0.5">
                 Submitted by {selReport.reported_by || 'Unknown'} on {selReport.date}
@@ -983,7 +983,7 @@ export default function FieldReporterChat() {
             <div className="text-[15px] font-semibold text-terminal-text">Field Reporter</div>
             <div className="text-[11px] text-[#9a9a92] flex items-center gap-[5px]">
               <span className="w-[5px] h-[5px] rounded-full bg-[#2dd478] animate-pulse" />
-              Online — {fieldReports.length} report{fieldReports.length !== 1 ? 's' : ''} total
+              Online - {fieldReports.length} report{fieldReports.length !== 1 ? 's' : ''} total
             </div>
           </div>
         </div>

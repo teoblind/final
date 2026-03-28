@@ -168,7 +168,7 @@ export function AuthProvider({ children }) {
     clearSession();
   }, []);
 
-  // Login — called by LoginPage after successful auth
+  // Login - called by LoginPage after successful auth
   const login = useCallback(
     (data) => {
       const { user: userData, tokens: tokenData, adminConsole: isAdminConsole } = data;

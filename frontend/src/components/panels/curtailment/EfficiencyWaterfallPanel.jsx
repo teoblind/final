@@ -46,7 +46,7 @@ export default function EfficiencyWaterfallPanel() {
   return (
     <Panel
       title="Fleet Efficiency Waterfall"
-      source={data ? 'Curtailment Engine' : '—'}
+      source={data ? 'Curtailment Engine' : '-'}
       lastUpdated={lastFetched}
       isStale={isStale}
       loading={loading}
@@ -58,7 +58,7 @@ export default function EfficiencyWaterfallPanel() {
           {/* Description */}
           <p className="text-xs text-terminal-muted">
             Machine classes ranked by efficiency. Bars show breakeven energy price.
-            The horizontal line is the current energy price — machines below it should curtail.
+            The horizontal line is the current energy price - machines below it should curtail.
           </p>
 
           {/* Waterfall Chart */}

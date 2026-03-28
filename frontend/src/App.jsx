@@ -142,7 +142,7 @@ function WorkspaceSwitcher({ user }) {
     const subdomain = ws.subdomain || ws.slug;
     const proto = window.location.protocol;
     const host = window.location.hostname;
-    // Build the target URL — same domain structure, different subdomain
+    // Build the target URL - same domain structure, different subdomain
     let target;
     if (host.endsWith('.coppice.ai')) {
       target = `${proto}//${subdomain}.coppice.ai`;
@@ -263,7 +263,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
                     <span className="w-2 h-2 rounded-full animate-pulse shrink-0" style={{ backgroundColor: 'var(--t-sidebar-accent)' }} />
                     <div className="text-left">
                       <div className="text-[12px] font-heading font-semibold" style={{ color: 'var(--t-sidebar-accent)' }}>{item.label}</div>
-                      <div className="text-[10px] text-white/30">Hivemind — always on</div>
+                      <div className="text-[10px] text-white/30">Hivemind - always on</div>
                     </div>
                   </button>
                 ) : (
@@ -750,7 +750,7 @@ function AppContent() {
 
       {/* Main area */}
       <div className={`flex-1 flex flex-col ${isChatView ? 'max-h-screen overflow-hidden' : 'min-h-screen overflow-auto'}`}>
-        {/* Top bar — hidden for chat views (chat has its own header) */}
+        {/* Top bar - hidden for chat views (chat has its own header) */}
         {!isChatView && (
           <header className="sticky top-0 z-30 bg-terminal-panel border-b border-terminal-border px-7 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -802,7 +802,7 @@ function AppContent() {
       )}
       {changePasswordOverlay}
 
-      {/* Help Chat Widget — floating on all authenticated pages */}
+      {/* Help Chat Widget - floating on all authenticated pages */}
       <Suspense fallback={null}>
         <HelpChatWidget />
       </Suspense>

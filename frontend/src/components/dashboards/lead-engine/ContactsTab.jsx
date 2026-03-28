@@ -47,18 +47,18 @@ export default function ContactsTab() {
             style={{ gridTemplateColumns: '2fr 2fr 1.5fr 1fr 1fr 80px' }}
           >
             <div>
-              <div className="font-semibold text-terminal-text">{c.name || '—'}</div>
+              <div className="font-semibold text-terminal-text">{c.name || '-'}</div>
               {c.phone && <div className="text-[11px] text-[#9a9a92]">{c.phone}</div>}
             </div>
-            <div className="text-xs text-[#6b6b65] truncate">{c.email || '—'}</div>
-            <div className="text-xs text-[#6b6b65]">{c.title || '—'}</div>
-            <div className="text-xs text-[#6b6b65]">{c.venue_name || '—'}</div>
-            <div className="text-xs text-[#6b6b65]">{c.region || '—'}</div>
+            <div className="text-xs text-[#6b6b65] truncate">{c.email || '-'}</div>
+            <div className="text-xs text-[#6b6b65]">{c.title || '-'}</div>
+            <div className="text-xs text-[#6b6b65]">{c.venue_name || '-'}</div>
+            <div className="text-xs text-[#6b6b65]">{c.region || '-'}</div>
             <div>
               {c.mx_valid ? (
                 <span className="text-[10px] font-semibold px-[9px] py-[3px] rounded-md bg-ui-accent-light text-ui-accent">Valid</span>
               ) : (
-                <span className="text-[10px] font-semibold px-[9px] py-[3px] rounded-md bg-[#f5f4f0] text-[#9a9a92]">—</span>
+                <span className="text-[10px] font-semibold px-[9px] py-[3px] rounded-md bg-[#f5f4f0] text-[#9a9a92]">-</span>
               )}
             </div>
           </div>

@@ -306,7 +306,7 @@ function MeetingChairs({ seats, meetingAgentCount }) {
     );
   }
 
-  // Empty meeting room — show default chairs
+  // Empty meeting room - show default chairs
   const emptyCount = 6;
   const emptyRadius = 100;
   return (

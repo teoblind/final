@@ -527,10 +527,10 @@ export default function SettingsPanel() {
         {/* Team Management */}
         <SettingsTeamPanel />
 
-        {/* Fleet Configuration — Phase 3 ACTIVE */}
+        {/* Fleet Configuration - Phase 3 ACTIVE */}
         <SettingsSection
           title="Fleet Configuration"
-          description="Define your ASIC fleet — models, quantities, efficiency ratings"
+          description="Define your ASIC fleet - models, quantities, efficiency ratings"
           icon={<Cpu size={18} className="text-terminal-green" />}
           phase={3}
           active
@@ -760,7 +760,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Curtailment Configuration — Phase 4 ACTIVE */}
+        {/* Curtailment Configuration - Phase 4 ACTIVE */}
         <SettingsSection
           title="Curtailment Optimizer"
           description="Operational constraints, hysteresis, demand response"
@@ -974,7 +974,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Energy Configuration — Phase 2 ACTIVE */}
+        {/* Energy Configuration - Phase 2 ACTIVE */}
         <SettingsSection
           title="Energy Market"
           description="ISO/RTO connection, node selection, price thresholds"
@@ -991,8 +991,8 @@ export default function SettingsPanel() {
                 className="bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm text-terminal-text w-full"
               >
                 <option value="ERCOT">ERCOT (Texas)</option>
-                <option value="PJM" disabled>PJM (Mid-Atlantic) — Coming Soon</option>
-                <option value="MISO" disabled>MISO (Central US) — Coming Soon</option>
+                <option value="PJM" disabled>PJM (Mid-Atlantic) - Coming Soon</option>
+                <option value="MISO" disabled>MISO (Central US) - Coming Soon</option>
               </select>
             </div>
 
@@ -1095,7 +1095,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Pool Configuration — Phase 5 ACTIVE */}
+        {/* Pool Configuration - Phase 5 ACTIVE */}
         <SettingsSection
           title="Pool Configuration"
           description="Connect mining pools for unified monitoring and earnings tracking"
@@ -1318,7 +1318,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Agent Configuration — Phase 6 ACTIVE */}
+        {/* Agent Configuration - Phase 6 ACTIVE */}
         <SettingsSection
           title="Clawbot Agents"
           description="Configure autonomous agent behavior, modes, and guardrails"
@@ -1414,7 +1414,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* GPU Fleet Configuration — Phase 7 ACTIVE */}
+        {/* GPU Fleet Configuration - Phase 7 ACTIVE */}
         <SettingsSection
           title="GPU Fleet Configuration"
           description="Configure your GPU fleet for AI/HPC workloads"
@@ -1474,7 +1474,7 @@ export default function SettingsPanel() {
                     <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs border-b border-terminal-border/50 items-center">
                       <div className="col-span-3 text-terminal-text truncate">{model?.model || entry.gpuModelId}</div>
                       <div className="col-span-1 text-right text-terminal-text">{entry.quantity}</div>
-                      <div className="col-span-2 text-right text-terminal-muted">{model?.tdpWatts || '—'}</div>
+                      <div className="col-span-2 text-right text-terminal-muted">{model?.tdpWatts || '-'}</div>
                       <div className="col-span-2 text-right text-terminal-muted">{entry.gpusPerServer || 8}</div>
                       <div className="col-span-2 text-right text-terminal-muted">{entry.pue || 1.2}</div>
                       <div className="col-span-1 text-terminal-muted">{entry.coolingType || 'air'}</div>
@@ -1591,7 +1591,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* HPC Contract Management — Phase 7 ACTIVE */}
+        {/* HPC Contract Management - Phase 7 ACTIVE */}
         <SettingsSection
           title="HPC Contracts"
           description="Manage AI/HPC customer contracts, SLA requirements, and curtailment rules"
@@ -1609,7 +1609,7 @@ export default function SettingsPanel() {
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${c.status === 'active' ? 'bg-terminal-green' : 'bg-terminal-muted'}`} />
                         <span className="text-sm font-medium text-terminal-text">{c.id}</span>
-                        <span className="text-xs text-terminal-muted">— {c.customer}</span>
+                        <span className="text-xs text-terminal-muted">- {c.customer}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`px-1.5 py-0.5 text-[10px] rounded ${
@@ -1805,7 +1805,7 @@ export default function SettingsPanel() {
           </div>
         </SettingsSection>
 
-        {/* Curtailment Priority — Phase 7 */}
+        {/* Curtailment Priority - Phase 7 */}
         <SettingsSection
           title="Curtailment Priority Order"
           description="Configure which workloads get curtailed first during price spikes"
@@ -1820,10 +1820,10 @@ export default function SettingsPanel() {
             <div className="space-y-1">
               {curtailmentPriority.map((item, idx) => {
                 const labels: Record<string, string> = {
-                  btc_inefficient: 'BTC Mining — Inefficient machines first',
-                  btc_efficient: 'BTC Mining — Efficient machines',
-                  hpc_spot: 'HPC — Spot/burst capacity',
-                  hpc_interruptible: 'HPC — Interruptible contracts (with penalty)',
+                  btc_inefficient: 'BTC Mining - Inefficient machines first',
+                  btc_efficient: 'BTC Mining - Efficient machines',
+                  hpc_spot: 'HPC - Spot/burst capacity',
+                  hpc_interruptible: 'HPC - Interruptible contracts (with penalty)',
                 };
                 return (
                   <div key={item} className="flex items-center gap-3 bg-terminal-bg border border-terminal-border rounded px-3 py-2">
@@ -1860,8 +1860,8 @@ export default function SettingsPanel() {
               })}
             </div>
             <div className="flex items-center gap-3 bg-terminal-bg border border-terminal-green/20 rounded px-3 py-2">
-              <span className="text-xs text-terminal-muted w-4">—</span>
-              <span className="text-xs text-terminal-green flex-1">HPC — Firm contracts (NEVER curtailed)</span>
+              <span className="text-xs text-terminal-muted w-4">-</span>
+              <span className="text-xs text-terminal-green flex-1">HPC - Firm contracts (NEVER curtailed)</span>
             </div>
             <button
               onClick={async () => {
@@ -2216,7 +2216,7 @@ function ApiKeysSection() {
       <div className="space-y-4">
         {newKey && (
           <div className="p-3 bg-terminal-green/10 border border-terminal-green/30 rounded">
-            <p className="text-xs text-terminal-green mb-1 font-semibold">New API Key — copy now, it won't be shown again:</p>
+            <p className="text-xs text-terminal-green mb-1 font-semibold">New API Key - copy now, it won't be shown again:</p>
             <code className="text-xs text-terminal-text bg-terminal-bg px-2 py-1 rounded block overflow-x-auto">{newKey}</code>
             <button onClick={() => setNewKey(null)} className="text-xs text-terminal-muted mt-2 hover:underline">Dismiss</button>
           </div>
@@ -2557,7 +2557,7 @@ function InsuranceSettingsSection() {
                         : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:text-terminal-green hover:border-terminal-green/30'
                     } disabled:opacity-50`}
                   >
-                    {togglingScheduler === name ? '...' : running ? 'Running — Stop' : 'Stopped — Start'}
+                    {togglingScheduler === name ? '...' : running ? 'Running - Stop' : 'Stopped - Start'}
                   </button>
                 </div>
               );

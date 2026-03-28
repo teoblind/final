@@ -239,7 +239,7 @@ function DashboardPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#111110] font-heading">Platform Dashboard</h1>
-          <p className="text-[13px] text-[#9a9a92] mt-0.5">Coppice Super Admin — All tenants, all metrics</p>
+          <p className="text-[13px] text-[#9a9a92] mt-0.5">Coppice Super Admin - All tenants, all metrics</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => alert('Report export started.')} className="px-4 py-2 rounded-[10px] text-[12px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0] font-heading">
@@ -278,7 +278,7 @@ function DashboardPage() {
       </Section>
 
       {/* API Spend */}
-      <Section title={`API Spend — ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`}>
+      <Section title={`API Spend - ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`}>
         {usage?.byModel?.length > 0 ? (
           <div className="bg-white border border-[#e8e6e1] rounded-2xl overflow-hidden">
             <table className="w-full border-collapse text-[12px]">
@@ -449,7 +449,7 @@ function OpusUsageCard() {
             <FileText size={16} className="text-[#7c3aed]" />
           </div>
           <div>
-            <p className="text-[14px] font-bold text-[#111110] font-heading">Opus 4.6 Reports — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+            <p className="text-[14px] font-bold text-[#111110] font-heading">Opus 4.6 Reports - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
             <p className="text-[11px] text-[#9a9a92]">{totalMonthly} reports generated · ~${(totalMonthly * opusCostPerReport).toFixed(2)} estimated spend</p>
           </div>
         </div>
@@ -545,7 +545,7 @@ function TenantsPage() {
                     </td>
                     <td className="px-4 py-3.5 border-b border-[#f0eeea] font-mono text-[13px] font-bold">{t.userCount || 0}</td>
                     <td className="px-4 py-3.5 border-b border-[#f0eeea] font-mono text-[13px]">{t.siteCount || 0}</td>
-                    <td className="px-4 py-3.5 border-b border-[#f0eeea] text-[11px] text-[#9a9a92]">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3.5 border-b border-[#f0eeea] text-[11px] text-[#9a9a92]">{t.created_at ? new Date(t.created_at).toLocaleDateString() : '-'}</td>
                   </tr>
                 );
               })}
@@ -655,7 +655,7 @@ function UsersPage() {
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white" style={{ background: avatarColor(u.name || u.email) }}>
                       {initials(u.name || u.email)}
                     </div>
-                    <span className="font-semibold text-[13px] text-[#111110]">{u.name || '—'}</span>
+                    <span className="font-semibold text-[13px] text-[#111110]">{u.name || '-'}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3 border-b border-[#f0eeea] font-mono text-[11px] text-[#6b6b65]">{u.email}</td>
@@ -883,7 +883,7 @@ function ApiLogsPage() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-[20px] font-bold text-[#111110] font-heading">API Logs</h1>
-          <p className="text-[12px] text-[#9a9a92] mt-0.5">Every API call across all tenants and agents — real-time</p>
+          <p className="text-[12px] text-[#9a9a92] mt-0.5">Every API call across all tenants and agents - real-time</p>
         </div>
         <div className="flex gap-2 items-center">
           <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#1a6b3c] bg-[#edf7f0] border border-[rgba(26,107,60,0.15)] px-3 py-1.5 rounded-lg">
@@ -964,7 +964,7 @@ function ApiLogsPage() {
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[10px]">{fmtTokens(log.input_tokens)}</td>
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[10px]">{fmtTokens(log.output_tokens)}</td>
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[10px] font-semibold text-[#3b82f6]">{fmtCost(log.cost)}</td>
-                    <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[10px] text-[#6b6b65]">—</td>
+                    <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[10px] text-[#6b6b65]">-</td>
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea] text-[#c5c5bc] text-[10px]">
                       {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                     </td>
@@ -978,14 +978,14 @@ function ApiLogsPage() {
                             <div className="font-mono text-[10px] text-[#333] leading-relaxed">
                               <div>Tenant: {log.tenant_id}</div>
                               <div>Agent: {log.agent_id || 'default'}</div>
-                              <div>User: {log.user_id || '—'}</div>
+                              <div>User: {log.user_id || '-'}</div>
                               <div>Time: {log.created_at}</div>
                             </div>
                           </div>
                           <div className="bg-white border border-[#f0eeea] rounded-[10px] p-3">
                             <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[0.5px] mb-1.5">Tokens</div>
                             <div className="font-mono text-[10px] text-[#333] leading-relaxed">
-                              <div>Model: {log.model || '—'}</div>
+                              <div>Model: {log.model || '-'}</div>
                               <div>Input: {(log.input_tokens || 0).toLocaleString()} tokens</div>
                               <div>Output: {(log.output_tokens || 0).toLocaleString()} tokens</div>
                               <div>Cost: {fmtCost(log.cost)}</div>
@@ -1172,7 +1172,7 @@ function ApiSpendPage() {
           {chartData.length > 0 && (
             <div className="bg-white border border-[#e8e6e1] rounded-2xl p-5 mb-6">
               <h3 className="text-[14px] font-bold text-[#111110] mb-3 font-heading">
-                Daily Spend — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                Daily Spend - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={chartData} barGap={1}>
@@ -1341,7 +1341,7 @@ function SettingsPage() {
     <div className="p-6 lg:px-8 lg:py-6 max-w-[800px]">
       <div className="mb-5">
         <h1 className="text-[20px] font-bold text-[#111110] font-heading">Settings</h1>
-        <p className="text-[12px] text-[#9a9a92] mt-0.5">Platform configuration — API keys, model routing, tenant defaults, and system settings</p>
+        <p className="text-[12px] text-[#9a9a92] mt-0.5">Platform configuration - API keys, model routing, tenant defaults, and system settings</p>
       </div>
 
       {/* Tabs */}
@@ -1419,14 +1419,14 @@ function SettingsPage() {
         <SettingsSection title="Model Routing" desc="Configure which model handles each task type. Affects cost and quality.">
           <SettingsCard>
             {[
-              { label: 'Chat — Intent Classification', desc: 'Determine which agent should handle a user message', model: 'haiku' },
-              { label: 'Chat — Response Generation', desc: 'Generate conversational responses and agent outputs', model: 'sonnet' },
-              { label: 'Estimating — Generate Estimate', desc: 'Create bid estimates from pricing table and scope', model: 'sonnet' },
-              { label: 'Email — Draft Generation', desc: 'Write outreach and response emails', model: 'sonnet' },
-              { label: 'Lead Engine — Parse Results', desc: 'Extract structured data from search results', model: 'haiku' },
-              { label: 'Lead Engine — Web Search', desc: 'Discover prospects and find contact information', model: 'sonar' },
-              { label: 'Reports — Section Writing', desc: 'Generate report prose from structured data', model: 'opus' },
-              { label: 'Knowledge — Document Processing', desc: 'Summarize and index uploaded documents', model: 'haiku' },
+              { label: 'Chat - Intent Classification', desc: 'Determine which agent should handle a user message', model: 'haiku' },
+              { label: 'Chat - Response Generation', desc: 'Generate conversational responses and agent outputs', model: 'sonnet' },
+              { label: 'Estimating - Generate Estimate', desc: 'Create bid estimates from pricing table and scope', model: 'sonnet' },
+              { label: 'Email - Draft Generation', desc: 'Write outreach and response emails', model: 'sonnet' },
+              { label: 'Lead Engine - Parse Results', desc: 'Extract structured data from search results', model: 'haiku' },
+              { label: 'Lead Engine - Web Search', desc: 'Discover prospects and find contact information', model: 'sonar' },
+              { label: 'Reports - Section Writing', desc: 'Generate report prose from structured data', model: 'opus' },
+              { label: 'Knowledge - Document Processing', desc: 'Summarize and index uploaded documents', model: 'haiku' },
             ].map((item, i, arr) => (
               <SettingRow key={item.label} label={item.label} desc={item.desc} last={false}>
                 <select className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] bg-white outline-none cursor-pointer"
@@ -1458,10 +1458,10 @@ function SettingsPage() {
             <SettingRow label="Max Seats" desc="Default user limit per tenant">
               <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[60px] text-center outline-none focus:border-[#3b82f6]" defaultValue="5" />
             </SettingRow>
-            <SettingRow label="Lead Engine — Enabled" desc="Enable Lead Engine agent for new tenants">
+            <SettingRow label="Lead Engine - Enabled" desc="Enable Lead Engine agent for new tenants">
               <ToggleSwitch defaultOn />
             </SettingRow>
-            <SettingRow label="Lead Engine — Max Emails/Day" desc="Rate limit on outbound emails per tenant">
+            <SettingRow label="Lead Engine - Max Emails/Day" desc="Rate limit on outbound emails per tenant">
               <input className="px-3 py-2 border border-[#e8e6e1] rounded-lg text-[12px] font-mono w-[60px] text-center outline-none focus:border-[#3b82f6]" defaultValue="10" />
             </SettingRow>
             <SettingRow label="API Spend Cap" desc="Alert when tenant exceeds this monthly API spend">
@@ -1774,7 +1774,7 @@ function SystemHealthPage() {
                     )}
                   </td>
                   <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[11px] text-[#9a9a92]">
-                    {v.masked || '—'}
+                    {v.masked || '-'}
                   </td>
                 </tr>
               ))}

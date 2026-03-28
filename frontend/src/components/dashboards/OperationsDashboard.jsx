@@ -92,7 +92,7 @@ export default function OperationsDashboard({ onNavigate }) {
         </Suspense>
       </div>
 
-      {/* HPC / AI Compute — hidden until tenant has HPC sites configured */}
+      {/* HPC / AI Compute - hidden until tenant has HPC sites configured */}
 
       {/* Mining Pools & On-Chain */}
       <div className="mb-8">

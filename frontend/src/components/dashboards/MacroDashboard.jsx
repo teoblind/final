@@ -1,6 +1,6 @@
 import React from 'react';
 
-// All existing macro panels — imported from their new location
+// All existing macro panels - imported from their new location
 import HashpricePanel from '../panels/macro/HashpricePanel';
 import EuUsRatioPanel from '../panels/macro/EuUsRatioPanel';
 import BtcReservePanel from '../panels/macro/BtcReservePanel';

@@ -173,7 +173,7 @@ export default function LoginPage({ onLogin }) {
           {/* Card */}
           <div style={{ background: '#161615', border: '1px solid #2a2a28', borderRadius: 18, padding: 32 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Admin Console</div>
-            <div style={{ fontSize: 12, color: '#6b6b65', marginBottom: 24 }}>Platform management — authorized personnel only</div>
+            <div style={{ fontSize: 12, color: '#6b6b65', marginBottom: 24 }}>Platform management - authorized personnel only</div>
 
             {error && (
               <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 8, background: 'rgba(192,57,43,0.1)', color: '#e74c3c', fontSize: 12, border: '1px solid rgba(192,57,43,0.15)' }}>
@@ -337,10 +337,10 @@ export default function LoginPage({ onLogin }) {
       : <>AI-powered<br /><em style={{ fontStyle: 'italic', color: accentColor }}>infrastructure</em><br />intelligence.</>;
 
   const heroDesc = isConstruction
-    ? 'Coppice reads your bid requests, generates estimates from your pricing table, drafts response emails, and tracks every job — 24 hours a day, 7 days a week.'
+    ? 'Coppice reads your bid requests, generates estimates from your pricing table, drafts response emails, and tracks every job - 24 hours a day, 7 days a week.'
     : isVenture
-      ? 'AI agents monitoring portfolio companies, managing LP relations, processing deal flow, and running fund operations — around the clock, without a full team.'
-      : 'Real-time risk analytics, automated curtailment, pool routing optimization, and AI agents — powering the next generation of energy infrastructure.';
+      ? 'AI agents monitoring portfolio companies, managing LP relations, processing deal flow, and running fund operations - around the clock, without a full team.'
+      : 'Real-time risk analytics, automated curtailment, pool routing optimization, and AI agents - powering the next generation of energy infrastructure.';
 
   const heroStats = isConstruction
     ? [{ val: '2 min', label: 'Per estimate' }, { val: '94%', label: 'Accuracy' }, { val: '$0.05', label: 'Per estimate' }]
@@ -353,7 +353,7 @@ export default function LoginPage({ onLogin }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Instrument Sans', sans-serif", WebkitFontSmoothing: 'antialiased' }}>
-      {/* LEFT — branded panel */}
+      {/* LEFT - branded panel */}
       <div style={{
         flex: 1, background: primaryColor, position: 'relative',
         display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
@@ -401,7 +401,7 @@ export default function LoginPage({ onLogin }) {
         </div>
       </div>
 
-      {/* RIGHT — login form */}
+      {/* RIGHT - login form */}
       <div style={{
         width: 480, minHeight: '100vh', background: '#fafaf8',
         display: 'flex', alignItems: 'center', justifyContent: 'center',

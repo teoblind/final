@@ -333,7 +333,7 @@ export function DiversificationBar({ score }) {
 
   const pct = Math.round(score * 100);
   const color = score < 0.3 ? COLORS.red : score < 0.7 ? COLORS.amber : COLORS.green;
-  const label = score < 0.3 ? 'Concentrated — single region/model risk' : score < 0.7 ? 'Moderate diversification' : 'Well diversified';
+  const label = score < 0.3 ? 'Concentrated - single region/model risk' : score < 0.7 ? 'Moderate diversification' : 'Well diversified';
 
   return (
     <div>

@@ -25,13 +25,13 @@ const ISO_OPTIONS = [
 const MINING_DATA_SOURCES = [
   { id: 'energy', Icon: Zap, name: 'Energy Market (ERCOT)', desc: 'Real-time LMP pricing and settlement data', oauth: false },
   { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
-  { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
+  { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration - agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
   { id: 'docs', Icon: FileText, name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
-  { id: 'quickbooks', Icon: BarChart3, name: 'QuickBooks', desc: 'Invoice, bill, and payment sync — automates accounting workflows', oauth: 'intuit' },
+  { id: 'quickbooks', Icon: BarChart3, name: 'QuickBooks', desc: 'Invoice, bill, and payment sync - automates accounting workflows', oauth: 'intuit' },
 ];
 
 const MINING_AGENTS = [
-  { id: 'sangha', name: 'Sangha Agent', desc: 'Your main AI command center — answers questions, runs tasks, and coordinates other agents', color: '#1a6b3c' },
+  { id: 'sangha', name: 'Sangha Agent', desc: 'Your main AI command center - answers questions, runs tasks, and coordinates other agents', color: '#1a6b3c' },
   { id: 'lead-engine', name: 'Lead Engine', desc: 'Discovers prospects, enriches contacts, manages your pipeline, and handles outreach', color: '#2dd478' },
   { id: 'meetings', name: 'Meeting Agent', desc: 'Joins calls, transcribes conversations, and extracts action items', color: '#a855f7' },
   { id: 'reporting-engine', name: 'Reporting Engine', desc: 'Generates weekly briefings, pipeline reports, and market analysis', color: '#f59e0b' },
@@ -39,7 +39,7 @@ const MINING_AGENTS = [
 
 const MINING_WELCOME = {
   title: 'Welcome to Coppice',
-  subtitle: 'An AI operations platform that connects your pipeline, meetings, documents, and email into a single command center — with autonomous agents that work for you.',
+  subtitle: 'An AI operations platform that connects your pipeline, meetings, documents, and email into a single command center - with autonomous agents that work for you.',
   features: [
     { Icon: Search, title: 'Lead Intelligence', desc: 'AI-powered prospect discovery and pipeline management' },
     { Icon: Mail, title: 'Smart Outreach', desc: 'Personalized email campaigns with engagement tracking' },
@@ -94,13 +94,13 @@ const SERVICE_AREAS = [
 // ─── Venture (Family Office) Config ─────────────────────────────────────────
 
 const VENTURE_DATA_SOURCES = [
-  { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration — agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
+  { id: 'gmail', Icon: Mail, name: 'Gmail', desc: 'Email integration - agent reads and drafts from your inbox', oauth: 'google', scopes: 'gmail.modify,gmail.send' },
   { id: 'calendar', Icon: Calendar, name: 'Google Calendar', desc: 'Meeting scheduling, event tracking, and agent reminders', oauth: 'google', scopes: 'calendar.readonly' },
   { id: 'docs', Icon: FileText, name: 'Google Docs & Drive', desc: 'Document sync, meeting notes, and file access', oauth: 'google', scopes: 'drive.file,drive.readonly' },
 ];
 
 const VENTURE_AGENTS = [
-  { id: 'hivemind', name: 'Command Agent', desc: 'Your main AI command center — answers questions, runs tasks, and coordinates other agents', color: '#ffffff' },
+  { id: 'hivemind', name: 'Command Agent', desc: 'Your main AI command center - answers questions, runs tasks, and coordinates other agents', color: '#ffffff' },
   { id: 'lead-engine', name: 'Deal Pipeline', desc: 'Track portfolio companies, investment opportunities, and deal flow', color: '#a0a0a0' },
   { id: 'meetings', name: 'Meeting Agent', desc: 'Joins calls, transcribes conversations, and extracts action items', color: '#666666' },
   { id: 'reporting-engine', name: 'Reporting Engine', desc: 'Generates portfolio reports, LP updates, and market analysis', color: '#888888' },
@@ -108,7 +108,7 @@ const VENTURE_AGENTS = [
 
 const VENTURE_WELCOME = {
   title: 'Welcome to Coppice',
-  subtitle: 'An AI operations platform for family offices — connecting portfolio management, deal flow, meetings, and communications into a single command center.',
+  subtitle: 'An AI operations platform for family offices - connecting portfolio management, deal flow, meetings, and communications into a single command center.',
   features: [
     { Icon: BarChart3, title: 'Portfolio Intelligence', desc: 'Real-time portfolio monitoring and company performance tracking' },
     { Icon: Search, title: 'Deal Pipeline', desc: 'AI-powered deal sourcing, due diligence, and pipeline management' },
@@ -204,7 +204,7 @@ export default function OnboardingWizard({ onComplete }) {
     const handleMessage = (event) => {
       if (event.data?.type === 'oauth-integration-success') {
         if (event.data.source === 'google-all') {
-          // Connect All flow — mark all Google sources as connected
+          // Connect All flow - mark all Google sources as connected
           ['gmail', 'calendar', 'docs'].forEach(id => updateSource(id, { connected: true }));
         } else {
           const connectedSource = oauthType === 'intuit' ? 'quickbooks' : event.data.source?.replace('google-', '');
@@ -363,7 +363,7 @@ export default function OnboardingWizard({ onComplete }) {
     try {
       await api.put('/v1/tenant', { settings: config });
     } catch (err) {
-      // Non-blocking — member users may not have manageSettings permission
+      // Non-blocking - member users may not have manageSettings permission
       console.warn('Could not save tenant settings:', err.message);
     }
     setSubmitting(false);
@@ -636,7 +636,7 @@ export default function OnboardingWizard({ onComplete }) {
                   <p className={`text-[12px] mb-3 ${dk ? dk.muted : 'text-terminal-muted'}`}>
                     {isConstruction
                       ? {
-                          pricing: 'Import your master pricing table — material, labor, and equipment costs per unit. Upload an Excel file or link a Google Sheet.',
+                          pricing: 'Import your master pricing table - material, labor, and equipment costs per unit. Upload an Excel file or link a Google Sheet.',
                           gmail: 'Connect Gmail to auto-import bid requests and manage GC correspondence.',
                           jobs: 'Import your job history for cost tracking and estimate benchmarking. Upload an Excel file or link a Google Sheet.',
                           docs: 'Connect Google Docs & Drive to sync meeting notes, submittals, and reports.',
@@ -676,7 +676,7 @@ export default function OnboardingWizard({ onComplete }) {
       </div>
 
       <p className={`text-center text-[11px] mt-5 ${dk ? dk.muted : 'text-terminal-muted'}`}>
-        {connectedCount} of {DATA_SOURCES.length} sources connected — you can add more later from Settings.
+        {connectedCount} of {DATA_SOURCES.length} sources connected - you can add more later from Settings.
       </p>
     </div>
   );

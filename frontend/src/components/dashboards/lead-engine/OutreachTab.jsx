@@ -73,10 +73,10 @@ export default function OutreachTab() {
           {outreach.slice(0, 20).map((o, i) => (
             <div key={i} onClick={() => setSelectedOutreachId(o.id)} className={`grid px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 items-center text-[13px] hover:bg-[#f5f4f0] transition-colors cursor-pointer ${selectedOutreachId === o.id ? 'bg-ui-accent-light' : ''}`} style={{ gridTemplateColumns: '2fr 1.5fr 1fr 1fr 100px' }}>
               <div>
-                <div className="font-semibold text-terminal-text">{o.contact_name || '—'}</div>
+                <div className="font-semibold text-terminal-text">{o.contact_name || '-'}</div>
                 <div className="text-[11px] text-[#9a9a92]">{o.venue_name}</div>
               </div>
-              <div className="text-xs text-[#6b6b65] truncate">{o.subject || '—'}</div>
+              <div className="text-xs text-[#6b6b65] truncate">{o.subject || '-'}</div>
               <div className="text-xs text-[#6b6b65]">{o.email_type === 'initial' ? 'Initial' : o.email_type?.replace('_', ' ')}</div>
               <div>
                 <span className={`text-[10px] font-semibold px-[9px] py-[3px] rounded-md uppercase ${OUTREACH_STATUS_CLS[o.status] || ''}`}>{o.status}</span>
@@ -87,7 +87,7 @@ export default function OutreachTab() {
         </Card>
 
         {/* Email Viewer */}
-        <Card title={selectedEmail ? `Email — ${selectedEmail.contact_name || selectedEmail.venue_name}` : 'Email Viewer'} meta={selectedEmail ? selectedEmail.status : null}>
+        <Card title={selectedEmail ? `Email - ${selectedEmail.contact_name || selectedEmail.venue_name}` : 'Email Viewer'} meta={selectedEmail ? selectedEmail.status : null}>
           <div className="p-[18px]">
             {!selectedEmail && (
               <div className="text-center py-8 text-sm text-terminal-muted">Select an email to view</div>
@@ -96,7 +96,7 @@ export default function OutreachTab() {
               <div className={`border rounded-[10px] p-[14px_16px] ${selectedEmail.status === 'sent' ? 'border-[#f0eeea] border-l-[3px] border-l-ui-accent bg-terminal-panel' : selectedEmail.status === 'draft' ? 'border-dashed border-[#c5c5bc] border-l-[3px] border-l-[#c5c5bc] bg-[#f5f4f0]' : 'border-[#f0eeea]'}`}>
                 <div className="flex items-center justify-between mb-[2px]">
                   <div className="text-xs font-semibold text-terminal-text">
-                    {selectedEmail.status === 'draft' ? 'Draft — Pending Approval' : `To: ${selectedEmail.contact_name || selectedEmail.contact_email}`}
+                    {selectedEmail.status === 'draft' ? 'Draft - Pending Approval' : `To: ${selectedEmail.contact_name || selectedEmail.contact_email}`}
                   </div>
                   <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-md uppercase ${OUTREACH_STATUS_CLS[selectedEmail.status] || ''}`}>{selectedEmail.status}</span>
                 </div>
@@ -151,7 +151,7 @@ export default function OutreachTab() {
             {followups.map((fu, i) => (
               <div key={i} className="grid items-center px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 text-[13px] hover:bg-[#f5f4f0] transition-colors" style={{ gridTemplateColumns: '2.5fr 1.5fr 1fr' }}>
                 <div>
-                  <div className="font-semibold text-terminal-text">{fu.contact_name || '—'}</div>
+                  <div className="font-semibold text-terminal-text">{fu.contact_name || '-'}</div>
                   <div className="text-[11px] text-[#9a9a92]">{fu.venue_name}</div>
                 </div>
                 <div className="text-xs text-[#6b6b65]">{fu.email_type === 'initial' ? 'Initial outreach' : fu.email_type?.replace('_', ' ')}</div>
@@ -174,7 +174,7 @@ export default function OutreachTab() {
                   <div className="h-full rounded bg-ui-accent" style={{ width: `${(count / geoMax) * 100}%` }} />
                 </div>
                 <div className="font-mono text-xs font-semibold text-terminal-text min-w-[30px] text-right">{count}</div>
-                <div className="font-mono text-[11px] text-[#9a9a92] min-w-[36px] text-right">{leads.length > 0 ? `${((count / leads.length) * 100).toFixed(1)}%` : '—'}</div>
+                <div className="font-mono text-[11px] text-[#9a9a92] min-w-[36px] text-right">{leads.length > 0 ? `${((count / leads.length) * 100).toFixed(1)}%` : '-'}</div>
               </div>
             ))}
           </div>

@@ -203,7 +203,7 @@ export default function DacpSettingsPanel() {
     }).catch(() => {});
   }, []);
 
-  // Save a single section — merges with existing settings so other sections aren't lost
+  // Save a single section - merges with existing settings so other sections aren't lost
   const saveSettings = async (section, data) => {
     setSaving(true);
     try {
@@ -441,8 +441,8 @@ export default function DacpSettingsPanel() {
           </Field>
           <Field label="Operating Mode">
             <Select value={bot.mode} onChange={v => setBot(p => ({ ...p, mode: v }))} options={[
-              { value: 'copilot', label: 'Copilot — drafts estimates for review' },
-              { value: 'autonomous', label: 'Autonomous — sends after approval delay' },
+              { value: 'copilot', label: 'Copilot - drafts estimates for review' },
+              { value: 'autonomous', label: 'Autonomous - sends after approval delay' },
               { value: 'off', label: 'Off' },
             ]} />
           </Field>

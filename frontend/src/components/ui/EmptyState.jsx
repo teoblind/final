@@ -17,12 +17,12 @@ const ICONS = {
  * Reusable empty state component for pages/panels with no data.
  *
  * Props:
- *   icon     — icon name string (from ICONS map) or a Lucide icon component
- *   title    — main heading
- *   subtitle — secondary text
- *   ctaLabel — optional button label
- *   onCta    — optional button click handler
- *   compact  — if true, uses less vertical padding (for inline panels)
+ *   icon     - icon name string (from ICONS map) or a Lucide icon component
+ *   title    - main heading
+ *   subtitle - secondary text
+ *   ctaLabel - optional button label
+ *   onCta    - optional button click handler
+ *   compact  - if true, uses less vertical padding (for inline panels)
  */
 export default function EmptyState({ icon, title, subtitle, ctaLabel, onCta, compact }) {
   const IconComponent = typeof icon === 'string' ? ICONS[icon] || AlertCircle : icon || AlertCircle;

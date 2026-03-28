@@ -64,7 +64,7 @@ export default function IntradayChart({ node = 'HB_NORTH' }) {
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">
-            Intraday LMP — {node}
+            Intraday LMP - {node}
           </span>
           <span className="text-[9px] font-bold text-[#1a6b3c] bg-[#edf7f0] px-2 py-[2px] rounded-full uppercase tracking-[0.5px] flex items-center gap-[5px]">
             <span className="w-[5px] h-[5px] rounded-full bg-[#2dd478] animate-pulse" />

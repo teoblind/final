@@ -337,7 +337,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
     refreshDashboard();
     fetchLeadsSheet();
 
-    // Live polling — refresh every 10 seconds
+    // Live polling - refresh every 10 seconds
     const poll = setInterval(refreshDashboard, 10_000);
     return () => clearInterval(poll);
   }, [meetingRange, fetchLeadsSheet, fetchAssignments]);
@@ -424,7 +424,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
   return (<>
     <div className="p-6 lg:px-7 lg:py-6">
-      {/* Top row: Bids Due + Active Jobs — inline expandable */}
+      {/* Top row: Bids Due + Active Jobs - inline expandable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div
@@ -446,7 +446,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
             <div className="border-t border-[#f0eeea] max-h-[300px] overflow-y-auto">
               {bidsThisWeek.map(bid => (
                 <div key={bid.id} className="px-5 py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] cursor-pointer" onClick={() => onNavigate?.('workflow-chat')}>
-                  <div className="text-[12px] font-medium text-terminal-text truncate">{bid.gc_name} — {bid.subject}</div>
+                  <div className="text-[12px] font-medium text-terminal-text truncate">{bid.gc_name} - {bid.subject}</div>
                   <div className="text-[10px] text-terminal-muted flex gap-3 mt-0.5">
                     <span>Due: {new Date(bid.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                     <span className={`font-semibold ${bid.status === 'new' ? 'text-[#b8860b]' : bid.status === 'estimated' ? 'text-[#1a6b3c]' : ''}`}>{bid.status}</span>
@@ -484,7 +484,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
         </div>
       </div>
 
-      {/* Agent Assignments — top of dashboard for morning review */}
+      {/* Agent Assignments - top of dashboard for morning review */}
       <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
@@ -797,7 +797,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
         })()}
       </div>
 
-      {/* Meetings This Week — expanded */}
+      {/* Meetings This Week - expanded */}
       <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">

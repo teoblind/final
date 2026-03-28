@@ -140,7 +140,7 @@ export default function OfficeDashboard() {
       <div className="flex items-center gap-6 mb-6">
         <div>
           <p className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px]">{tenant?.name || 'Coppice'} Office</p>
-          <p className="text-xs font-mono text-terminal-text font-semibold">{filteredAgents.length} agents — {activeCount} active</p>
+          <p className="text-xs font-mono text-terminal-text font-semibold">{filteredAgents.length} agents - {activeCount} active</p>
         </div>
         <div className="flex-1" />
         <button

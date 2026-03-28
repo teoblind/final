@@ -11,7 +11,7 @@ function getSignal(lmp) {
 }
 
 function formatTime(ts) {
-  if (!ts) return '—';
+  if (!ts) return '-';
   const d = new Date(ts);
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CST';
 }
@@ -67,7 +67,7 @@ export default function LmpTicker({ node = 'HB_NORTH', ppaRate = 22.40 }) {
       <div className="bg-terminal-panel p-[14px_18px] flex-1">
         <div className="text-[9px] font-bold text-terminal-muted uppercase tracking-[1px] mb-[3px]">Today Avg</div>
         <div className="text-xl font-bold text-terminal-text tabular-nums font-mono leading-none">
-          ${data.todayAvg?.toFixed(2) ?? '—'}<span className="text-[11px] font-medium text-terminal-muted"> /MWh</span>
+          ${data.todayAvg?.toFixed(2) ?? '-'}<span className="text-[11px] font-medium text-terminal-muted"> /MWh</span>
         </div>
         <div className="text-[10px] font-semibold mt-[3px] text-terminal-muted">{data.intervals} intervals</div>
       </div>
@@ -76,7 +76,7 @@ export default function LmpTicker({ node = 'HB_NORTH', ppaRate = 22.40 }) {
       <div className="bg-terminal-panel p-[14px_18px] flex-1">
         <div className="text-[9px] font-bold text-terminal-muted uppercase tracking-[1px] mb-[3px]">Today Peak</div>
         <div className="text-xl font-bold text-terminal-text tabular-nums font-mono leading-none">
-          ${data.todayPeak?.toFixed(2) ?? '—'}<span className="text-[11px] font-medium text-terminal-muted"> /MWh</span>
+          ${data.todayPeak?.toFixed(2) ?? '-'}<span className="text-[11px] font-medium text-terminal-muted"> /MWh</span>
         </div>
         <div className={`text-[10px] font-semibold mt-[3px] ${data.todayPeak > BREAKEVENS.fleet ? 'text-[#b8860b]' : 'text-terminal-muted'}`}>
           {formatTime(data.todayPeakTime)}

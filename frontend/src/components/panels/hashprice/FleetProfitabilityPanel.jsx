@@ -5,7 +5,7 @@ import { formatNumber, formatCurrency } from '../../../utils/formatters';
 
 /**
  * Panel 4a: Fleet Profitability Overview
- * Hero panel — a miner's P&L at a glance.
+ * Hero panel - a miner's P&L at a glance.
  */
 export default function FleetProfitabilityPanel() {
   const { data, loading, error, lastFetched, isStale, refetch } = useApi('/fleet/profitability', {
@@ -49,7 +49,7 @@ export default function FleetProfitabilityPanel() {
         <div className="space-y-4">
           {isMock && (
             <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-              Using mock network data — live API unavailable
+              Using mock network data - live API unavailable
             </div>
           )}
 

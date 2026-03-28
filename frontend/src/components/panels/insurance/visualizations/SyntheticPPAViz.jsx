@@ -28,14 +28,14 @@ export default function SyntheticPPAViz() {
       {/* Grid line at zero */}
       <line x1={padL} y1={zeroY} x2={rightX} y2={zeroY} stroke="#333" strokeWidth={0.5} />
 
-      {/* Green fill — Sangha pays (below strike, above zero) */}
+      {/* Green fill - Sangha pays (below strike, above zero) */}
       <polygon
         points={`${leftX},${leftY} ${strikeX},${zeroY} ${leftX},${zeroY}`}
         fill="#00d26a"
         opacity={0.15}
       />
 
-      {/* Red fill — miner shares upside (above strike, below zero) */}
+      {/* Red fill - miner shares upside (above strike, below zero) */}
       <polygon
         points={`${strikeX},${zeroY} ${rightX},${rightY} ${rightX},${zeroY}`}
         fill="#ff3b30"

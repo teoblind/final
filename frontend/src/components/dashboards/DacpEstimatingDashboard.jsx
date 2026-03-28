@@ -356,7 +356,7 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
         </button>
       )}
 
-      {/* Analysis results — grouped by type */}
+      {/* Analysis results - grouped by type */}
       {analysis && (
         <div className="mb-4">
           <div className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-2">Identified Elements</div>
@@ -632,7 +632,7 @@ export default function DacpEstimatingDashboard() {
 
       {/* Split Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-4">
-        {/* Left — Inbox */}
+        {/* Left - Inbox */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] border-b border-[#f0eeea]">
             <div className="flex items-center gap-2 mb-3">
@@ -693,11 +693,11 @@ export default function DacpEstimatingDashboard() {
           </div>
         </div>
 
-        {/* Right — Estimate Preview */}
+        {/* Right - Estimate Preview */}
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           {selected ? (
             <>
-              {/* Header — always visible */}
+              {/* Header - always visible */}
               <div className="px-[18px] py-[14px] border-b border-[#f0eeea]">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-heading font-bold text-terminal-text">{selected.gc_name}</span>
@@ -709,7 +709,7 @@ export default function DacpEstimatingDashboard() {
                 <div className="text-[11px] text-terminal-muted mt-1">{selected.from_name} &lt;{selected.from_email}&gt;</div>
               </div>
 
-              {/* Workflow Stepper — shown when bidding */}
+              {/* Workflow Stepper - shown when bidding */}
               {selected.status === 'bidding' && (
                 <WorkflowStepper currentStep={selected.workflow_step || 1} />
               )}

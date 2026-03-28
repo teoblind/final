@@ -84,7 +84,7 @@ export default function DayAheadPanel() {
       <div className="flex items-center justify-between mb-3">
         <div>
           <span className="text-xs text-terminal-muted">Daily Avg: </span>
-          <span className="font-sans text-sm">${dailyAvg != null ? formatNumber(dailyAvg, 2) : '—'}/MWh</span>
+          <span className="font-sans text-sm">${dailyAvg != null ? formatNumber(dailyAvg, 2) : '-'}/MWh</span>
         </div>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-terminal-green" /> &lt;${lowThreshold}</span>
@@ -143,7 +143,7 @@ export default function DayAheadPanel() {
               </span>
             ))}
             {prices.filter(p => p.lmp <= lowThreshold).length === 0 && (
-              <span className="text-xs text-terminal-muted italic">None — consider curtailing all day</span>
+              <span className="text-xs text-terminal-muted italic">None - consider curtailing all day</span>
             )}
           </div>
         </div>

@@ -116,7 +116,7 @@ function LaborDetailModal({ onClose, onAction }) {
 
   return (
     <ModalShell
-      title="Job Cost Detail — Westpark Retail"
+      title="Job Cost Detail - Westpark Retail"
       subtitle="McCarthy Building · 40% complete · J-009"
       onClose={onClose}
       footer={
@@ -245,7 +245,7 @@ function WinRateAnalysisModal({ onClose, onAction }) {
 
   return (
     <ModalShell
-      title="Win Rate Analysis — Foundation Work"
+      title="Win Rate Analysis - Foundation Work"
       subtitle="Based on 48 historical estimates"
       onClose={onClose}
       footer={
@@ -296,7 +296,7 @@ function SendReminderModal({ onClose, onAction }) {
   return (
     <ModalShell
       title="Send Follow-up Reminder"
-      subtitle="Geotech report — Frisco Station pier P-5"
+      subtitle="Geotech report - Frisco Station pier P-5"
       onClose={onClose}
       footer={
         <>
@@ -310,7 +310,7 @@ function SendReminderModal({ onClose, onAction }) {
           <strong className="text-[#111110]">To:</strong> geotech@texasgeoservices.com
         </div>
         <div className="px-4 py-2 text-[12px] text-[#6b6b65] border-b border-[#f0eeea]">
-          <strong className="text-[#111110]">Subject:</strong> Follow-up: Updated Boring Logs — Frisco Station Pier P-5
+          <strong className="text-[#111110]">Subject:</strong> Follow-up: Updated Boring Logs - Frisco Station Pier P-5
         </div>
         {editing ? (
           <textarea

@@ -1,7 +1,7 @@
 /**
  * Ampera Theme Configuration
  *
- * Minimal dark theme — white, black, dark grey.
+ * Minimal dark theme - white, black, dark grey.
  * Font: Exo 2.
  */
 

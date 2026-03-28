@@ -43,7 +43,7 @@ export default function LmpHeatmap({ node = 'HB_NORTH' }) {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-4">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">LMP Heatmap — Hourly Averages</span>
+        <span className="text-xs font-bold text-terminal-text tracking-[0.3px]">LMP Heatmap - Hourly Averages</span>
         <div className="flex gap-1">
           {pills.map(p => (
             <button
@@ -131,7 +131,7 @@ export default function LmpHeatmap({ node = 'HB_NORTH' }) {
               <span>Low</span>
               <div className="w-[120px] h-2 rounded bg-gradient-to-r from-[#1a6b3c] via-[#a3d9a5] via-60% to-[#c0392b]" />
               <span>High</span>
-              <span className="ml-3 text-[#c5c5bc]">$/MWh — darker green = cheaper energy = more profitable mining</span>
+              <span className="ml-3 text-[#c5c5bc]">$/MWh - darker green = cheaper energy = more profitable mining</span>
             </div>
           </>
         )}

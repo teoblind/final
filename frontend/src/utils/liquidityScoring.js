@@ -58,7 +58,7 @@ function clamp(min, max, value) {
 // ============================================================================
 
 /**
- * Bond Volatility Score (MOVE Index) — INVERSE relationship
+ * Bond Volatility Score (MOVE Index) - INVERSE relationship
  *
  * Formula: score = clamp(0, 100, 100 - ((MOVE - 70) / 90) * 100)
  *
@@ -76,7 +76,7 @@ export function calculateMoveScore(moveIndex) {
 }
 
 /**
- * Treasury Rates Score (US 10Y Yield) — INVERSE relationship
+ * Treasury Rates Score (US 10Y Yield) - INVERSE relationship
  *
  * Formula: score = clamp(0, 100, 100 - ((US10Y - 2.0) / 4.0) * 100)
  *
@@ -94,7 +94,7 @@ export function calculateRateScore(us10y) {
 }
 
 /**
- * Dollar Strength Score (DXY) — INVERSE relationship
+ * Dollar Strength Score (DXY) - INVERSE relationship
  *
  * Formula: score = clamp(0, 100, 100 - ((DXY - 88) / 17) * 100)
  *
@@ -112,7 +112,7 @@ export function calculateDxyScore(dxy) {
 }
 
 /**
- * Banking Assets Score (Fed Balance Sheet) — DIRECT relationship
+ * Banking Assets Score (Fed Balance Sheet) - DIRECT relationship
  *
  * Formula: score = clamp(0, 100, ((FedBS - 5.5) / 1.5) * 100)
  *

@@ -42,7 +42,7 @@ export default function HelpChatWidget() {
   const accentColor = tenant?.branding?.primaryColor || '#1a6b3c';
   const agentId = getHelpAgentId(tenant);
 
-  // Scroll to bottom on new messages — only if user hasn't scrolled up
+  // Scroll to bottom on new messages - only if user hasn't scrolled up
   useEffect(() => {
     if (!helpScrolledUpRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -97,7 +97,7 @@ export default function HelpChatWidget() {
     const token = getAuthToken();
 
     try {
-      // Always use the lightweight public help endpoint — no auth needed,
+      // Always use the lightweight public help endpoint - no auth needed,
       // avoids expired-token issues, and uses Haiku (fast + cheap).
       const postUrl = `${API_BASE}/v1/chat/help/${agentId}/messages/stream`;
 

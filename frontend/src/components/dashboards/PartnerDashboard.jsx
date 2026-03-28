@@ -160,7 +160,7 @@ export default function PartnerDashboard() {
                 <div
                   className="w-full bg-terminal-green/70 rounded-t hover:bg-terminal-green transition-colors min-h-[2px]"
                   style={{ height: `${Math.max(heightPct, 1)}%` }}
-                  title={`${String(index).padStart(2, '0')}:00 — ${value.toFixed(1)} MW`}
+                  title={`${String(index).padStart(2, '0')}:00 - ${value.toFixed(1)} MW`}
                 />
               </div>
             );
@@ -248,7 +248,7 @@ export default function PartnerDashboard() {
                 <div
                   className="w-full bg-terminal-cyan/60 rounded-t hover:bg-terminal-cyan transition-colors min-h-[2px]"
                   style={{ height: `${Math.max(heightPct, 1)}%` }}
-                  title={`Day ${index + 1} — ${value.toFixed(1)} MWh`}
+                  title={`Day ${index + 1} - ${value.toFixed(1)} MWh`}
                 />
               </div>
             );

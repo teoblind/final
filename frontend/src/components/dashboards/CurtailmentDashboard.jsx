@@ -153,7 +153,7 @@ function FleetConfigModal({ onClose, onSaved, existing }) {
             <input
               type="text"
               className={inputCls}
-              placeholder="e.g. Oberon Solar — ERCOT West"
+              placeholder="e.g. Oberon Solar - ERCOT West"
               value={form.fleetName}
               onChange={(e) => set('fleetName', e.target.value)}
               required
@@ -320,7 +320,7 @@ function ConnectedDashboard({ config }) {
         ))}
         <div className="w-px h-5 bg-terminal-border mx-1" />
         <button
-          onClick={() => alert('Backtest initiated — analyzing last 30 days of ERCOT pricing against curtailment decisions.')}
+          onClick={() => alert('Backtest initiated - analyzing last 30 days of ERCOT pricing against curtailment decisions.')}
           className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all font-heading"
         >
           Run Backtest
@@ -356,7 +356,7 @@ function ConnectedDashboard({ config }) {
 
         <Card title="Agent Status" meta="Curtailment Engine">
           <KVRow label="Mode" value="Copilot" cls="accent" />
-          <KVRow label="Strategy" value="Peeling — least efficient first" cls="accent" />
+          <KVRow label="Strategy" value="Peeling - least efficient first" cls="accent" />
           <KVRow label="ERCOT Node" value={node} />
           <KVRow label="Margin Threshold" value="5%" />
           <KVRow label="Data Feed" value="Awaiting ERCOT connection" cls="warn" last />

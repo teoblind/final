@@ -46,10 +46,10 @@ const INSIGHT_TYPE_STYLES = {
 // ─── Structural Defaults ─────────────────────────────────────────────────────
 
 const DEFAULT_METRICS = [
-  { label: 'Leads', value: '—', delta: 'loading...', type: 'flat', bar: 0 },
-  { label: 'Outreach', value: '—', delta: '', type: 'flat', bar: 0 },
-  { label: 'Replies', value: '—', delta: '', type: 'flat', bar: 0 },
-  { label: 'Meetings', value: '—', delta: '', type: 'flat', bar: 0 },
+  { label: 'Leads', value: '-', delta: 'loading...', type: 'flat', bar: 0 },
+  { label: 'Outreach', value: '-', delta: '', type: 'flat', bar: 0 },
+  { label: 'Replies', value: '-', delta: '', type: 'flat', bar: 0 },
+  { label: 'Meetings', value: '-', delta: '', type: 'flat', bar: 0 },
 ];
 
 const AGENTS_TEMPLATE = [
@@ -656,7 +656,7 @@ export default function CommandDashboard({ onNavigate }) {
     const item = approvals.find(a => a.id === id);
     try {
       await fetch(`${API_BASE}/v1/approvals/${id}/approve`, { method: 'POST' });
-      const toastMap = { email_draft: 'Approved — email sent', tool_action: 'Approved — executing action', meeting_instruction: 'Approved — executing instruction' };
+      const toastMap = { email_draft: 'Approved - email sent', tool_action: 'Approved - executing action', meeting_instruction: 'Approved - executing instruction' };
       showToast(toastMap[item?.type] || 'Approved');
     } catch {
       showToast('Approve failed');
@@ -1327,7 +1327,7 @@ export default function CommandDashboard({ onNavigate }) {
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Pipeline</span>
-            <span className="text-[11px] font-mono text-terminal-muted">{leadStats ? `${leadStats.totalLeads || 0} total` : '—'}</span>
+            <span className="text-[11px] font-mono text-terminal-muted">{leadStats ? `${leadStats.totalLeads || 0} total` : '-'}</span>
           </div>
           <div className="py-1">
             {PIPELINE.map((row, i) => (
@@ -1506,7 +1506,7 @@ export default function CommandDashboard({ onNavigate }) {
               )}
             </div>
 
-            {/* Footer — open in chat */}
+            {/* Footer - open in chat */}
             <div className="px-[26px] py-[14px] flex items-center justify-between shrink-0" style={{ borderTop: '1px solid #1e3028' }}>
               <span className="text-[10px] font-mono tabular-nums" style={{ color: '#2d4a3e' }}>{threadModal.messages.length} messages</span>
               <button

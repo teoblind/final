@@ -85,7 +85,7 @@ export default function CoverageStatusPanel() {
               Explore coverage options backed by institutional capital partners to protect your mining revenue.
             </p>
             <button
-              onClick={() => alert('Coverage Explorer — explore institutional capital partner options for mining revenue protection.')}
+              onClick={() => alert('Coverage Explorer - explore institutional capital partner options for mining revenue protection.')}
               className="flex items-center gap-2 px-4 py-2 bg-terminal-cyan/20 text-terminal-cyan border border-terminal-cyan/30 rounded hover:bg-terminal-cyan/30 transition-colors text-xs"
             >
               <ExternalLink size={12} />

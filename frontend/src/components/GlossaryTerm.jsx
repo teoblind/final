@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import INSURANCE_GLOSSARY from '../config/insuranceGlossary';
 
 /**
- * GlossaryTerm — inline tooltip for insurance/financial terms.
+ * GlossaryTerm - inline tooltip for insurance/financial terms.
  *
  * Usage:
  *   <GlossaryTerm id="quarq_spread">Quarq Spread</GlossaryTerm>

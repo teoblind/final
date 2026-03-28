@@ -1,5 +1,5 @@
 /**
- * Insurance Glossary — definitions for Sangha financial instrument terms.
+ * Insurance Glossary - definitions for Sangha financial instrument terms.
  * Used by the <GlossaryTerm> component to provide inline tooltips.
  */
 
@@ -12,7 +12,7 @@ const INSURANCE_GLOSSARY = {
   },
   synthetic_ppa: {
     term: 'Synthetic PPA (CfD)',
-    shortDef: 'Cash-settled hashprice guarantee — lock a strike price, settle the difference.',
+    shortDef: 'Cash-settled hashprice guarantee - lock a strike price, settle the difference.',
     energyEquivalent: 'Contract for Difference / Virtual PPA',
     learnMorePanelId: 'insurance-instruments',
   },

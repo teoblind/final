@@ -43,7 +43,7 @@ export default function InsuranceDashboard() {
       <div className="mb-4">
         <h2 className="text-lg font-bold text-terminal-green">Insurance & Revenue Protection</h2>
         <p className="text-xs text-terminal-muted mt-1">
-          Sangha revenue floor guarantees — risk assessment, coverage exploration, and policy management.
+          Sangha revenue floor guarantees - risk assessment, coverage exploration, and policy management.
         </p>
       </div>
 
@@ -65,7 +65,7 @@ export default function InsuranceDashboard() {
         ))}
       </div>
 
-      {/* Network Context Widget — always visible */}
+      {/* Network Context Widget - always visible */}
       <Suspense fallback={<LoadingSpinner />}>
         <NetworkContextWidget />
       </Suspense>

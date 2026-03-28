@@ -10,7 +10,7 @@ const ERCOT_NODES = [
 ];
 
 /**
- * Panel 3a: Current Energy Price — The "hero" metric panel.
+ * Panel 3a: Current Energy Price - The "hero" metric panel.
  * Shows current LMP, moving averages, system load, and grid status.
  */
 export default function EnergyPricePanel() {
@@ -68,7 +68,7 @@ export default function EnergyPricePanel() {
       {isMock && (
         <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-terminal-amber/10 border border-terminal-amber/20 rounded text-xs text-terminal-amber">
           <Info size={14} />
-          <span>Simulated data — configure ERCOT API credentials for live prices</span>
+          <span>Simulated data - configure ERCOT API credentials for live prices</span>
         </div>
       )}
 
@@ -77,13 +77,13 @@ export default function EnergyPricePanel() {
         <div>
           <p className="text-xs text-terminal-muted uppercase tracking-wider">Current LMP</p>
           <p className={`text-4xl font-bold ${priceColor}`}>
-            ${lmp != null ? formatNumber(lmp, 2) : '—'}<span className="text-lg text-terminal-muted">/MWh</span>
+            ${lmp != null ? formatNumber(lmp, 2) : '-'}<span className="text-lg text-terminal-muted">/MWh</span>
           </p>
         </div>
         <div className="text-right">
           <p className="text-xs text-terminal-muted uppercase">System Load</p>
           <p className="text-xl font-bold">
-            {systemLoad != null ? `${formatNumber(systemLoad, 0)}` : '—'}
+            {systemLoad != null ? `${formatNumber(systemLoad, 0)}` : '-'}
             <span className="text-xs text-terminal-muted"> MW</span>
           </p>
         </div>
@@ -99,7 +99,7 @@ export default function EnergyPricePanel() {
           <div key={label} className="bg-terminal-bg/50 rounded p-2 text-center">
             <p className="text-xs text-terminal-muted">{label}</p>
             <p className="font-sans text-sm">
-              {value != null ? `$${formatNumber(value, 2)}` : '—'}
+              {value != null ? `$${formatNumber(value, 2)}` : '-'}
             </p>
           </div>
         ))}

@@ -52,7 +52,7 @@ export default function OperatingStatusPanel() {
         <div className="space-y-4">
           {isMock && (
             <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-              Using mock data — live API unavailable
+              Using mock data - live API unavailable
             </div>
           )}
 
@@ -64,7 +64,7 @@ export default function OperatingStatusPanel() {
               {formatNumber(summary?.fleetOnlinePercent, 0)}% online
             </p>
             <p className="text-xs text-terminal-muted mt-1">
-              Copilot mode — recommendations only
+              Copilot mode - recommendations only
             </p>
           </div>
 
@@ -72,11 +72,11 @@ export default function OperatingStatusPanel() {
           {demandResponse?.active && (
             <div className="bg-terminal-cyan/10 border border-terminal-cyan/20 rounded px-3 py-2 text-xs text-terminal-cyan flex items-center gap-2">
               <span className="text-base">⚡</span>
-              Grid stress event — Demand response active (+${formatNumber(demandResponse.premiumMWh, 0)}/MWh curtailment premium)
+              Grid stress event - Demand response active (+${formatNumber(demandResponse.premiumMWh, 0)}/MWh curtailment premium)
             </div>
           )}
 
-          {/* Key Metrics — $/hr focus */}
+          {/* Key Metrics - $/hr focus */}
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-terminal-bg/50 rounded p-3">
               <p className="text-xs text-terminal-muted">Net Revenue</p>
@@ -129,7 +129,7 @@ export default function OperatingStatusPanel() {
               <p className="text-xs text-terminal-muted mb-1">Next State Change</p>
               <p className="text-xs text-terminal-text">
                 <span className="text-terminal-amber font-medium">{nextStateChange.estimatedHour}:00</span>
-                {' — '}{nextStateChange.trigger}
+                {' - '}{nextStateChange.trigger}
               </p>
             </div>
           )}
@@ -148,7 +148,7 @@ export default function OperatingStatusPanel() {
                       className={`w-2 h-2 rounded-full inline-block ${
                         d.action === 'MINE' ? 'bg-terminal-green' : 'bg-terminal-muted'
                       }`}
-                      title={`${d.model} — ${d.action}`}
+                      title={`${d.model} - ${d.action}`}
                     />
                   ))
                 )}

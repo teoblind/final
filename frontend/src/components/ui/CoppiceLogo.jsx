@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * Coppice logo mark — orbital rings with dynamic background color.
+ * Coppice logo mark - orbital rings with dynamic background color.
  * PNG used for favicon/PWA. This SVG component used in-app for color adaptation.
  *
  * @param {string} color - Background fill color (default: navy)
@@ -44,11 +44,11 @@ export default function CoppiceLogo({ color = '#1e3a5f', size = 32 }) {
       {/* Inner ring */}
       <circle cx="50" cy="50" r="11.5" fill="none" stroke={`url(#${uid}i)`} strokeWidth="3" />
 
-      {/* Orbital dot — outer ring ~9 o'clock */}
+      {/* Orbital dot - outer ring ~9 o'clock */}
       <circle cx="21.5" cy="45" r="2.2" fill="rgba(255,255,255,0.38)" />
-      {/* Orbital dot — middle ring ~12 o'clock */}
+      {/* Orbital dot - middle ring ~12 o'clock */}
       <circle cx="53" cy="30.5" r="2" fill="rgba(255,255,255,0.50)" />
-      {/* Orbital dot — inner ring ~3 o'clock */}
+      {/* Orbital dot - inner ring ~3 o'clock */}
       <circle cx="61" cy="51.5" r="1.8" fill="rgba(255,255,255,0.65)" />
 
       {/* Center dot */}

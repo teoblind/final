@@ -76,8 +76,8 @@ function DifficultyAdjustmentIndicator({ state }) {
       <p className="text-[10px] text-terminal-muted mt-1">
         {fmt(blocksRemaining)} blocks remaining
         {isPositive
-          ? ' — difficulty rising (harder for miners)'
-          : ' — difficulty dropping (good for miners)'}
+          ? ' - difficulty rising (harder for miners)'
+          : ' - difficulty dropping (good for miners)'}
       </p>
     </div>
   );
@@ -157,7 +157,7 @@ function EfficiencyDistribution({ distribution, tenantEfficiency }) {
       </div>
       {tenantEfficiency != null && (
         <p className="text-[10px] text-terminal-muted mt-2">
-          Your fleet: <span className="text-terminal-green font-sans">{tenantEfficiency} J/TH</span> — {tenantPercentile}
+          Your fleet: <span className="text-terminal-green font-sans">{tenantEfficiency} J/TH</span> - {tenantPercentile}
         </p>
       )}
     </div>

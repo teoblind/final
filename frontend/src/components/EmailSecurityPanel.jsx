@@ -91,7 +91,7 @@ export default function EmailSecurityPanel() {
   const emails = senders.filter(s => s.email);
 
   const fmtDate = (iso) => {
-    if (!iso) return '—';
+    if (!iso) return '-';
     const d = new Date(iso);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
       d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -234,8 +234,8 @@ export default function EmailSecurityPanel() {
                         {fmtDate(entry.created_at)}
                       </div>
                     </td>
-                    <td className="py-2 px-2 text-terminal-text">{entry.sender_email || '—'}</td>
-                    <td className="py-2 px-2 text-terminal-text truncate max-w-[200px]">{entry.subject || '—'}</td>
+                    <td className="py-2 px-2 text-terminal-text">{entry.sender_email || '-'}</td>
+                    <td className="py-2 px-2 text-terminal-text truncate max-w-[200px]">{entry.subject || '-'}</td>
                     <td className="py-2 px-2">
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
                         entry.reason === 'spoofed' ? 'bg-red-50 text-red-600' :

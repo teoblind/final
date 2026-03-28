@@ -210,7 +210,7 @@ export default function DacpJobsDashboard() {
                           <div key={i} className="flex items-start gap-2 text-[12px] p-2 bg-[#f5f4f0] rounded-lg">
                             <span className="text-terminal-muted font-mono shrink-0 tabular-nums">{r.date}</span>
                             <div className="flex-1 min-w-0">
-                              <span className="text-[#6b6b65]">{r.reported_by} — </span>
+                              <span className="text-[#6b6b65]">{r.reported_by} - </span>
                               <span className="text-terminal-text">{(r.work || []).join('; ').slice(0, 100)}</span>
                               {r.issues && r.issues.length > 0 && (
                                 <div className="text-terminal-red mt-0.5">⚠ {r.issues.join(', ')}</div>

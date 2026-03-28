@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * Quarq Spread mini visualization — horizontal bars showing
+ * Quarq Spread mini visualization - horizontal bars showing
  * Revenue (green) vs Energy Cost (red) with the spread gap
  * and a dashed floor guarantee line.
  */

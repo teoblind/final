@@ -165,7 +165,7 @@ function TableTab({ type, data, loading }) {
                       <td className="px-4 py-2.5">{inv.customer_name}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{fmt(inv.amount)}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{fmt(inv.balance_due)}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs">{inv.due_date || '—'}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs">{inv.due_date || '-'}</td>
                       <td className="px-4 py-2.5"><StatusBadge status={inv.status} /></td>
                       <td className="px-4 py-2.5 text-[11px] text-terminal-muted">{inv.source}</td>
                     </tr>
@@ -206,7 +206,7 @@ function TableTab({ type, data, loading }) {
                       <td className="px-4 py-2.5">{bill.vendor_name}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{fmt(bill.amount)}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{fmt(bill.balance_due)}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs">{bill.due_date || '—'}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs">{bill.due_date || '-'}</td>
                       <td className="px-4 py-2.5"><StatusBadge status={bill.status} /></td>
                       <td className="px-4 py-2.5 text-[11px] text-terminal-muted">{bill.source}</td>
                     </tr>
@@ -249,7 +249,7 @@ function TableTab({ type, data, loading }) {
                     </td>
                     <td className="px-4 py-2.5">{pmt.customer_or_vendor}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">{fmt(pmt.amount)}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs">{pmt.payment_date || '—'}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs">{pmt.payment_date || '-'}</td>
                     <td className="px-4 py-2.5 text-[11px] text-terminal-muted">{pmt.source}</td>
                   </tr>
                 ))}
@@ -298,12 +298,12 @@ function SettingsTab({ qbConnected, billcomConnected, onConnectQB, onDisconnectQ
           {billcomConnected ? (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-[#dcfce7] rounded-lg">
               <CheckCircle size={14} className="text-[#166534]" />
-              <span className="text-[13px] font-medium text-[#166534]">Bill.com connected — syncing every 15 minutes</span>
+              <span className="text-[13px] font-medium text-[#166534]">Bill.com connected - syncing every 15 minutes</span>
             </div>
           ) : (
             <div className="flex items-center gap-2 px-3 py-2.5 bg-[#fef3c7] rounded-lg">
               <AlertCircle size={14} className="text-[#92400e]" />
-              <span className="text-[13px] font-medium text-[#92400e]">Not connected — enter your Bill.com credentials below to start syncing</span>
+              <span className="text-[13px] font-medium text-[#92400e]">Not connected - enter your Bill.com credentials below to start syncing</span>
             </div>
           )}
 

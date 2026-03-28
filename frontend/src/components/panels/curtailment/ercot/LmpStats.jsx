@@ -54,15 +54,15 @@ export default function LmpStats({ node = 'HB_NORTH' }) {
         <div className="p-8 text-center text-terminal-muted text-sm">No data</div>
       ) : (
         <div>
-          <KVRow label={`${days}D Average`} value={resp.avg != null ? `$${resp.avg.toFixed(2)}` : '—'} />
-          <KVRow label={`${days}D Median`} value={resp.median != null ? `$${resp.median.toFixed(2)}` : '—'} />
-          <KVRow label={`${days}D Peak`} value={resp.peak != null ? `$${resp.peak.toFixed(2)}` : '—'} cls={resp.peak > 100 ? 'danger' : resp.peak > 50 ? 'warn' : ''} />
-          <KVRow label={`${days}D Trough`} value={resp.trough != null ? `$${resp.trough.toFixed(2)}` : '—'} cls={resp.trough < 0 ? 'green' : ''} />
-          <KVRow label="Negative Price Hours" value={resp.negativeHours ?? '—'} cls={resp.negativeHours > 0 ? 'green' : ''} />
-          <KVRow label="Hours Above Fleet BE" value={resp.hoursAboveFleetBE ?? '—'} cls={resp.hoursAboveFleetBE > 20 ? 'warn' : ''} />
-          <KVRow label="Hours Above S19 BE" value={resp.hoursAboveS19BE ?? '—'} cls={resp.hoursAboveS19BE > 10 ? 'danger' : ''} />
-          <KVRow label="Volatility (Std Dev)" value={resp.stdDev != null ? `$${resp.stdDev.toFixed(2)}` : '—'} />
-          <KVRow label="Data Points" value={resp.dataPoints?.toLocaleString() ?? '—'} cls="muted" />
+          <KVRow label={`${days}D Average`} value={resp.avg != null ? `$${resp.avg.toFixed(2)}` : '-'} />
+          <KVRow label={`${days}D Median`} value={resp.median != null ? `$${resp.median.toFixed(2)}` : '-'} />
+          <KVRow label={`${days}D Peak`} value={resp.peak != null ? `$${resp.peak.toFixed(2)}` : '-'} cls={resp.peak > 100 ? 'danger' : resp.peak > 50 ? 'warn' : ''} />
+          <KVRow label={`${days}D Trough`} value={resp.trough != null ? `$${resp.trough.toFixed(2)}` : '-'} cls={resp.trough < 0 ? 'green' : ''} />
+          <KVRow label="Negative Price Hours" value={resp.negativeHours ?? '-'} cls={resp.negativeHours > 0 ? 'green' : ''} />
+          <KVRow label="Hours Above Fleet BE" value={resp.hoursAboveFleetBE ?? '-'} cls={resp.hoursAboveFleetBE > 20 ? 'warn' : ''} />
+          <KVRow label="Hours Above S19 BE" value={resp.hoursAboveS19BE ?? '-'} cls={resp.hoursAboveS19BE > 10 ? 'danger' : ''} />
+          <KVRow label="Volatility (Std Dev)" value={resp.stdDev != null ? `$${resp.stdDev.toFixed(2)}` : '-'} />
+          <KVRow label="Data Points" value={resp.dataPoints?.toLocaleString() ?? '-'} cls="muted" />
         </div>
       )}
     </div>

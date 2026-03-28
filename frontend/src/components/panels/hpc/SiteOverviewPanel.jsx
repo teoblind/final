@@ -118,7 +118,7 @@ export default function SiteOverviewPanel() {
           {/* HPC not configured hint */}
           {hasBtc && !hasHpc && (
             <div className="bg-terminal-bg/50 border border-terminal-border rounded px-3 py-2 text-xs text-terminal-muted text-center">
-              HPC not configured — add AI/HPC workloads in Settings to see side-by-side economics.
+              HPC not configured - add AI/HPC workloads in Settings to see side-by-side economics.
             </div>
           )}
 

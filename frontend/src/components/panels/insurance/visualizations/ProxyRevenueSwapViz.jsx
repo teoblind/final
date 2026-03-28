@@ -1,7 +1,7 @@
 import React from 'react';
 
 /**
- * Proxy Revenue Swap — 2x2 scenario grid.
+ * Proxy Revenue Swap - 2x2 scenario grid.
  * BTC Price (columns) x Difficulty (rows).
  * Top-left = no hedge needed, other 3 cells show coverage.
  */

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 /**
- * Heat Rate / Efficiency Hedge — simplified fleet efficiency waterfall.
+ * Heat Rate / Efficiency Hedge - simplified fleet efficiency waterfall.
  * Shows machine class bars with breakeven heights,
  * current energy price line, and a "virtual breakeven" hedge line
  * that animates downward to show the efficiency improvement.

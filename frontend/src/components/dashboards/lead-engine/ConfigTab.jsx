@@ -44,8 +44,8 @@ export default function ConfigTab() {
           <KVRow label="Emails / Cycle" value={config.max_emails_per_cycle || 10} cls="" />
           <KVRow label="Follow-Up After" value={`${config.followup_delay_days || 5} days`} cls="" />
           <KVRow label="Max Follow-Ups" value={config.max_followups || 2} cls="" />
-          <KVRow label="Sender" value={config.sender_name || '—'} cls="sans" />
-          <KVRow label="Send From" value={config.sender_email || '—'} cls="muted" />
+          <KVRow label="Sender" value={config.sender_name || '-'} cls="sans" />
+          <KVRow label="Send From" value={config.sender_email || '-'} cls="muted" />
         </Card>
       ) : (
         <ConfigEditor config={config} onSave={async (updated) => {

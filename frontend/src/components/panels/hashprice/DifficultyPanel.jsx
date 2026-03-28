@@ -31,7 +31,7 @@ export default function DifficultyPanel() {
         <div className="space-y-4">
           {isMock && (
             <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-              Using mock data — live API unavailable
+              Using mock data - live API unavailable
             </div>
           )}
 
@@ -114,7 +114,7 @@ export default function DifficultyPanel() {
                 <div className="bg-terminal-red/10 border border-terminal-red/20 rounded px-3 py-2 text-xs text-terminal-red">
                   <p className="font-medium mb-1">Machines at risk of becoming unprofitable:</p>
                   {impact.atRiskModels.map((m, i) => (
-                    <p key={i}>{m.model} ({m.quantity} units) — current: ${formatNumber(m.currentNet, 2)}/unit/day</p>
+                    <p key={i}>{m.model} ({m.quantity} units) - current: ${formatNumber(m.currentNet, 2)}/unit/day</p>
                   ))}
                 </div>
               )}

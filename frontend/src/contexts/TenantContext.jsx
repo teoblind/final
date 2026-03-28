@@ -58,7 +58,7 @@ export function TenantProvider({ children }) {
         applyBranding(res.data.branding);
       })
       .catch(() => {
-        // Fallback — use detected slug or default
+        // Fallback - use detected slug or default
         const fallback = FALLBACK_TENANTS[slug] || FALLBACK_TENANTS.sangha;
         setTenant(fallback);
         applyBranding(fallback.branding);

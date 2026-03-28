@@ -29,7 +29,7 @@ export default function PoolEarningsPanel() {
 
   if (data && !data.configured) {
     return (
-      <Panel title="Earnings" source="—" loading={false}>
+      <Panel title="Earnings" source="-" loading={false}>
         <div className="flex flex-col items-center justify-center py-6 text-terminal-muted text-sm">
           <p>Connect your pool to track earnings.</p>
         </div>
@@ -57,7 +57,7 @@ export default function PoolEarningsPanel() {
       <div className="space-y-4">
         {data?.isMock && (
           <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-            Demo data — connect pool for real earnings
+            Demo data - connect pool for real earnings
           </div>
         )}
 

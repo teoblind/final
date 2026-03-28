@@ -308,10 +308,10 @@ export default function PoolRoutingDashboard() {
           <div className="w-2.5 h-2.5 rounded-full bg-[#1a6b3c] animate-pulse shrink-0" />
           <div>
             <div className="text-sm font-bold text-terminal-text font-heading">
-              Pool connected — {cfg.provider || 'Unknown'}
+              Pool connected - {cfg.provider || 'Unknown'}
             </div>
             <div className="text-[11px] text-terminal-muted mt-0.5 font-mono">
-              Worker: {cfg.workerPrefix || '—'} · Wallet: {cfg.walletAddress ? cfg.walletAddress.slice(0, 8) + '...' + cfg.walletAddress.slice(-6) : '—'}
+              Worker: {cfg.workerPrefix || '-'} · Wallet: {cfg.walletAddress ? cfg.walletAddress.slice(0, 8) + '...' + cfg.walletAddress.slice(-6) : '-'}
               {cfg.subAccount ? ` · Sub-account: ${cfg.subAccount}` : ''}
             </div>
           </div>
@@ -327,16 +327,16 @@ export default function PoolRoutingDashboard() {
       {/* Pool Configuration Details */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <Card title="Pool Configuration" meta={cfg.provider || ''}>
-          <KVRow label="Provider" value={cfg.provider || '—'} cls="accent" />
+          <KVRow label="Provider" value={cfg.provider || '-'} cls="accent" />
           <KVRow label="API Key" value={maskedKey} />
-          <KVRow label="Worker Prefix" value={cfg.workerPrefix || '—'} />
-          <KVRow label="Wallet Address" value={cfg.walletAddress ? cfg.walletAddress.slice(0, 12) + '...' + cfg.walletAddress.slice(-6) : '—'} />
+          <KVRow label="Worker Prefix" value={cfg.workerPrefix || '-'} />
+          <KVRow label="Wallet Address" value={cfg.walletAddress ? cfg.walletAddress.slice(0, 12) + '...' + cfg.walletAddress.slice(-6) : '-'} />
           <KVRow label="Sub-account" value={cfg.subAccount || 'None'} cls={cfg.subAccount ? '' : 'muted'} last />
         </Card>
 
         <Card title="Connection Status" meta="Live">
           <KVRow label="Status" value="Connected" cls="green" />
-          <KVRow label="Provider" value={cfg.provider || '—'} />
+          <KVRow label="Provider" value={cfg.provider || '-'} />
           <KVRow label="Last Sync" value={cfg.lastSync ? new Date(cfg.lastSync).toLocaleString() : 'Pending'} cls={cfg.lastSync ? '' : 'muted'} />
           <KVRow label="Polling Interval" value="60s" />
           <KVRow label="API Health" value={cfg.apiHealthy !== false ? 'OK' : 'Degraded'} cls={cfg.apiHealthy !== false ? 'green' : 'warn'} last />

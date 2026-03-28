@@ -1,5 +1,5 @@
 /**
- * Data fetching hook — migrated from original useApi.js with TypeScript types.
+ * Data fetching hook - migrated from original useApi.js with TypeScript types.
  *
  * Provides automatic polling, WebSocket real-time updates, stale detection,
  * and manual refetch capabilities.

@@ -50,13 +50,13 @@ const TEMPLATES = [
 ];
 
 const RECENT_REPORTS = [
-  { name: 'Daily Ops — Mar 7', type: 'daily-ops', generated: '06:00 CST', pages: 3, status: 'delivered' },
-  { name: 'Daily Ops — Mar 6', type: 'daily-ops', generated: '06:00 CST', pages: 3, status: 'delivered' },
-  { name: 'Weekly Briefing — W10', type: 'exec', generated: 'Mar 3, 08:00', pages: 2, status: 'delivered' },
+  { name: 'Daily Ops - Mar 7', type: 'daily-ops', generated: '06:00 CST', pages: 3, status: 'delivered' },
+  { name: 'Daily Ops - Mar 6', type: 'daily-ops', generated: '06:00 CST', pages: 3, status: 'delivered' },
+  { name: 'Weekly Briefing - W10', type: 'exec', generated: 'Mar 3, 08:00', pages: 2, status: 'delivered' },
   { name: 'February Investor Update', type: 'investor', generated: 'Mar 1, 09:00', pages: 8, status: 'delivered' },
   { name: 'Oberon Site Deep Dive', type: 'custom', generated: 'Feb 28, 14:30', pages: 5, status: 'delivered' },
-  { name: 'Daily Ops — Mar 5', type: 'daily-ops', generated: '06:00 CST', pages: 3, status: 'delivered' },
-  { name: 'Weekly Briefing — W9', type: 'exec', generated: 'Feb 24, 08:00', pages: 2, status: 'delivered' },
+  { name: 'Daily Ops - Mar 5', type: 'daily-ops', generated: '06:00 CST', pages: 3, status: 'delivered' },
+  { name: 'Weekly Briefing - W9', type: 'exec', generated: 'Feb 24, 08:00', pages: 2, status: 'delivered' },
 ];
 
 const SCHEDULES = [
@@ -215,7 +215,7 @@ export default function ReportingDashboard() {
         </Card>
 
         {/* Preview */}
-        <Card title="Preview — Daily Ops, Mar 7" meta={
+        <Card title="Preview - Daily Ops, Mar 7" meta={
           <div className="flex items-center gap-2">
             <span onClick={() => alert('Exporting PDF...')} className="text-[11px] font-semibold text-[#1a6b3c] cursor-pointer hover:opacity-70">Export PDF</span>
             <span className="text-[#c5c5bc]">|</span>
@@ -226,9 +226,9 @@ export default function ReportingDashboard() {
             <div className="bg-[#f5f4f0] border border-[#f0eeea] rounded-[10px] p-6 max-h-[460px] overflow-y-auto">
               {/* Header */}
               <div className="mb-5 pb-4 border-b border-[#f0eeea]">
-                <div className="text-[10px] font-bold text-terminal-muted tracking-[2px] uppercase mb-3">Coppice — Sangha Renewables</div>
+                <div className="text-[10px] font-bold text-terminal-muted tracking-[2px] uppercase mb-3">Coppice - Sangha Renewables</div>
                 <div className="font-serif text-xl text-terminal-text mb-1">Daily Operations Report</div>
-                <div className="text-xs text-terminal-muted">March 7, 2026 — Oberon Solar, ERCOT West — Auto-generated at 06:00 CST</div>
+                <div className="text-xs text-terminal-muted">March 7, 2026 - Oberon Solar, ERCOT West - Auto-generated at 06:00 CST</div>
               </div>
 
               {/* Fleet Overview */}
@@ -283,7 +283,7 @@ export default function ReportingDashboard() {
               <div className="mb-5">
                 <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2.5 pb-1.5 border-b border-[#f0eeea]">Curtailment Summary</div>
                 <div className="text-xs text-[#6b6b65] leading-relaxed p-[10px_12px] bg-white border-l-[3px] border-l-[#1a6b3c] rounded-r-lg">
-                  2 curtailment events triggered. 108 machines affected during peak hours (13:00–16:00). Total savings from curtailment: $412. Demand response signal detected at 14:12 — fleet responded within 3 minutes. S19 fleet remained curtailed through end of day due to negative margin.
+                  2 curtailment events triggered. 108 machines affected during peak hours (13:00–16:00). Total savings from curtailment: $412. Demand response signal detected at 14:12 - fleet responded within 3 minutes. S19 fleet remained curtailed through end of day due to negative margin.
                 </div>
               </div>
 
@@ -303,7 +303,7 @@ export default function ReportingDashboard() {
                       { agent: 'Curtailment', actions: 2, note: 'Demand response auto-curtail + S19 peel' },
                       { agent: 'Lead Engine', actions: 34, note: '12 PJM leads discovered, 8 emails sent' },
                       { agent: 'Meeting Bot', actions: 1, note: 'Reassurity call transcribed, 4 action items' },
-                      { agent: 'Pool Routing', actions: 0, note: 'No action — quarterly review next week' },
+                      { agent: 'Pool Routing', actions: 0, note: 'No action - quarterly review next week' },
                     ].map(r => (
                       <tr key={r.agent}>
                         <td className="text-xs font-medium text-terminal-text px-2 py-[7px] border-b border-[#f0eeea] last:border-b-0">{r.agent}</td>

@@ -274,7 +274,7 @@ export default function CoverageExplorerPanel({ initialMode }) {
             {/* CfD explainer */}
             <p className="text-[10px] text-terminal-muted leading-relaxed">
               Below the strike, Sangha pays you the difference. Above the strike, you share {upsideSharePct}% of the upside.
-              Pure financial settlement — no physical delivery.
+              Pure financial settlement - no physical delivery.
             </p>
           </>
         );
@@ -426,16 +426,16 @@ export default function CoverageExplorerPanel({ initialMode }) {
           </p>
         </div>
 
-        {/* How It Works — three-party explainer */}
+        {/* How It Works - three-party explainer */}
         <details className="bg-terminal-bg/50 border border-terminal-border rounded">
           <summary className="px-3 py-2 text-[11px] text-terminal-cyan cursor-pointer hover:text-terminal-text">
             How coverage works (three-party structure)
           </summary>
           <div className="px-3 pb-3 text-[10px] text-terminal-muted leading-relaxed space-y-1.5">
-            <p><span className="text-terminal-text font-semibold">1. You request coverage</span> — choose your instrument, floor price, and term.</p>
-            <p><span className="text-terminal-text font-semibold">2. Sangha structures the deal</span> — our underwriting team assesses risk and structures terms.</p>
-            <p><span className="text-terminal-text font-semibold">3. Institutional capital backs it</span> — a balance sheet partner provides the capital guarantee.</p>
-            <p><span className="text-terminal-text font-semibold">4. You pay a monthly premium</span> — if hashprice drops below your floor, the capital partner pays the difference via Sangha.</p>
+            <p><span className="text-terminal-text font-semibold">1. You request coverage</span> - choose your instrument, floor price, and term.</p>
+            <p><span className="text-terminal-text font-semibold">2. Sangha structures the deal</span> - our underwriting team assesses risk and structures terms.</p>
+            <p><span className="text-terminal-text font-semibold">3. Institutional capital backs it</span> - a balance sheet partner provides the capital guarantee.</p>
+            <p><span className="text-terminal-text font-semibold">4. You pay a monthly premium</span> - if hashprice drops below your floor, the capital partner pays the difference via Sangha.</p>
             <p className="text-terminal-muted/60 pt-1">Your identity is never shared with capital partners. Sangha manages all counterparty relationships.</p>
           </div>
         </details>

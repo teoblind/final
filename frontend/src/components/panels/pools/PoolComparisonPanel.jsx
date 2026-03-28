@@ -22,7 +22,7 @@ export default function PoolComparisonPanel() {
 
   if (data && pools.length < 2) {
     return (
-      <Panel title="Pool Comparison" source="—" loading={false}>
+      <Panel title="Pool Comparison" source="-" loading={false}>
         <div className="flex flex-col items-center justify-center py-6 text-terminal-muted text-sm">
           <p>Connect 2+ mining pools to compare performance.</p>
           <p className="text-xs mt-1">Configure pools in Settings &gt; Pool Configuration.</p>
@@ -56,7 +56,7 @@ export default function PoolComparisonPanel() {
       <div className="space-y-4">
         {data?.isMock && (
           <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-            Demo data — connect pools for real comparison
+            Demo data - connect pools for real comparison
           </div>
         )}
 
@@ -93,7 +93,7 @@ export default function PoolComparisonPanel() {
               <MetricRow
                 label="Reject Rate"
                 values={pools.map(p => `${formatNumber(p.rejectRate, 1)}%`)}
-                expected="—"
+                expected="-"
               />
               <MetricRow
                 label={`Luck (${period})`}
@@ -103,19 +103,19 @@ export default function PoolComparisonPanel() {
               <MetricRow
                 label="Pool Fee"
                 values={pools.map(p => `${formatNumber(p.fee, 1)}%`)}
-                expected="—"
+                expected="-"
               />
               <MetricRow
                 label="Net $/TH/day"
                 values={pools.map(p => `$${formatNumber(p.effectivePerThDay, 4)}`)}
-                expected="—"
+                expected="-"
                 highlight={bestPool?.pool}
                 pools={pools}
               />
               <MetricRow
                 label="Payout"
                 values={pools.map(p => p.payoutFrequency || 'Daily')}
-                expected="—"
+                expected="-"
               />
             </tbody>
           </table>

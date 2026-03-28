@@ -51,7 +51,7 @@ export function KVRow({ label, value, cls = '' }) {
 }
 
 export function timeAgo(dateStr) {
-  if (!dateStr) return '—';
+  if (!dateStr) return '-';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 60) return `${mins}m ago`;

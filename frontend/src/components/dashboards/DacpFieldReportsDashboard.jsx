@@ -81,7 +81,7 @@ export default function DacpFieldReportsDashboard() {
         >
           <option value="">All Jobs</option>
           {jobs.filter(j => j.status === 'complete' && j.margin_pct != null).map(j => (
-            <option key={j.id} value={j.id}>{j.id} — {j.project_name}</option>
+            <option key={j.id} value={j.id}>{j.id} - {j.project_name}</option>
           ))}
         </select>
         <span className="text-[11px] font-mono text-terminal-muted">{filteredReports.length} reports</span>

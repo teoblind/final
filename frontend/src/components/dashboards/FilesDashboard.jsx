@@ -228,7 +228,7 @@ Words: 57 | Hook: Miner Weekly: ERCOT Hits Reset on Texas' AI and Mining Power Q
 PART 2: RENEWABLES MARKET DYNAMICS
 ────────────────────────────────────────
 
-Potential Customers — Solar, Wind, Battery, Hydro IPPs
+Potential Customers - Solar, Wind, Battery, Hydro IPPs
 
 CUSTOMER/TARGET SNAPSHOT
 Target 1: Zelestra | Sector: Solar | Activity: Meta signs solar PPA with Zelestra in Texas for clean energy supply | Opportunity: growth | Why Relevant: Texas solar projects frequently face curtailment due to transmission constraints and negative pricing during peak generation. Sangha can partner with Zelestra to monetize curtailed energy through behind-the-meter mining.
@@ -328,7 +328,7 @@ RENEWABLES DRAFT OUTREACH MESSAGES
 
 Draft 1: Michael Avidan (Clenera, an Enlight Company)
 Subject: Behind-the-meter optimization for renewable assets
-Body: Hi Michael, With renewed focus on solar PPAs like Meta's recent Zelestra agreement, maximizing asset utilization becomes critical. Sangha helps renewable developers monetize curtailed energy through behind-the-meter Bitcoin mining—creating flexible load that ramps instantly with generation while avoiding grid constraints. Given Clenera's portfolio scale, this could transform economics on projects facing curtailment or transmission limitations. Would you be open to a brief call to explore applications for your pipeline? Best regards, Spencer
+Body: Hi Michael, With renewed focus on solar PPAs like Meta's recent Zelestra agreement, maximizing asset utilization becomes critical. Sangha helps renewable developers monetize curtailed energy through behind-the-meter Bitcoin mining-creating flexible load that ramps instantly with generation while avoiding grid constraints. Given Clenera's portfolio scale, this could transform economics on projects facing curtailment or transmission limitations. Would you be open to a brief call to explore applications for your pipeline? Best regards, Spencer
 Words: 72 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas
 
 Draft 2: Larry E. Keith (Solvent Energy)
@@ -343,7 +343,7 @@ Words: 66 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Tex
 
 Draft 4: Sandeep Arora (REV Renewables)
 Subject: Optimizing curtailed energy economics at REV Renewables
-Body: Hi Sandeep, With ERCOT's growing renewable capacity and trading innovations like the new Enwex futures, managing curtailment economics becomes increasingly critical. We've been helping renewables operators monetize stranded energy through flexible, behind-the-meter Bitcoin mining that ramps instantly with your generation curves—turning curtailed MWh into revenue streams without grid constraints. Would you be open to a brief call to explore how this might apply to REV's portfolio? Best regards, Spencer
+Body: Hi Sandeep, With ERCOT's growing renewable capacity and trading innovations like the new Enwex futures, managing curtailment economics becomes increasingly critical. We've been helping renewables operators monetize stranded energy through flexible, behind-the-meter Bitcoin mining that ramps instantly with your generation curves-turning curtailed MWh into revenue streams without grid constraints. Would you be open to a brief call to explore how this might apply to REV's portfolio? Best regards, Spencer
 Words: 70 | Hook: Meta Inks Solar Energy Purchase Agreement with Zelestra in Texas
 
 
@@ -1634,7 +1634,7 @@ function ReportViewerModal({ file, onClose }) {
                     Part 2: Renewables Market Dynamics
                   </h3>
                 </div>
-                <p style={{ fontSize: '12px', color: '#16a34a', fontStyle: 'italic', marginBottom: '20px' }}>Potential Customers — Solar, Wind, Battery, Hydro IPPs</p>
+                <p style={{ fontSize: '12px', color: '#16a34a', fontStyle: 'italic', marginBottom: '20px' }}>Potential Customers - Solar, Wind, Battery, Hydro IPPs</p>
 
                 {/* Customer/Target Snapshot Table */}
                 {report.renewables.targets.length > 0 && (
@@ -1937,7 +1937,7 @@ function ReportViewerModal({ file, onClose }) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-// No demo/sample files — only show real uploaded files
+// No demo/sample files - only show real uploaded files
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -2097,7 +2097,7 @@ export default function FilesDashboard() {
         // Fall through to workspace agent
       }
 
-      // Fallback: try workspace agent (skip for venture — no demo data)
+      // Fallback: try workspace agent (skip for venture - no demo data)
       if (!isVenture) {
         try {
           const res = await fetch(`${API_BASE}/v1/workspace/files`, { headers: authHeaders });
@@ -2204,7 +2204,7 @@ export default function FilesDashboard() {
   useEffect(() => {
     if (prevSyncRef.current === 'running' && syncStatus?.status === 'completed') {
       refreshFiles();
-      showToast(`Drive sync complete — ${syncStatus.files_indexed || 0} files indexed`, 'success');
+      showToast(`Drive sync complete - ${syncStatus.files_indexed || 0} files indexed`, 'success');
     }
     prevSyncRef.current = syncStatus?.status || null;
   }, [syncStatus?.status]);
@@ -2422,7 +2422,7 @@ export default function FilesDashboard() {
                         } else if (file.url) {
                           window.open(`${FILE_BASE}${file.url}`, '_blank');
                         } else {
-                          showToast('Sample file — upload real files with the Upload button above');
+                          showToast('Sample file - upload real files with the Upload button above');
                         }
                       }}
                     >
@@ -2483,7 +2483,7 @@ export default function FilesDashboard() {
                           onClick={(e) => {
                             e.stopPropagation();
                             const gcName = file.name.replace(/DACP_Estimate_|\.xlsx/g, '').replace(/_/g, ' ');
-                            const subject = encodeURIComponent(`DACP Estimate — ${gcName}`);
+                            const subject = encodeURIComponent(`DACP Estimate - ${gcName}`);
                             const body = encodeURIComponent(`Please find attached our estimate for ${gcName}.\n\n${file.url ? 'View: ' + file.url + '\n\n' : ''}Best regards,\nDACP Construction`);
                             window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
                           }}
@@ -2512,7 +2512,7 @@ export default function FilesDashboard() {
                             } else if (file.url) {
                               window.open(`${FILE_BASE}${file.url}`, '_blank');
                             } else {
-                              showToast('Sample file — upload real files with the Upload button above');
+                              showToast('Sample file - upload real files with the Upload button above');
                             }
                           }}
                           className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-[#2c5282] hover:bg-[#e8eef5] transition-colors font-heading"

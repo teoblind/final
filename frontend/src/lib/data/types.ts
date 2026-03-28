@@ -1,5 +1,5 @@
 /**
- * Data layer types — shared interfaces for connectors, caching, and data fetching.
+ * Data layer types - shared interfaces for connectors, caching, and data fetching.
  */
 
 export interface DataResult<T = any> {

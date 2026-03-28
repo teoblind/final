@@ -26,7 +26,7 @@ const DEMO_OUTREACH = [
 
 function LeadDetailModal({ lead, onClose }) {
   if (!lead) return null;
-  const name = lead.venue_name || lead.company_name || '—';
+  const name = lead.venue_name || lead.company_name || '-';
   const contacts = lead.contacts || [];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]" onClick={onClose}>
@@ -49,7 +49,7 @@ function LeadDetailModal({ lead, onClose }) {
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-5">
             {lead.hq_location && <InfoField label="HQ Location" value={lead.hq_location} />}
             {lead.size_scale && <InfoField label="Size / Scale" value={lead.size_scale} />}
-            {(lead.industry || lead.region) && <InfoField label="Industry" value={lead.industry || '—'} />}
+            {(lead.industry || lead.region) && <InfoField label="Industry" value={lead.industry || '-'} />}
             {lead.region && <InfoField label="Region" value={lead.region} />}
             {lead.website && (
               <div className="col-span-2">
@@ -84,7 +84,7 @@ function LeadDetailModal({ lead, onClose }) {
                   <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-[#f5f4f0] border border-[#f0eeea]">
                     <div className="w-9 h-9 rounded-full bg-ui-accent flex items-center justify-center text-white text-[13px] font-bold shrink-0">{(c.name || '?')[0]}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-terminal-text">{c.name || '—'}</div>
+                      <div className="text-[13px] font-semibold text-terminal-text">{c.name || '-'}</div>
                       {c.title && <div className="text-[11px] text-[#6b6b65]">{c.title}</div>}
                       <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
                         {c.email && <a href={`mailto:${c.email}`} className="text-[12px] text-ui-accent hover:opacity-70">{c.email}</a>}
@@ -108,7 +108,7 @@ function LeadDetailModal({ lead, onClose }) {
               <div className="flex items-start gap-3 p-3 rounded-xl bg-[#f5f4f0] border border-[#f0eeea]">
                 <div className="w-9 h-9 rounded-full bg-ui-accent flex items-center justify-center text-white text-[13px] font-bold shrink-0">{(lead.contact_name || '?')[0]}</div>
                 <div>
-                  <div className="text-[13px] font-semibold text-terminal-text">{lead.contact_name || '—'}</div>
+                  <div className="text-[13px] font-semibold text-terminal-text">{lead.contact_name || '-'}</div>
                   {lead.contact_title && <div className="text-[11px] text-[#6b6b65]">{lead.contact_title}</div>}
                   <a href={`mailto:${lead.contact_email}`} className="text-[12px] text-ui-accent hover:opacity-70">{lead.contact_email}</a>
                 </div>
@@ -332,8 +332,8 @@ export default function PipelineTab() {
                 <div className="font-semibold text-terminal-text">{l.venue_name || l.company_name}</div>
                 <div className="text-[11px] text-[#9a9a92]">{l.contactCount || 0} contact{l.contactCount !== 1 ? 's' : ''}</div>
               </div>
-              <div className="text-xs text-[#6b6b65]">{l.industry || '—'}</div>
-              <div className="text-xs text-[#6b6b65]">{l.region || '—'}</div>
+              <div className="text-xs text-[#6b6b65]">{l.industry || '-'}</div>
+              <div className="text-xs text-[#6b6b65]">{l.region || '-'}</div>
               <div>
                 <span className={`text-[10px] font-semibold px-[9px] py-[3px] rounded-md uppercase tracking-[0.3px] ${STAGE_CLS[l.status] || STAGE_CLS.new}`}>{l.status}</span>
               </div>
@@ -344,7 +344,7 @@ export default function PipelineTab() {
           ))}
         </Card>
 
-        <Card title={`Email Thread${selectedLeadId ? ` — ${leads.find(l => l.id === selectedLeadId)?.venue_name || ''}` : ''}`} meta={selectedOutreach.length > 0 ? `${selectedOutreach.length} messages` : null}>
+        <Card title={`Email Thread${selectedLeadId ? ` - ${leads.find(l => l.id === selectedLeadId)?.venue_name || ''}` : ''}`} meta={selectedOutreach.length > 0 ? `${selectedOutreach.length} messages` : null}>
           <div className="p-[18px]">
             {selectedOutreach.length === 0 && (
               <div className="text-center py-8 text-sm text-terminal-muted">
@@ -355,7 +355,7 @@ export default function PipelineTab() {
               <div key={i} className={`border rounded-[10px] p-[14px_16px] mb-[10px] last:mb-0 ${msg.status === 'sent' ? 'border-[#f0eeea] border-l-[3px] border-l-ui-accent bg-terminal-panel' : msg.status === 'draft' ? 'border-dashed border-[#c5c5bc] border-l-[3px] border-l-[#c5c5bc] bg-[#f5f4f0]' : 'border-[#f0eeea]'}`}>
                 <div className="flex items-center justify-between mb-[2px]">
                   <div className="text-xs font-semibold text-terminal-text">
-                    {msg.status === 'draft' ? 'Draft — Pending Approval' : `To: ${msg.contact_name || msg.contact_email}`}
+                    {msg.status === 'draft' ? 'Draft - Pending Approval' : `To: ${msg.contact_name || msg.contact_email}`}
                   </div>
                   <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-md uppercase ${OUTREACH_STATUS_CLS[msg.status] || ''}`}>{msg.status}</span>
                 </div>

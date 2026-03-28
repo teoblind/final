@@ -70,31 +70,31 @@ const TAG_STYLES = {
 
 const MINING_EVENTS = {
   'Today': [
-    { time: '09:42', agent: 'curtailment', action: 'Triggered curtailment protocol', target: 'Crane County Site', detail: 'ERCOT real-time price exceeded $85/MWh — 12 miners paused for 45 min', tags: ['auto'], cost: '$0.03' },
-    { time: '09:15', agent: 'outreach', action: 'Sent personalized outreach', target: 'James Torres, VP Ops — SunPeak Energy', detail: 'Referenced ERCOT curtailment data & behind-the-meter opportunity', tags: ['auto'], cost: '$0.02' },
-    { time: '08:50', agent: 'hivemind', action: 'Answered operator question', target: '#general channel', detail: '"What\'s our current hashrate allocation?" — responded with live pool breakdown', tags: ['auto'], cost: '$0.04' },
-    { time: '08:30', agent: 'meetings', action: 'Transcribed strategy call', target: 'Reassurity Product Strategy', detail: '42 min — 6 attendees — 4 action items extracted and assigned', tags: ['auto'], cost: '$0.08' },
-    { time: '06:00', agent: 'workspace', action: 'Created Weekly Executive Briefing', target: '/Sangha/Presentations/', detail: '8-slide deck — KPIs, fleet status, revenue, risk flags, action items', tags: ['auto', 'proactive'], cost: '$0.05' },
+    { time: '09:42', agent: 'curtailment', action: 'Triggered curtailment protocol', target: 'Crane County Site', detail: 'ERCOT real-time price exceeded $85/MWh - 12 miners paused for 45 min', tags: ['auto'], cost: '$0.03' },
+    { time: '09:15', agent: 'outreach', action: 'Sent personalized outreach', target: 'James Torres, VP Ops - SunPeak Energy', detail: 'Referenced ERCOT curtailment data & behind-the-meter opportunity', tags: ['auto'], cost: '$0.02' },
+    { time: '08:50', agent: 'hivemind', action: 'Answered operator question', target: '#general channel', detail: '"What\'s our current hashrate allocation?" - responded with live pool breakdown', tags: ['auto'], cost: '$0.04' },
+    { time: '08:30', agent: 'meetings', action: 'Transcribed strategy call', target: 'Reassurity Product Strategy', detail: '42 min - 6 attendees - 4 action items extracted and assigned', tags: ['auto'], cost: '$0.08' },
+    { time: '06:00', agent: 'workspace', action: 'Created Weekly Executive Briefing', target: '/Sangha/Presentations/', detail: '8-slide deck - KPIs, fleet status, revenue, risk flags, action items', tags: ['auto', 'proactive'], cost: '$0.05' },
   ],
   'Yesterday': [
     { time: '16:20', agent: 'pool', action: 'Rebalanced pool allocation', target: 'Foundry → Luxor', detail: 'Shifted 15 PH/s based on 7-day fee differential of 0.3%', tags: ['approved'], cost: '$0.01' },
     { time: '14:45', agent: 'reporting', action: 'Generated weekly briefing', target: 'Week 10 Operations Report', detail: 'Revenue, hashrate, curtailment savings, outreach pipeline summary', tags: ['auto', 'proactive'], cost: '$0.12' },
-    { time: '11:30', agent: 'outreach', action: 'Drafted follow-up email', target: 'Mark Liu — GridScale Partners', detail: '5 days since last contact — awaiting operator approval', tags: ['manual', 'alert'], cost: '$0.02' },
+    { time: '11:30', agent: 'outreach', action: 'Drafted follow-up email', target: 'Mark Liu - GridScale Partners', detail: '5 days since last contact - awaiting operator approval', tags: ['manual', 'alert'], cost: '$0.02' },
     { time: '09:00', agent: 'curtailment', action: 'Published daily ERCOT forecast', target: 'Operations Dashboard', detail: 'Peak price windows: 14:00–16:00 CST, recommended pre-curtailment at 13:45', tags: ['auto', 'proactive'], cost: '$0.05' },
-    { time: '07:30', agent: 'workspace', action: 'Updated Fleet Analysis spreadsheet', target: '/Sangha/Fleet/', detail: 'Post-difficulty-adjustment projections — S19 tier now marginal at current hashprice', tags: ['auto'], cost: '$0.03' },
+    { time: '07:30', agent: 'workspace', action: 'Updated Fleet Analysis spreadsheet', target: '/Sangha/Fleet/', detail: 'Post-difficulty-adjustment projections - S19 tier now marginal at current hashprice', tags: ['auto'], cost: '$0.03' },
   ],
 };
 
 const DACP_EVENTS = {
   'Today': [
-    { time: '9:06 AM', agent: 'estimating', action: 'Generated estimate', target: 'Bishop Arts Mixed-Use', detail: '$847,300 — Rogers-O\'Brien — 5 line items', tags: ['auto'], cost: '$0.08' },
+    { time: '9:06 AM', agent: 'estimating', action: 'Generated estimate', target: 'Bishop Arts Mixed-Use', detail: '$847,300 - Rogers-O\'Brien - 5 line items', tags: ['auto'], cost: '$0.08' },
     { time: '8:42 AM', agent: 'workspace', action: 'Received RFQ email', target: 'Bishop Arts Mixed-Use', detail: 'From Rogers-O\'Brien (dkim@rogers-obrien.com)', tags: ['auto'], cost: '$0.00' },
     { time: '6:00 AM', agent: 'workspace', action: 'Generated daily ops report', target: 'March 9', detail: '3 active jobs, 2 estimates pending', tags: ['auto'], cost: '$0.04' },
   ],
   'Yesterday': [
-    { time: '4:30 PM', agent: 'field', action: 'Daily log submitted', target: 'Westpark Retail Center', detail: 'Carlos Mendez — 52 CY poured, 6 finishers', tags: ['manual'], cost: '$0.00' },
+    { time: '4:30 PM', agent: 'field', action: 'Daily log submitted', target: 'Westpark Retail Center', detail: 'Carlos Mendez - 52 CY poured, 6 finishers', tags: ['manual'], cost: '$0.00' },
     { time: '2:25 PM', agent: 'estimating', action: 'Drafted response', target: 'I-35 Retaining Walls', detail: 'Email to Hensel Phelps (pending approval)', tags: ['auto'], cost: '$0.06' },
-    { time: '2:20 PM', agent: 'estimating', action: 'Generated estimate', target: 'I-35 Retaining Walls', detail: '$312,000 — Hensel Phelps', tags: ['auto'], cost: '$0.08' },
+    { time: '2:20 PM', agent: 'estimating', action: 'Generated estimate', target: 'I-35 Retaining Walls', detail: '$312,000 - Hensel Phelps', tags: ['auto'], cost: '$0.08' },
     { time: '2:15 PM', agent: 'workspace', action: 'Received RFQ', target: 'I-35 Retaining Walls', detail: 'From Hensel Phelps (lchen@henselphelps.com)', tags: ['auto'], cost: '$0.00' },
     { time: '11:00 AM', agent: 'workspace', action: 'Discovered 6 new GC contacts', target: 'DFW Area', detail: 'Austin Commercial, Balfour Beatty + 4 others', tags: ['proactive'], cost: '$0.12' },
     { time: '9:30 AM', agent: 'estimating', action: 'Started parsing specs', target: 'McKinney Town Center', detail: '48-page spec document, 3 line items identified', tags: ['auto'], cost: '$0.10' },
@@ -109,7 +109,7 @@ const DACP_EVENTS = {
   'March 5': [
     { time: '4:00 PM', agent: 'workspace', action: 'Transcribed meeting', target: 'Weekly Team Standup', detail: '45 min, 4 action items', tags: ['auto'], cost: '$0.18' },
     { time: '2:00 PM', agent: 'workspace', action: 'Followed up', target: 'Memorial Hermann Phase 2', detail: 'No response from Turner in 48 hours', tags: ['proactive'], cost: '$0.02' },
-    { time: '10:00 AM', agent: 'estimating', action: 'Recommended declining', target: 'Plano ISD Natatorium', detail: 'Outside core competency — specialty coatings', tags: ['auto'], cost: '$0.06' },
+    { time: '10:00 AM', agent: 'estimating', action: 'Recommended declining', target: 'Plano ISD Natatorium', detail: 'Outside core competency - specialty coatings', tags: ['auto'], cost: '$0.06' },
   ],
   'March 4': [
     { time: '3:00 PM', agent: 'workspace', action: 'Transcribed meeting', target: 'DPR Samsung Fab Scope Review', detail: '25 min, 2 action items', tags: ['auto'], cost: '$0.12' },

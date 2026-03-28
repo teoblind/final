@@ -86,7 +86,7 @@ export default function PriceHeatmapPanel() {
     >
       {/* Legend */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-terminal-muted">{node} — Last {days} days</span>
+        <span className="text-xs text-terminal-muted">{node} - Last {days} days</span>
         <div className="flex items-center gap-1 text-xs text-terminal-muted">
           <span>Cheap</span>
           <div className="flex">
@@ -122,7 +122,7 @@ export default function PriceHeatmapPanel() {
                   key={ci}
                   className="flex-1 h-4 mx-px rounded-sm cursor-crosshair"
                   style={{ backgroundColor: getCellColor(price) }}
-                  title={price != null ? `${dates[ri]} ${String(ci).padStart(2, '0')}:00 — $${formatNumber(price, 2)}/MWh` : 'No data'}
+                  title={price != null ? `${dates[ri]} ${String(ci).padStart(2, '0')}:00 - $${formatNumber(price, 2)}/MWh` : 'No data'}
                 />
               ))}
             </div>
@@ -135,7 +135,7 @@ export default function PriceHeatmapPanel() {
         <div className="mt-3 pt-3 border-t border-terminal-border text-xs text-terminal-muted">
           <p>
             Price range: <span className="text-terminal-green">${formatNumber(priceRange.min, 2)}</span>
-            {' — '}
+            {' - '}
             <span className="text-terminal-red">${formatNumber(priceRange.max, 2)}</span>/MWh
           </p>
         </div>

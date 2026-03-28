@@ -48,7 +48,7 @@ function ScopeExtractionCard({ data }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5">
               <span className="font-semibold text-terminal-text">{item.name}</span>
-              <span className="text-[#6b6b65]">— {item.quantity}</span>
+              <span className="text-[#6b6b65]">- {item.quantity}</span>
               {item.section && (
                 <span className="text-[10px] font-mono text-[#9a9a92]">({item.section})</span>
               )}
@@ -427,7 +427,7 @@ function DocumentsTab({ inbox, loading }) {
         {/* Extraction table for the first document with scope items */}
         {extractionItems.length > 0 && (
           <div className="mb-2">
-            <div className="text-[13px] font-semibold text-terminal-text mb-3">{detailDoc.name} — Extraction</div>
+            <div className="text-[13px] font-semibold text-terminal-text mb-3">{detailDoc.name} - Extraction</div>
             <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
               <table className="w-full text-[11px]">
                 <thead>

@@ -67,7 +67,7 @@ export default function WorkerFleetPanel() {
 
   if (data && !data.configured) {
     return (
-      <Panel title="Worker Fleet" source="—" loading={false}>
+      <Panel title="Worker Fleet" source="-" loading={false}>
         <div className="flex flex-col items-center justify-center py-6 text-terminal-muted text-sm">
           <p>Connect your pool to see worker details.</p>
         </div>
@@ -149,7 +149,7 @@ export default function WorkerFleetPanel() {
           <div className="max-h-[400px] overflow-y-auto">
             {pageWorkers.map((w, i) => {
               const si = statusIcon(w.status);
-              const timeSince = w.lastShare ? getTimeSince(w.lastShare) : '—';
+              const timeSince = w.lastShare ? getTimeSince(w.lastShare) : '-';
               return (
                 <div
                   key={i}
@@ -159,11 +159,11 @@ export default function WorkerFleetPanel() {
                 >
                   <div className="text-terminal-text truncate" title={w.name}>{w.name}</div>
                   <div className="text-right text-terminal-text font-sans">
-                    {w.hashrate > 0 ? `${formatNumber(w.hashrate, 0)} TH/s` : '—'}
+                    {w.hashrate > 0 ? `${formatNumber(w.hashrate, 0)} TH/s` : '-'}
                   </div>
                   <div className={`text-center ${si.color}`}>{si.icon} {si.label}</div>
                   <div className={`text-right ${(w.rejectRate || 0) > 2 ? 'text-terminal-red' : 'text-terminal-muted'}`}>
-                    {w.rejectRate !== undefined ? `${formatNumber(w.rejectRate, 1)}%` : '—'}
+                    {w.rejectRate !== undefined ? `${formatNumber(w.rejectRate, 1)}%` : '-'}
                   </div>
                   <div className="text-right text-terminal-muted">{timeSince}</div>
                 </div>

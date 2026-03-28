@@ -50,7 +50,7 @@ export default function GenerationMixPanel() {
       {isMock && (
         <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-terminal-amber/10 border border-terminal-amber/20 rounded text-xs text-terminal-amber">
           <Info size={14} />
-          <span>Simulated — configure EIA_API_KEY for live data</span>
+          <span>Simulated - configure EIA_API_KEY for live data</span>
         </div>
       )}
 
@@ -106,7 +106,7 @@ export default function GenerationMixPanel() {
 
       {/* Context note */}
       <p className="text-xs text-terminal-muted mt-3 pt-3 border-t border-terminal-border">
-        High wind/solar output often drives negative pricing — ideal for mining operations.
+        High wind/solar output often drives negative pricing - ideal for mining operations.
       </p>
     </Panel>
   );

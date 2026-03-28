@@ -116,7 +116,7 @@ export function FleetImpactCard({ fleet }) {
       <p className="text-xs font-semibold text-terminal-text mb-2">Fleet-Specific Impact</p>
       {fleet.breakeven_breached && (
         <div className="flex items-center gap-2 bg-terminal-red/10 border border-terminal-red/20 rounded px-3 py-2 mb-2 text-xs text-terminal-red">
-          <span className="font-bold">BREAKEVEN BREACHED</span> — Fleet becomes unprofitable under this scenario
+          <span className="font-bold">BREAKEVEN BREACHED</span> - Fleet becomes unprofitable under this scenario
         </div>
       )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

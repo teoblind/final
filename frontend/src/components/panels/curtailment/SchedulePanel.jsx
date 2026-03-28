@@ -92,7 +92,7 @@ export default function SchedulePanel() {
         <div className="space-y-4">
           {isMock && (
             <div className="bg-terminal-amber/10 border border-terminal-amber/20 rounded px-3 py-2 text-xs text-terminal-amber">
-              Mock DAM data — real prices publish daily ~1PM
+              Mock DAM data - real prices publish daily ~1PM
             </div>
           )}
 
@@ -132,10 +132,10 @@ export default function SchedulePanel() {
                   className={`flex-1 ${stateColor[h.state] || 'bg-terminal-border'} ${
                     i === currentHour ? 'ring-1 ring-white' : ''
                   } relative group cursor-default`}
-                  title={`${h.hour}:00 — ${stateLabel[h.state]} — $${h.priceMWh?.toFixed(1)}/MWh`}
+                  title={`${h.hour}:00 - ${stateLabel[h.state]} - $${h.priceMWh?.toFixed(1)}/MWh`}
                 >
                   <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-terminal-panel border border-terminal-border rounded px-2 py-1 text-[10px] text-terminal-text whitespace-nowrap z-10 hidden group-hover:block">
-                    {h.hour}:00 — {stateLabel[h.state]}<br />
+                    {h.hour}:00 - {stateLabel[h.state]}<br />
                     ${h.priceMWh?.toFixed(1)}/MWh
                     {h.note && <><br />{h.note}</>}
                   </div>
@@ -161,7 +161,7 @@ export default function SchedulePanel() {
                           className={`flex-1 ${
                             h.action === 'MINE' ? 'bg-terminal-green' : 'bg-terminal-red/60'
                           } ${i === currentHour ? 'ring-1 ring-white' : ''}`}
-                          title={`${h.hour}:00 — ${ms.model} — ${h.action}`}
+                          title={`${h.hour}:00 - ${ms.model} - ${h.action}`}
                         />
                       ))}
                     </div>

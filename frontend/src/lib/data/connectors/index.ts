@@ -2,7 +2,7 @@
  * Data Connector Registry
  *
  * Each external data source gets a connector with a consistent interface.
- * All connectors proxy through the backend API — the frontend never calls
+ * All connectors proxy through the backend API - the frontend never calls
  * external APIs directly.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Task Tracker Dashboard — Background agent jobs with progress tracking,
+ * Task Tracker Dashboard - Background agent jobs with progress tracking,
  * agent-to-user messaging, and key vault management.
  */
 
