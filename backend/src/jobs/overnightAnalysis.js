@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 import {
   getAllTenants, runWithTenant,
   getDacpBidRequests, getDacpEstimates, getDacpJobs, getDacpStats,
-  insertAgentAssignment, clearOldAssignments, clearProposedAssignments,
+  insertAgentAssignment, clearOldAssignments, trimProposedAssignments,
   getAgentAssignments, getUsersByTenant,
 } from '../cache/database.js';
 
@@ -227,14 +227,14 @@ async function runOvernightAnalysis() {
         // Clean old completed/dismissed assignments
         clearOldAssignments(tenant.id, 7);
 
-        // Clear stale proposed assignments before generating fresh ones
-        clearProposedAssignments(tenant.id);
+        // Trim proposed assignments to keep at most 50 (oldest get deleted)
+        trimProposedAssignments(tenant.id, 50);
 
         // Gather context + existing tasks to avoid duplicates
         const context = gatherDacpContext(tenant.id);
         const existingAssignments = getAgentAssignments(tenant.id);
         const existingTitles = existingAssignments
-          .filter(a => ['confirmed', 'in_progress', 'completed'].includes(a.status))
+          .filter(a => ['proposed', 'confirmed', 'in_progress', 'completed'].includes(a.status))
           .map(a => a.title);
         if (existingTitles.length > 0) {
           context.existingTasks = existingTitles;

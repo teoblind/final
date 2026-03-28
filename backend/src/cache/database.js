@@ -6378,6 +6378,15 @@ export function clearProposedAssignments(tenantId) {
   db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status = 'proposed'`).run(tenantId);
 }
 
+export function trimProposedAssignments(tenantId, maxKeep = 50) {
+  db.prepare(`
+    DELETE FROM agent_assignments WHERE tenant_id = ? AND status = 'proposed' AND id NOT IN (
+      SELECT id FROM agent_assignments WHERE tenant_id = ? AND status = 'proposed'
+      ORDER BY created_at DESC LIMIT ?
+    )
+  `).run(tenantId, tenantId, maxKeep);
+}
+
 // ─── CC Thread Tracker CRUD ──────────────────────────────────────────────
 
 export function upsertCcThreadTracker(tenantId, threadId, { subject, participant, hasAttachment }) {

@@ -763,18 +763,17 @@ function AppContent() {
               <div className="flex items-center gap-2.5">
                 <h1 className="text-lg font-heading font-bold tracking-[0.3px]">{tabLabels[activeTab] || 'Overview'}</h1>
               </div>
-            </div>
-
-            {/* Search bar */}
-            <div className="hidden sm:flex items-center flex-1 max-w-sm mx-6">
-              <div className="relative w-full">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-terminal-muted" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="w-full pl-9 pr-14 py-1.5 rounded-lg text-[12px] bg-[#f5f4f0] border border-terminal-border text-terminal-text placeholder:text-terminal-muted focus:outline-none focus:border-terminal-green transition-colors"
-                />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-terminal-muted bg-terminal-panel border border-terminal-border rounded px-1.5 py-[1px] font-mono">⌘K</span>
+              {/* Search bar */}
+              <div className="hidden sm:flex items-center max-w-[260px]">
+                <div className="relative w-full">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-terminal-muted" />
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    className="w-full pl-9 pr-14 py-1.5 rounded-lg text-[12px] bg-[#f5f4f0] border border-terminal-border text-terminal-text placeholder:text-terminal-muted focus:outline-none focus:border-terminal-green transition-colors"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-terminal-muted bg-terminal-panel border border-terminal-border rounded px-1.5 py-[1px] font-mono">⌘K</span>
+                </div>
               </div>
             </div>
 
