@@ -1380,6 +1380,39 @@ export function setCache(key, data, ttlMinutes = 60) {
   stmt.run(key, JSON.stringify(data), now.toISOString(), expiresAt.toISOString());
 }
 
+// Manual data helpers
+export function addManualData(category, metric, value, date, notes = null) {
+  const stmt = db.prepare(`
+    INSERT INTO manual_data (category, metric, value, date, notes)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  return stmt.run(category, metric, value, date, notes);
+}
+
+export function getManualData(category, metric = null, startDate = null, endDate = null) {
+  let query = 'SELECT * FROM manual_data WHERE category = ?';
+  const params = [category];
+
+  if (metric) {
+    query += ' AND metric = ?';
+    params.push(metric);
+  }
+
+  if (startDate) {
+    query += ' AND date >= ?';
+    params.push(startDate);
+  }
+
+  if (endDate) {
+    query += ' AND date <= ?';
+    params.push(endDate);
+  }
+
+  query += ' ORDER BY date DESC';
+
+  return db.prepare(query).all(...params);
+}
+
 // Alert helpers
 export function getAlerts() {
   return db.prepare('SELECT * FROM alerts WHERE enabled = 1').all();
