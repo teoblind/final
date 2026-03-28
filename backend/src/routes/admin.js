@@ -857,6 +857,51 @@ router.get('/system/health', async (req, res) => {
         target: 'Mac (claude CLI)',
         cliEnabled: process.env.CLAUDE_CLI_ENABLED === 'true',
       };
+
+      // Check OAuth token expiry on Mac (via SSH)
+      if (tunnelUp) {
+        try {
+          const oauthStatus = await new Promise((resolve) => {
+            const { spawn } = require('child_process');
+            const sshKey = process.env.CLAUDE_SSH_KEY || '/root/.ssh/id_ed25519';
+            const sshUser = process.env.CLAUDE_SSH_USER || 'teoblind';
+            const proc = spawn('ssh', [
+              '-4', '-i', sshKey, '-p', '2222',
+              '-o', 'StrictHostKeyChecking=no', '-o', 'ConnectTimeout=5', '-o', 'BatchMode=yes',
+              `${sshUser}@127.0.0.1`,
+              '/usr/bin/python3', '-c',
+              'import json,time; d=json.load(open("/Users/teoblind/.claude-oauth-token")); exp=d.get("expiresAt",0); now=int(time.time()*1000); print(json.dumps({"expiresAt":exp,"remainingMs":exp-now,"valid":exp>now}))',
+            ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+            let out = '';
+            proc.stdout.on('data', (d) => { out += d; });
+            const timer = setTimeout(() => { proc.kill('SIGTERM'); resolve(null); }, 6000);
+            proc.on('close', () => {
+              clearTimeout(timer);
+              try { resolve(JSON.parse(out.trim())); } catch { resolve(null); }
+            });
+          });
+
+          if (oauthStatus) {
+            const remainingHrs = oauthStatus.remainingMs / 3600000;
+            health.services.tunnel.oauth = {
+              valid: oauthStatus.valid,
+              expiresAt: new Date(oauthStatus.expiresAt).toISOString(),
+              remainingHours: Math.round(remainingHrs * 10) / 10,
+            };
+            // Mark tunnel as warning if token expires within 2 hours
+            if (!oauthStatus.valid) {
+              health.services.tunnel.status = 'down';
+              health.services.tunnel.oauth.message = 'OAuth token expired — tasks will fail';
+            } else if (remainingHrs < 2) {
+              health.services.tunnel.status = 'warning';
+              health.services.tunnel.oauth.message = `Token expires in ${Math.round(remainingHrs * 10) / 10}h`;
+            }
+          }
+        } catch (oauthErr) {
+          health.services.tunnel.oauth = { valid: false, error: oauthErr.message };
+        }
+      }
     } catch (e) {
       health.services.tunnel = {
         name: 'CLI Tunnel',

@@ -1625,6 +1625,12 @@ function SystemHealthPage() {
       { label: 'Host', value: `${services.tunnel?.host || '127.0.0.1'}:${services.tunnel?.port || 2222}` },
       { label: 'Target', value: services.tunnel?.target || 'Mac (claude CLI)' },
       { label: 'CLI Enabled', value: services.tunnel?.cliEnabled ? 'Yes' : 'No' },
+      ...(services.tunnel?.oauth ? [
+        { label: 'OAuth', value: services.tunnel.oauth.valid
+          ? `Valid (${services.tunnel.oauth.remainingHours}h left)`
+          : 'EXPIRED' },
+        ...(services.tunnel.oauth.message ? [{ label: 'Alert', value: services.tunnel.oauth.message }] : []),
+      ] : []),
     ], usage: null },
   ];
 
@@ -1663,6 +1669,25 @@ function SystemHealthPage() {
           {Object.keys(services).length} services monitored
         </span>
       </div>
+
+      {/* OAuth Token Warning */}
+      {services.tunnel?.oauth && (!services.tunnel.oauth.valid || services.tunnel.oauth.remainingHours < 2) && (
+        <div className="rounded-2xl px-5 py-4 mb-4 flex items-center gap-3 bg-[#fdf6e8] border border-[#f0d68a]">
+          <AlertTriangle size={18} className="text-[#b8860b] flex-shrink-0" />
+          <div>
+            <span className="text-[13px] font-bold text-[#b8860b]">
+              {!services.tunnel.oauth.valid
+                ? 'Claude Max OAuth Token Expired'
+                : `OAuth Token Expires in ${services.tunnel.oauth.remainingHours}h`}
+            </span>
+            <p className="text-[11px] text-[#b8860b]/70 mt-0.5">
+              {!services.tunnel.oauth.valid
+                ? 'Agent tasks will fail. Run a Claude Code session on the Mac to refresh, then the wrapper script will auto-update the cached token.'
+                : 'Token will expire soon. Start a Claude Code session on the Mac to refresh it automatically.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Service Cards Grid */}
       <Section title="Services">
