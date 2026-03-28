@@ -440,6 +440,26 @@ export function generateHtml({ title, content, meta = {}, theme }) {
 
 const SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '/root/google-service-account.json';
 
+/** Get Drive client using tenant's OAuth token (real Workspace storage) */
+async function getTenantDrive(tenantId) {
+  if (!tenantId) return null;
+  try {
+    const { getTenantDb } = await import('../cache/database.js');
+    const tdb = getTenantDb(tenantId);
+    const row = tdb.prepare('SELECT gmail_refresh_token FROM tenant_email_config WHERE tenant_id = ? LIMIT 1').get(tenantId);
+    if (!row?.gmail_refresh_token) return null;
+    const oauth2 = new google.auth.OAuth2(
+      process.env.GMAIL_CLIENT_ID,
+      process.env.GMAIL_CLIENT_SECRET,
+    );
+    oauth2.setCredentials({ refresh_token: row.gmail_refresh_token });
+    return google.drive({ version: 'v3', auth: oauth2 });
+  } catch (err) {
+    console.warn(`[DocumentService] Tenant OAuth drive failed: ${err.message}`);
+    return null;
+  }
+}
+
 async function getServiceDrive() {
   const auth = new google.auth.GoogleAuth({
     keyFile: SERVICE_ACCOUNT_KEY,
@@ -453,9 +473,12 @@ async function getServiceDrive() {
  * Share with the specified email(s).
  * Optionally place in a specific folder.
  */
-export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [], folderId, supersedePrevious }) {
+export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [], folderId, supersedePrevious, tenantId }) {
   try {
-    const drive = await getServiceDrive();
+    // Try tenant OAuth first (has real Workspace storage), fall back to service account
+    let drive = tenantId ? await getTenantDrive(tenantId) : null;
+    const usingTenantOAuth = !!drive;
+    if (!drive) drive = await getServiceDrive();
 
     const requestBody = { name: title };
     if (folderId) requestBody.parents = [folderId];
@@ -493,7 +516,17 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
     const fileId = res.data.id;
     const webViewLink = res.data.webViewLink;
 
-    // Share with each email
+    // Make file viewable by anyone with link (so "Open in Google Docs" always works)
+    try {
+      await drive.permissions.create({
+        fileId,
+        requestBody: { role: 'reader', type: 'anyone' },
+      });
+    } catch (permErr) {
+      console.warn(`[DocumentService] Failed to set public access: ${permErr.message}`);
+    }
+
+    // Also share as writer with specific emails
     for (const email of shareWithEmails) {
       if (!email || email.includes('localhost')) continue;
       try {
@@ -504,12 +537,6 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
         });
       } catch (shareErr) {
         console.warn(`[DocumentService] Failed to share with ${email}: ${shareErr.message}`);
-        try {
-          await drive.permissions.create({
-            fileId,
-            requestBody: { role: 'writer', type: 'anyone' },
-          });
-        } catch {}
       }
     }
 
@@ -530,7 +557,7 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
  * @param {{ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label }} params
  * @returns {{ pdfPath, gdocUrl, gdocId, artifacts }}
  */
-export async function generateReport({ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label }) {
+export async function generateReport({ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label, tenantId }) {
   const meta = {
     tenantName: tenantName || 'Coppice Client',
     date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
@@ -558,6 +585,7 @@ export async function generateReport({ title, content, tenantName, agentName, us
     shareWithEmails: shareEmails,
     folderId: folderId || null,
     supersedePrevious: !!folderId,
+    tenantId,
   });
 
   const artifacts = [

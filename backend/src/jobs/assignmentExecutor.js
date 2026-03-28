@@ -486,6 +486,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
         agentName: 'Coppice AI',
         userEmail,
         assignmentId: assignment.id,
+        tenantId,
       });
 
       // Merge generated artifacts with any agent-emitted artifacts
