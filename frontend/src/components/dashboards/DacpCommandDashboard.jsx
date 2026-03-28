@@ -703,9 +703,24 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                 <CheckCircle size={11} /> Done
                               </span>
                               {a.visibility === 'shared' && (
-                                <span className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
-                                  <Users size={8} /> Shared
-                                </span>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${a.id}/unshare`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                      });
+                                      if (res.ok) {
+                                        setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, visibility: 'private' } : x));
+                                        setSharedAssignments(prev => { const n = { ...prev }; delete n[`internal-${a.id}`]; return n; });
+                                      }
+                                    } catch {}
+                                  }}
+                                  className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer"
+                                  title="Click to unshare"
+                                >
+                                  <Users size={8} /> Shared <X size={8} />
+                                </button>
                               )}
                               <button
                                 onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
