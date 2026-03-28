@@ -69,14 +69,20 @@ const THEMES = {
 /** Strip conversational agent text that shouldn't appear in a formal report */
 function cleanForReport(text) {
   let cleaned = text;
-  // Remove conversational preamble lines
-  cleaned = cleaned.replace(/^(The Google Doc is live\..*|Here['']s the (?:full )?summary:?|✅|📄.*|📁.*)$/gm, '');
+  // Remove lines with emoji indicators of agent chat
+  cleaned = cleaned.replace(/^.*[✅📄📁📋🔗💡🤖].*$/gm, '');
+  // Remove conversational preamble/postamble
+  cleaned = cleaned.replace(/^(The Google Doc is live\.?.*|Here['']s the (?:full )?summary:?.*|I['']ve (?:created|generated|uploaded|prepared|built|saved|shared).*|The (?:report|document|brief) (?:is|has been).*|Let me know if.*|Would you like.*|I haven['']t sent an email.*|Per standing policy.*)$/gmi, '');
+  // Remove "Document:" / "Saved to:" / "Full Report:" reference lines
+  cleaned = cleaned.replace(/^.*(?:Document:|Saved to:|Full Report:|Open in Google).*$/gmi, '');
   // Remove markdown link syntax but keep text: [text](url) -> text
   cleaned = cleaned.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1');
   // Remove raw URLs on their own line
   cleaned = cleaned.replace(/^\s*https?:\/\/\S+\s*$/gm, '');
   // Remove "Note: Per standing policy..." agent disclaimers
-  cleaned = cleaned.replace(/^\*?Note:?\s*Per standing policy.*$/gm, '');
+  cleaned = cleaned.replace(/^\*?Note:?\s*Per standing policy.*$/gmi, '');
+  // Remove triple+ blank lines, collapse to double
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
   // Remove leading/trailing blank lines
   cleaned = cleaned.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '');
   return cleaned;
