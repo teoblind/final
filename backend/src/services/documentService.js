@@ -1,19 +1,18 @@
 /**
- * Document Service — Generate DOCX and PDF files from markdown content,
+ * Document Service - Generate styled PDF reports from markdown content,
  * upload to Google Drive, and share with users.
  *
+ * Pipeline: Markdown -> Research-style HTML (gradient cover, tight body) -> Chrome headless PDF -> Drive upload
+ *
  * Features:
- * - Cover page with title, tenant name, date, "Prepared by Coppice AI"
- * - Markdown tables → formatted tables
- * - PDF via wkhtmltopdf or Chrome headless
+ * - Gradient cover page with title, tenant name, date, accent keyword
+ * - Ultra-tight body text (11px Inter, 1.5 line-height)
+ * - Color-coded callout boxes, stat grids, risk tags
+ * - Markdown tables -> styled HTML tables
+ * - Chrome headless PDF rendering (wkhtmltopdf fallback)
  * - Google Drive upload + sharing via service account
  */
 
-import {
-  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType,
-  BorderStyle, TableRow, TableCell, Table, WidthType, PageBreak,
-  ShadingType, Footer, PageNumber, NumberFormat,
-} from 'docx';
 import { writeFileSync, mkdirSync, existsSync, createReadStream, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -28,280 +27,46 @@ if (!existsSync(OUTPUT_DIR)) {
   mkdirSync(OUTPUT_DIR, { recursive: true });
 }
 
-const NAVY = '1e3a5f';
-const LIGHT_BG = 'f0f4f8';
-const ACCENT = '2d7d46';
+// ---- Theme presets (gradient + accent color per industry/type) ----
 
-// ─── Markdown Parsing ───────────────────────────────────────────────────────
+const THEMES = {
+  analysis: {
+    gradient: 'linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 40%, #2d1b69 70%, #4a1a8a 100%)',
+    radialOverlay: `radial-gradient(circle at 70% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                    radial-gradient(circle at 30% 70%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)`,
+    accent: '#a78bfa',
+    h3Color: '#4a1a8a',
+    statColor: '#4a1a8a',
+  },
+  research: {
+    gradient: 'linear-gradient(135deg, #0a1628 0%, #0d2137 30%, #1a3a5c 60%, #2d5a3f 100%)',
+    radialOverlay: `radial-gradient(circle at 60% 40%, rgba(45, 90, 63, 0.2) 0%, transparent 50%),
+                    radial-gradient(circle at 40% 60%, rgba(29, 78, 137, 0.15) 0%, transparent 50%)`,
+    accent: '#6ee7b7',
+    h3Color: '#1a5c3a',
+    statColor: '#166534',
+  },
+  construction: {
+    gradient: 'linear-gradient(135deg, #1a0f0a 0%, #2d1f14 30%, #4a3728 60%, #5c4a3a 100%)',
+    radialOverlay: `radial-gradient(circle at 60% 40%, rgba(180, 130, 70, 0.15) 0%, transparent 50%),
+                    radial-gradient(circle at 40% 60%, rgba(120, 80, 40, 0.1) 0%, transparent 50%)`,
+    accent: '#d4a574',
+    h3Color: '#8b6914',
+    statColor: '#7c5c1e',
+  },
+  default: {
+    gradient: 'linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 40%, #1e3a5f 70%, #2d5a3f 100%)',
+    radialOverlay: `radial-gradient(circle at 70% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+                    radial-gradient(circle at 30% 70%, rgba(16, 185, 129, 0.1) 0%, transparent 50%)`,
+    accent: '#60a5fa',
+    h3Color: '#1e3a5f',
+    statColor: '#1e3a5f',
+  },
+};
 
-function parseMarkdown(markdown) {
-  const lines = markdown.split('\n');
-  const elements = [];
-  let i = 0;
+// ---- Markdown -> HTML conversion ----
 
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (line.trim() === '') { i++; continue; }
-
-    // Horizontal rule
-    if (/^---+$/.test(line.trim())) {
-      elements.push({ type: 'hr' });
-      i++;
-      continue;
-    }
-
-    // Table detection: line with | separators
-    if (line.includes('|') && line.trim().startsWith('|')) {
-      const tableRows = [];
-      while (i < lines.length && lines[i].includes('|') && lines[i].trim().startsWith('|')) {
-        const row = lines[i].trim();
-        // Skip separator rows (|---|---|)
-        if (/^\|[\s\-:]+\|/.test(row) && !row.match(/[a-zA-Z0-9]/)) {
-          i++;
-          continue;
-        }
-        const cells = row.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => c.trim());
-        tableRows.push(cells);
-        i++;
-      }
-      if (tableRows.length > 0) {
-        elements.push({ type: 'table', rows: tableRows });
-      }
-      continue;
-    }
-
-    // Headings
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
-    if (headingMatch) {
-      elements.push({ type: 'heading', level: headingMatch[1].length, text: headingMatch[2] });
-      i++;
-      continue;
-    }
-
-    // List items
-    const listMatch = line.match(/^(\s*)([-*]|\d+[.)]) (.+)/);
-    if (listMatch) {
-      elements.push({ type: 'list', ordered: /\d/.test(listMatch[2]), text: listMatch[3], indent: listMatch[1].length });
-      i++;
-      continue;
-    }
-
-    // Regular paragraph
-    elements.push({ type: 'paragraph', text: line.trim() });
-    i++;
-  }
-
-  return elements;
-}
-
-function parseInlineMarkdown(text, fontSize = 22) {
-  const runs = [];
-  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|([^*]+))/g;
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    if (match[2]) {
-      runs.push(new TextRun({ text: match[2], bold: true, font: 'Calibri', size: fontSize }));
-    } else if (match[3]) {
-      runs.push(new TextRun({ text: match[3], italics: true, font: 'Calibri', size: fontSize }));
-    } else if (match[4]) {
-      runs.push(new TextRun({ text: match[4], font: 'Calibri', size: fontSize }));
-    }
-  }
-
-  return runs.length > 0 ? runs : [new TextRun({ text, font: 'Calibri', size: fontSize })];
-}
-
-// ─── DOCX Generation ────────────────────────────────────────────────────────
-
-function buildCoverPage(title, meta = {}) {
-  const { tenantName, preparedBy, date, classification } = meta;
-  return [
-    // Spacer
-    new Paragraph({ spacing: { before: 4000 }, children: [] }),
-    // Title
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 200 },
-      children: [new TextRun({ text: title, bold: true, font: 'Calibri', size: 56, color: NAVY })],
-    }),
-    // Divider line
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 300, after: 300 },
-      border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: ACCENT } },
-      children: [],
-    }),
-    // Prepared for
-    ...(tenantName ? [new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-      children: [
-        new TextRun({ text: 'Prepared for: ', font: 'Calibri', size: 24, color: '666666' }),
-        new TextRun({ text: tenantName, bold: true, font: 'Calibri', size: 24, color: NAVY }),
-      ],
-    })] : []),
-    // Prepared by
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-      children: [
-        new TextRun({ text: 'Prepared by: ', font: 'Calibri', size: 24, color: '666666' }),
-        new TextRun({ text: preparedBy || 'Coppice AI', bold: true, font: 'Calibri', size: 24, color: ACCENT }),
-      ],
-    }),
-    // Date
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
-      children: [new TextRun({ text: date || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), font: 'Calibri', size: 24, color: '666666' })],
-    }),
-    // Classification
-    ...(classification ? [new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 600 },
-      children: [new TextRun({ text: classification, font: 'Calibri', size: 20, color: '999999', italics: true })],
-    })] : []),
-    // Page break after cover
-    new Paragraph({ children: [new PageBreak()] }),
-  ];
-}
-
-function tableToDocx(rows) {
-  if (rows.length === 0) return [];
-
-  const isHeader = rows.length > 1;
-  const docxRows = rows.map((cells, rowIdx) => {
-    const isHeaderRow = rowIdx === 0 && isHeader;
-    return new TableRow({
-      tableHeader: isHeaderRow,
-      children: cells.map(cellText => new TableCell({
-        shading: isHeaderRow
-          ? { type: ShadingType.SOLID, color: NAVY, fill: NAVY }
-          : rowIdx % 2 === 0 ? { type: ShadingType.SOLID, color: LIGHT_BG, fill: LIGHT_BG } : undefined,
-        children: [new Paragraph({
-          spacing: { before: 40, after: 40 },
-          children: [new TextRun({
-            text: cellText,
-            bold: isHeaderRow,
-            font: 'Calibri',
-            size: 20,
-            color: isHeaderRow ? 'ffffff' : '333333',
-          })],
-        })],
-        margins: { top: 40, bottom: 40, left: 80, right: 80 },
-      })),
-    });
-  });
-
-  return [new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: docxRows,
-  }), new Paragraph({ spacing: { after: 200 }, children: [] })];
-}
-
-function elementsToDocxParagraphs(elements) {
-  const paragraphs = [];
-
-  for (const el of elements) {
-    switch (el.type) {
-      case 'heading': {
-        const headingLevel = { 1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3, 4: HeadingLevel.HEADING_4 }[el.level] || HeadingLevel.HEADING_4;
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({
-            text: el.text.replace(/\*\*/g, ''),
-            bold: true,
-            font: 'Calibri',
-            size: el.level === 1 ? 32 : el.level === 2 ? 26 : 24,
-            color: NAVY,
-          })],
-          heading: headingLevel,
-          spacing: { before: el.level <= 2 ? 360 : 240, after: 120 },
-        }));
-        break;
-      }
-      case 'paragraph':
-        paragraphs.push(new Paragraph({
-          children: parseInlineMarkdown(el.text),
-          spacing: { after: 120, line: 276 },
-        }));
-        break;
-      case 'list':
-        paragraphs.push(new Paragraph({
-          children: parseInlineMarkdown(el.text),
-          bullet: el.ordered ? undefined : { level: 0 },
-          numbering: el.ordered ? { reference: 'default-numbering', level: 0 } : undefined,
-          spacing: { after: 60, line: 276 },
-          indent: { left: 720 },
-        }));
-        break;
-      case 'table':
-        paragraphs.push(...tableToDocx(el.rows));
-        break;
-      case 'hr':
-        paragraphs.push(new Paragraph({
-          children: [],
-          border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '999999' } },
-          spacing: { before: 240, after: 240 },
-        }));
-        break;
-    }
-  }
-
-  return paragraphs;
-}
-
-/**
- * Generate a DOCX file with cover page and formatted content.
- */
-export async function generateDocx({ title, content, filename, meta = {} }) {
-  const elements = parseMarkdown(content);
-  const bodyParagraphs = elementsToDocxParagraphs(elements);
-  const coverParagraphs = buildCoverPage(title, meta);
-
-  const doc = new Document({
-    creator: 'Coppice AI',
-    title,
-    sections: [
-      {
-        properties: {
-          page: { margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 } },
-        },
-        footers: {
-          default: new Footer({
-            children: [new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({ text: 'Coppice AI  |  ', font: 'Calibri', size: 16, color: '999999' }),
-                new TextRun({ text: title, font: 'Calibri', size: 16, color: '999999', italics: true }),
-                new TextRun({ text: '  |  Page ', font: 'Calibri', size: 16, color: '999999' }),
-                new TextRun({ children: [PageNumber.CURRENT], font: 'Calibri', size: 16, color: '999999' }),
-              ],
-            })],
-          }),
-        },
-        children: [...coverParagraphs, ...bodyParagraphs],
-      },
-    ],
-  });
-
-  const buffer = await Packer.toBuffer(doc);
-  const safeName = (filename || title).replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_');
-  const outputFilename = `${safeName}.docx`;
-  const filePath = join(OUTPUT_DIR, outputFilename);
-  writeFileSync(filePath, buffer);
-
-  return { filePath, filename: outputFilename, contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
-}
-
-// ─── PDF Generation ─────────────────────────────────────────────────────────
-
-function markdownToStyledHtml(title, markdown, meta = {}) {
-  const { tenantName, date, classification } = meta;
-  const displayDate = date || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
-  // Convert markdown tables to HTML tables
+function markdownToHtml(markdown) {
   let html = markdown;
 
   // Tables: find blocks of | delimited lines
@@ -310,127 +75,368 @@ function markdownToStyledHtml(title, markdown, meta = {}) {
     let tableHtml = '<table>';
     let isFirstRow = true;
     for (const row of rows) {
-      if (/^\|[\s\-:]+\|$/.test(row)) continue; // skip separator
+      if (/^\|[\s\-:]+\|$/.test(row)) continue;
       const cells = row.split('|').filter((_, i, a) => i > 0 && i < a.length - 1).map(c => c.trim());
       const tag = isFirstRow ? 'th' : 'td';
-      tableHtml += `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join('')}</tr>`;
+      tableHtml += `<tr>${cells.map(c => `<${tag}>${inlineFormat(c)}</${tag}>`).join('')}</tr>`;
       if (isFirstRow) isFirstRow = false;
     }
     tableHtml += '</table>';
     return tableHtml;
   });
 
-  // Standard markdown conversions
+  // Headings
   html = html
     .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+  // Inline formatting
+  html = html
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
-    .replace(/(<li>.*<\/li>\n?)+/gs, (m) => `<ul>${m}</ul>`)
-    .replace(/^---+$/gm, '<hr>')
-    .replace(/←/g, '&larr;')
-    .replace(/^(?!<[hluodtp])((?!<).+)$/gm, '<p>$1</p>');
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+
+  // Lists
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/gs, (m) => {
+    const isOrdered = false; // simplified - could detect from original
+    const tag = isOrdered ? 'ol' : 'ul';
+    return `<${tag}>${m}</${tag}>`;
+  });
+
+  // Horizontal rules
+  html = html.replace(/^---+$/gm, '<hr>');
+
+  // Paragraphs - lines that aren't already HTML
+  html = html.replace(/^(?!<[hluodtp]|<\/|<table|<tr|<th|<td|$)((?!<).+)$/gm, '<p>$1</p>');
+
+  return html;
+}
+
+function inlineFormat(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+/**
+ * Extract a "highlight word" from the title for the accent-colored span on the cover.
+ * Picks the last significant word (skipping common prepositions/articles).
+ */
+function extractAccentWord(title) {
+  const skip = new Set(['the', 'a', 'an', 'of', 'for', 'and', 'in', 'on', 'at', 'to', 'by', '-', '&']);
+  const words = title.split(/\s+/).filter(w => !skip.has(w.toLowerCase()));
+  if (words.length <= 1) return { before: title, accent: '', after: '' };
+
+  // Use the last word as accent, or a proper noun if found
+  const accentIdx = words.length - 1;
+  const accentWord = words[accentIdx];
+  const titleWords = title.split(/\s+/);
+  const idx = titleWords.indexOf(accentWord);
+  if (idx === -1) return { before: title, accent: '', after: '' };
+
+  const before = titleWords.slice(0, idx).join(' ');
+  const after = titleWords.slice(idx + 1).join(' ');
+  return { before: before ? before + ' ' : '', accent: accentWord, after: after ? ' ' + after : '' };
+}
+
+// ---- Research-style HTML builder ----
+
+function buildResearchHtml(title, bodyHtml, meta = {}, theme = 'default') {
+  const t = THEMES[theme] || THEMES.default;
+  const { tenantName, date, classification, subtitle, label } = meta;
+  const displayDate = date || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const coverLabel = label || 'Analysis Report';
+  const { before, accent, after } = extractAccentWord(title);
 
   return `<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>${title}</title>
-  <style>
-    @page { size: letter; margin: 0.8in 1in; }
-    body { font-family: 'Helvetica Neue', 'Calibri', sans-serif; font-size: 10.5pt; line-height: 1.6; color: #333; max-width: 7in; margin: 0 auto; }
+<meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    /* Cover page */
-    .cover { page-break-after: always; text-align: center; padding-top: 3in; }
-    .cover h1 { font-size: 28pt; color: #1e3a5f; margin-bottom: 0.3in; font-weight: 700; }
-    .cover .divider { width: 3in; height: 3px; background: #2d7d46; margin: 0.3in auto; }
-    .cover .meta { font-size: 11pt; color: #666; margin: 0.1in 0; }
-    .cover .meta strong { color: #1e3a5f; }
-    .cover .classification { font-size: 9pt; color: #999; font-style: italic; margin-top: 1in; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-    h1 { font-size: 18pt; color: #1e3a5f; margin-top: 24pt; margin-bottom: 8pt; border-bottom: 2px solid #e0e0e0; padding-bottom: 4pt; }
-    h2 { font-size: 14pt; color: #1e3a5f; margin-top: 18pt; margin-bottom: 6pt; }
-    h3 { font-size: 12pt; color: #1e3a5f; margin-top: 14pt; margin-bottom: 4pt; }
-    h4 { font-size: 11pt; color: #1e3a5f; margin-top: 10pt; margin-bottom: 4pt; }
-    p { margin: 6pt 0; }
-    ul, ol { margin: 6pt 0; padding-left: 20pt; }
-    li { margin: 3pt 0; }
-    hr { border: none; border-top: 1px solid #ccc; margin: 18pt 0; }
-    strong { font-weight: 600; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: #1a1a2e;
+  line-height: 1.5;
+  background: #fff;
+}
 
-    table { width: 100%; border-collapse: collapse; margin: 12pt 0; font-size: 10pt; }
-    th { background: #1e3a5f; color: white; font-weight: 600; text-align: left; padding: 8px 10px; }
-    td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; }
-    tr:nth-child(even) td { background: #f8f9fb; }
+/* Cover page */
+.cover {
+  height: 100vh;
+  background: ${t.gradient};
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 80px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+}
+.cover::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: ${t.radialOverlay};
+}
+.cover-label {
+  font-size: 13px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 24px;
+  position: relative;
+}
+.cover h1 {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 16px;
+  position: relative;
+}
+.cover h1 span { color: ${t.accent}; }
+.cover .cover-subtitle {
+  font-size: 20px;
+  font-weight: 300;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 48px;
+  position: relative;
+}
+.cover-meta {
+  position: relative;
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 24px;
+}
+.cover-meta strong { color: rgba(255,255,255,0.7); }
 
-    .footer { text-align: center; font-size: 8pt; color: #999; margin-top: 1in; border-top: 1px solid #e0e0e0; padding-top: 6pt; }
-  </style>
+/* Content pages */
+.content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 30px 36px;
+}
+h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 20px 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+h2:first-child { margin-top: 0; }
+h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: ${t.h3Color};
+  margin: 12px 0 3px;
+}
+h4 {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin: 8px 0 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+p { margin: 3px 0; font-size: 11px; line-height: 1.5; }
+ul, ol { margin: 3px 0 3px 18px; font-size: 11px; }
+li { margin: 1px 0; line-height: 1.45; }
+strong { font-weight: 600; }
+code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
+hr { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
+
+/* Callout boxes */
+.callout {
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding: 6px 12px;
+  margin: 8px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 10.5px;
+}
+.callout-warning {
+  background: #fff7ed;
+  border-left: 3px solid #f97316;
+  padding: 6px 12px;
+  margin: 8px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 10.5px;
+}
+.callout-danger {
+  background: #fef2f2;
+  border-left: 3px solid #ef4444;
+  padding: 6px 12px;
+  margin: 8px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 10.5px;
+}
+.callout-success {
+  background: #f0fdf4;
+  border-left: 3px solid #22c55e;
+  padding: 6px 12px;
+  margin: 8px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 10.5px;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 10.5px;
+}
+th {
+  background: #f1f5f9;
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+tr:hover td { background: #fafafa; }
+
+/* Stat grids */
+.key-stat {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 6px 0;
+}
+.key-stat .label { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+.key-stat .value { font-size: 14px; font-weight: 700; color: ${t.statColor}; }
+.key-stat .context { font-size: 9px; color: #64748b; }
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+/* Risk tags */
+.risk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 600; }
+.risk-high { background: #fee2e2; color: #dc2626; }
+.risk-medium { background: #fef3c7; color: #d97706; }
+.risk-low { background: #d1fae5; color: #059669; }
+
+/* Footer */
+.doc-footer {
+  text-align: center;
+  font-size: 8px;
+  color: #94a3b8;
+  margin-top: 32px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+@media print {
+  .cover { height: 100vh; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
 </head>
 <body>
-  <div class="cover">
-    <h1>${title}</h1>
-    <div class="divider"></div>
-    ${tenantName ? `<p class="meta">Prepared for: <strong>${tenantName}</strong></p>` : ''}
-    <p class="meta">Prepared by: <strong>Coppice AI</strong></p>
-    <p class="meta">${displayDate}</p>
-    ${classification ? `<p class="classification">${classification}</p>` : ''}
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div class="cover-label">${coverLabel}</div>
+  <h1>${before}<span>${accent}</span>${after}</h1>
+  ${subtitle ? `<div class="cover-subtitle">${subtitle}</div>` : ''}
+  <div class="cover-meta">
+    ${tenantName ? `<strong>Prepared for:</strong> ${tenantName}<br>` : ''}
+    <strong>Date:</strong> ${displayDate}<br>
+    <strong>Prepared by:</strong> Coppice AI<br>
+    ${classification ? `<strong>Classification:</strong> ${classification}` : ''}
   </div>
-${html}
-  <div class="footer">Coppice AI &mdash; ${title} &mdash; ${displayDate}</div>
+</div>
+
+<!-- BODY -->
+<div class="content">
+${bodyHtml}
+<div class="doc-footer">Coppice AI - ${title} - ${displayDate}</div>
+</div>
+
 </body>
 </html>`;
 }
 
-export async function generatePdf({ title, content, filename, meta = {} }) {
+// ---- PDF Generation ----
+
+/**
+ * Generate a styled PDF from markdown content using the Research style.
+ */
+export async function generatePdf({ title, content, filename, meta = {}, theme }) {
   const safeName = (filename || title).replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_');
-  const html = markdownToStyledHtml(title, content, meta);
+  const bodyHtml = markdownToHtml(content);
+  const resolvedTheme = theme || meta.theme || 'default';
+  const html = buildResearchHtml(title, bodyHtml, meta, resolvedTheme);
   const htmlPath = join(OUTPUT_DIR, `${safeName}_temp.html`);
   const pdfPath = join(OUTPUT_DIR, `${safeName}.pdf`);
   writeFileSync(htmlPath, html);
 
   let generated = false;
 
-  // Try wkhtmltopdf first (installed on VPS)
-  if (!generated) {
+  // Try Chrome headless first (best rendering for gradients/fonts)
+  const chromePaths = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium',
+  ];
+  for (const cp of chromePaths) {
     try {
-      execSync(`wkhtmltopdf --quiet --enable-local-file-access --page-size Letter --margin-top 20mm --margin-bottom 20mm --margin-left 25mm --margin-right 25mm "${htmlPath}" "${pdfPath}"`, {
+      execSync(`"${cp}" --headless=new --no-sandbox --disable-gpu --print-to-pdf="${pdfPath}" --no-pdf-header-footer --print-background "file://${htmlPath}"`, {
         timeout: 30000, stdio: 'pipe',
       });
       generated = true;
-    } catch { /* fallback */ }
+      break;
+    } catch { continue; }
   }
 
-  // Try Chrome headless
+  // Fallback: wkhtmltopdf
   if (!generated) {
-    const chromePaths = ['/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/usr/bin/chromium',
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
-    for (const cp of chromePaths) {
-      try {
-        execSync(`"${cp}" --headless=new --no-sandbox --disable-gpu --print-to-pdf="${pdfPath}" --no-pdf-header-footer "file://${htmlPath}"`, {
-          timeout: 30000, stdio: 'pipe',
-        });
-        generated = true;
-        break;
-      } catch { continue; }
-    }
+    try {
+      execSync(`wkhtmltopdf --quiet --enable-local-file-access --page-size Letter --margin-top 0 --margin-bottom 0 --margin-left 0 --margin-right 0 "${htmlPath}" "${pdfPath}"`, {
+        timeout: 30000, stdio: 'pipe',
+      });
+      generated = true;
+    } catch { /* no PDF converter */ }
   }
 
   // Clean up temp HTML
   try { unlinkSync(htmlPath); } catch {}
 
-  if (generated) {
-    return { filePath: pdfPath, filename: `${safeName}.pdf`, contentType: 'application/pdf' };
+  if (!generated) {
+    console.warn('[DocumentService] No PDF converter available');
+    return null;
   }
 
-  console.warn('[DocumentService] No PDF converter available, falling back to DOCX');
-  return generateDocx({ title, content, filename, meta });
+  return { filePath: pdfPath, filename: `${safeName}.pdf`, contentType: 'application/pdf' };
 }
 
-// ─── Google Drive Upload ────────────────────────────────────────────────────
+/**
+ * Generate just the HTML (for preview or custom rendering).
+ */
+export function generateHtml({ title, content, meta = {}, theme }) {
+  const bodyHtml = markdownToHtml(content);
+  const resolvedTheme = theme || meta.theme || 'default';
+  return buildResearchHtml(title, bodyHtml, meta, resolvedTheme);
+}
+
+// ---- Google Drive Upload ----
 
 const SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '/root/google-service-account.json';
 
@@ -443,21 +449,42 @@ async function getServiceDrive() {
 }
 
 /**
- * Upload a DOCX file to Google Drive and convert to Google Doc.
+ * Upload a PDF to Google Drive.
  * Share with the specified email(s).
+ * Optionally place in a specific folder.
  */
-export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [] }) {
+export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [], folderId, supersedePrevious }) {
   try {
     const drive = await getServiceDrive();
 
-    // Upload as Google Doc (auto-convert from DOCX)
+    const requestBody = { name: title };
+    if (folderId) requestBody.parents = [folderId];
+
+    // If superseding previous files in the folder, rename them first
+    if (supersedePrevious && folderId) {
+      try {
+        const existing = await drive.files.list({
+          q: `'${folderId}' in parents and trashed = false and mimeType = 'application/pdf'`,
+          fields: 'files(id, name)',
+        });
+        for (const f of (existing.data.files || [])) {
+          if (!f.name.startsWith('SUPERSEDED - ')) {
+            await drive.files.update({
+              fileId: f.id,
+              requestBody: { name: `SUPERSEDED - ${f.name}` },
+            });
+            console.log(`[DocumentService] Marked superseded: ${f.name}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[DocumentService] Failed to supersede old files: ${err.message}`);
+      }
+    }
+
     const res = await drive.files.create({
-      requestBody: {
-        name: title,
-        mimeType: 'application/vnd.google-apps.document',
-      },
+      requestBody,
       media: {
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        mimeType: 'application/pdf',
         body: createReadStream(filePath),
       },
       fields: 'id, webViewLink',
@@ -477,7 +504,6 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
         });
       } catch (shareErr) {
         console.warn(`[DocumentService] Failed to share with ${email}: ${shareErr.message}`);
-        // Try making it accessible via link instead
         try {
           await drive.permissions.create({
             fileId,
@@ -487,7 +513,7 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
       }
     }
 
-    console.log(`[DocumentService] Uploaded to Google Drive: ${webViewLink}`);
+    console.log(`[DocumentService] Uploaded PDF to Google Drive: ${webViewLink}`);
     return { fileId, webViewLink };
   } catch (err) {
     console.error(`[DocumentService] Google Drive upload failed: ${err.message}`);
@@ -495,47 +521,52 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
   }
 }
 
-// ─── Full Report Pipeline ───────────────────────────────────────────────────
+// ---- Full Report Pipeline ----
 
 /**
- * Generate a complete report: DOCX + PDF + Google Doc.
+ * Generate a complete report: Research-style PDF + Google Drive upload.
  * Returns artifact metadata to store on the assignment.
  *
- * @param {{ title, content, tenantName, agentName, userEmail, assignmentId }} params
- * @returns {{ docxPath, pdfPath, gdocUrl, gdocId, artifacts }}
+ * @param {{ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label }} params
+ * @returns {{ pdfPath, gdocUrl, gdocId, artifacts }}
  */
-export async function generateReport({ title, content, tenantName, agentName, userEmail, assignmentId }) {
+export async function generateReport({ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label }) {
   const meta = {
     tenantName: tenantName || 'Coppice Client',
-    preparedBy: agentName || 'Coppice AI',
     date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
     classification: 'Internal Use Only',
+    subtitle: subtitle || null,
+    label: label || null,
+    theme: theme || null,
   };
 
   const safeName = (assignmentId || title).replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_');
 
-  // Generate DOCX
-  const docx = await generateDocx({ title, content, filename: safeName, meta });
-  console.log(`[DocumentService] Generated DOCX: ${docx.filePath}`);
+  // Generate PDF (primary output)
+  const pdf = await generatePdf({ title, content, filename: safeName, meta, theme });
+  if (!pdf) {
+    console.error('[DocumentService] PDF generation failed');
+    return { pdfPath: null, gdocUrl: null, gdocId: null, artifacts: [] };
+  }
+  console.log(`[DocumentService] Generated PDF: ${pdf.filePath}`);
 
-  // Generate PDF
-  const pdf = await generatePdf({ title, content, filename: safeName, meta });
-  const pdfGenerated = pdf.contentType === 'application/pdf';
-  console.log(`[DocumentService] Generated PDF: ${pdfGenerated ? pdf.filePath : 'failed, using DOCX fallback'}`);
-
-  // Upload to Google Drive
+  // Upload PDF to Google Drive
   const shareEmails = userEmail ? [userEmail] : [];
-  const gdoc = await uploadToGoogleDrive({ filePath: docx.filePath, title, shareWithEmails: shareEmails });
+  const gdoc = await uploadToGoogleDrive({
+    filePath: pdf.filePath,
+    title: `${title}.pdf`,
+    shareWithEmails: shareEmails,
+    folderId: folderId || null,
+    supersedePrevious: !!folderId,
+  });
 
   const artifacts = [
-    { type: 'docx', label: 'Word Document', path: `/v1/estimates/assignments/${assignmentId}/download/docx`, filename: docx.filename },
-    ...(pdfGenerated ? [{ type: 'pdf', label: 'PDF', path: `/v1/estimates/assignments/${assignmentId}/download/pdf`, filename: pdf.filename }] : []),
-    ...(gdoc ? [{ type: 'gdoc', label: 'Google Docs', url: gdoc.webViewLink, fileId: gdoc.fileId }] : []),
+    { type: 'pdf', label: 'PDF Report', path: `/v1/estimates/assignments/${assignmentId}/download/pdf`, filename: pdf.filename },
+    ...(gdoc ? [{ type: 'gdrive', label: 'Google Drive', url: gdoc.webViewLink, fileId: gdoc.fileId }] : []),
   ];
 
   return {
-    docxPath: docx.filePath,
-    pdfPath: pdfGenerated ? pdf.filePath : null,
+    pdfPath: pdf.filePath,
     gdocUrl: gdoc?.webViewLink || null,
     gdocId: gdoc?.fileId || null,
     artifacts,
@@ -543,10 +574,10 @@ export async function generateReport({ title, content, tenantName, agentName, us
 }
 
 /**
- * Main entry point — generate a document in the requested format.
+ * Main entry point - generate a document in the requested format.
  */
-export async function generateDocument({ format = 'docx', title, content, filename, meta = {} }) {
-  const generator = format === 'pdf' ? generatePdf : generateDocx;
-  const result = await generator({ title, content, filename, meta });
-  return { ...result, title };
+export async function generateDocument({ format = 'pdf', title, content, filename, meta = {}, theme }) {
+  return generatePdf({ title, content, filename, meta, theme });
 }
+
+export default { generatePdf, generateHtml, generateReport, generateDocument, uploadToGoogleDrive };

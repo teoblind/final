@@ -749,9 +749,9 @@ async function callLegalTool(toolName, toolInput, tenantId) {
     const { generateLegalDoc } = await import('./legalDocService.js');
     const doc = generateLegalDoc(toolInput);
 
-    // Generate a DOCX file for attachment
-    const { generateDocx } = await import('./documentService.js');
-    const fileResult = await generateDocx({ title: doc.title, content: doc.content });
+    // Generate a PDF file for attachment
+    const { generatePdf } = await import('./documentService.js');
+    const fileResult = await generatePdf({ title: doc.title, content: doc.content });
 
     // Also try Google Drive
     let googleDoc = null;

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', -apple-system, sans-serif; color: #1a1a2e; line-height: 1.5; background: #fff; }
+
+.cover {
+  height: 100vh;
+  background: linear-gradient(135deg, #0a1628 0%, #0d2137 30%, #1a3a5c 60%, #2d5a3f 100%);
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 80px; color: white; position: relative; overflow: hidden;
+  page-break-after: always;
+}
+.cover::before {
+  content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(circle at 60% 40%, rgba(45, 90, 63, 0.2) 0%, transparent 50%),
+              radial-gradient(circle at 40% 60%, rgba(29, 78, 137, 0.15) 0%, transparent 50%);
+}
+.cover-label { font-size: 13px; letter-spacing: 4px; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 24px; position: relative; }
+.cover h1 { font-size: 48px; font-weight: 700; line-height: 1.1; margin-bottom: 16px; position: relative; }
+.cover h1 span { color: #6ee7b7; }
+.cover h2 { font-size: 20px; font-weight: 300; color: rgba(255,255,255,0.7); margin-bottom: 48px; position: relative; }
+.cover-meta { position: relative; font-size: 14px; color: rgba(255,255,255,0.4); border-top: 1px solid rgba(255,255,255,0.1); padding-top: 24px; }
+.cover-meta strong { color: rgba(255,255,255,0.7); }
+.cover-topics { position: relative; margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; color: rgba(255,255,255,0.6); }
+.cover-topics div { padding: 4px 0; border-left: 2px solid rgba(110, 231, 183, 0.3); padding-left: 10px; }
+
+.content { max-width: 800px; margin: 0 auto; padding: 30px 36px; }
+h2 { font-size: 18px; font-weight: 700; color: #1a1a2e; margin: 20px 0 4px; padding-bottom: 4px; border-bottom: 1.5px solid #e2e8f0; }
+h2:first-child { margin-top: 0; }
+h3 { font-size: 13px; font-weight: 600; color: #1a5c3a; margin: 12px 0 3px; }
+h4 { font-size: 11px; font-weight: 600; color: #64748b; margin: 8px 0 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+p { margin: 3px 0; font-size: 11px; line-height: 1.5; }
+ul, ol { margin: 3px 0 3px 18px; font-size: 11px; }
+li { margin: 1px 0; line-height: 1.45; }
+strong { font-weight: 600; }
+
+.topic-header { background: #f0fdf4; border-left: 3px solid #22c55e; padding: 8px 12px; margin: 16px 0 8px; border-radius: 0 6px 6px 0; }
+.topic-header h2 { margin: 0; padding: 0; border: none; font-size: 15px; color: #166534; }
+.topic-header .subtitle { font-size: 10px; color: #64748b; margin-top: 2px; }
+
+.dd-questions { background: #eff6ff; border-left: 3px solid #3b82f6; padding: 6px 12px; margin: 8px 0; border-radius: 0 6px 6px 0; }
+.dd-questions h4 { color: #1d4ed8; margin-top: 0; }
+.dd-questions ol { margin-left: 16px; }
+
+.red-flag { background: #fef2f2; border-left: 3px solid #ef4444; padding: 6px 12px; margin: 8px 0; border-radius: 0 6px 6px 0; }
+.red-flag h4 { color: #dc2626; margin-top: 0; }
+
+table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 10px; }
+th { background: #f1f5f9; padding: 4px 8px; text-align: left; font-weight: 600; border-bottom: 1.5px solid #e2e8f0; }
+td { padding: 3px 8px; border-bottom: 1px solid #f1f5f9; }
+
+.key-stat { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; margin: 6px 0; }
+.key-stat .label { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+.key-stat .value { font-size: 14px; font-weight: 700; color: #166534; }
+.key-stat .context { font-size: 9px; color: #64748b; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 6px 0; }
+
+.callout { background: #eff6ff; border-left: 3px solid #3b82f6; padding: 6px 12px; margin: 8px 0; border-radius: 0 6px 6px 0; font-size: 10.5px; }
+
+@media print { .cover { height: 100vh; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-label">Due Diligence Research Workbook</div>
+  <h1>Project <span>Odin</span><br>7-Point Site Assessment</h1>
+  <h2>Comprehensive DD Research & Question Framework for EIP<br>Mark Buctin Wind Cluster — Luleå, SE1</h2>
+  <div class="cover-topics">
+    <div>1. General Site Conditions & Hazards</div>
+    <div>2. Odin Wind Project Specifics</div>
+    <div>3. Data Center Regulatory & Permitting</div>
+    <div>4. Existing DC Projects (SE1 & Sweden)</div>
+    <div>5. Meta Luleå — Anchor Proof Point</div>
+    <div>6. SE1 Grid Overview & Constraints</div>
+    <div>7. Backup Gas Generation Regulations</div>
+  </div>
+  <div class="cover-meta">
+    <strong>Requested by:</strong> Mo Haji, Spencer Marr (Sangha Renewables)<br>
+    <strong>Date:</strong> March 28, 2026<br>
+    <strong>Prepared by:</strong> Coppice AI Agent (Sangha Tenant)<br>
+    <strong>Classification:</strong> Confidential — Internal Use Only
+  </div>
+</div>
+
+<div class="content">
+
+<!-- TOPIC 1 -->
+<div class="topic-header">
+  <h2>1. General Site Conditions</h2>
+  <div class="subtitle">Natural hazards, topography, accessibility, environmental sensitivities — Luleå / Norrbotten</div>
+</div>
+
+<h3>Natural Hazards</h3>
+<table>
+  <tr><th>Hazard</th><th>Risk Level</th><th>Details</th></tr>
+  <tr><td>Seismic</td><td>Very Low</td><td>Fennoscandian Shield is tectonically stable. Post-glacial rebound causes minor events (M1-3). Largest recorded: ~M4.1 (1983).</td></tr>
+  <tr><td>Flooding</td><td>Low-Moderate</td><td>Spring snowmelt is primary risk. Lule River dams mitigate. Coastal flooding minimal due to land uplift (~8-9mm/yr).</td></tr>
+  <tr><td>Extreme cold</td><td>High (manageable)</td><td>Sustained periods below -20°C. Wind chill to -40°C. Requires cold climate turbine packages (de-icing, heating, special lubricants).</td></tr>
+  <tr><td>Snow load</td><td>High</td><td>Ground snow loads 3.0-4.5 kN/m² per Swedish building code. All structures must be designed accordingly.</td></tr>
+  <tr><td>Ice accretion</td><td>Moderate</td><td>Blade icing well-documented in northern Sweden/Finland. Energy losses of 5-10% if de-icing inadequate.</td></tr>
+  <tr><td>Permafrost</td><td>None</td><td>Not present at Luleå latitude/altitude. Seasonal frost depth reaches 2-2.5m.</td></tr>
+</table>
+
+<h3>Topography & Soil</h3>
+<ul>
+  <li>Coastal lowlands near Luleå (0-50m elevation), forested inland plateaus (200-500m). Wind sites likely 200-400m.</li>
+  <li>Soil: Glacial till (generally favorable), bedrock outcrops (granite/gneiss — good for anchored foundations), peatlands (require special treatment).</li>
+  <li>Extensive boreal forest (pine/spruce) — significant clearing needed for turbine pads, roads, crane hardstands.</li>
+</ul>
+
+<h3>Accessibility</h3>
+<ul>
+  <li><strong>Roads:</strong> E4 motorway coastal, E10 east-west to Kiruna. Inland roads often gravel — may need upgrading for blade transport (70-80m+).</li>
+  <li><strong>Rail:</strong> Iron ore railway (Malmbanan) through region. Luleå freight terminal available.</li>
+  <li><strong>Port:</strong> Port of Luleå — northernmost major Swedish port. Handles bulk cargo. <strong>Ice-affected Dec-Apr/May — creates seasonal delivery constraint.</strong></li>
+</ul>
+
+<h3>Environmental Sensitivities</h3>
+<ul>
+  <li><strong>Reindeer herding (renskötsel):</strong> THE #1 permitting risk. Entire county within Sami herding areas. Multiple wind projects blocked by Supreme Administrative Court. Immemorial prescription rights can override development permits.</li>
+  <li><strong>Natura 2000:</strong> Extensive protected sites in Norrbotten. Coastal bird zones near Luleå. Lule River delta ecologically sensitive.</li>
+  <li><strong>Wetlands/mires:</strong> Vast mire complexes protected under EU Habitats Directive. Construction on/near mires requires careful EIA.</li>
+  <li><strong>Raptors:</strong> Golden eagle collision risk assessments mandatory. White-tailed eagle along coast.</li>
+</ul>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Site Conditions</h4>
+  <ol>
+    <li>Specific site elevation and terrain profile? Geotechnical survey completed? Soil/bedrock conditions at turbine locations?</li>
+    <li>Which Sami villages (samebyar) have herding rights in the project area? Status of consultations? Any formal objections?</li>
+    <li>Has a comprehensive EIA (MKB) been filed with Länsstyrelsen Norrbotten? Current permit status?</li>
+    <li>Transport route for turbine components? Transport study completed? Road upgrades needed? Seasonal delivery window?</li>
+    <li>Any Natura 2000 sites, nature reserves, or wetlands within/adjacent to project boundary?</li>
+    <li>Cold climate turbine package specified (de-icing, heating, lubricants)? Assumed icing energy losses?</li>
+    <li>Golden eagle survey conducted? Breeding territories within 2km buffer?</li>
+    <li>Frost depth assumption for foundation design? Any turbine locations on peat requiring special foundations?</li>
+    <li>Site within any mineral rights concession (gruvrättigheter) that could create future land-use conflicts?</li>
+    <li>Snow load design assumptions confirmed for all infrastructure?</li>
+  </ol>
+</div>
+
+<div class="red-flag">
+  <h4>Red Flags</h4>
+  <ul>
+    <li>Reindeer herding conflicts are the #1 permitting killer in Norrbotten — if Sami consultations are incomplete/contentious, project can be delayed or blocked entirely.</li>
+    <li>Seasonal port access (ice Dec-May) constrains construction schedule — missing the delivery window pushes timeline a full year.</li>
+    <li>Peat soils at turbine locations dramatically increase foundation costs.</li>
+  </ul>
+</div>
+
+<!-- TOPIC 2 -->
+<div class="topic-header">
+  <h2>2. Odin Wind Project Specifics</h2>
+  <div class="subtitle">EIP portfolio, Mark Buctin cluster, wind resource, permitting, development status</div>
+</div>
+
+<h3>Energy Infra Partners (EIP)</h3>
+<ul>
+  <li>Nordic-focused renewable energy infrastructure developer/investor. Portfolio across Sweden and Finland, concentrated in northern Sweden.</li>
+  <li>Strategy: Acquire development-stage wind projects, advance through permitting, build with long-term offtake or sell to infrastructure investors.</li>
+  <li>Active in BTM/data center co-location space — the Sangha engagement confirms this.</li>
+</ul>
+
+<h3>Mark Buctin Cluster</h3>
+<ul>
+  <li>Cluster of wind development sites in Norrbotten area. 2-3 GW total across multiple phases (per Mar 27 call).</li>
+  <li>"Mark Buctin" may be an internal EIP designation — limited public documentation. Verify legal entity structure and land rights.</li>
+  <li>Developers commonly pursue adjacent sites to share grid infrastructure, roads, and operational synergies.</li>
+</ul>
+
+<h3>SE1 Wind Resource</h3>
+<div class="stat-grid">
+  <div class="key-stat"><div class="label">SE1 Capacity Factor</div><div class="value">35-42%</div><div class="context">Modern turbines (150m+ hub, 5-6MW class)</div></div>
+  <div class="key-stat"><div class="label">National Average</div><div class="value">30-33%</div><div class="context">SE1 materially outperforms</div></div>
+  <div class="key-stat"><div class="label">Sweden Total Wind</div><div class="value">~16 GW</div><div class="context">Pipeline: 20+ GW in development</div></div>
+</div>
+
+<h3>Permitting Context</h3>
+<ul>
+  <li><strong>Timeline:</strong> 5-8 years typical from application to final permit in Sweden. Government working to streamline.</li>
+  <li><strong>Process:</strong> Environmental permit (miljötillstånd) through County Administrative Board + Land and Environment Court.</li>
+  <li><strong>Municipal veto (kommunalt veto):</strong> Recent policy gives municipalities stronger power to block wind projects. Must confirm municipality has formally approved.</li>
+</ul>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Project Odin</h4>
+  <ol>
+    <li>Total permitted/planned capacity of Mark Buctin cluster? How many project sites? Odin's specific capacity?</li>
+    <li>Permitting status — environmental permit (miljötillstånd) granted or in process? Appeal stage?</li>
+    <li>Municipal position (kommunalt veto) — has the municipality formally approved wind development?</li>
+    <li>Turbine model/specs baselined? Hub height, rotor diameter, rated capacity, total count?</li>
+    <li>P50 and P90 net capacity factor from on-site wind data? How many years of met mast/LiDAR data?</li>
+    <li>Grid connection plan — distance to substation, voltage, required infrastructure? Connection agreement secured?</li>
+    <li>Expected energy loss budget (icing, wake, electrical, availability, curtailment)?</li>
+    <li>EIP's development pathway — build and hold, or develop and sell? Target financial close?</li>
+    <li>Any existing offtake agreements or PPAs? Or merchant?</li>
+    <li>Total development expenditure to date? Remaining capital to COD?</li>
+  </ol>
+</div>
+
+<div class="red-flag">
+  <h4>Red Flags</h4>
+  <ul>
+    <li>If "Mark Buctin" has no public filings, verify EIP has clear title or option agreements on the land.</li>
+    <li>Confirm wind measurement is on-site (met mast/LiDAR), not modeled — SE1 terrain creates micro-siting variation.</li>
+    <li>Pre-permit project = substantial development risk premium. Check EIP's track record of actually building vs. flipping.</li>
+  </ul>
+</div>
+
+<!-- TOPIC 3 -->
+<div class="topic-header">
+  <h2>3. Data Center Regulatory & Permitting</h2>
+  <div class="subtitle">Swedish regulations, municipal planning, community acceptance, Norrbotten-specific context</div>
+</div>
+
+<h3>Swedish Regulatory Framework</h3>
+<table>
+  <tr><th>Regulation</th><th>Authority</th><th>Relevance</th></tr>
+  <tr><td>Planning and Building Act (PBL)</td><td>Municipality</td><td>Zoning, detailed development plans (detaljplan), building permits. Municipality has planning monopoly.</td></tr>
+  <tr><td>Environmental Code (Miljöbalken)</td><td>County Admin Board / Court</td><td>Large DCs may need environmental permits depending on power, cooling, backup generation.</td></tr>
+  <tr><td>Electricity Act</td><td>Ei (Energy Markets Inspectorate)</td><td>Grid connection regulation for large consumers.</td></tr>
+  <tr><td>Energy tax (2023 change)</td><td>Tax Agency</td><td>All DCs now pay 36 öre/kWh (up from 0.6). Politically contentious — could change again.</td></tr>
+</table>
+
+<h3>Municipal Context (Norrbotten)</h3>
+<ul>
+  <li><strong>Luleå:</strong> Actively promoting DC development since Meta. Designated industrial land available.</li>
+  <li><strong>Boden:</strong> Attracted Hive, Northern Data. History of military installations being repurposed. Has imposed 5 MW cap on new mining.</li>
+  <li><strong>Planning timeline:</strong> Detailed planning typically 1-2 years, but fast-tracked for large industrial projects.</li>
+</ul>
+
+<h3>Community Acceptance</h3>
+<ul>
+  <li>Generally receptive to industrial development in Norrbotten (employment needs, economic diversification).</li>
+  <li><strong>"Green colonialism" tension:</strong> Sami communities + environmental groups argue northern resources exploited for southern/international benefit without adequate local compensation.</li>
+  <li><strong>Crypto-specific opposition:</strong> Finansinspektionen + Naturvårdsverket publicly called for restrictions on mining energy use (2022). Political sentiment negative toward crypto specifically.</li>
+  <li>Employment-to-power ratio scrutinized — DCs consume enormous power but employ relatively few.</li>
+</ul>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Regulatory</h4>
+  <ol>
+    <li>Has EIP engaged with the municipality regarding zoning and detailed planning for DC co-location? Letter of intent?</li>
+    <li>How is BTM consumption classified — direct customer of wind farm, or separate grid connection required?</li>
+    <li>Any competing land-use claims — mining exploration rights, military restrictions, other industrial designations?</li>
+    <li>Community engagement strategy developed? Any local opposition raised?</li>
+    <li>Environmental permits needed for DC component (backup generation, cooling, noise)?</li>
+    <li>Is the municipality aware load may include BTC mining? Political support for this vs. traditional hyperscale?</li>
+    <li>Expected local employment creation vs. power consumption ratio?</li>
+    <li>Risk assessment of energy tax reduction being further modified or removed?</li>
+  </ol>
+</div>
+
+<div class="red-flag">
+  <h4>Red Flags</h4>
+  <ul>
+    <li>Energy tax for DCs is politically vulnerable — any change significantly impacts economics.</li>
+    <li>BTM regulatory ambiguity — boundary between "self-consumption" and "electricity supply" needs careful legal analysis.</li>
+    <li>If primary use is BTC mining (not traditional DC), community + political acceptance risk is materially higher.</li>
+  </ul>
+</div>
+
+<!-- TOPIC 4 -->
+<div class="topic-header">
+  <h2>4. Existing & Planned Data Center Projects</h2>
+  <div class="subtitle">SE1 and broader Sweden competitive landscape</div>
+</div>
+
+<h3>SE1 Data Center Landscape</h3>
+<table>
+  <tr><th>Operator</th><th>Location</th><th>Capacity</th><th>Status</th><th>Power Source</th></tr>
+  <tr><td><strong>Meta</strong></td><td>Luleå</td><td>~150MW+</td><td>Operational (2013), expanding</td><td>Hydro PPAs (Lule River)</td></tr>
+  <tr><td><strong>Hive Digital</strong></td><td>Boden</td><td>~30-50MW</td><td>Converting to AI/HPC</td><td>Grid (hydro)</td></tr>
+  <tr><td><strong>Northern Data / Ardent</strong></td><td>Boden</td><td>~50-100MW</td><td>Expanding, pivoting to AI</td><td>Grid</td></tr>
+  <tr><td><strong>atNorth</strong></td><td>Multiple</td><td>200MW planned</td><td>Building</td><td>Renewable PPAs</td></tr>
+  <tr><td><strong>Hydro66</strong></td><td>Boden</td><td>~10-20MW</td><td>Operational</td><td>Grid</td></tr>
+  <tr><td><strong>Landinfra</strong></td><td>Luleå</td><td>50-100MW planned</td><td>Planning</td><td>TBD</td></tr>
+  <tr><td><strong>EcoDataCenter</strong></td><td>Falun (SE3)</td><td>240-360MW</td><td>Expanding</td><td>Grid, heat reuse</td></tr>
+</table>
+
+<p><strong>Total Sweden:</strong> 37 existing DCs, 5 upcoming. Total existing capacity >160 MW, upcoming roughly double. The Node Pole (Luleå/Boden investment promotion) has been key facilitator.</p>
+
+<h3>BTM vs. Grid</h3>
+<ul>
+  <li>Most established SE1 DCs are grid-connected with renewable PPAs.</li>
+  <li>BTM (directly connected to wind/solar) is emerging primarily in crypto space — avoids grid charges + transmission losses but sacrifices grid backup reliability.</li>
+  <li>EIP's model: co-locate DC load with wind generation = BTM play. Matches industry trend but regulatory classification is untested at this scale.</li>
+</ul>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Competitive Landscape</h4>
+  <ol>
+    <li>How does Project Odin differentiate from existing SE1 operators? Target customer profile (crypto, HPC/AI, enterprise cloud)?</li>
+    <li>Total power availability for DC after accounting for grid export, curtailment, and intermittency? Assumed utilization?</li>
+    <li>Has EIP engaged with The Node Pole or municipal investment promotion?</li>
+    <li>Competitive positioning on power price — BTM wind vs. grid-connected hydro PPA?</li>
+    <li>SE1 saturation risk — could the zone become oversaturated with demand, driving up prices?</li>
+    <li>Fiber/interconnection strategy? Distance to major fiber routes? Latency to Stockholm/Frankfurt?</li>
+    <li>How does intermittent wind profile match DC demand (baseload)? What happens during low-wind periods?</li>
+  </ol>
+</div>
+
+<!-- TOPIC 5 -->
+<div class="topic-header">
+  <h2>5. Meta Luleå — Anchor Proof Point</h2>
+  <div class="subtitle">Investment, capacity, infrastructure, cooling, community impact</div>
+</div>
+
+<div class="stat-grid">
+  <div class="key-stat"><div class="label">Total Investment</div><div class="value">$1.5-2B+</div><div class="context">Over multiple expansion phases since 2013</div></div>
+  <div class="key-stat"><div class="label">Power Capacity</div><div class="value">~150-200MW</div><div class="context">Campus continues expanding for AI</div></div>
+  <div class="key-stat"><div class="label">PUE</div><div class="value">1.04-1.10</div><div class="context">Among lowest globally (avg: 1.5-1.6)</div></div>
+</div>
+
+<h3>Key Facts</h3>
+<ul>
+  <li><strong>First Meta DC outside US.</strong> Opened 2013, 5+ server buildings (~30,000m² each).</li>
+  <li><strong>100% renewable:</strong> Lule River hydro PPAs (~4.4 GW installed hydro capacity on that river system).</li>
+  <li><strong>Free air cooling:</strong> Evaporative cooling using outside air. Annual avg temp ~2°C. Mechanical cooling rarely/never needed.</li>
+  <li><strong>Fiber:</strong> Connected to major Swedish backbones. ~10-15ms to Stockholm, ~25-35ms to Frankfurt.</li>
+  <li><strong>Employment:</strong> ~200-400 permanent + 1,000+ during construction. Low employment-to-power ratio (common criticism).</li>
+  <li><strong>Community impact:</strong> Generally positive. Funded local programs, infrastructure, education. Established Luleå as credible DC location.</li>
+  <li><strong>Why Luleå:</strong> Cheap renewable power, cold climate (PUE advantage), stable grid (hydro baseload), good fiber, supportive government, tax incentives.</li>
+</ul>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Meta Context</h4>
+  <ol>
+    <li>Has Meta's demand created grid congestion or capacity constraints affecting Project Odin?</li>
+    <li>Is Project Odin competing for the same power resources (PPAs, grid capacity) as Meta expansion?</li>
+    <li>Does Meta's presence raise land prices, labor costs, or permitting complexity?</li>
+    <li>Distance from Odin's DC site to nearest fiber route servicing Meta?</li>
+    <li>Any discussions with Meta about potential offtake, fiber sharing, or synergies?</li>
+  </ol>
+</div>
+
+<!-- TOPIC 6 -->
+<div class="topic-header">
+  <h2>6. SE1 Grid Overview</h2>
+  <div class="subtitle">Transmission capacity, Svenska Kraftnät plans, competing demand, constraints</div>
+</div>
+
+<h3>Current Transmission</h3>
+<table>
+  <tr><th>Corridor</th><th>Capacity</th><th>Status</th></tr>
+  <tr><td>SE1 → SE2</td><td>3,300-3,800 MW</td><td>Active, plans to increase</td></tr>
+  <tr><td>SE2 → SE3</td><td>~7,300 MW (~8 GW physical)</td><td>Structurally congested — main bottleneck</td></tr>
+  <tr><td>SE3 → SE4</td><td>5,600 MW</td><td>Active</td></tr>
+  <tr><td>Cross-border (Finland)</td><td>Various interconnectors</td><td>Finland building domestic capacity too</td></tr>
+</table>
+
+<h3>Svenska Kraftnät Investment Plans</h3>
+<ul>
+  <li><strong>Aurora Line:</strong> New 400kV line north→south. Target completion 2030-2035 (permitting + construction timeline).</li>
+  <li><strong>SEK 13B:</strong> Four major power line renewals in Norrbotten/Västerbotten (replacing 1950s infrastructure).</li>
+  <li><strong>SEK 3B:</strong> Hitachi Energy series compensation — up to 10 systems to increase transmitted power 50%, operational by 2030.</li>
+  <li><strong>New 400kV substations:</strong> Högnäs 2, Hertson, Svartbyn 2.</li>
+  <li><strong>New 400kV lines:</strong> Letsi-Svartbyn, Högnäs-Stornorrfors, Svartbyn-Keminmaa reinforcement.</li>
+</ul>
+
+<h3>Competing Industrial Demand (CRITICAL)</h3>
+<table>
+  <tr><th>Project</th><th>Demand</th><th>Status</th></tr>
+  <tr><td><strong>H2 Green Steel (Stegra)</strong></td><td>~800MW initial → 1.5+ GW</td><td>Boden. Commercial production targeted 2025-2026 (delayed).</td></tr>
+  <tr><td><strong>HYBRIT / LKAB</strong></td><td>20-50+ TWh/yr by 2040</td><td>Fossil-free iron ore processing. Malmberget/Gällivare.</td></tr>
+  <tr><td><strong>SSAB</strong></td><td>Significant (EAF conversion)</td><td>Blast furnace → electric arc furnace.</td></tr>
+  <tr><td><strong>Northvolt</strong></td><td>Massive (battery factory)</td><td>Skellefteå (SE2) — competing for northern grid + labor.</td></tr>
+  <tr><td><strong>Various H2/ammonia/e-fuels</strong></td><td>10-20+ GW collective</td><td>Multiple projects in pipeline through 2040.</td></tr>
+</table>
+
+<div class="callout">
+<strong>Key structural shift:</strong> SE1 is projected to flip from net exporter to net importer by 2026-2030. Grid connection requests in SE1 are competing with ~5 GW of new industrial demand. Connection timelines have stretched to 5-10+ years. <strong>BTM consumption bypasses the grid queue entirely — this is Project Odin's key strategic advantage.</strong>
+</div>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Grid</h4>
+  <ol>
+    <li>Grid connection plan — voltage, capacity (MW), substation, distance? Connection agreement signed with SvK or DSO?</li>
+    <li>Position in grid connection queue? Milestones/financial commitments to maintain it?</li>
+    <li>SE1 price convergence risk model — what happens if SE1 prices rise to match SE3/SE4?</li>
+    <li>Grid capacity still needed for BTM backup/export? Associated grid charges (nätavgifter)?</li>
+    <li>Has SvK indicated curtailment risk for new wind in SE1?</li>
+    <li>Competition for grid at same substation from other projects?</li>
+    <li>Scenario modeling if Aurora Line delayed beyond 2035?</li>
+    <li>Local DSO capacity and reliability? Power quality study?</li>
+  </ol>
+</div>
+
+<div class="red-flag">
+  <h4>Red Flags</h4>
+  <ul>
+    <li><strong>Grid congestion is the single biggest infrastructure risk.</strong> SE1 grid designed for hydro export, not massive new demand + generation simultaneously.</li>
+    <li>Stegra, HYBRIT, LKAB are government-backed flagships — they likely get grid priority over a wind+DC project.</li>
+    <li>If SE1 prices converge with SE3/SE4, the cheap-power advantage erodes completely.</li>
+  </ul>
+</div>
+
+<!-- TOPIC 7 -->
+<div class="topic-header">
+  <h2>7. Backup Gas Generation — Regulatory View</h2>
+  <div class="subtitle">Swedish stance on gas backup, permitting thresholds, EU ETS, political climate</div>
+</div>
+
+<h3>Sweden's Position</h3>
+<ul>
+  <li>Natural gas: ~1-2% of Sweden's energy mix. No domestic production. No pipeline to Norrbotten — LNG by truck/rail required.</li>
+  <li>Political stance: Broadly anti-fossil fuel. Net-zero by 2045, 100% renewable electricity by 2040.</li>
+  <li>New fossil infrastructure inconsistent with climate targets — faces significant political headwinds.</li>
+</ul>
+
+<h3>Permitting Thresholds (Environmental Code)</h3>
+<table>
+  <tr><th>Thermal Input</th><th>Classification</th><th>Authority</th></tr>
+  <tr><td>< 500 kW</td><td>No specific permit</td><td>Building permit only</td></tr>
+  <tr><td>500 kW - 20 MW</td><td>C-verksamhet (notification)</td><td>Municipal environmental committee</td></tr>
+  <tr><td>20 - 50 MW</td><td>B-verksamhet (permit)</td><td>County Administrative Board (Länsstyrelsen)</td></tr>
+  <tr><td>> 50 MW</td><td>A-verksamhet (full permit)</td><td>Land and Environment Court</td></tr>
+</table>
+
+<p><strong>EU ETS:</strong> Installations ≥20 MW thermal covered by EU Emissions Trading System. Carbon prices ~€50-80/tonne (trending up). Even limited-hours backup must hold EU Allowances if above threshold.</p>
+
+<h3>Critical Distinction: Backup vs. Peaking</h3>
+<div class="red-flag">
+  <h4>This is the most important regulatory distinction in the project</h4>
+  <ul>
+    <li><strong>True emergency backup</strong> (<100 hrs/yr, grid outages only): More permissive treatment, limited scrutiny.</li>
+    <li><strong>Peaking/load-following</strong> (running to supplement intermittent wind): Classified as regular industrial combustion. Full environmental permitting, EU ETS, significant political opposition.</li>
+    <li><strong>If gas is intended to "firm up" intermittent wind for DC baseload, it WILL be classified as peaking, NOT backup.</strong> This fundamentally changes the regulatory, cost, and political analysis.</li>
+    <li>Framing risk: "Using fossil fuels to power Bitcoin mining" = politically toxic narrative in Sweden.</li>
+  </ul>
+</div>
+
+<h3>Precedents & Alternatives</h3>
+<ul>
+  <li><strong>Meta Luleå:</strong> Uses diesel backup generators (standard hyperscale practice). Emergency only, <100 hrs/yr. Leniently treated.</li>
+  <li><strong>Battery (BESS):</strong> Increasingly considered as gas/diesel alternative for short-duration outages. Cannot provide extended backup.</li>
+  <li><strong>Biogas/bio-LNG:</strong> More politically acceptable but supply at scale in Norrbotten is limited.</li>
+  <li>No known precedent of a Swedish DC using gas as primary (non-backup) fuel.</li>
+</ul>
+
+<div class="dd-questions">
+  <h4>DD Questions for EIP — Gas Backup</h4>
+  <ol>
+    <li>Intended operating profile — true emergency (<100 hrs/yr) or peaking to supplement wind intermittency?</li>
+    <li>Total backup generation capacity (MW thermal)? Does it exceed 20MW EU ETS threshold?</li>
+    <li>Gas supply logistics — LNG by truck? Biogas alternative? Existing infrastructure?</li>
+    <li>EU ETS cost exposure modeled at what carbon price? Stress tested at €100+/tonne?</li>
+    <li>Battery storage considered as alternative for short-duration interruptions?</li>
+    <li>Maximum annual operating hours? Will environmental permit cap this?</li>
+    <li>Has Länsstyrelsen Norrbotten been consulted on permitting pathway?</li>
+    <li>If backup runs as peaking (firming wind for DC), has the permitting pathway been modeled as industrial combustion?</li>
+  </ol>
+</div>
+
+<!-- SUMMARY -->
+<h2>Cross-Cutting Risk Summary</h2>
+<table>
+  <tr><th>#</th><th>Risk</th><th>Impact</th></tr>
+  <tr><td>1</td><td><strong>Grid capacity</strong> — binding constraint in SE1</td><td>BTM bypasses queue but export/backup still needs connection</td></tr>
+  <tr><td>2</td><td><strong>Reindeer herding rights</strong> — can block wind development</td><td>Sami consultation status is critical path item</td></tr>
+  <tr><td>3</td><td><strong>BTM regulatory classification</strong> — untested at scale</td><td>Self-consumption vs. electricity supply line is legally ambiguous</td></tr>
+  <tr><td>4</td><td><strong>Political sentiment vs. crypto mining</strong></td><td>Negative and worsening — AI compute pivot mitigates</td></tr>
+  <tr><td>5</td><td><strong>SE1 price convergence</strong></td><td>Industrial demand may erase cheap-power advantage by 2030</td></tr>
+  <tr><td>6</td><td><strong>Gas backup classification</strong></td><td>If peaking (not emergency), regulatory burden increases dramatically</td></tr>
+  <tr><td>7</td><td><strong>EIP execution track record</strong></td><td>Verify: developer-builder or developer-flipper?</td></tr>
+</table>
+
+<hr style="margin: 20px 0; border: none; border-top: 1px solid #e2e8f0;">
+<p style="font-size: 9px; color: #94a3b8; text-align: center;">
+  Generated by Coppice AI Agent (Sangha Tenant) — March 28, 2026<br>
+  Confidential — Sangha Renewables internal use only.<br>
+  Sources: Ei, Svenska Kraftnät, CMS, SDI Alliance, DatacenterDynamics, Hashrate Index, Baxtel, GlobalConnect, Norran
+</p>
+
+</div>
+</body>
+</html>

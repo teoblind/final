@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  color: #1a1a2e;
+  line-height: 1.6;
+  background: #fff;
+}
+
+/* Cover page */
+.cover {
+  height: 100vh;
+  background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 40%, #2d1b69 70%, #4a1a8a 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 80px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+  page-break-after: always;
+}
+.cover::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at 70% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+              radial-gradient(circle at 30% 70%, rgba(168, 85, 247, 0.1) 0%, transparent 50%);
+}
+.cover-label {
+  font-size: 13px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 24px;
+  position: relative;
+}
+.cover h1 {
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 16px;
+  position: relative;
+}
+.cover h1 span { color: #a78bfa; }
+.cover h2 {
+  font-size: 22px;
+  font-weight: 300;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 48px;
+  position: relative;
+}
+.cover-meta {
+  position: relative;
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 24px;
+}
+.cover-meta strong { color: rgba(255,255,255,0.7); }
+.correction-banner {
+  background: rgba(251, 146, 60, 0.15);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-top: 32px;
+  position: relative;
+  font-size: 14px;
+  color: rgba(255,255,255,0.8);
+}
+.correction-banner strong { color: #fb923c; }
+
+/* Content pages */
+.content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 30px 36px;
+}
+h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 20px 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+h2:first-child { margin-top: 0; }
+h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a1a8a;
+  margin: 14px 0 3px;
+}
+p { margin: 3px 0; font-size: 11px; line-height: 1.5; }
+ul, ol { margin: 3px 0 3px 18px; font-size: 11px; }
+li { margin: 1px 0; line-height: 1.45; }
+strong { font-weight: 600; }
+
+.correction-box {
+  background: #fff7ed;
+  border-left: 3px solid #f97316;
+  padding: 8px 12px;
+  margin: 10px 0;
+  border-radius: 0 6px 6px 0;
+}
+.correction-box h3 { color: #c2410c; margin-top: 0; font-size: 12px; }
+
+.key-stat {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+.key-stat .label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+.key-stat .value { font-size: 16px; font-weight: 700; color: #4a1a8a; }
+.key-stat .context { font-size: 9px; color: #64748b; }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 10.5px;
+}
+th {
+  background: #f1f5f9;
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+tr:hover td { background: #fafafa; }
+
+.risk-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
+.risk-high { background: #fee2e2; color: #dc2626; }
+.risk-medium { background: #fef3c7; color: #d97706; }
+.risk-low { background: #d1fae5; color: #059669; }
+
+.callout {
+  background: #eff6ff;
+  border-left: 3px solid #3b82f6;
+  padding: 6px 12px;
+  margin: 10px 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 10.5px;
+}
+
+.page-break { /* let content flow naturally */ }
+
+@media print {
+  .cover { height: 100vh; }
+  .page-break { /* let content flow naturally */ }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div class="cover-label">Corrected Feasibility Analysis</div>
+  <h1>Project <span>Odin</span><br>SE1 BTM Analysis</h1>
+  <h2>Behind-the-Meter Mining & AI Compute Co-Location<br>Mark Buctin Wind Cluster — Luleå, Sweden</h2>
+  <div class="correction-banner">
+    <strong>⚠ CORRECTION NOTICE:</strong> This report replaces the SE2 BTM Analysis (Mar 16, 2026) which was based on incorrect site data (Nysäter, 474MW, SE2). The actual site is Project Odin within the Mark Buctin cluster (2-3 GW, SE1).
+  </div>
+  <div class="cover-meta">
+    <strong>Prepared for:</strong> Sangha Renewables — Spencer Marr, Mo Haji<br>
+    <strong>Date:</strong> March 28, 2026<br>
+    <strong>Prepared by:</strong> Coppice AI Agent (Sangha Tenant)<br>
+    <strong>Classification:</strong> Confidential — Internal Use Only
+  </div>
+</div>
+
+<!-- CORRECTIONS vs ORIGINAL -->
+<div class="content">
+  <h2>Corrections vs. Original Report</h2>
+  <div class="correction-box">
+    <h3>What Changed</h3>
+    <table>
+      <tr><th>Parameter</th><th>Original (Mar 16)</th><th>Corrected</th></tr>
+      <tr><td>Site Name</td><td>Nysäter</td><td><strong>Project Odin</strong> (Mark Buctin cluster)</td></tr>
+      <tr><td>Bidding Zone</td><td>SE2</td><td><strong>SE1</strong></td></tr>
+      <tr><td>Capacity</td><td>474 MW (operational)</td><td><strong>2-3 GW</strong> (in development)</td></tr>
+      <tr><td>Status</td><td>Operational since 2022</td><td><strong>Permitting / development phase</strong></td></tr>
+      <tr><td>Location</td><td>Central Sweden</td><td><strong>Near Luleå, northern Sweden</strong></td></tr>
+      <tr><td>Strategy</td><td>BTM Bitcoin mining only</td><td><strong>BTM mining + AI compute co-location</strong></td></tr>
+    </table>
+    <p><strong>What was right:</strong> EIP ownership structure, energy tax analysis methodology, FCR-N/FCR-D framework, general Nordic power market context. The analytical framework was sound — it was applied to the wrong asset.</p>
+  </div>
+
+  <h2>Executive Summary</h2>
+  <p>Energy Infra Partners (EIP) manages approximately 2 GW of onshore wind across 4 clusters in the Nordics. The site under evaluation — <strong>Project Odin</strong> — is part of the <strong>Mark Buctin cluster</strong> near Luleå in Sweden's SE1 bidding zone, with 2-3 GW of total wind capacity across multiple development phases.</p>
+
+  <p>Following Sweden's July 2023 energy tax increase on data centers (from 0.6 to 36 öre/kWh), EIP and Sangha are pivoting the opportunity assessment from pure Bitcoin mining toward <strong>AI compute co-location</strong>, with BTM mining as an interim monetization strategy during the development phase. This mirrors the industry-wide trend: every significant mining operator in Sweden (Hive Digital, Northern Data) is converting to AI/HPC.</p>
+
+  <div class="stat-grid">
+    <div class="key-stat">
+      <div class="label">Cluster Capacity</div>
+      <div class="value">2-3 GW</div>
+      <div class="context">Multiple development phases</div>
+    </div>
+    <div class="key-stat">
+      <div class="label">SE1 Avg. Spot (2024)</div>
+      <div class="value">€25-28/MWh</div>
+      <div class="context">Lowest zone in Sweden</div>
+    </div>
+    <div class="key-stat">
+      <div class="label">Meta Luleå Campus</div>
+      <div class="value">724 MW</div>
+      <div class="context">Validates the corridor</div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Critical Open Question:</strong> Does BTM electricity from a directly connected wind farm avoid the 36 öre/kWh energy tax? This is the single most important variable for the deal economics. If BTM power is tax-exempt, the all-in energy cost drops to ~€15-30/MWh. If taxed at 36 öre, it rises to ~€49-64/MWh — approaching the threshold that killed grid-connected mining in Sweden. <strong>Requires Swedish tax counsel confirmation.</strong>
+  </div>
+
+  <div class="page-break"></div>
+  <h2>1. SE1 Power Market Analysis</h2>
+
+  <h3>Spot Price Overview</h3>
+  <table>
+    <tr><th>Year</th><th>SE1 Avg</th><th>SE2 Avg</th><th>SE3 Avg</th><th>SE4 Avg</th></tr>
+    <tr><td>2023</td><td>~€42/MWh</td><td>~€42/MWh</td><td>~€55/MWh</td><td>~€74/MWh</td></tr>
+    <tr><td>2024</td><td><strong>~€25-28/MWh</strong></td><td>~€28/MWh</td><td>~€36/MWh</td><td>~€45/MWh</td></tr>
+    <tr><td>2025 Q1</td><td colspan="4">+51% vs Q1 2024 nationally (tighter hydro conditions)</td></tr>
+    <tr><td>Feb 2026</td><td colspan="4">~€14.40/MWh national average</td></tr>
+  </table>
+
+  <p>SE1 and SE2 consistently trade at a steep discount to southern Sweden due to the <strong>SE2-SE3 transmission bottleneck</strong> (~8 GW physical corridor, still congested). Production surplus in the north cannot flow south fast enough, creating a structural price advantage for northern consumers.</p>
+
+  <h3>Seasonal Dynamics</h3>
+  <ul>
+    <li><strong>Spring (Apr-Jun):</strong> Lowest prices, frequently negative. Spring flood hydro forces generation at a loss. SE2 had 679 negative-price hours in 2025.</li>
+    <li><strong>Summer:</strong> Low demand + moderate wind = continued low prices.</li>
+    <li><strong>Winter:</strong> Higher demand (heating), reduced wind — prices rise but remain well below SE3/SE4.</li>
+    <li><strong>Wind events:</strong> Extreme oversupply drives prices to zero or negative, especially in SE1/SE2.</li>
+  </ul>
+
+  <div class="callout">
+    <strong>BTM Implication:</strong> A direct PPA with EIP for Odin wind output could realistically achieve €15-30/MWh baseload, with significant hours at zero or negative. This is materially cheaper than the €49-59/MWh gross figure in the original SE2 report (which included grid costs and energy tax).
+  </div>
+
+  <h3>SE1 Price Trajectory Risk</h3>
+  <p>SE1 is projected to <strong>flip from net exporter to net importer</strong> of electricity by 2026-2030. Massive new industrial demand is incoming:</p>
+  <ul>
+    <li><strong>H2 Green Steel (Stegra):</strong> 13-15 TWh/year at full capacity</li>
+    <li><strong>HYBRIT/LKAB:</strong> ~5 TWh/year for fossil-free sponge iron</li>
+    <li><strong>Combined projection:</strong> 46.1 TWh of new demand in SE1 by 2030</li>
+  </ul>
+  <p>This could raise SE1 spot prices significantly, making BTM power more valuable (higher opportunity cost) but also making a fixed PPA more attractive relative to rising grid prices.</p>
+
+  <div class="page-break"></div>
+  <h2>2. Energy Tax — The Deal-Maker or Breaker</h2>
+
+  <h3>Current Tax Regime</h3>
+  <table>
+    <tr><th>Category</th><th>Rate (SEK/kWh)</th><th>Equivalent</th></tr>
+    <tr><td>Manufacturing industry</td><td>0.006</td><td>~€0.5/MWh</td></tr>
+    <tr><td><strong>Data centers (all types)</strong></td><td><strong>0.36</strong></td><td><strong>~€34/MWh</strong></td></tr>
+    <tr><td>General consumers (2026)</td><td>0.36</td><td>~€34/MWh</td></tr>
+  </table>
+
+  <p>The July 2023 change removed tax benefits for <strong>all</strong> data centers — not just crypto miners. Both Meta-style facilities and Bitcoin mines pay the same 36 öre/kWh. The Ministry of Finance argued the exemption didn't create expected jobs.</p>
+
+  <h3>Enforcement Climate</h3>
+  <ul>
+    <li>18 of 21 investigated data centers were found concealing crypto mining to claim tax benefits</li>
+    <li>Swedish tax authority demanded <strong>SEK 990M (~$90M)</strong> in back taxes from miners</li>
+    <li>As of Jan 2025, any mining operation >0.5 MW must publicly report real-time energy use</li>
+    <li>Boden caps new mining at 5 MW; Kiruna demands 90% renewable verification</li>
+  </ul>
+
+  <h3>BTM Tax Question</h3>
+  <div class="correction-box">
+    <h3>Priority DD Item: BTM Energy Tax Treatment</h3>
+    <p>The energy tax applies to electricity consumed from the grid. The critical legal question: <strong>does electricity consumed behind the meter from a directly connected wind farm incur the same 36 öre/kWh tax?</strong></p>
+    <p>If BTM power is treated as self-generation by the wind farm operator (not "supply" to a consumer), it may fall outside the tax regime entirely. This needs definitive guidance from Swedish tax counsel — it is the single biggest variable in the economic model.</p>
+  </div>
+
+  <h3>Industry Response: Projekt Datorhall</h3>
+  <p>A coalition of Swedish data center operators is pursuing five legal pathways against the tax increase, claiming €680M+ in losses. Includes EU Commission complaint, Energy Charter Treaty arbitration, and Francovich damages. No resolution expected before 2027-2028.</p>
+
+  <div class="page-break"></div>
+  <h2>3. AI Compute Opportunity (New Angle)</h2>
+
+  <p>Every significant mining operator in Sweden is pivoting to AI compute. This is not optional — it is the market direction:</p>
+
+  <table>
+    <tr><th>Operator</th><th>Location</th><th>Transition</th></tr>
+    <tr><td>Hive Digital</td><td>Boden (SE1)</td><td>Converting 7 MW from BTC mining → Tier-III HPC (2,000 NVIDIA GPUs)</td></tr>
+    <tr><td>Northern Data / Ardent</td><td>Boden (SE1)</td><td>Divested all crypto mining Nov 2025, full AI/HPC pivot</td></tr>
+    <tr><td>atNorth</td><td>Sweden</td><td>Building 200 MW data center for AI/HPC workloads</td></tr>
+    <tr><td>EcoDataCenter</td><td>Falun</td><td>Expanding to 360 MW, Sweden's largest — all compute/cloud</td></tr>
+  </table>
+
+  <h3>Why SE1 for AI Compute</h3>
+  <ul>
+    <li><strong>Climate:</strong> PUE of 1.07 achievable (Meta Luleå). Free air cooling year-round saves 20-30% on total energy vs. warm climates.</li>
+    <li><strong>Power cost:</strong> SE1 spot at €25-28/MWh (2024 avg) — among lowest in Europe.</li>
+    <li><strong>Fiber:</strong> Nordic Wave project (GlobalConnect) — 27 Tbps Stockholm-Luleå, completion mid-2026.</li>
+    <li><strong>Validation:</strong> Meta's 724 MW Luleå campus proves hyperscale viability.</li>
+    <li><strong>Waste heat:</strong> Cold climate + long heating season = opportunity to sell waste heat to district heating networks.</li>
+  </ul>
+
+  <h3>Phased Strategy Recommendation</h3>
+  <p><strong>Phase 1 (0-18 months):</strong> BTM Bitcoin mining as initial monetization. Fast to deploy, flexible load profile, instant revenue. Mining acts as a "buyer of first resort" for wind output during development.</p>
+  <p><strong>Phase 2 (12-36 months):</strong> AI compute infrastructure buildout. Requires Tier-III facilities, fiber connection, cooling infrastructure, and customer contracts. Higher margins, better regulatory treatment, more sustainable long-term economics.</p>
+  <p><strong>Phase 3 (ongoing):</strong> Hybrid operation — mining absorbs excess/curtailed wind, AI compute runs on baseload. FCR-D participation from mining loads provides ancillary revenue.</p>
+
+  <div class="page-break"></div>
+  <h2>4. Grid & Infrastructure</h2>
+
+  <h3>SE1 Transmission Capacity</h3>
+  <table>
+    <tr><th>Corridor</th><th>Capacity</th><th>Status</th></tr>
+    <tr><td>SE1 → SE2</td><td>3,300 MW</td><td>Active</td></tr>
+    <tr><td>SE2 → SE3</td><td>7,300 MW</td><td>Structurally congested</td></tr>
+    <tr><td>SE3 → SE4</td><td>5,600 MW</td><td>Active</td></tr>
+  </table>
+
+  <h3>Svenska Kraftnät Investment</h3>
+  <ul>
+    <li><strong>SEK 13 billion:</strong> Four major power line renewal projects in Norrbotten/Västerbotten (replacing 1950s infrastructure)</li>
+    <li><strong>SEK 3 billion:</strong> Hitachi Energy series compensation — up to 10 systems to increase transmitted power by 50%, operational by 2030</li>
+    <li><strong>Three new 400 kV lines:</strong> Letsi-Svartbyn, Högnäs-Stornorrfors, Svartbyn-Keminmaa reinforcement</li>
+    <li><strong>Three new 400 kV stations:</strong> Högnäs 2, Hertson, Svartbyn 2</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Strategic advantage of BTM:</strong> Grid connection requests in SE1 are competing with 5 GW of new industrial demand (green steel, LKAB). Queue times are long and uncertain. BTM consumption bypasses the grid queue entirely — a major advantage for Project Odin.
+  </div>
+
+  <h3>Fiber Infrastructure</h3>
+  <p><strong>Nordic Wave</strong> (GlobalConnect, EU-funded): 2,600 km fiber upgrade Berlin → Stockholm → Luleå. Phase 1 (Stockholm-Luleå) complete at 27 Tbps. Full completion mid-2026. <strong>Polar Connect</strong> — Arctic submarine cable route under exploration.</p>
+
+  <h3>Meta Luleå — Anchor Proof Point</h3>
+  <div class="key-stat">
+    <div class="label">Meta Luleå Data Center</div>
+    <div class="value">724 MW / 2.6M sq ft</div>
+    <div class="context">Opened 2013 | $835M invested | PUE 1.07 | 100% hydro powered | First Meta facility outside US</div>
+  </div>
+
+  <div class="page-break"></div>
+  <h2>5. Ancillary Services (FCR-N / FCR-D)</h2>
+
+  <h3>Market Evolution</h3>
+  <table>
+    <tr><th>Period</th><th>FCR-D Pricing</th><th>Context</th></tr>
+    <tr><td>2022-2023</td><td>Very high</td><td>Scarcity — golden era for BESS operators</td></tr>
+    <tr><td>2024</td><td>Declining</td><td>Prequalified capacity surged from <10 MW to ~600 MW (BESS flood)</td></tr>
+    <tr><td>Jan 2025</td><td>€6.02/MW avg</td><td>Record low — battery saturation</td></tr>
+    <tr><td>Current</td><td>€6-20/MW/h</td><td>Stabilizing at lower level</td></tr>
+  </table>
+
+  <h3>Mining-as-Demand-Response</h3>
+  <p><strong>Hive/Sympower precedent:</strong> Proven >8 MW FCR-D delivery from Boden mining facility. Response: 5 seconds for 50% curtailment, 30 seconds for full load. Mining loads have a structural advantage over batteries — they can shed hundreds of MW instantly at GW-scale clusters.</p>
+
+  <p>At Project Odin's 2-3 GW scale, even modest FCR participation would be material. However, <strong>do not model at 2022-2023 prices</strong> — use €6-20/MW/h as the conservative baseline. The original SE2 report's €25-30/MW/h estimate for FCR-N was from the high-water mark.</p>
+
+  <div class="page-break"></div>
+  <h2>6. Risk Matrix</h2>
+
+  <table>
+    <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+    <tr>
+      <td>BTM energy tax ruling unfavorable</td>
+      <td><span class="risk-tag risk-high">HIGH</span></td>
+      <td>Engage Swedish tax counsel immediately. Model both scenarios.</td>
+    </tr>
+    <tr>
+      <td>No PPA in place — offtake risk</td>
+      <td><span class="risk-tag risk-high">HIGH</span></td>
+      <td>Negotiate PPA terms early. BTM mining as interim buyer.</td>
+    </tr>
+    <tr>
+      <td>Development timeline uncertainty</td>
+      <td><span class="risk-tag risk-high">HIGH</span></td>
+      <td>Site still in permitting. Confirm EIP's construction timeline and phasing plan.</td>
+    </tr>
+    <tr>
+      <td>SE1 price increase (industrial demand)</td>
+      <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      <td>Lock in PPA at current favorable rates. Fixed price > floating for planning.</td>
+    </tr>
+    <tr>
+      <td>Grid connection competition</td>
+      <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      <td>BTM bypasses grid queue. Only relevant for power export.</td>
+    </tr>
+    <tr>
+      <td>Regulatory tightening (mining)</td>
+      <td><span class="risk-tag risk-medium">MEDIUM</span></td>
+      <td>AI compute pivot reduces regulatory exposure. Mining as secondary use.</td>
+    </tr>
+    <tr>
+      <td>FCR revenue decline</td>
+      <td><span class="risk-tag risk-low">LOW</span></td>
+      <td>Model at current conservative rates. FCR is supplementary, not core.</td>
+    </tr>
+    <tr>
+      <td>Climate / natural hazard</td>
+      <td><span class="risk-tag risk-low">LOW</span></td>
+      <td>No earthquake/hurricane risk. Cold is an advantage for cooling.</td>
+    </tr>
+  </table>
+
+  <div class="page-break"></div>
+  <h2>7. Priority Due Diligence Questions for EIP</h2>
+
+  <h3>Site & Land</h3>
+  <ol>
+    <li>What is the exact MW allocation for Project Odin within the Mark Buctin cluster?</li>
+    <li>What is the current permitting status and expected construction timeline?</li>
+    <li>Land ownership structure — lease, purchase, or easement?</li>
+    <li>Water availability on-site (cooling backup, fire suppression)?</li>
+    <li>Fiber connectivity — existing or planned? Distance to nearest PoP?</li>
+    <li>Security infrastructure — fencing, access control, monitoring?</li>
+    <li>Redundant power supply options (gas backup, grid connection for emergencies)?</li>
+  </ol>
+
+  <h3>Grid & Interconnection</h3>
+  <ol start="8">
+    <li>Status of grid connection discussions with Svenska Kraftnät?</li>
+    <li>DSO (distribution system operator) constraints for the site?</li>
+    <li>Curtailment history and expected curtailment profile?</li>
+    <li>Can BTM consumption be structured to avoid grid connection requirements?</li>
+  </ol>
+
+  <h3>Commercial</h3>
+  <ol start="12">
+    <li>EIP's preferred deal structure — PPA, lease, JV?</li>
+    <li>Has EIP obtained a legal opinion on BTM energy tax treatment?</li>
+    <li>What other tenants is EIP courting for the Mark Buctin cluster?</li>
+    <li>Willingness to support phased deployment (mining first, AI compute later)?</li>
+  </ol>
+
+  <h3>Technical</h3>
+  <ol start="16">
+    <li>Wind generation profile — capacity factor, seasonal variability, hourly output data?</li>
+    <li>Substation capacity and electrical infrastructure on-site?</li>
+    <li>Cooling water availability and discharge permitting?</li>
+    <li>Construction-ready areas — graded, with access roads?</li>
+  </ol>
+
+  <div class="page-break"></div>
+  <h2>8. Next Steps</h2>
+
+  <ol>
+    <li><strong>Immediate:</strong> Engage Swedish tax counsel on BTM energy tax question — this gates the entire economic model.</li>
+    <li><strong>This week:</strong> Mo to compile DD questions (template above) and send to Arne at EIP.</li>
+    <li><strong>Week 2:</strong> EIP returns DD responses. Coppice updates economic model with site-specific data.</li>
+    <li><strong>Week 3:</strong> Updated feasibility report with SE1-specific EBITDA scenarios (both mining-only and hybrid mining+AI).</li>
+    <li><strong>Week 4:</strong> Decision meeting — go/no-go on site visit and term sheet negotiation.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Key insight from the Mar 27 call:</strong> Arne (EIP) is a former Vattenfall executive with 30+ years in Swedish power. His grid connection and regulatory knowledge is a major asset. Mo's defense tech background (Raytheon-adjacent) brings a different risk assessment lens to the DD process. The team composition is strong for this evaluation.
+  </div>
+
+  <hr style="margin: 40px 0; border: none; border-top: 1px solid #e2e8f0;">
+  <p style="font-size: 12px; color: #94a3b8; text-align: center;">
+    Generated by Coppice AI Agent (Sangha Tenant) — March 28, 2026<br>
+    This report is confidential and intended solely for Sangha Renewables internal use.<br>
+    Sources: Nord Pool, Ei (Swedish Energy Markets Inspectorate), Svenska Kraftnät, DatacenterDynamics, CoinDesk, Hashrate Index
+  </p>
+</div>
+
+</body>
+</html>
