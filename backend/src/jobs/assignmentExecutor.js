@@ -402,10 +402,20 @@ ${inputBlock}
 ${contextString}
 
 IMPORTANT - DELIVERABLE REQUIREMENTS:
-You are executing an autonomous task for the user's dashboard. Produce tangible deliverables:
-1. If the task involves analysis or modeling, create a Google Sheet using workspace_create_sheet. Include the sheet URL.
-2. If the task involves a report or document, create a Google Doc using workspace_create_doc. Include the doc URL.
-3. At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
+You are executing an autonomous task. Your FULL, DETAILED written output will be automatically converted into a professional PDF and Word document for the user. This is your primary deliverable — write it thoroughly.
+
+CONTENT EXPECTATIONS:
+- Write the COMPLETE report/analysis in your response. Do NOT summarize — write the full thing.
+- A research report should be 3-10 pages of real content: detailed findings, specific data points, analysis, recommendations.
+- A scope analysis should cover every line item, risk, exclusion, and contract term in detail.
+- Use markdown headers (##), bullet points, tables, and bold text for structure. This formatting translates directly to the PDF.
+- Include specific numbers, dollar figures, dates, and references — not vague statements.
+- Do NOT write a "summary of what I did" or "here's what the report covers." Write the actual report content itself.
+
+OPTIONAL - GOOGLE WORKSPACE:
+If the task involves spreadsheets or data modeling, also create a Google Sheet using workspace_create_sheet.
+If you want to also create a Google Doc, use workspace_create_doc. But always write the full content in your response regardless.
+At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
 
 IMPORTANT - EMAIL POLICY:
 Do NOT send any emails directly. Do NOT call send_email. Instead, if you want to notify the user or send outreach emails, draft the email and output it EXACTLY like this:
@@ -413,7 +423,7 @@ Do NOT send any emails directly. Do NOT call send_email. Instead, if you want to
 The user will review and approve the email before it is sent. You may include multiple EMAIL_DRAFT tags if multiple emails need to be sent.
 
 IMPORTANT - TOOL FAILURES:
-If a tool fails (Google Drive upload, sheet creation, etc.), DO NOT spend your session debugging the tool. Instead, focus on producing the written deliverable in your response text. The system will automatically generate PDF/DOC from your written output. Your primary job is to produce high-quality content, not to troubleshoot infrastructure.
+If a tool fails (Google Drive upload, sheet creation, etc.), DO NOT spend your session debugging the tool. Focus on producing the written deliverable in your response text. The system will automatically generate PDF/DOC from your written output. Your primary job is to produce high-quality content, not to troubleshoot infrastructure.
 
 IMPORTANT - IF YOU NEED MORE INFORMATION:
 If you cannot complete this task because you are missing critical information (e.g., meeting notes, a document, specific data), output EXACTLY this tag:
@@ -436,18 +446,18 @@ ${contextString}
 You previously asked: ${respondedRequest.content}
 The user responded: ${respondedRequest.response}
 
-Continue executing the task with this additional information. Produce tangible deliverables as described below.
+Continue executing the task with this additional information.
 
 IMPORTANT - DELIVERABLE REQUIREMENTS:
-You are executing an autonomous task for the user's dashboard. Produce tangible deliverables:
-1. If the task involves analysis or modeling, create a Google Sheet using workspace_create_sheet. Include the sheet URL.
-2. If the task involves a report or document, create a Google Doc using workspace_create_doc. Include the doc URL.
-3. At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
+Your FULL, DETAILED written output will be automatically converted into a professional PDF and Word document. Write the COMPLETE report/analysis — not a summary.
+- 3-10 pages of real content with specific data points, analysis, and recommendations.
+- Use markdown headers (##), bullet points, tables, and bold text.
+- Do NOT write "here's what I found" — write the actual findings in full detail.
+At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
 
 IMPORTANT - EMAIL POLICY:
-Do NOT send any emails directly. Do NOT call send_email. Instead, if you want to notify the user or send outreach emails, draft the email and output it EXACTLY like this:
+Do NOT send any emails directly. Do NOT call send_email. Instead, draft emails as:
 <!--EMAIL_DRAFT{"to":"recipient@example.com","subject":"Subject line","body":"Full email body in HTML"}EMAIL_DRAFT-->
-The user will review and approve the email before it is sent. You may include multiple EMAIL_DRAFT tags if multiple emails need to be sent.
 
 IMPORTANT - IF YOU NEED MORE INFORMATION:
 If you still cannot complete this task, output EXACTLY this tag:
@@ -515,11 +525,14 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     console.log(`[AssignmentExecutor] Captured ${emailDrafts.length} email draft(s) for user approval`);
   }
 
-  // Clean response — strip the special tags
+  // Clean response — strip special tags and conversational preamble
   const cleanResponse = response
     .replace(/<!--INFO_REQUEST\{[\s\S]*?\}INFO_REQUEST-->/g, '')
     .replace(/<!--ARTIFACTS\[[\s\S]*?\]ARTIFACTS-->/g, '')
     .replace(/<!--EMAIL_DRAFT\{[\s\S]*?\}EMAIL_DRAFT-->/g, '')
+    // Strip conversational preamble that agents add before the actual content
+    .replace(/^(Done\.?|Complete\.?|Finished\.?|Here['']s|I['']ve|The document|The report|The analysis)[^\n]*\n+/i, '')
+    .replace(/^(Created|Generated|Produced|Uploaded)[^\n]*\n+/i, '')
     .trim();
 
   // Generate formatted documents for research/analysis/document tasks

@@ -28,7 +28,7 @@ const FALLBACK_TENANTS = {
   dacp: {
     name: 'DACP Construction',
     slug: 'dacp',
-    branding: { companyName: 'DACP', primaryColor: '#1e3a5f', logo: null },
+    branding: { companyName: 'DACP', primaryColor: '#1e3a5f', hideSanghaBranding: true, logo: null },
     settings: { industry: 'construction' },
   },
   sangha: {
