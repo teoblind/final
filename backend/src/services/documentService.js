@@ -533,7 +533,7 @@ tr:hover td { background: #fafafa; }
   <div class="cover-meta">
     ${tenantName ? `<strong>Prepared for:</strong> ${tenantName}<br>` : ''}
     <strong>Date:</strong> ${displayDate}<br>
-    <strong>Prepared by:</strong> Coppice AI<br>
+    <strong>Prepared by:</strong> ${meta.agentLabel || 'Coppice AI'}<br>
     ${classification ? `<strong>Classification:</strong> ${classification}` : ''}
   </div>
 </div>
@@ -541,7 +541,7 @@ tr:hover td { background: #fafafa; }
 <!-- BODY -->
 <div class="content">
 ${bodyHtml}
-<div class="doc-footer">Coppice AI - ${title} - ${displayDate}</div>
+<div class="doc-footer">${meta.agentLabel || 'Coppice AI'} - ${title} - ${displayDate}</div>
 </div>
 
 </body>
@@ -730,7 +730,7 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
  * @param {{ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label }} params
  * @returns {{ pdfPath, gdocUrl, gdocId, artifacts }}
  */
-export async function generateReport({ title, content, tenantName, agentName, userEmail, assignmentId, theme, folderId, subtitle, label, tenantId }) {
+export async function generateReport({ title, content, tenantName, agentName, agentLabel, userEmail, assignmentId, theme, folderId, subtitle, label, tenantId }) {
   const meta = {
     tenantName: tenantName || 'Coppice Client',
     date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
@@ -738,6 +738,7 @@ export async function generateReport({ title, content, tenantName, agentName, us
     subtitle: subtitle || null,
     label: label || null,
     theme: theme || null,
+    agentLabel: agentLabel || agentName || 'Coppice AI',
   };
 
   const safeName = (assignmentId || title).replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_');

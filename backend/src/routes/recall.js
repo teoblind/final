@@ -25,6 +25,7 @@ import {
 import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
 import { handleTranscriptEvent, startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
 import { getMeetingRoomByBot, addTranscript } from '../services/meetingRoomService.js';
+import { startVisionLoop, stopVisionLoop, getVisualContext, isVisionActive, processFrame } from '../services/geminiVisionService.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -179,6 +180,31 @@ router.post('/save-transcript', async (req, res) => {
   }
 });
 
+/**
+ * POST /video-frame — Real-time video frame webhook from Recall.ai
+ * No auth — Recall.ai calls this directly.
+ * Receives video frames and sends them to Gemini for analysis.
+ */
+router.post('/video-frame', async (req, res) => {
+  try {
+    const event = req.body;
+    const botId = event.data?.bot?.id || event.bot?.id || event.data?.bot_id;
+    const frameData = event.data?.data || event.data?.frame || event.data?.b64_data;
+
+    if (botId && frameData && isVisionActive(botId)) {
+      // Don't await — process in background
+      processFrame(botId, frameData).catch(err =>
+        console.error(`[Vision] Frame processing error:`, err.message)
+      );
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error('[Recall] Video frame error:', error.message);
+    res.sendStatus(200);
+  }
+});
+
 // ── Authenticated routes ──
 router.use(authenticate);
 
@@ -190,7 +216,7 @@ router.use(authenticate);
  */
 router.post('/join', async (req, res) => {
   try {
-    const { meetingUrl, botName, transcriptionProvider, joinMessage } = req.body;
+    const { meetingUrl, botName, transcriptionProvider, joinMessage, enableVision } = req.body;
     if (!meetingUrl) {
       return res.status(400).json({ error: 'meetingUrl is required' });
     }
@@ -200,10 +226,19 @@ router.post('/join', async (req, res) => {
     // Silent mode: transcribe only, respond via meeting chat (not voice)
     startChatLoop(bot.id);
 
+    // Enable vision if requested and Gemini key is configured
+    let visionEnabled = false;
+    if (enableVision && process.env.GEMINI_API_KEY) {
+      // Small delay to let bot join before polling screenshots
+      setTimeout(() => startVisionLoop(bot.id), 10000);
+      visionEnabled = true;
+    }
+
     res.json({
       botId: bot.id,
       status: 'joining',
       meetingUrl,
+      vision: visionEnabled,
     });
   } catch (error) {
     console.error('[Recall] Join error:', error.message);
@@ -219,6 +254,7 @@ router.delete('/leave/:botId', async (req, res) => {
     const { botId } = req.params;
     await removeBot(botId);
     stopChatLoop(botId);
+    stopVisionLoop(botId);
     removeLocalBot(botId);
 
     res.json({ botId, status: 'leaving' });
@@ -318,6 +354,54 @@ router.post('/chat/:botId', async (req, res) => {
     res.json({ botId, sent: true });
   } catch (error) {
     console.error('[Recall] Chat error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /vision/start/:botId — Enable vision (Gemini) for a bot in a meeting
+ * Starts polling screenshots and analyzing with Gemini.
+ */
+router.post('/vision/start/:botId', (req, res) => {
+  try {
+    const { botId } = req.params;
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(400).json({ error: 'GEMINI_API_KEY not configured' });
+    }
+    startVisionLoop(botId);
+    res.json({ botId, vision: true, polling: true });
+  } catch (error) {
+    console.error('[Vision] Start error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /vision/stop/:botId — Disable vision for a bot
+ */
+router.post('/vision/stop/:botId', (req, res) => {
+  try {
+    const { botId } = req.params;
+    stopVisionLoop(botId);
+    res.json({ botId, vision: false });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /vision/:botId — Get current visual context for a bot
+ */
+router.get('/vision/:botId', (req, res) => {
+  try {
+    const { botId } = req.params;
+    const context = getVisualContext(botId);
+    res.json({
+      botId,
+      active: isVisionActive(botId),
+      context: context || null,
+    });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

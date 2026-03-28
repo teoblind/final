@@ -603,7 +603,7 @@ const TASK_PROPOSAL_TOOLS = [
       properties: {
         title: { type: 'string', description: 'Short task title (5-10 words)' },
         description: { type: 'string', description: '1-2 sentence description of what will be done and what deliverables will be produced' },
-        category: { type: 'string', enum: ['research', 'analysis', 'estimate', 'outreach', 'document', 'admin', 'follow_up'], description: 'Task category' },
+        category: { type: 'string', enum: ['research', 'analysis', 'estimate', 'outreach', 'document', 'admin', 'follow_up', 'pitch_deck'], description: 'Task category' },
         priority: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Priority level' },
         action_prompt: { type: 'string', description: 'Detailed execution instructions for when the task runs. Include specific data sources, analysis steps, deliverable format, and who to email results to.' },
         sources: {
@@ -616,6 +616,28 @@ const TASK_PROPOSAL_TOOLS = [
     },
   },
 ];
+
+const TASK_PROPOSAL_PROMPT_ADDON = `
+
+═══ BACKGROUND TASK PROPOSALS ═══
+You have a "propose_task" tool that lets you propose background tasks the user can approve and run asynchronously.
+
+WHEN TO USE propose_task:
+- The user describes work that requires multiple steps, research, document creation, or analysis
+- The task would take more than a quick conversational answer (e.g., "write a report on...", "research...", "put together a one-pager on...")
+- The user explicitly asks you to "run a task", "create a task", or "queue this up"
+
+WHEN NOT TO USE propose_task:
+- Simple questions you can answer directly in chat
+- Quick lookups or single-step operations
+- The user just wants information, not a deliverable
+
+HOW TO USE IT WELL:
+- Write a clear, specific action_prompt — this is the instruction the background executor will follow
+- Include any relevant entity names, file references, or data sources in the action_prompt
+- Set the right category: research, analysis, estimate, outreach, document, admin, or follow_up
+- If the user mentioned specific entities or documents in the conversation, include them in the sources array
+- After proposing, tell the user what you proposed and that they can review/approve it in chat or on the Command dashboard`;
 
 // ─── Mining / IPP Tools (Sangha tenant) ─────────────────────────────────────
 
@@ -2275,7 +2297,7 @@ async function callTaskProposalTool(toolName, toolInput, tenantId) {
     category,
     priority,
     action_prompt,
-    agent_id: 'estimating',
+    agent_id: _toolContext.agentId || 'coppice',
     context_json: sources ? JSON.stringify({ sources }) : null,
   });
 
@@ -3234,6 +3256,7 @@ const SAFE_TOOLS = new Set([
   'list_scheduled_tasks',
   'workspace_search_drive', 'workspace_read_file', 'workspace_export_pdf',
   'plan_content',
+  'propose_task',
 ]);
 
 // ─── Agentic Loop Constants ──────────────────────────────────────────────────
@@ -3270,10 +3293,10 @@ async function executeToolWithRetry(toolName, toolInput, tenantId) {
 }
 
 // _toolContext is set per-request to provide threadId and onContextUpdate for context tools
-let _toolContext = { threadId: null, onContextUpdate: null };
+let _toolContext = { threadId: null, onContextUpdate: null, agentId: null };
 
-function setToolContext(threadId, onContextUpdate) {
-  _toolContext = { threadId, onContextUpdate };
+function setToolContext(threadId, onContextUpdate, agentId) {
+  _toolContext = { threadId, onContextUpdate, agentId };
 }
 
 async function routeToolCall(toolName, toolInput, tenantId) {
@@ -3541,7 +3564,10 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + knowledgeContext + siblingContext;
+  // Task proposal addon — tells agents when/how to use propose_task
+  const taskProposalAddon = taskProposalAgents.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
+
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + knowledgeContext + siblingContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -3625,7 +3651,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   }
 
   // Set tool context for context panel tools (threadId needed for pin_to_context)
-  setToolContext(threadId, null);
+  setToolContext(threadId, null, agentId);
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -4084,7 +4110,10 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + knowledgeContext + siblingContext;
+  // Task proposal addon — tells agents when/how to use propose_task
+  const taskProposalAddonStream = taskProposalAgentsStream.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
+
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + knowledgeContext + siblingContext;
 
   // ─── Build tools list (must match chat()) ───────────────────────────────
   const tools = [...WORKSPACE_TOOLS];
@@ -4127,7 +4156,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   // Set tool context for context panel tools — emits SSE context_update events
   setToolContext(threadId, (update) => {
     onChunk(JSON.stringify({ _type: 'context_update', ...update }));
-  });
+  }, agentId);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
+import TaskInputForm from './TaskInputForm.jsx';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -85,6 +86,11 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [shareSearch, setShareSearch] = useState('');
   const [shareSelected, setShareSelected] = useState([]); // selected user ids
   const [shareLoading, setShareLoading] = useState(false);
+  const [attachModal, setAttachModal] = useState(null); // assignment id
+  const [attachEntities, setAttachEntities] = useState([]);
+  const [attachSearch, setAttachSearch] = useState('');
+  const [attachTypeFilter, setAttachTypeFilter] = useState('all');
+  const [attachLoading, setAttachLoading] = useState(false);
 
   // Dynamic senders: Coppice (default) + currently logged-in user
   const SENDERS = (() => {
@@ -200,6 +206,19 @@ export default function DacpCommandDashboard({ onNavigate }) {
     finally { setProcessingAssignment(null); }
   }, []);
 
+  const handleSubmitInputs = useCallback(async (id, values) => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${id}/inputs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ values }),
+      });
+      if (res.ok) {
+        setAssignments(prev => prev.map(a => a.id === id ? { ...a, input_values_json: JSON.stringify(values) } : a));
+      }
+    } catch {}
+  }, []);
+
   const handleDismissAssignment = useCallback(async (id) => {
     try {
       await fetch(`${API_BASE}/v1/estimates/assignments/${id}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
@@ -240,7 +259,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
       const res = await fetch(`${API_BASE}/v1/estimates/assignments/team-members`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setShareUsers((data.users || []).filter(u => u.status === 'active'));
+        setShareUsers(data.users || []);
       }
     } catch {}
   }, []);
@@ -263,6 +282,43 @@ export default function DacpCommandDashboard({ onNavigate }) {
       setShareLoading(false);
     }
   }, [shareModal, shareSelected]);
+
+  const openAttachModal = useCallback(async (id) => {
+    setAttachModal(id);
+    setAttachSearch('');
+    setAttachTypeFilter('all');
+    setAttachEntities([]);
+    try {
+      const res = await fetch(`${API_BASE}/v1/knowledge/entities?limit=50`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setAttachEntities(data.entities || data || []);
+      }
+    } catch {}
+  }, []);
+
+  const handleAttachToEntity = useCallback(async (entityId, entityName) => {
+    if (!attachModal) return;
+    setAttachLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${attachModal}/attach-to-entity`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ entity_id: entityId }),
+      });
+      if (res.ok) {
+        setAssignments(prev => prev.map(a => {
+          if (a.id !== attachModal) return a;
+          const existing = a.attached_entity_ids_json ? JSON.parse(a.attached_entity_ids_json) : [];
+          if (!existing.includes(entityId)) existing.push(entityId);
+          return { ...a, attached_entity_ids_json: JSON.stringify(existing) };
+        }));
+        setAttachModal(null);
+      }
+    } catch {} finally {
+      setAttachLoading(false);
+    }
+  }, [attachModal]);
 
   const handleAssignmentChat = useCallback(async (assignmentId) => {
     if (!chatInput.trim()) return;
@@ -578,6 +634,21 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         </span>
                       </div>
                       <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
+                      {a.status === 'proposed' && a.input_fields_json && (() => {
+                        try {
+                          const fields = JSON.parse(a.input_fields_json);
+                          if (!fields.length) return null;
+                          const existingValues = a.input_values_json ? JSON.parse(a.input_values_json) : {};
+                          return (
+                            <TaskInputForm
+                              inputFields={fields}
+                              inputValues={existingValues}
+                              onSubmit={(values) => handleSubmitInputs(a.id, values)}
+                              disabled={processingAssignment === a.id}
+                            />
+                          );
+                        } catch { return null; }
+                      })()}
                       {a.status === 'completed' && (
                         <div className="mt-1.5 space-y-1.5">
                           {a.result_summary && (
@@ -589,9 +660,13 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             try {
                               const artifacts = JSON.parse(a.output_artifacts_json || '[]');
                               if (!artifacts.length) return null;
+                              const docArtifacts = artifacts.filter(art => art.type !== 'email_draft');
+                              const emailDrafts = artifacts.filter(art => art.type === 'email_draft');
                               return (
+                                <>
+                                {docArtifacts.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5">
-                                  {artifacts.map((art, i) => {
+                                  {docArtifacts.map((art, i) => {
                                     const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
                                     const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
                                       : art.type === 'pdf' ? <FileText size={10} />
@@ -600,17 +675,21 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                       : art.type === 'email' ? <Mail size={10} />
                                       : <ExternalLink size={10} />;
                                     const openPreview = async (e) => {
-                                      if (art.type === 'gdoc') return; // let Google Docs open in new tab
+                                      if (art.type === 'gdoc') return;
                                       e.preventDefault();
-                                      // Fetch with auth headers, create blob URL for iframe
                                       try {
                                         setDocPreview({ type: art.type, url: null, title: a.title, filename: art.filename, assignment: a, loading: true });
-                                        const resp = await fetch(href, { headers: getAuthHeaders() });
-                                        if (!resp.ok) throw new Error('Failed to load');
+                                        const previewUrl = art.path ? `${API_BASE}${art.path}?preview=1` : href;
+                                        console.log('[DocPreview] Fetching:', previewUrl, 'type:', art.type);
+                                        const resp = await fetch(previewUrl, { headers: getAuthHeaders() });
+                                        console.log('[DocPreview] Response:', resp.status, resp.statusText);
+                                        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
                                         const blob = await resp.blob();
+                                        console.log('[DocPreview] Blob:', blob.size, blob.type);
                                         const blobUrl = URL.createObjectURL(blob);
                                         setDocPreview(prev => prev ? { ...prev, url: blobUrl, loading: false } : null);
-                                      } catch {
+                                      } catch (err) {
+                                        console.error('[DocPreview] Error:', err);
                                         setDocPreview(prev => prev ? { ...prev, url: null, loading: false, error: true } : null);
                                       }
                                     };
@@ -634,6 +713,78 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                     );
                                   })}
                                 </div>
+                                )}
+                                {emailDrafts.map((draft, di) => (
+                                  <div key={`email-${di}`} className="mt-2 border border-amber-200 bg-amber-50 rounded-lg p-3">
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <Mail size={12} className="text-amber-600" />
+                                      <span className="text-[11px] font-semibold text-amber-800">
+                                        {draft.status === 'sent' ? 'Email Sent' : draft.status === 'rejected' ? 'Email Rejected' : 'Email Draft — Awaiting Approval'}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-amber-700 mb-1"><strong>To:</strong> {draft.to}</div>
+                                    <div className="text-[10px] text-amber-700 mb-2"><strong>Subject:</strong> {draft.subject}</div>
+                                    <div className="text-[10px] text-[#4a4a42] bg-white rounded border border-amber-100 p-2 mb-2 max-h-[120px] overflow-y-auto" dangerouslySetInnerHTML={{ __html: draft.body }} />
+                                    {draft.status === 'pending_approval' && (
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={async () => {
+                                            if (!window.confirm(`Send email to ${draft.to}?`)) return;
+                                            try {
+                                              const resp = await fetch(`${API_BASE}/v1/estimates/assignments/${a.id}/approve-email`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                                body: JSON.stringify({ index: draft.index }),
+                                              });
+                                              if (resp.ok) {
+                                                setAssignments(prev => prev.map(x => {
+                                                  if (x.id !== a.id) return x;
+                                                  const arts = JSON.parse(x.output_artifacts_json || '[]').map(ar =>
+                                                    ar.type === 'email_draft' && ar.index === draft.index ? { ...ar, status: 'sent' } : ar
+                                                  );
+                                                  return { ...x, output_artifacts_json: JSON.stringify(arts) };
+                                                }));
+                                              }
+                                            } catch {}
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[10px] font-medium px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+                                        >
+                                          <Check size={10} /> Approve & Send
+                                        </button>
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              const resp = await fetch(`${API_BASE}/v1/estimates/assignments/${a.id}/reject-email`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                                body: JSON.stringify({ index: draft.index }),
+                                              });
+                                              if (resp.ok) {
+                                                setAssignments(prev => prev.map(x => {
+                                                  if (x.id !== a.id) return x;
+                                                  const arts = JSON.parse(x.output_artifacts_json || '[]').map(ar =>
+                                                    ar.type === 'email_draft' && ar.index === draft.index ? { ...ar, status: 'rejected' } : ar
+                                                  );
+                                                  return { ...x, output_artifacts_json: JSON.stringify(arts) };
+                                                }));
+                                              }
+                                            } catch {}
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[10px] font-medium px-3 py-1.5 rounded-lg bg-white hover:bg-red-50 text-red-600 border border-red-200 transition-colors"
+                                        >
+                                          <X size={10} /> Reject
+                                        </button>
+                                      </div>
+                                    )}
+                                    {draft.status === 'sent' && (
+                                      <div className="text-[10px] text-green-600 font-medium"><Check size={10} className="inline" /> Sent {draft.sent_at ? `at ${new Date(draft.sent_at).toLocaleString()}` : ''}</div>
+                                    )}
+                                    {draft.status === 'rejected' && (
+                                      <div className="text-[10px] text-red-500 font-medium"><X size={10} className="inline" /> Rejected</div>
+                                    )}
+                                  </div>
+                                ))}
+                                </>
                               );
                             } catch { return null; }
                           })()}
@@ -649,31 +800,42 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                      {a.status === 'proposed' && (
-                        <>
-                          <button
-                            onClick={() => { setChatOpenFor(chatOpenFor === a.id ? null : a.id); setChatInput(''); }}
-                            className={`p-1 rounded transition-colors ${chatOpenFor === a.id ? 'text-[#1e3a5f] bg-blue-50' : 'text-terminal-muted hover:text-[#1e3a5f]'}`}
-                            title="Refine task"
-                          >
-                            <MessageSquare size={13} />
-                          </button>
-                          <button
-                            onClick={() => handleConfirmAssignment(a.id)}
-                            disabled={processingAssignment === a.id}
-                            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
-                          >
-                            <Check size={11} /> Run
-                          </button>
-                          <button
-                            onClick={() => handleDismissAssignment(a.id)}
-                            className="p-1 text-terminal-muted hover:text-red-500 rounded"
-                            title="Dismiss"
-                          >
-                            <X size={13} />
-                          </button>
-                        </>
-                      )}
+                      {a.status === 'proposed' && (() => {
+                        let inputsReady = true;
+                        try {
+                          const fields = JSON.parse(a.input_fields_json || '[]');
+                          const vals = a.input_values_json ? JSON.parse(a.input_values_json) : {};
+                          if (fields.length > 0) {
+                            inputsReady = fields.filter(f => f.required).every(f => vals[f.name] && String(vals[f.name]).trim() !== '');
+                          }
+                        } catch {}
+                        return (
+                          <>
+                            <button
+                              onClick={() => { setChatOpenFor(chatOpenFor === a.id ? null : a.id); setChatInput(''); }}
+                              className={`p-1 rounded transition-colors ${chatOpenFor === a.id ? 'text-[#1e3a5f] bg-blue-50' : 'text-terminal-muted hover:text-[#1e3a5f]'}`}
+                              title="Refine task"
+                            >
+                              <MessageSquare size={13} />
+                            </button>
+                            <button
+                              onClick={() => handleConfirmAssignment(a.id)}
+                              disabled={processingAssignment === a.id || !inputsReady}
+                              title={!inputsReady ? 'Fill in required fields to confirm' : ''}
+                              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                            >
+                              <Check size={11} /> Run
+                            </button>
+                            <button
+                              onClick={() => handleDismissAssignment(a.id)}
+                              className="p-1 text-terminal-muted hover:text-red-500 rounded"
+                              title="Dismiss"
+                            >
+                              <X size={13} />
+                            </button>
+                          </>
+                        );
+                      })()}
                       {a.status === 'in_progress' && (
                         <span className="flex items-center gap-1 text-[11px] text-[#1e3a5f] font-medium">
                           {infoRequests[a.job_id]?.length > 0
@@ -737,6 +899,13 @@ export default function DacpCommandDashboard({ onNavigate }) {
                               >
                                 <Users size={10} />
                                 {a.visibility === 'shared' ? 'Shared' : 'Share'}
+                              </button>
+                              <button
+                                onClick={() => openAttachModal(a.id)}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] transition-colors"
+                                title="Attach to entity"
+                              >
+                                <Link2 size={10} /> Attach
                               </button>
                               <button
                                 onClick={() => handleArchiveAssignment(a.id)}
@@ -1455,7 +1624,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </div>
             ) : docPreview.error ? (
               <div className="flex items-center justify-center h-full text-[13px] text-red-500">Failed to load document</div>
-            ) : docPreview.type === 'pdf' ? (
+            ) : (docPreview.type === 'pdf' || docPreview.type === 'docx') && docPreview.url ? (
               <iframe src={docPreview.url} className="w-full h-full border-0" title={docPreview.title} />
             ) : (
               <div className="p-6 max-w-[700px] mx-auto">
@@ -1540,6 +1709,122 @@ export default function DacpCommandDashboard({ onNavigate }) {
             >
               {shareLoading ? 'Sharing...' : 'Share'}
             </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {attachModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setAttachModal(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[500px] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e6e1] bg-[#faf9f7]">
+            <div className="flex items-center gap-2">
+              <Link2 size={16} className="text-[#1e3a5f]" />
+              <h3 className="text-[14px] font-bold text-[#111110] font-heading">Attach to entity</h3>
+            </div>
+            <button onClick={() => setAttachModal(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="px-5 py-3 border-b border-[#e8e6e1]">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9a9a92]" />
+              <input
+                type="text"
+                value={attachSearch}
+                onChange={e => setAttachSearch(e.target.value)}
+                placeholder="Search entities..."
+                className="w-full pl-9 pr-3 py-2 text-[12px] bg-[#f5f5f0] border border-[#e8e6e1] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e3a5f] text-[#333]"
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="flex gap-1 px-5 py-2 border-b border-[#e8e6e1]">
+            {['all', 'company', 'site', 'project', 'person'].map(t => (
+              <button
+                key={t}
+                onClick={() => setAttachTypeFilter(t)}
+                className={`px-2 py-1 text-[10px] font-semibold rounded-md transition-colors capitalize ${
+                  attachTypeFilter === t ? 'bg-[#1e3a5f] text-white' : 'bg-[#f0f0ec] text-[#6b6b65] hover:bg-[#e8e6e1]'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-2">
+            {(() => {
+              const currentAssignment = assignments.find(x => x.id === attachModal);
+              const matchText = ((currentAssignment?.title || '') + ' ' + (currentAssignment?.description || '')).toLowerCase();
+              const attachedIds = currentAssignment?.attached_entity_ids_json ? JSON.parse(currentAssignment.attached_entity_ids_json) : [];
+
+              const filtered = attachEntities.filter(e => {
+                if (attachTypeFilter !== 'all' && e.entity_type !== attachTypeFilter) return false;
+                if (!attachSearch) return true;
+                const q = attachSearch.toLowerCase();
+                return (e.name || '').toLowerCase().includes(q) || (e.entity_type || '').toLowerCase().includes(q);
+              });
+
+              // Score entities by relevance to task title/description
+              const scored = filtered.map(e => {
+                const name = (e.name || '').toLowerCase();
+                const words = name.split(/\s+/).filter(w => w.length > 2);
+                let score = 0;
+                if (matchText.includes(name)) score += 10; // full name match
+                for (const w of words) {
+                  if (matchText.includes(w)) score += 3; // partial word match
+                }
+                return { ...e, _score: score };
+              });
+
+              const recommended = scored.filter(e => e._score >= 3).sort((a, b) => b._score - a._score);
+              const recommendedIds = new Set(recommended.map(e => e.id));
+              const rest = scored.filter(e => !recommendedIds.has(e.id));
+
+              const renderEntity = (e) => {
+                const alreadyAttached = attachedIds.includes(e.id);
+                return (
+                  <button
+                    key={e.id}
+                    onClick={() => !alreadyAttached && handleAttachToEntity(e.id, e.name)}
+                    disabled={alreadyAttached || attachLoading}
+                    className={`w-full text-left flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors ${alreadyAttached ? 'opacity-50 cursor-default' : 'hover:bg-[#f5f5f0] cursor-pointer'}`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-[#f0f0ec] flex items-center justify-center text-[#6b6b65] shrink-0">
+                      {e.entity_type === 'company' ? <HardHat size={14} /> : e.entity_type === 'site' ? <TrendingUp size={14} /> : e.entity_type === 'project' ? <ClipboardList size={14} /> : <UserPlus size={14} />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold text-[#111110] truncate">{e.name}</div>
+                      <div className="text-[10px] text-[#9a9a92] capitalize">{e.entity_type}</div>
+                    </div>
+                    {alreadyAttached ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-semibold">Attached</span>
+                    ) : (
+                      <Link2 size={12} className="text-[#c5c5bc] shrink-0" />
+                    )}
+                  </button>
+                );
+              };
+
+              return (
+                <>
+                  {recommended.length > 0 && !attachSearch && (
+                    <>
+                      <div className="text-[10px] font-bold text-[#1e3a5f] uppercase tracking-wider px-2 pt-1 pb-1.5">Recommended</div>
+                      {recommended.map(renderEntity)}
+                      {rest.length > 0 && <div className="border-t border-[#e8e6e1] my-2" />}
+                      {rest.length > 0 && <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider px-2 pt-1 pb-1.5">All entities</div>}
+                    </>
+                  )}
+                  {rest.map(renderEntity)}
+                  {attachSearch && filtered.length === 0 && (
+                    <div className="text-center text-[12px] text-[#9a9a92] py-4">No matching entities</div>
+                  )}
+                  {filtered.length === 0 && !attachSearch && attachEntities.length === 0 && (
+                    <div className="text-center text-[12px] text-[#9a9a92] py-6">Loading entities...</div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

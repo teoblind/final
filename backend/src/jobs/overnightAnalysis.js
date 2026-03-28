@@ -163,12 +163,13 @@ RULES:
 7. Research tasks should produce a specific deliverable (PDF report, Excel sheet, summary doc) — not just "look into it"
 8. For financial analysis, specify what numbers to model and what format to deliver (Excel, PDF, etc.)
 9. NEVER propose a task that duplicates an existing active/completed task listed in the business state under "existingTasks". Find different, fresh work to do.
+10. PITCH DECKS (category: "pitch_deck") should be RARE — only suggest one when there is an unmistakable signal: a major new client/GC relationship to formalize, a high-value bid that needs a capabilities presentation, or an explicit mention in emails/meetings that a pitch deck is needed. Do NOT suggest pitch decks as routine tasks.
 
 Return a JSON array. Each object:
 {
   "title": "Short title (5-10 words)",
   "description": "What to do and why (1-2 sentences). Be specific about the deliverable.",
-  "category": "follow_up|estimate|outreach|admin|research|analysis|document",
+  "category": "follow_up|estimate|outreach|admin|research|analysis|document|pitch_deck",
   "priority": "high|medium|low",
   "action_prompt": "Detailed prompt for the agent to execute this task. Include what to research, what to build, what format, and where to save it.",
   "agent_id": "estimating|comms|hivemind"

@@ -996,6 +996,34 @@ router.get('/assignments', (req, res) => {
   }
 });
 
+/** PATCH /assignments/:id/inputs — Submit input values for a task's required fields */
+router.patch('/assignments/:id/inputs', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const { values } = req.body;
+    if (!values || typeof values !== 'object') return res.status(400).json({ error: 'values object is required' });
+
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    // Validate required fields
+    let inputFields = [];
+    try { inputFields = JSON.parse(assignment.input_fields_json || '[]'); } catch {}
+    const missing = inputFields
+      .filter(f => f.required && (!values[f.name] || String(values[f.name]).trim() === ''))
+      .map(f => f.label || f.name);
+    if (missing.length > 0) {
+      return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+    }
+
+    updateAgentAssignment(tenantId, id, { input_values_json: JSON.stringify(values) });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** POST /assignments/:id/confirm — Confirm an assignment for execution */
 router.post('/assignments/:id/confirm', async (req, res) => {
   try {
@@ -1005,17 +1033,32 @@ router.post('/assignments/:id/confirm', async (req, res) => {
     if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
     if (!['proposed', 'completed'].includes(assignment.status)) return res.status(400).json({ error: 'Assignment cannot be run in current state' });
 
-    // Mark as confirmed
+    // Check required input fields are filled before allowing confirmation
+    let inputFields = [];
+    try { inputFields = JSON.parse(assignment.input_fields_json || '[]'); } catch {}
+    if (inputFields.length > 0) {
+      let inputValues = {};
+      try { inputValues = JSON.parse(assignment.input_values_json || '{}'); } catch {}
+      const missing = inputFields
+        .filter(f => f.required && (!inputValues[f.name] || String(inputValues[f.name]).trim() === ''))
+        .map(f => f.label || f.name);
+      if (missing.length > 0) {
+        return res.status(400).json({ error: `Fill in required fields before confirming: ${missing.join(', ')}` });
+      }
+    }
+
+    // Mark as confirmed — the assignment executor polls for 'confirmed' status and picks it up
     updateAgentAssignment(tenantId, id, {
       status: 'confirmed',
       confirmed_at: new Date().toISOString(),
+      job_id: null,
+      result_summary: null,
+      full_response: null,
+      output_artifacts_json: null,
     });
-
-    // Mark as in-progress — the assignment executor job will pick it up
-    updateAgentAssignment(tenantId, id, { status: 'in_progress' });
     console.log(`[Assignments] Confirmed: ${assignment.title} — executor will pick up`);
 
-    res.json({ success: true, status: 'in_progress' });
+    res.json({ success: true, status: 'confirmed' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1167,6 +1210,140 @@ router.post('/assignments/:id/unshare', (req, res) => {
   }
 });
 
+/** POST /assignments/:id/approve-email — Approve and send a drafted email from task execution */
+router.post('/assignments/:id/approve-email', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const { index = 0 } = req.body; // which email draft to approve (if multiple)
+
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const artifacts = assignment.output_artifacts_json ? JSON.parse(assignment.output_artifacts_json) : [];
+    const emailDrafts = artifacts.filter(a => a.type === 'email_draft' && a.status === 'pending_approval');
+
+    if (emailDrafts.length === 0) return res.status(400).json({ error: 'No pending email drafts' });
+    const draft = emailDrafts[index] || emailDrafts[0];
+    if (!draft) return res.status(400).json({ error: 'Email draft not found' });
+
+    // Send the email
+    const { sendHtmlEmail } = await import('../services/emailService.js');
+    await sendHtmlEmail({
+      to: draft.to,
+      subject: draft.subject,
+      html: draft.body,
+      tenantId,
+    });
+
+    // Mark the draft as sent in artifacts
+    const updatedArtifacts = artifacts.map(a => {
+      if (a.type === 'email_draft' && a.index === draft.index) {
+        return { ...a, status: 'sent', sent_at: new Date().toISOString(), sent_by: req.user?.id || 'unknown' };
+      }
+      return a;
+    });
+
+    updateAgentAssignment(tenantId, id, {
+      output_artifacts_json: JSON.stringify(updatedArtifacts),
+    });
+
+    console.log(`[Assignments] Email approved and sent by ${req.user?.id}: "${draft.subject}" to ${draft.to}`);
+    res.json({ success: true, to: draft.to, subject: draft.subject });
+  } catch (error) {
+    console.error('[Assignments] Approve email error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/:id/reject-email — Reject a drafted email */
+router.post('/assignments/:id/reject-email', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const { index = 0 } = req.body;
+
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const artifacts = assignment.output_artifacts_json ? JSON.parse(assignment.output_artifacts_json) : [];
+    const updatedArtifacts = artifacts.map(a => {
+      if (a.type === 'email_draft' && a.index === (index || 0)) {
+        return { ...a, status: 'rejected', rejected_at: new Date().toISOString(), rejected_by: req.user?.id || 'unknown' };
+      }
+      return a;
+    });
+
+    updateAgentAssignment(tenantId, id, {
+      output_artifacts_json: JSON.stringify(updatedArtifacts),
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /assignments/:id/attach-to-entity — Attach task artifacts to a knowledge entity */
+router.post('/assignments/:id/attach-to-entity', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const { entity_id } = req.body;
+    if (!entity_id) return res.status(400).json({ error: 'entity_id required' });
+
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const { getTenantDb } = await import('../cache/database.js');
+    const db = getTenantDb(tenantId);
+
+    // Verify entity exists
+    const entity = db.prepare('SELECT * FROM knowledge_entities WHERE id = ? AND tenant_id = ?').get(entity_id, tenantId);
+    if (!entity) return res.status(404).json({ error: 'Entity not found' });
+
+    // Create a knowledge entry for the task output
+    const artifacts = assignment.output_artifacts_json ? JSON.parse(assignment.output_artifacts_json) : [];
+    const pdfArt = artifacts.find(a => a.type === 'pdf');
+    const gdocArt = artifacts.find(a => a.type === 'gdoc');
+    const entryId = uuidv4();
+
+    db.prepare(`
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, drive_file_id, drive_url, recorded_at, processed)
+      VALUES (?, ?, 'document', ?, ?, 'task-output', 'coppice', ?, ?, datetime('now'), 1)
+    `).run(
+      entryId,
+      tenantId,
+      assignment.title,
+      (assignment.result_summary || '').slice(0, 2000),
+      gdocArt?.fileId || null,
+      gdocArt?.url || pdfArt?.path || null,
+    );
+
+    // Link entry to entity
+    const linkId = uuidv4();
+    db.prepare(`
+      INSERT OR IGNORE INTO knowledge_links (id, entry_id, entity_id, relationship)
+      VALUES (?, ?, ?, 'has_report')
+    `).run(linkId, entryId, entity_id);
+
+    // Store which entities this assignment is attached to
+    const existingAttached = assignment.attached_entity_ids_json ? JSON.parse(assignment.attached_entity_ids_json) : [];
+    if (!existingAttached.includes(entity_id)) {
+      existingAttached.push(entity_id);
+      updateAgentAssignment(tenantId, id, {
+        attached_entity_ids_json: JSON.stringify(existingAttached),
+      });
+    }
+
+    console.log(`[Assignments] Attached "${assignment.title}" to entity ${entity.name} (${entity_id})`);
+    res.json({ success: true, entry_id: entryId, entity_name: entity.name });
+  } catch (error) {
+    console.error('[Assignments] Attach to entity error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** POST /assignments/:id/regenerate-report — Regenerate PDF/DOC artifacts for a completed task */
 router.post('/assignments/:id/regenerate-report', async (req, res) => {
   try {
@@ -1227,14 +1404,19 @@ router.get('/assignments/:id/download/:format', (req, res) => {
 
     if (!existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
 
+    // Our .doc files are HTML (Word opens HTML natively).
+    // If ?preview=1, serve as text/html for iframe rendering; otherwise as msword for download.
+    const isPreview = req.query.preview === '1';
     const mimeTypes = {
-      docx: 'application/msword',
-      doc: 'application/msword',
+      docx: isPreview ? 'text/html' : 'application/msword',
+      doc: isPreview ? 'text/html' : 'application/msword',
       pdf: 'application/pdf',
     };
 
     res.setHeader('Content-Type', mimeTypes[format] || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${artifact.filename}"`);
+    if (!isPreview) {
+      res.setHeader('Content-Disposition', `attachment; filename="${artifact.filename}"`);
+    }
     createReadStream(filePath).pipe(res);
   } catch (error) {
     res.status(500).json({ error: error.message });

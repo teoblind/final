@@ -370,12 +370,34 @@ async function gatherContext(tenantId, assignment) {
 
 // ─── Prompt Building ──────────────────────────────────────────────────────────
 
+function formatInputValues(assignment) {
+  try {
+    const fields = JSON.parse(assignment.input_fields_json || '[]');
+    const values = JSON.parse(assignment.input_values_json || '{}');
+    if (!fields.length || !Object.keys(values).length) return '';
+    const lines = fields
+      .filter(f => values[f.name] !== undefined && values[f.name] !== '' && f.type !== 'password')
+      .map(f => `- ${f.label || f.name}: ${values[f.name]}`);
+    // Include password fields as redacted references so agent knows they exist
+    const passwordFields = fields.filter(f => f.type === 'password' && values[f.name]);
+    for (const pf of passwordFields) {
+      lines.push(`- ${pf.label || pf.name}: [PROVIDED — available in context]`);
+    }
+    if (!lines.length) return '';
+    return `\n--- USER-PROVIDED INPUTS ---\nThe user provided the following inputs for this task:\n${lines.join('\n')}\n`;
+  } catch {
+    return '';
+  }
+}
+
 function buildExecutionPrompt(assignment, contextString) {
   const taskBlock = assignment.action_prompt
     || `Execute this task: ${assignment.title}\n\n${assignment.description}`;
 
-  return `${taskBlock}
+  const inputBlock = formatInputValues(assignment);
 
+  return `${taskBlock}
+${inputBlock}
 --- CONTEXT FROM KNOWLEDGE BASE ---
 ${contextString}
 
@@ -383,8 +405,15 @@ IMPORTANT - DELIVERABLE REQUIREMENTS:
 You are executing an autonomous task for the user's dashboard. Produce tangible deliverables:
 1. If the task involves analysis or modeling, create a Google Sheet using workspace_create_sheet. Include the sheet URL.
 2. If the task involves a report or document, create a Google Doc using workspace_create_doc. Include the doc URL.
-3. After creating deliverables, email the user a brief summary with links using send_email.
-4. At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
+3. At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
+
+IMPORTANT - EMAIL POLICY:
+Do NOT send any emails directly. Do NOT call send_email. Instead, if you want to notify the user or send outreach emails, draft the email and output it EXACTLY like this:
+<!--EMAIL_DRAFT{"to":"recipient@example.com","subject":"Subject line","body":"Full email body in HTML"}EMAIL_DRAFT-->
+The user will review and approve the email before it is sent. You may include multiple EMAIL_DRAFT tags if multiple emails need to be sent.
+
+IMPORTANT - TOOL FAILURES:
+If a tool fails (Google Drive upload, sheet creation, etc.), DO NOT spend your session debugging the tool. Instead, focus on producing the written deliverable in your response text. The system will automatically generate PDF/DOC from your written output. Your primary job is to produce high-quality content, not to troubleshoot infrastructure.
 
 IMPORTANT - IF YOU NEED MORE INFORMATION:
 If you cannot complete this task because you are missing critical information (e.g., meeting notes, a document, specific data), output EXACTLY this tag:
@@ -396,8 +425,10 @@ function buildContinuationPrompt(assignment, respondedRequest, contextString) {
   const taskBlock = assignment.action_prompt
     || `Execute this task: ${assignment.title}\n\n${assignment.description}`;
 
-  return `${taskBlock}
+  const inputBlock = formatInputValues(assignment);
 
+  return `${taskBlock}
+${inputBlock}
 --- CONTEXT FROM KNOWLEDGE BASE ---
 ${contextString}
 
@@ -411,8 +442,12 @@ IMPORTANT - DELIVERABLE REQUIREMENTS:
 You are executing an autonomous task for the user's dashboard. Produce tangible deliverables:
 1. If the task involves analysis or modeling, create a Google Sheet using workspace_create_sheet. Include the sheet URL.
 2. If the task involves a report or document, create a Google Doc using workspace_create_doc. Include the doc URL.
-3. After creating deliverables, email the user a brief summary with links using send_email.
-4. At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
+3. At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
+
+IMPORTANT - EMAIL POLICY:
+Do NOT send any emails directly. Do NOT call send_email. Instead, if you want to notify the user or send outreach emails, draft the email and output it EXACTLY like this:
+<!--EMAIL_DRAFT{"to":"recipient@example.com","subject":"Subject line","body":"Full email body in HTML"}EMAIL_DRAFT-->
+The user will review and approve the email before it is sent. You may include multiple EMAIL_DRAFT tags if multiple emails need to be sent.
 
 IMPORTANT - IF YOU NEED MORE INFORMATION:
 If you still cannot complete this task, output EXACTLY this tag:
@@ -462,15 +497,39 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     }
   }
 
+  // Extract email drafts before cleaning
+  const emailDrafts = [];
+  const emailDraftRegex = /<!--EMAIL_DRAFT(\{[\s\S]*?\})EMAIL_DRAFT-->/g;
+  let emailMatch;
+  while ((emailMatch = emailDraftRegex.exec(response)) !== null) {
+    try {
+      const draft = JSON.parse(emailMatch[1]);
+      if (draft.to && draft.subject && draft.body) {
+        emailDrafts.push(draft);
+      }
+    } catch (parseErr) {
+      console.warn(`[AssignmentExecutor] Failed to parse EMAIL_DRAFT: ${parseErr.message}`);
+    }
+  }
+  if (emailDrafts.length > 0) {
+    console.log(`[AssignmentExecutor] Captured ${emailDrafts.length} email draft(s) for user approval`);
+  }
+
   // Clean response — strip the special tags
   const cleanResponse = response
     .replace(/<!--INFO_REQUEST\{[\s\S]*?\}INFO_REQUEST-->/g, '')
     .replace(/<!--ARTIFACTS\[[\s\S]*?\]ARTIFACTS-->/g, '')
+    .replace(/<!--EMAIL_DRAFT\{[\s\S]*?\}EMAIL_DRAFT-->/g, '')
     .trim();
 
   // Generate formatted documents for research/analysis/document tasks
+  // Skip doc generation if the response looks like debug/error output rather than actual content
   const docCategories = ['research', 'analysis', 'document'];
-  if (docCategories.includes(assignment.category) && cleanResponse.length > 200) {
+  const looksLikeContent = cleanResponse.length > 500
+    && !cleanResponse.startsWith('Memory updated')
+    && !/^(Error|Failed|Could not|Unable to|I was unable|I couldn't)/i.test(cleanResponse.trim())
+    && (cleanResponse.includes('#') || cleanResponse.includes('**') || cleanResponse.length > 1000);
+  if (docCategories.includes(assignment.category) && looksLikeContent) {
     try {
       updateBackgroundJob(jobId, { progressPct: 85, progressMessage: 'Generating documents...' });
 
@@ -479,11 +538,19 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       const assignedUser = assignment.user_id ? users.find(u => u.id === assignment.user_id) : null;
       const userEmail = assignedUser?.email && !assignedUser.email.includes('localhost') ? assignedUser.email : null;
 
+      // Determine agent display name — use DACP Agent unless it's specifically the estimating agent on an estimating task
+      const agentId = assignment.agent_id || 'coppice';
+      const isEstimatingTask = agentId === 'estimating' && ['estimate', 'outreach'].includes(assignment.category);
+      const agentLabel = isEstimatingTask
+        ? `${tenant?.name || 'DACP'} Estimating Agent`
+        : `${tenant?.name || 'DACP'} Agent`;
+
       const report = await generateReport({
         title: assignment.title,
         content: cleanResponse,
         tenantName: tenant?.name || tenantId,
-        agentName: 'Coppice AI',
+        agentName: agentLabel,
+        agentLabel,
         userEmail,
         assignmentId: assignment.id,
         tenantId,
@@ -498,6 +565,21 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       console.error(`[AssignmentExecutor] Document generation failed for ${assignment.id}: ${docErr.message}`);
       // Continue — don't fail the task over doc generation
     }
+  }
+
+  // Add email drafts as pending artifacts
+  for (let i = 0; i < emailDrafts.length; i++) {
+    const draft = emailDrafts[i];
+    if (!artifacts) artifacts = [];
+    artifacts.push({
+      type: 'email_draft',
+      status: 'pending_approval',
+      label: `Email to ${draft.to}: ${draft.subject}`,
+      to: draft.to,
+      subject: draft.subject,
+      body: draft.body,
+      index: i,
+    });
   }
 
   // Complete the assignment — save full response for document regeneration

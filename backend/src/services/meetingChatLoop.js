@@ -10,6 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { sendChatMessage } from './recallService.js';
+import { getVisualContext, isVisionActive } from './geminiVisionService.js';
 
 const SPEECH_PAUSE_MS = 3000; // longer debounce for chat (less urgency than voice)
 
@@ -135,11 +136,28 @@ async function respondViaChat(state, userMessage, speaker) {
       state.conversationHistory = state.conversationHistory.slice(-20);
     }
 
+    // Inject visual context if vision is active for this bot
+    let systemPrompt = SYSTEM_PROMPT;
+    if (isVisionActive(state.botId)) {
+      const vision = getVisualContext(state.botId);
+      if (vision && vision.description) {
+        systemPrompt += `\n\n--- VISUAL CONTEXT (what you can see on screen right now) ---\n${vision.description}`;
+        if (vision.screenShareDetected) {
+          systemPrompt += `\n[Screen share is active — you can see and describe what's being shared]`;
+        }
+        if (vision.history && vision.history.length > 1) {
+          const recent = vision.history.slice(-3).map(h => `- ${h.description}`).join('\n');
+          systemPrompt += `\n\nRecent visual observations:\n${recent}`;
+        }
+        systemPrompt += `\n--- END VISUAL CONTEXT ---`;
+      }
+    }
+
     const anthropic = new Anthropic();
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 200,
-      system: SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: state.conversationHistory,
     });
 

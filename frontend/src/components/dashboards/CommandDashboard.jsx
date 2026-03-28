@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
+import TaskInputForm from './TaskInputForm.jsx';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -606,6 +607,19 @@ export default function CommandDashboard({ onNavigate }) {
     finally { setProcessingAssignment(null); }
   }, []);
 
+  const handleSubmitInputs = useCallback(async (id, values) => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments/${id}/inputs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ values }),
+      });
+      if (res.ok) {
+        setAssignments(prev => prev.map(a => a.id === id ? { ...a, input_values_json: JSON.stringify(values) } : a));
+      }
+    } catch {}
+  }, []);
+
   const handleDismissAssignment = useCallback(async (id) => {
     try {
       await fetch(`${API_BASE}/v1/estimates/assignments/${id}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
@@ -963,6 +977,21 @@ export default function CommandDashboard({ onNavigate }) {
                     {assignmentExpanded === a.id && a.description && (
                       <div className="text-[11px] text-terminal-muted mt-1.5 leading-[1.5]">{a.description}</div>
                     )}
+                    {assignmentExpanded === a.id && a.status === 'proposed' && a.input_fields_json && (() => {
+                      try {
+                        const fields = JSON.parse(a.input_fields_json);
+                        if (!fields.length) return null;
+                        const existingValues = a.input_values_json ? JSON.parse(a.input_values_json) : {};
+                        return (
+                          <TaskInputForm
+                            inputFields={fields}
+                            inputValues={existingValues}
+                            onSubmit={(values) => handleSubmitInputs(a.id, values)}
+                            disabled={processingAssignment === a.id}
+                          />
+                        );
+                      } catch { return null; }
+                    })()}
                     {assignmentExpanded === a.id && a.status === 'completed' && a.result_summary && !a.result_summary.startsWith('Failed') && (
                       <div className="text-[11px] text-[var(--t-ui-accent)] mt-1.5 leading-[1.5] bg-[var(--t-ui-accent-bg)] rounded-lg p-2.5 border border-[var(--t-ui-accent-border)]">
                         {a.result_summary.slice(0, 500)}{a.result_summary.length > 500 ? '...' : ''}
@@ -1014,23 +1043,34 @@ export default function CommandDashboard({ onNavigate }) {
                     })()}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                    {a.status === 'proposed' && (
-                      <>
-                        <button
-                          onClick={() => handleConfirmAssignment(a.id)}
-                          disabled={processingAssignment === a.id}
-                          className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-                        >
-                          {processingAssignment === a.id ? 'Running...' : 'Run'}
-                        </button>
-                        <button
-                          onClick={() => handleDismissAssignment(a.id)}
-                          className="w-6 h-6 rounded-md flex items-center justify-center text-terminal-muted hover:text-terminal-red hover:bg-red-50 transition-colors"
-                        >
-                          <X size={13} />
-                        </button>
-                      </>
-                    )}
+                    {a.status === 'proposed' && (() => {
+                      let inputsReady = true;
+                      try {
+                        const fields = JSON.parse(a.input_fields_json || '[]');
+                        const vals = a.input_values_json ? JSON.parse(a.input_values_json) : {};
+                        if (fields.length > 0) {
+                          inputsReady = fields.filter(f => f.required).every(f => vals[f.name] && String(vals[f.name]).trim() !== '');
+                        }
+                      } catch {}
+                      return (
+                        <>
+                          <button
+                            onClick={() => handleConfirmAssignment(a.id)}
+                            disabled={processingAssignment === a.id || !inputsReady}
+                            title={!inputsReady ? 'Fill in required fields to confirm' : ''}
+                            className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                          >
+                            {processingAssignment === a.id ? 'Running...' : 'Run'}
+                          </button>
+                          <button
+                            onClick={() => handleDismissAssignment(a.id)}
+                            className="w-6 h-6 rounded-md flex items-center justify-center text-terminal-muted hover:text-terminal-red hover:bg-red-50 transition-colors"
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      );
+                    })()}
                     {a.status === 'in_progress' && (
                       <span className="flex items-center gap-1 text-[11px] text-[var(--t-ui-accent)] font-medium">
                         {infoRequests[a.job_id]?.length > 0

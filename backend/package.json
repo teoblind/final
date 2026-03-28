@@ -12,6 +12,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.81",
     "@anthropic-ai/claude-code": "^2.1.81",
     "@anthropic-ai/sdk": "^0.78.0",
+    "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "axios": "^1.6.5",
     "bcryptjs": "^3.0.3",

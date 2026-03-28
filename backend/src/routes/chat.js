@@ -1213,14 +1213,49 @@ router.get('/context/:threadId', async (req, res) => {
     const entityNames = parsedEntities.map(e => e.name);
     const relatedThreads = getRelatedThreads(tenantId, entityNames, threadId, 5);
 
-    // 6. Get referenced files from Drive
+    // 6. Get referenced files from Drive + entity-linked files
     let recentFiles = [];
     try {
-      const { searchDriveContents } = await import('../cache/database.js');
+      const { searchDriveContents, getTenantDb } = await import('../cache/database.js');
       if (thread.title) {
         recentFiles = searchDriveContents(tenantId, thread.title, 5);
       }
-    } catch {}
+      // Also get files linked to detected entities via knowledge_links
+      if (parsedEntities.length > 0) {
+        const db = getTenantDb(tenantId);
+        const entityIds = parsedEntities.map(e => e.id).filter(Boolean);
+        if (entityIds.length > 0) {
+          const placeholders = entityIds.map(() => '?').join(',');
+          const linkedFiles = db.prepare(`
+            SELECT DISTINCT ke.id, ke.title as name, ke.drive_url, ke.drive_file_id, ke.type as category, ke.source,
+                   kl.relationship, kn.name as entity_name
+            FROM knowledge_entries ke
+            JOIN knowledge_links kl ON kl.entry_id = ke.id
+            JOIN knowledge_entities kn ON kn.id = kl.entity_id
+            WHERE kl.entity_id IN (${placeholders})
+              AND ke.tenant_id = ?
+              AND (ke.drive_url IS NOT NULL OR ke.source = 'task-output')
+            ORDER BY ke.recorded_at DESC
+            LIMIT 10
+          `).all(...entityIds, tenantId);
+          // Merge with Drive files, avoiding duplicates
+          const existingUrls = new Set(recentFiles.map(f => f.drive_url));
+          for (const lf of linkedFiles) {
+            if (!existingUrls.has(lf.drive_url)) {
+              recentFiles.push({
+                name: lf.name,
+                drive_url: lf.drive_url || `#entity-file-${lf.id}`,
+                category: lf.source === 'task-output' ? 'Task Report' : (lf.category || 'document'),
+                entity_name: lf.entity_name,
+                relationship: lf.relationship,
+              });
+            }
+          }
+        }
+      }
+    } catch (fileErr) {
+      console.warn('[Chat] File lookup error:', fileErr.message);
+    }
 
     res.json({
       entities: parsedEntities,

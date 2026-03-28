@@ -11,6 +11,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getMeetingPrompt } from './chatService.js';
 import { getTenantDb } from '../cache/database.js';
+import { getVisualContext, isVisionActive } from './geminiVisionService.js';
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || '';
 const ELEVENLABS_VOICE = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // Sarah
@@ -191,9 +192,21 @@ async function respondToSpeech(state, userMessage, speaker) {
       .join('\n');
 
     // Add user message to conversation history with meeting context
+    // Add visual context if vision is active
+    let visualNote = '';
+    if (isVisionActive(state.botId)) {
+      const vision = getVisualContext(state.botId);
+      if (vision && vision.description) {
+        visualNote = `\n\n[VISUAL CONTEXT — what's on screen right now]: ${vision.description}`;
+        if (vision.screenShareDetected) {
+          visualNote += ' [Screen share is active]';
+        }
+      }
+    }
+
     const contextualMessage = recentContext
-      ? `[Meeting context — last few utterances]\n${recentContext}\n\n[${speaker} is now addressing you directly]: ${userMessage}`
-      : userMessage;
+      ? `[Meeting context — last few utterances]\n${recentContext}${visualNote}\n\n[${speaker} is now addressing you directly]: ${userMessage}`
+      : `${userMessage}${visualNote}`;
 
     state.conversationHistory.push({ role: 'user', content: contextualMessage });
     if (state.conversationHistory.length > 20) {

@@ -999,6 +999,9 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec("ALTER TABLE agent_assignments ADD COLUMN visibility TEXT DEFAULT 'private'"); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN full_response TEXT'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN shared_with_json TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN attached_entity_ids_json TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN input_fields_json TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN input_values_json TEXT'); } catch (e) {}
 
   // CC thread tracking — auto-trigger assignments from accumulated observations
   targetDb.exec(`
@@ -6363,15 +6366,16 @@ export function getAgentAssignment(tenantId, id) {
 
 export function insertAgentAssignment(assignment) {
   db.prepare(`
-    INSERT INTO agent_assignments (id, tenant_id, agent_id, title, description, category, priority, action_prompt, context_json, status, user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?)
+    INSERT INTO agent_assignments (id, tenant_id, agent_id, title, description, category, priority, action_prompt, context_json, status, user_id, input_fields_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?)
   `).run(assignment.id, assignment.tenant_id, assignment.agent_id || 'estimating', assignment.title,
     assignment.description, assignment.category || 'general', assignment.priority || 'medium',
-    assignment.action_prompt || null, assignment.context_json || null, assignment.user_id || null);
+    assignment.action_prompt || null, assignment.context_json || null, assignment.user_id || null,
+    assignment.input_fields_json || null);
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility', 'full_response', 'shared_with_json'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility', 'full_response', 'shared_with_json', 'attached_entity_ids_json', 'input_fields_json', 'input_values_json'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {

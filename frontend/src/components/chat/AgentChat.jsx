@@ -1361,35 +1361,59 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
   const [noteText, setNoteText] = useState('');
 
   // Open pin search pre-filtered to a tab
+  const [pinSearchAll, setPinSearchAll] = useState([]); // full list loaded on open
+
   const openPinSearch = (tab) => {
     setPinSearchTab(tab || 'entities');
     setPinSearchQuery('');
     setPinSearchResults([]);
+    setPinSearchAll([]);
     setShowPinSearch(true);
     setAddingNote(false);
   };
 
-  // Pin search debounce
+  // Load all items when pin search opens or tab changes
   useEffect(() => {
-    if (!pinSearchQuery || pinSearchQuery.length < 2) { setPinSearchResults([]); return; }
-    const timeout = setTimeout(async () => {
-      const token = getAuthToken();
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    if (!showPinSearch) return;
+    const token = getAuthToken();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    (async () => {
       try {
         if (pinSearchTab === 'entities') {
-          const res = await fetch(`${API_BASE}/v1/knowledge/entity/${encodeURIComponent(pinSearchQuery)}`, { headers });
+          const res = await fetch(`${API_BASE}/v1/knowledge/entities?limit=50`, { headers });
           const data = await res.json();
-          const results = data.entity ? [data.entity] : [];
-          setPinSearchResults(results);
+          const all = data.entities || data || [];
+          setPinSearchAll(all);
+          setPinSearchResults(all);
         } else if (pinSearchTab === 'files') {
-          const res = await fetch(`${API_BASE}/v1/files?search=${encodeURIComponent(pinSearchQuery)}&limit=10`, { headers });
+          const res = await fetch(`${API_BASE}/v1/files?limit=20`, { headers });
           const data = await res.json();
-          setPinSearchResults(data.files || data || []);
+          const all = data.files || data || [];
+          setPinSearchAll(all);
+          setPinSearchResults(all);
         }
-      } catch { setPinSearchResults([]); }
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, [pinSearchQuery, pinSearchTab]);
+      } catch {
+        setPinSearchAll([]);
+        setPinSearchResults([]);
+      }
+    })();
+  }, [showPinSearch, pinSearchTab]);
+
+  // Filter results as user types
+  useEffect(() => {
+    if (!showPinSearch) return;
+    if (!pinSearchQuery) {
+      setPinSearchResults(pinSearchAll);
+      return;
+    }
+    const q = pinSearchQuery.toLowerCase();
+    const filtered = pinSearchAll.filter(r => {
+      const name = (r.name || r.title || '').toLowerCase();
+      const type = (r.entity_type || r.category || '').toLowerCase();
+      return name.includes(q) || type.includes(q);
+    });
+    setPinSearchResults(filtered);
+  }, [pinSearchQuery, pinSearchAll, showPinSearch]);
 
   // Show approval context if navigated from "Edit in DACP Agent"
   if (approvalContext) {
@@ -1785,8 +1809,11 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
                   ))}
                 </div>
               )}
-              {pinSearchQuery.length >= 2 && pinSearchResults.length === 0 && (
+              {pinSearchResults.length === 0 && pinSearchAll.length > 0 && pinSearchQuery && (
                 <div className="text-[10px] text-[#c5c5bc] text-center py-2">No results</div>
+              )}
+              {pinSearchResults.length === 0 && pinSearchAll.length === 0 && (
+                <div className="text-[10px] text-[#c5c5bc] text-center py-2">Loading...</div>
               )}
             </div>
           </div>
@@ -2086,6 +2113,7 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
   const accent = agentDef?.accentColor || '#1e3a5f';
   const [editingThreadId, setEditingThreadId] = React.useState(null);
   const [editTitle, setEditTitle] = React.useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState(null);
 
   const startEditing = (thread, e) => {
     if (e) e.stopPropagation();
@@ -2203,13 +2231,34 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
                       <Share2 size={9} />
                     </button>
                   )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onDeleteThread(thread.id); }}
-                    className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#dc2626] hover:bg-[#dc262615] opacity-0 group-hover:opacity-100 transition-all"
-                    title="Delete thread"
-                  >
-                    <Trash2 size={9} />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(confirmDeleteId === thread.id ? null : thread.id); }}
+                      className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#dc2626] hover:bg-[#dc262615] opacity-0 group-hover:opacity-100 transition-all"
+                      title="Delete thread"
+                    >
+                      <Trash2 size={9} />
+                    </button>
+                    {confirmDeleteId === thread.id && (
+                      <div className="absolute right-0 top-5 z-50 bg-white border border-[#e0ded9] rounded-lg shadow-lg p-2.5 w-[160px]" onClick={(e) => e.stopPropagation()}>
+                        <div className="text-[10px] text-[#4a4a42] mb-2">Delete this thread?</div>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); onDeleteThread(thread.id); }}
+                            className="flex-1 text-[10px] font-medium px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white transition-colors"
+                          >
+                            Delete
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                            className="flex-1 text-[10px] font-medium px-2 py-1 rounded border border-[#d5d3ce] text-[#6b6b65] hover:bg-[#f0eeea] transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <span className="text-[10px] text-[#c5c5bc] tabular-nums ml-0.5 font-mono">{formatRelativeTime(thread.updatedAt)}</span>
                 </div>
               </div>
@@ -2606,7 +2655,6 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
   // Delete thread
   const handleDeleteThread = useCallback(async (threadId) => {
-    if (!window.confirm('Delete this conversation?')) return;
     const token = getAuthToken();
     try {
       await fetch(`${API_BASE}/v1/chat/${agentId}/threads/${threadId}`, {
