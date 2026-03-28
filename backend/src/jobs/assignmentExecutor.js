@@ -501,7 +501,9 @@ async function handleResponse(tenantId, assignment, jobId, response) {
   const artifactsMatch = response.match(/<!--ARTIFACTS(\[[\s\S]*?\])ARTIFACTS-->/);
   if (artifactsMatch) {
     try {
-      artifacts = JSON.parse(artifactsMatch[1]);
+      const parsed = JSON.parse(artifactsMatch[1]);
+      // Filter out junk artifacts with no url or path (agent sometimes emits metadata-only entries)
+      artifacts = parsed.filter(a => a.url || a.path || a.type === 'email_draft');
     } catch (parseErr) {
       console.warn(`[AssignmentExecutor] Failed to parse ARTIFACTS: ${parseErr.message}`);
     }
