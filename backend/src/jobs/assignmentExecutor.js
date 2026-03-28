@@ -401,20 +401,20 @@ ${inputBlock}
 --- CONTEXT FROM KNOWLEDGE BASE ---
 ${contextString}
 
-IMPORTANT - DELIVERABLE REQUIREMENTS:
-You are executing an autonomous task. Your FULL, DETAILED written output will be automatically converted into a professional PDF and Word document for the user. This is your primary deliverable — write it thoroughly.
+CRITICAL - HOW TO DELIVER YOUR WORK:
+Your response text IS the deliverable. The system converts your response into a professional PDF and Word document automatically. There is no other mechanism.
 
-CONTENT EXPECTATIONS:
-- Write the COMPLETE report/analysis in your response. Do NOT summarize — write the full thing.
+DO NOT create Google Docs or Google Sheets as your primary output. Do NOT use workspace_create_doc for the report. Do NOT link to external documents. Write EVERYTHING directly in your response.
+
+CONTENT REQUIREMENTS:
+- Write the COMPLETE report/analysis RIGHT HERE in your response text. Every section, every finding, every table.
 - A research report should be 3-10 pages of real content: detailed findings, specific data points, analysis, recommendations.
 - A scope analysis should cover every line item, risk, exclusion, and contract term in detail.
 - Use markdown headers (##), bullet points, tables, and bold text for structure. This formatting translates directly to the PDF.
 - Include specific numbers, dollar figures, dates, and references — not vague statements.
-- Do NOT write a "summary of what I did" or "here's what the report covers." Write the actual report content itself.
+- Do NOT write "here's a summary" or "the document covers..." — write the actual content itself.
+- Do NOT write a brief overview and link to a Google Doc. That defeats the purpose. The full content must be in your response.
 
-OPTIONAL - GOOGLE WORKSPACE:
-If the task involves spreadsheets or data modeling, also create a Google Sheet using workspace_create_sheet.
-If you want to also create a Google Doc, use workspace_create_doc. But always write the full content in your response regardless.
 At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
 
 IMPORTANT - EMAIL POLICY:
@@ -448,11 +448,11 @@ The user responded: ${respondedRequest.response}
 
 Continue executing the task with this additional information.
 
-IMPORTANT - DELIVERABLE REQUIREMENTS:
-Your FULL, DETAILED written output will be automatically converted into a professional PDF and Word document. Write the COMPLETE report/analysis — not a summary.
-- 3-10 pages of real content with specific data points, analysis, and recommendations.
+CRITICAL - HOW TO DELIVER YOUR WORK:
+Your response text IS the deliverable. The system converts it into PDF and Word automatically. Do NOT create Google Docs. Write EVERYTHING here.
+- Write the COMPLETE report — every section, every finding, every table. 3-10 pages of real content.
 - Use markdown headers (##), bullet points, tables, and bold text.
-- Do NOT write "here's what I found" — write the actual findings in full detail.
+- Do NOT summarize or link to external docs. Write the actual content in full.
 At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
 
 IMPORTANT - EMAIL POLICY:
@@ -575,10 +575,16 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       const generatedTypes = new Set(report.artifacts.map(a => a.type));
       const dedupedAgentArtifacts = (artifacts || []).filter(a => {
         if (a.url && generatedUrls.has(a.url)) return false;
-        // Skip agent pdf/docx/gdoc if we generated our own
-        if (['pdf', 'docx', 'gdoc'].includes(a.type) && generatedTypes.has(a.type)) return false;
-        // Skip "document" type pointing to Google Docs URLs
-        if (a.type === 'document' && a.url && a.url.includes('docs.google.com')) return false;
+        // Skip agent pdf/docx if we generated our own (but keep gdoc — agent may have created one when documentService couldn't upload)
+        if (['pdf', 'docx'].includes(a.type) && generatedTypes.has(a.type)) return false;
+        // Only skip agent gdoc/document if we actually generated a gdoc
+        if (a.type === 'gdoc' && generatedTypes.has('gdoc')) return false;
+        if (a.type === 'document' && a.url && a.url.includes('docs.google.com') && generatedTypes.has('gdoc')) return false;
+        // Normalize "document" type with Google Docs URL to "gdoc" so frontend renders it correctly
+        if (a.type === 'document' && a.url && (a.url.includes('docs.google.com') || a.url.includes('drive.google.com'))) {
+          a.type = 'gdoc';
+          a.label = a.label || 'Google Docs';
+        }
         return true;
       });
       artifacts = [...dedupedAgentArtifacts, ...report.artifacts];
