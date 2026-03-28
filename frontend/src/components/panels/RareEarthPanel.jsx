@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import Panel from '../Panel';
-import { useApi, postApi } from '../../hooks/useApi';
+import { useApi } from '../../hooks/useApi';
 import { formatNumber, formatDate, formatPercent, exportToCSV, getTrendColor } from '../../utils/formatters';
 
 const ELEMENT_COLORS = {
@@ -12,7 +12,6 @@ const ELEMENT_COLORS = {
 };
 
 export default function RareEarthPanel() {
-  const [showAddModal, setShowAddModal] = useState(false);
   const [selectedElement, setSelectedElement] = useState('NdPr');
 
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
@@ -42,21 +41,13 @@ export default function RareEarthPanel() {
   return (
     <Panel
       title="Rare Earth Oxide Prices"
-      source="Manual Entry (SMM, Asian Metal)"
+      source="SMM, Asian Metal"
       lastUpdated={lastFetched}
       isStale={isStale}
       loading={loading}
       error={error}
       onRefresh={refetch}
       onExport={handleExport}
-      headerRight={
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="text-xs text-terminal-green hover:underline"
-        >
-          + Add Price
-        </button>
-      }
     >
       {/* Element Tabs */}
       <div className="flex gap-1 mb-4">
@@ -171,111 +162,6 @@ export default function RareEarthPanel() {
           {primary.importance}
         </p>
       )}
-
-      {/* Add Price Modal */}
-      {showAddModal && (
-        <AddPriceModal
-          elements={elements.map(e => e.symbol)}
-          onClose={() => setShowAddModal(false)}
-          onSuccess={refetch}
-        />
-      )}
     </Panel>
-  );
-}
-
-function AddPriceModal({ elements, onClose, onSuccess }) {
-  const [form, setForm] = useState({
-    symbol: 'NdPr',
-    value: '',
-    date: new Date().toISOString().split('T')[0],
-    notes: ''
-  });
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await postApi('/rareearth/manual', form);
-      onSuccess();
-      onClose();
-    } catch (err) {
-      alert('Failed to save: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-terminal-panel border border-terminal-border rounded-lg p-6 w-full max-w-md">
-        <h3 className="text-lg font-bold mb-4">Add Rare Earth Price</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs text-terminal-muted mb-1">Element</label>
-            <select
-              value={form.symbol}
-              onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-              className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-            >
-              {elements.map(sym => (
-                <option key={sym} value={sym}>{sym}</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-terminal-muted mb-1">Price (USD/kg)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.value}
-                onChange={(e) => setForm({ ...form, value: e.target.value })}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-                placeholder="75.00"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-terminal-muted mb-1">Date</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-                required
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-terminal-muted mb-1">Notes</label>
-            <input
-              type="text"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-              placeholder="Source: Asian Metal"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-terminal-border rounded hover:bg-terminal-border"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-4 py-2 bg-terminal-green/20 border border-terminal-green/30 text-terminal-green rounded hover:bg-terminal-green/30 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Add Price'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }

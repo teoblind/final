@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment } from '../cache/database.js';
 import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
@@ -629,6 +629,56 @@ async function pollSingleInbox(gmail, tenantId, label) {
             });
           } catch (knErr) {
             console.warn(`[GmailPoll] CC knowledge storage failed: ${knErr.message}`);
+          }
+
+          // Track CC thread for auto-trigger
+          try {
+            const hasAttachments = (fullData.payload?.parts || []).some(p => p.filename && p.filename.length > 0);
+            const tracker = upsertCcThreadTracker(ccTenant, msgThreadId, {
+              subject,
+              participant: senderEmail,
+              hasAttachment: hasAttachments,
+            });
+
+            // Check if this thread should auto-trigger an assignment
+            const readyThreads = getCcThreadsReadyForTrigger(ccTenant);
+            for (const thread of readyThreads) {
+              if (thread.gmail_thread_id === msgThreadId) {
+                const assignmentId = `assign-cc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                const participants = JSON.parse(thread.participants_json || '[]');
+                insertAgentAssignment({
+                  id: assignmentId,
+                  tenant_id: ccTenant,
+                  agent_id: 'coppice',
+                  title: `Thread Analysis: ${(thread.subject || subject || 'Email Thread').slice(0, 80)}`,
+                  description: `Compile a report from ${thread.observation_count} observed emails in this thread (${participants.length} participants${thread.attachment_count > 0 ? `, ${thread.attachment_count} attachments` : ''}). Extract key decisions, action items, and relevant data.`,
+                  category: 'analysis',
+                  priority: thread.attachment_count >= 2 ? 'high' : 'medium',
+                  action_prompt: `Analyze this email thread and compile a comprehensive report. The thread "${thread.subject || subject}" has ${thread.observation_count} emails from: ${participants.join(', ')}.
+
+Gather all knowledge entries for this thread and any attachments. Then:
+1. Summarize the key points and decisions made
+2. List all action items with responsible parties
+3. Extract and organize any data from attachments (spreadsheets, reports)
+4. Note any outstanding questions or missing information
+5. Create a Google Doc with the full analysis
+
+If you are missing critical context (like meeting notes or recordings mentioned in the emails), request it using the INFO_REQUEST tag.`,
+                  context_json: JSON.stringify({ threadId: msgThreadId, participants, observationCount: thread.observation_count }),
+                });
+                // Set source fields (new columns)
+                try {
+                  updateAgentAssignment(ccTenant, assignmentId, {
+                    source_type: 'cc-auto',
+                    source_thread_id: msgThreadId,
+                  });
+                } catch {}
+                markCcThreadTriggered(ccTenant, msgThreadId, assignmentId);
+                console.log(`[GmailPoll] Auto-triggered assignment "${assignmentId}" from CC thread: ${thread.subject || subject}`);
+              }
+            }
+          } catch (trackErr) {
+            console.warn(`[GmailPoll] CC thread tracking failed: ${trackErr.message}`);
           }
 
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}

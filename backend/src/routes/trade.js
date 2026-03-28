@@ -1,5 +1,5 @@
 import express from 'express';
-import { getCache, setCache, getManualData, addManualData, getImecMilestones, addImecMilestone, updateImecMilestone } from '../cache/database.js';
+import { getCache, setCache, getImecMilestones, addImecMilestone, updateImecMilestone } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -17,29 +17,17 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Get manual Suez data
-    const suezData = getManualData('trade', 'suez_transits');
-    const suezTonnage = getManualData('trade', 'suez_tonnage');
-
     // Get IMEC milestones
     const imecMilestones = getImecMilestones();
 
     const result = {
       suez: {
-        transits: suezData.map(d => ({
-          date: d.date,
-          value: d.value,
-          notes: d.notes
-        })),
-        tonnage: suezTonnage.map(d => ({
-          date: d.date,
-          value: d.value,
-          notes: d.notes
-        })),
-        currentMonth: suezData[0] || null,
-        yoyChange: calculateYoY(suezData),
+        transits: [],
+        tonnage: [],
+        currentMonth: null,
+        yoyChange: null,
         context: 'Suez Canal handles ~12-15% of global trade. Disruptions (Houthi attacks, Ever Given) impact global shipping costs.',
-        source: 'Suez Canal Authority (manual entry)'
+        source: 'Suez Canal Authority'
       },
       imec: {
         milestones: imecMilestones.map(m => ({
@@ -70,28 +58,6 @@ router.get('/', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching trade routes:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add Suez Canal data
-router.post('/suez', (req, res) => {
-  const { metric, value, date, notes } = req.body;
-
-  if (!metric || value === undefined || !date) {
-    return res.status(400).json({ error: 'Metric, value, and date are required' });
-  }
-
-  const validMetrics = ['suez_transits', 'suez_tonnage'];
-  if (!validMetrics.includes(metric)) {
-    return res.status(400).json({ error: `Metric must be one of: ${validMetrics.join(', ')}` });
-  }
-
-  try {
-    addManualData('trade', metric, parseFloat(value), date, notes);
-    setCache('trade-routes', null, 0);
-    res.json({ success: true });
-  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -131,22 +97,5 @@ router.put('/imec/:id', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-function calculateYoY(data) {
-  if (data.length < 2) return null;
-
-  const current = data[0];
-  const yearAgo = data.find(d => {
-    const daysDiff = (new Date(current.date) - new Date(d.date)) / (1000 * 60 * 60 * 24);
-    return daysDiff >= 365;
-  });
-
-  if (!yearAgo) return null;
-
-  return {
-    change: current.value - yearAgo.value,
-    percentage: ((current.value - yearAgo.value) / yearAgo.value) * 100
-  };
-}
 
 export default router;

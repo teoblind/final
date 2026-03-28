@@ -1,7 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import yahooFinance from '../services/yahooService.js';
-import { getCache, setCache, getManualData, addManualData } from '../cache/database.js';
+import { getCache, setCache } from '../cache/database.js';
 import db from '../cache/database.js';
 import { fetchAllFredData, getDataFreshness, clearFredCache, FRED_SERIES } from '../services/fredService.js';
 import { getSchedulerStatus } from '../jobs/liquidityRefresh.js';

@@ -1,7 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { getCache, setCache, getManualData, addManualData } from '../cache/database.js';
+import { getCache, setCache } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -25,27 +25,22 @@ router.get('/', async (req, res) => {
     try {
       uraniumData = await scrapeUraniumPrices();
     } catch (e) {
-      console.log('Scraping failed, using manual data:', e.message);
+      console.log('Scraping failed:', e.message);
     }
 
-    // Get manual data entries
-    const manualSpot = getManualData('uranium', 'spot');
-    const manualTerm = getManualData('uranium', 'term');
-
-    // Merge data sources
-    const spotHistory = mergeDataSources(uraniumData?.spotHistory || [], manualSpot);
-    const termHistory = mergeDataSources(uraniumData?.termHistory || [], manualTerm);
+    const spotHistory = uraniumData?.spotHistory || [];
+    const termHistory = uraniumData?.termHistory || [];
 
     const result = {
       spot: {
-        current: manualSpot[0]?.value || uraniumData?.spot || null,
+        current: uraniumData?.spot || null,
         history: spotHistory
       },
       term: {
-        current: manualTerm[0]?.value || uraniumData?.term || null,
+        current: uraniumData?.term || null,
         history: termHistory
       },
-      spread: calculateSpread(manualSpot[0]?.value || uraniumData?.spot, manualTerm[0]?.value || uraniumData?.term),
+      spread: calculateSpread(uraniumData?.spot, uraniumData?.term),
       keyEvents: [
         { date: '2022-02-24', event: 'Russia-Ukraine War Begins', impact: 'Supply concerns' },
         { date: '2023-07-26', event: 'Niger Coup', impact: 'Major supply disruption risk' },
@@ -54,10 +49,8 @@ router.get('/', async (req, res) => {
       ],
       sources: {
         primary: ['UxC', 'TradeTech', 'Numerco'],
-        fallback: ['Trading Economics', 'nuclear-economics.com'],
-        note: 'Canonical sources (UxC, TradeTech) are paywalled. Use manual entry for accurate data.'
-      },
-      manualEntryRequired: true
+        fallback: ['Trading Economics', 'nuclear-economics.com']
+      }
     };
 
     // Only cache if we have some data
@@ -83,39 +76,15 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Return structure for manual entry
     res.json({
       spot: { current: null, history: [] },
       term: { current: null, history: [] },
       spread: null,
       keyEvents: [],
-      sources: { note: 'Data unavailable. Please use manual entry.' },
-      manualEntryRequired: true,
+      sources: { note: 'Data unavailable.' },
       error: error.message,
       fetchedAt: new Date().toISOString()
     });
-  }
-});
-
-// Add manual uranium price entry
-router.post('/manual', (req, res) => {
-  const { type, value, date, notes } = req.body;
-
-  if (!type || !value || !date) {
-    return res.status(400).json({ error: 'Type, value, and date are required' });
-  }
-
-  if (!['spot', 'term'].includes(type)) {
-    return res.status(400).json({ error: 'Type must be "spot" or "term"' });
-  }
-
-  try {
-    addManualData('uranium', type, parseFloat(value), date, notes);
-    // Invalidate cache
-    setCache('uranium-prices', null, 0);
-    res.json({ success: true, message: 'Data added successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 
@@ -127,12 +96,8 @@ router.post('/annotation', (req, res) => {
     return res.status(400).json({ error: 'Date and event are required' });
   }
 
-  try {
-    addManualData('uranium_events', 'annotation', 0, date, JSON.stringify({ event, impact }));
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  // Annotations are part of keyEvents static data; this endpoint is a no-op placeholder
+  res.json({ success: true });
 });
 
 async function scrapeUraniumPrices() {
@@ -165,22 +130,6 @@ async function scrapeUraniumPrices() {
   }
 
   return null;
-}
-
-function mergeDataSources(scraped, manual) {
-  const combined = new Map();
-
-  // Add scraped data
-  scraped.forEach(item => {
-    combined.set(item.date, { date: item.date, value: item.value, source: 'scraped' });
-  });
-
-  // Override with manual data (more reliable)
-  manual.forEach(item => {
-    combined.set(item.date, { date: item.date, value: item.value, source: 'manual', notes: item.notes });
-  });
-
-  return Array.from(combined.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
 function calculateSpread(spot, term) {

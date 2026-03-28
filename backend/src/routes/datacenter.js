@@ -1,6 +1,6 @@
 import express from 'express';
 import axios from 'axios';
-import { getCache, setCache, getManualData, addManualData, getDatacenterProjects, addDatacenterProject, getFiberDeals, addFiberDeal } from '../cache/database.js';
+import { getCache, setCache, getDatacenterProjects, addDatacenterProject, getFiberDeals, addFiberDeal } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -28,13 +28,13 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Get manual capacity data
+    // Capacity data per region
     const capacityData = {};
     REGIONS.forEach(region => {
       capacityData[region.code] = {
-        currentDemand: getManualData('datacenter', `${region.code}_demand`)[0]?.value || null,
-        plannedAdditions: getManualData('datacenter', `${region.code}_planned`)[0]?.value || null,
-        gridHeadroom: getManualData('datacenter', `${region.code}_headroom`)[0]?.value || null
+        currentDemand: null,
+        plannedAdditions: null,
+        gridHeadroom: null
       };
     });
 
@@ -85,7 +85,7 @@ router.get('/', async (req, res) => {
         bottleneck: 'Grid interconnection queues are 4-7 years in Virginia. Power is the new constraint for AI scaling.',
         trend: 'Hyperscalers increasingly looking at alternative regions (Texas, Brazil) for power availability.'
       },
-      sources: ['EIA', 'PJM Interconnection Queue', 'ERCOT', 'Company Announcements', 'Manual Entry']
+      sources: ['EIA', 'PJM Interconnection Queue', 'ERCOT', 'Company Announcements']
     };
 
     setCache(cacheKey, result, 60 * 24);
@@ -98,33 +98,6 @@ router.get('/', async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching datacenter data:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add capacity data
-router.post('/capacity', (req, res) => {
-  const { region, metric, value, date, notes } = req.body;
-
-  if (!region || !metric || value === undefined || !date) {
-    return res.status(400).json({ error: 'Region, metric, value, and date are required' });
-  }
-
-  const validRegions = REGIONS.map(r => r.code);
-  if (!validRegions.includes(region)) {
-    return res.status(400).json({ error: `Region must be one of: ${validRegions.join(', ')}` });
-  }
-
-  const validMetrics = ['demand', 'planned', 'headroom'];
-  if (!validMetrics.includes(metric)) {
-    return res.status(400).json({ error: `Metric must be one of: ${validMetrics.join(', ')}` });
-  }
-
-  try {
-    addManualData('datacenter', `${region}_${metric}`, parseFloat(value), date, notes);
-    setCache('datacenter-power', null, 0);
-    res.json({ success: true });
-  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -205,7 +178,7 @@ async function fetchEIAData() {
 
   try {
     // This would fetch actual EIA data
-    // For now, return null to use manual data
+    // EIA integration not yet configured
     return null;
   } catch (e) {
     return null;

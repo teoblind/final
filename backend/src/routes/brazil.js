@@ -1,7 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import yahooFinance from '../services/yahooService.js';
-import { getCache, setCache, getManualData, addManualData, getDatacenterProjects, addDatacenterProject } from '../cache/database.js';
+import { getCache, setCache, getDatacenterProjects, addDatacenterProject } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
           'Distance from major AI compute centers'
         ]
       },
-      sources: ['Yahoo Finance', 'Banco Central do Brasil', 'ONS', 'ANEEL', 'USGS', 'Manual Entry']
+      sources: ['Yahoo Finance', 'Banco Central do Brasil', 'ONS', 'ANEEL', 'USGS']
     };
 
     setCache(cacheKey, result, 15);
@@ -86,28 +86,6 @@ router.get('/', async (req, res) => {
         fetchedAt: cached.fetchedAt
       });
     }
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add manual data
-router.post('/manual', (req, res) => {
-  const { category, metric, value, date, notes } = req.body;
-
-  if (!category || !metric || value === undefined || !date) {
-    return res.status(400).json({ error: 'Category, metric, value, and date are required' });
-  }
-
-  const validCategories = ['energy', 'minerals', 'macro'];
-  if (!validCategories.includes(category)) {
-    return res.status(400).json({ error: `Category must be one of: ${validCategories.join(', ')}` });
-  }
-
-  try {
-    addManualData(`brazil_${category}`, metric, parseFloat(value), date, notes);
-    setCache('brazil-compute', null, 0);
-    res.json({ success: true });
-  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -215,64 +193,46 @@ async function fetchBrazilEquities() {
 }
 
 async function fetchBrazilMacro() {
-  // Get manual data for SELIC and IPCA
-  const selicData = getManualData('brazil_macro', 'selic');
-  const ipcaData = getManualData('brazil_macro', 'ipca');
-
-  const latestSelic = selicData[0]?.value || null;
-  const latestIpca = ipcaData[0]?.value || null;
-  const realRate = latestSelic && latestIpca ? latestSelic - latestIpca : null;
-
   return {
     selic: {
-      current: latestSelic,
-      history: selicData,
+      current: null,
+      history: [],
       description: 'Brazil policy rate (Banco Central do Brasil)'
     },
     ipca: {
-      current: latestIpca,
-      history: ipcaData,
+      current: null,
+      history: [],
       description: 'Brazil CPI inflation'
     },
     realRate: {
-      current: realRate,
+      current: null,
       description: 'SELIC - IPCA (positive = attractive carry)'
     },
-    sources: ['Banco Central do Brasil', 'FRED', 'Manual Entry'],
-    note: 'Add SELIC and IPCA data manually for accurate real rate calculation'
+    sources: ['Banco Central do Brasil', 'FRED']
   };
 }
 
 async function fetchEnergyData() {
-  // Get manual data
-  const capacityData = getManualData('brazil_energy', 'installed_capacity');
-  const demandData = getManualData('brazil_energy', 'peak_demand');
-  const reservoirData = getManualData('brazil_energy', 'reservoir_level');
-
-  const latestCapacity = capacityData[0]?.value || null;
-  const latestDemand = demandData[0]?.value || null;
-  const headroom = latestCapacity && latestDemand ? latestCapacity - latestDemand : null;
-
   return {
     installedCapacity: {
-      value: latestCapacity,
+      value: null,
       unit: 'GW',
-      history: capacityData
+      history: []
     },
     peakDemand: {
-      value: latestDemand,
+      value: null,
       unit: 'GW',
-      history: demandData
+      history: []
     },
     headroom: {
-      value: headroom,
+      value: null,
       unit: 'GW',
       description: 'Available capacity above peak demand'
     },
     reservoirLevel: {
-      value: reservoirData[0]?.value || null,
+      value: null,
       unit: '%',
-      history: reservoirData
+      history: []
     },
     generationMix: {
       hydro: 65,
@@ -282,38 +242,33 @@ async function fetchEnergyData() {
       nuclear: 2,
       thermal: 8
     },
-    sources: ['ONS (Operador Nacional do Sistema Elétrico)', 'ANEEL', 'Manual Entry']
+    sources: ['ONS (Operador Nacional do Sistema Elétrico)', 'ANEEL']
   };
 }
 
 async function fetchMineralData() {
-  // Get manual data
-  const niobiumData = getManualData('brazil_minerals', 'niobium_production');
-  const rareEarthData = getManualData('brazil_minerals', 'rare_earth_reserves');
-  const lithiumData = getManualData('brazil_minerals', 'lithium_reserves');
-
   return {
     niobium: {
       globalShare: 90,
-      production: niobiumData[0]?.value || null,
+      production: null,
       unit: 'tonnes',
       uses: 'High-strength steel, superalloys, superconducting magnets',
       mainProducer: 'CBMM (Companhia Brasileira de Metalurgia e Mineração)',
-      history: niobiumData
+      history: []
     },
     rareEarths: {
-      reserves: rareEarthData[0]?.value || null,
+      reserves: null,
       projects: ['Serra Verde (GoiAS)', 'Morro do Ferro'],
       status: 'Development stage',
-      history: rareEarthData
+      history: []
     },
     lithium: {
-      reserves: lithiumData[0]?.value || null,
+      reserves: null,
       location: 'Minas Gerais (Jequitinhonha Valley)',
       status: 'Early exploration',
-      history: lithiumData
+      history: []
     },
-    sources: ['USGS', 'DNPM (Brazil Mining Agency)', 'CBMM', 'Manual Entry']
+    sources: ['USGS', 'DNPM (Brazil Mining Agency)', 'CBMM']
   };
 }
 

@@ -1,6 +1,6 @@
 import express from 'express';
 import axios from 'axios';
-import { getCache, setCache, getBtcWallets, addBtcWallet, getManualData } from '../cache/database.js';
+import { getCache, setCache, getBtcWallets, addBtcWallet } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -75,9 +75,8 @@ router.get('/reserve', async (req, res) => {
       })
     );
 
-    // Combine with manual wallet entries from database
+    // Combine with wallet entries from database
     const dbWallets = getBtcWallets();
-    const manualData = getManualData('btc_reserve');
 
     const totalBTC = walletData.reduce((sum, w) => sum + (w.balance || 0), 0);
     const totalUSD = totalBTC * btcPrice;
@@ -91,7 +90,6 @@ router.get('/reserve', async (req, res) => {
       totalUSD,
       btcPrice,
       history,
-      manualEntries: manualData,
       sources: [
         'Blockchain.info',
         'DOJ Press Releases',

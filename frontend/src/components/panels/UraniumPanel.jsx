@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from 'recharts';
-import Panel, { Stat } from '../Panel';
-import { useApi, postApi } from '../../hooks/useApi';
-import { formatCurrency, formatNumber, formatDate, formatPercent, exportToCSV } from '../../utils/formatters';
+import React from 'react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import Panel from '../Panel';
+import { useApi } from '../../hooks/useApi';
+import { formatNumber, formatDate, formatPercent, exportToCSV } from '../../utils/formatters';
 
 export default function UraniumPanel() {
-  const [showAddModal, setShowAddModal] = useState(false);
-
   const { data, loading, error, lastFetched, isStale, refetch } = useApi(
     '/uranium',
     { refreshInterval: 24 * 60 * 60 * 1000 } // 24 hours (weekly data)
@@ -40,21 +38,13 @@ export default function UraniumPanel() {
   return (
     <Panel
       title="Uranium Spot & Term Prices"
-      source={data?.sources?.primary?.join(', ') || 'Manual Entry'}
+      source={data?.sources?.primary?.join(', ') || 'UxC, TradeTech'}
       lastUpdated={lastFetched}
       isStale={isStale}
       loading={loading}
       error={error}
       onRefresh={refetch}
       onExport={handleExport}
-      headerRight={
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="text-xs text-terminal-green hover:underline"
-        >
-          + Add Price
-        </button>
-      }
     >
       {/* Current Prices */}
       <div className="grid grid-cols-2 gap-4 mb-4">
@@ -134,7 +124,7 @@ export default function UraniumPanel() {
         </div>
       ) : (
         <div className="h-40 flex items-center justify-center text-terminal-muted">
-          <p>No price data. Add entries using the button above.</p>
+          <p>No price data available.</p>
         </div>
       )}
 
@@ -151,113 +141,6 @@ export default function UraniumPanel() {
           ))}
         </div>
       </div>
-
-      {/* Manual entry note */}
-      {data?.manualEntryRequired && (
-        <p className="text-xs text-terminal-amber mt-3">
-          UxC and TradeTech are paywalled. Use manual entry for accurate pricing data.
-        </p>
-      )}
-
-      {/* Add Price Modal */}
-      {showAddModal && (
-        <AddPriceModal onClose={() => setShowAddModal(false)} onSuccess={refetch} />
-      )}
     </Panel>
-  );
-}
-
-function AddPriceModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({
-    type: 'spot',
-    value: '',
-    date: new Date().toISOString().split('T')[0],
-    notes: ''
-  });
-  const [saving, setSaving] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await postApi('/uranium/manual', form);
-      onSuccess();
-      onClose();
-    } catch (err) {
-      alert('Failed to save: ' + err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-terminal-panel border border-terminal-border rounded-lg p-6 w-full max-w-md">
-        <h3 className="text-lg font-bold mb-4">Add Uranium Price</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs text-terminal-muted mb-1">Price Type</label>
-            <select
-              value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-            >
-              <option value="spot">Spot Price</option>
-              <option value="term">Term Price</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-terminal-muted mb-1">Price (USD/lb)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.value}
-                onChange={(e) => setForm({ ...form, value: e.target.value })}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-                placeholder="85.50"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-terminal-muted mb-1">Date</label>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-                required
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-terminal-muted mb-1">Notes (source)</label>
-            <input
-              type="text"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="w-full bg-terminal-bg border border-terminal-border rounded px-3 py-2 text-sm"
-              placeholder="From UxC weekly report"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-terminal-border rounded hover:bg-terminal-border"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-4 py-2 bg-terminal-green/20 border border-terminal-green/30 text-terminal-green rounded hover:bg-terminal-green/30 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Add Price'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }

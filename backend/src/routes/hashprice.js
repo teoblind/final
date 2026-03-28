@@ -1,6 +1,6 @@
 import express from 'express';
 import axios from 'axios';
-import { getCache, setCache, getManualData } from '../cache/database.js';
+import { getCache, setCache } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -36,12 +36,6 @@ router.get('/', async (req, res) => {
     } catch (e) {
       // Fallback: Calculate from components
       hashpriceData = await calculateHashprice();
-    }
-
-    // Merge with manual data if available
-    const manualData = getManualData('hashprice', 'hashprice');
-    if (manualData.length > 0) {
-      hashpriceData.manualEntries = manualData;
     }
 
     const hashpriceValues = hashpriceData.history.map(d => d.hashprice);

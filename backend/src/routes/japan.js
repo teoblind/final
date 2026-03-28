@@ -1,6 +1,6 @@
 import express from 'express';
 import axios from 'axios';
-import { getCache, setCache, getManualData, addManualData } from '../cache/database.js';
+import { getCache, setCache } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -24,20 +24,16 @@ router.get('/', async (req, res) => {
       fetchNIIP()
     ]);
 
-    // Get manual entries
-    const manualYields = getManualData('japan', 'jgb_10y');
-    const manualNIIP = getManualData('japan', 'niip');
-
     const result = {
       jgb: {
         current: jgbData.current,
         yieldCurve: jgbData.yieldCurve,
-        history10Y: mergeData(jgbData.history10Y, manualYields),
+        history10Y: jgbData.history10Y,
         previousMonth: jgbData.previousMonth
       },
       niip: {
-        current: manualNIIP[0]?.value || niipData.current,
-        history: mergeData(niipData.history, manualNIIP),
+        current: niipData.current,
+        history: niipData.history,
         inUSD: niipData.inUSD,
         inJPY: niipData.inJPY
       },
@@ -67,28 +63,6 @@ router.get('/', async (req, res) => {
         fetchedAt: cached.fetchedAt
       });
     }
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Add manual entry
-router.post('/manual', (req, res) => {
-  const { metric, value, date, notes } = req.body;
-
-  if (!metric || value === undefined || !date) {
-    return res.status(400).json({ error: 'Metric, value, and date are required' });
-  }
-
-  const validMetrics = ['jgb_2y', 'jgb_5y', 'jgb_10y', 'jgb_30y', 'niip'];
-  if (!validMetrics.includes(metric)) {
-    return res.status(400).json({ error: `Metric must be one of: ${validMetrics.join(', ')}` });
-  }
-
-  try {
-    addManualData('japan', metric, parseFloat(value), date, notes);
-    setCache('japan-macro', null, 0);
-    res.json({ success: true });
-  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -194,20 +168,6 @@ async function fetchNIIP() {
       inJPY: null
     };
   }
-}
-
-function mergeData(apiData, manualData) {
-  const combined = new Map();
-
-  apiData.forEach(item => {
-    combined.set(item.date, { ...item, source: 'api' });
-  });
-
-  manualData.forEach(item => {
-    combined.set(item.date, { date: item.date, value: item.value, source: 'manual', notes: item.notes });
-  });
-
-  return Array.from(combined.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
 export default router;

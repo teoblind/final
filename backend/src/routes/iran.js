@@ -1,5 +1,5 @@
 import express from 'express';
-import { getCache, setCache, getManualData, addManualData } from '../cache/database.js';
+import { getCache, setCache } from '../cache/database.js';
 import {
   getCountryHashrate,
   getIranData,
@@ -96,27 +96,13 @@ router.get('/', async (req, res) => {
       }
     ];
 
-    // Get any manual overrides
-    countryData.forEach(country => {
-      const manualData = getManualData('hashrate_share', country.code);
-      if (manualData.length > 0) {
-        country.manualOverride = manualData[0].value;
-        country.manualDate = manualData[0].date;
-        country.history = manualData.map(d => ({
-          date: d.date,
-          value: d.value,
-          notes: d.notes
-        }));
-      }
-    });
-
     // Iran-specific details
     const iran = countryData.find(c => c.code === 'IR');
 
     // CBECI data notes
     const cbeci = {
       url: 'https://ccaf.io/cbeci/mining_map',
-      lastUpdate: getManualData('cbeci', 'last_update')[0]?.date || summary.lastUpdated,
+      lastUpdate: summary.lastUpdated,
       methodology: 'Uses IP geolocation of mining pool servers. VPN usage causes significant underreporting of China and overreporting of other countries.',
       reliability: 'Low-Medium. Data is based on pool IP addresses, not actual miner locations.'
     };
@@ -217,48 +203,6 @@ router.post('/refresh', async (req, res) => {
   }
 });
 
-// Add hashrate share data (manual override)
-router.post('/manual', (req, res) => {
-  const { country, value, date, notes } = req.body;
-
-  if (!country || value === undefined || !date) {
-    return res.status(400).json({ error: 'Country, value, and date are required' });
-  }
-
-  const validCountries = COUNTRIES.map(c => c.code);
-  if (!validCountries.includes(country)) {
-    return res.status(400).json({ error: `Country must be one of: ${validCountries.join(', ')}` });
-  }
-
-  if (value < 0 || value > 100) {
-    return res.status(400).json({ error: 'Value must be between 0 and 100 (percentage)' });
-  }
-
-  try {
-    addManualData('hashrate_share', country, parseFloat(value), date, notes);
-    setCache('hashrate-share', null, 0);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Mark CBECI update
-router.post('/cbeci-update', (req, res) => {
-  const { date, notes } = req.body;
-
-  if (!date) {
-    return res.status(400).json({ error: 'Date is required' });
-  }
-
-  try {
-    addManualData('cbeci', 'last_update', 0, date, notes);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Get history for a specific country
 router.get('/history/:country', (req, res) => {
   const { country } = req.params;
@@ -268,20 +212,11 @@ router.get('/history/:country', (req, res) => {
     return res.status(400).json({ error: `Country must be one of: ${COUNTRIES.map(c => c.code).join(', ')}` });
   }
 
-  try {
-    const history = getManualData('hashrate_share', country);
-    res.json({
-      ...countryInfo,
-      history: history.map(d => ({
-        date: d.date,
-        value: d.value,
-        notes: d.notes
-      })),
-      fetchedAt: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  res.json({
+    ...countryInfo,
+    history: [],
+    fetchedAt: new Date().toISOString()
+  });
 });
 
 export default router;

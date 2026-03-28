@@ -1,7 +1,7 @@
 import express from 'express';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { getCache, setCache, getManualData, addManualData } from '../cache/database.js';
+import { getCache, setCache } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -34,12 +34,8 @@ router.get('/', async (req, res) => {
     // Try to fetch PMI data
     const pmiData = await fetchPMIData();
 
-    // Merge with manual entries
-    const manualData = getManualData('pmi');
-    const mergedData = mergePMIData(pmiData, manualData);
-
     const result = {
-      countries: mergedData,
+      countries: pmiData,
       lastUpdated: new Date().toISOString(),
       sources: PMI_COUNTRIES.map(c => ({ country: c.name, source: c.source })),
       legend: {
@@ -47,7 +43,7 @@ router.get('/', async (req, res) => {
         yellow: '48-52 (Neutral)',
         red: '< 48 (Contraction)'
       },
-      note: 'PMI data updates monthly. Manual entry recommended for accuracy.'
+      note: 'PMI data updates monthly.'
     };
 
     setCache(cacheKey, result, 60 * 24); // Cache for 24 hours
@@ -73,28 +69,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Add manual PMI entry
-router.post('/manual', (req, res) => {
-  const { country, metric, value, date, notes } = req.body;
-
-  if (!country || !metric || value === undefined || !date) {
-    return res.status(400).json({ error: 'Country, metric, value, and date are required' });
-  }
-
-  const validMetrics = ['headline', 'newOrders', 'employment', 'pricesPaid', 'supplierDeliveries'];
-  if (!validMetrics.includes(metric)) {
-    return res.status(400).json({ error: `Metric must be one of: ${validMetrics.join(', ')}` });
-  }
-
-  try {
-    addManualData('pmi', `${country}_${metric}`, parseFloat(value), date, notes);
-    setCache('pmi-data', null, 0); // Invalidate cache
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Get historical PMI for a country
 router.get('/history/:country', async (req, res) => {
   const { country } = req.params;
@@ -110,17 +84,10 @@ router.get('/history/:country', async (req, res) => {
       });
     }
 
-    // Get manual data
-    const manualData = getManualData('pmi', `${country}_headline`);
-
     const result = {
       country,
-      history: manualData.map(d => ({
-        date: d.date,
-        value: d.value,
-        notes: d.notes
-      })),
-      source: 'Manual entries'
+      history: [],
+      source: 'Scraped data'
     };
 
     setCache(cacheKey, result, 60 * 24);
@@ -165,7 +132,8 @@ async function fetchPMIData() {
         pricesPaid: null,
         supplierDeliveries: null,
         date: null,
-        scraped: true
+        scraped: true,
+        dataSource: 'scraped'
       });
 
       // Rate limit
@@ -183,37 +151,13 @@ async function fetchPMIData() {
         pricesPaid: null,
         supplierDeliveries: null,
         date: null,
-        scraped: false
+        scraped: false,
+        dataSource: 'scraped'
       });
     }
   }
 
   return results;
-}
-
-function mergePMIData(scraped, manual) {
-  const result = scraped.map(country => {
-    const manualHeadline = manual.find(m => m.metric === `${country.code}_headline`);
-    const manualNewOrders = manual.find(m => m.metric === `${country.code}_newOrders`);
-    const manualEmployment = manual.find(m => m.metric === `${country.code}_employment`);
-    const manualPrices = manual.find(m => m.metric === `${country.code}_pricesPaid`);
-    const manualDeliveries = manual.find(m => m.metric === `${country.code}_supplierDeliveries`);
-
-    return {
-      ...country,
-      headline: manualHeadline?.value || country.headline,
-      newOrders: manualNewOrders?.value || country.newOrders,
-      employment: manualEmployment?.value || country.employment,
-      pricesPaid: manualPrices?.value || country.pricesPaid,
-      supplierDeliveries: manualDeliveries?.value || country.supplierDeliveries,
-      date: manualHeadline?.date || country.date,
-      // Calculate month-over-month change if we have previous data
-      change: null,
-      dataSource: manualHeadline ? 'manual' : 'scraped'
-    };
-  });
-
-  return result;
 }
 
 // Helper to determine PMI color
