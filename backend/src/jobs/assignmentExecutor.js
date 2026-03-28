@@ -174,13 +174,14 @@ async function executeAssignment(tenantId, assignment) {
     // 6. Build and execute prompt
     const prompt = buildExecutionPrompt(assignment, contextString);
 
+    const isResearch = ['research', 'analysis', 'document'].includes(assignment.category);
     const { response } = await tunnelOrChat({
       tenantId,
       agentId: assignment.agent_id || 'coppice',
       userId: 'system',
       prompt,
-      maxTurns: 15,
-      timeoutMs: 300_000,
+      maxTurns: isResearch ? 200 : 50,
+      timeoutMs: isResearch ? 1_800_000 : 600_000,
       label: `Assignment: ${assignment.title}`,
     });
 
@@ -245,13 +246,14 @@ async function resumeAssignment(tenantId, assignment) {
     const contextString = await gatherContext(tenantId, assignment);
     const continuationPrompt = buildContinuationPrompt(assignment, respondedRequest, contextString);
 
+    const isResearchResume = ['research', 'analysis', 'document'].includes(assignment.category);
     const { response } = await tunnelOrChat({
       tenantId,
       agentId: assignment.agent_id || 'coppice',
       userId: 'system',
       prompt: continuationPrompt,
-      maxTurns: 15,
-      timeoutMs: 300_000,
+      maxTurns: isResearchResume ? 200 : 50,
+      timeoutMs: isResearchResume ? 1_800_000 : 600_000,
       label: `Assignment (resumed): ${assignment.title}`,
     });
 
