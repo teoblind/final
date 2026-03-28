@@ -672,7 +672,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                   {docArtifacts.map((rawArt, i) => {
                                     // Normalize: treat any artifact with a Google Docs URL as gdoc type
                                     const isGoogleUrl = rawArt.url && (rawArt.url.includes('docs.google.com') || rawArt.url.includes('drive.google.com'));
-                                    const art = isGoogleUrl && rawArt.type !== 'gdoc' ? { ...rawArt, type: 'gdoc', label: rawArt.label || 'Google Docs' } : rawArt;
+                                    const art = isGoogleUrl && rawArt.type !== 'gdoc' ? { ...rawArt, type: 'gdoc', label: 'Google Docs' } : rawArt;
                                     const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
                                     const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
                                       : art.type === 'pdf' ? <FileText size={10} />

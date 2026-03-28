@@ -583,7 +583,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
         // Normalize "document" type with Google Docs URL to "gdoc" so frontend renders it correctly
         if (a.type === 'document' && a.url && (a.url.includes('docs.google.com') || a.url.includes('drive.google.com'))) {
           a.type = 'gdoc';
-          a.label = a.label || 'Google Docs';
+          a.label = 'Google Docs';
         }
         return true;
       });
