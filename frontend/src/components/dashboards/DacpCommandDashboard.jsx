@@ -575,10 +575,20 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                       : art.type === 'sheet' ? <FileSpreadsheet size={10} />
                                       : art.type === 'email' ? <Mail size={10} />
                                       : <ExternalLink size={10} />;
-                                    const openPreview = (e) => {
+                                    const openPreview = async (e) => {
                                       if (art.type === 'gdoc') return; // let Google Docs open in new tab
                                       e.preventDefault();
-                                      setDocPreview({ type: art.type, url: href, title: a.title, filename: art.filename, assignment: a });
+                                      // Fetch with auth headers, create blob URL for iframe
+                                      try {
+                                        setDocPreview({ type: art.type, url: null, title: a.title, filename: art.filename, assignment: a, loading: true });
+                                        const resp = await fetch(href, { headers: getAuthHeaders() });
+                                        if (!resp.ok) throw new Error('Failed to load');
+                                        const blob = await resp.blob();
+                                        const blobUrl = URL.createObjectURL(blob);
+                                        setDocPreview(prev => prev ? { ...prev, url: blobUrl, loading: false } : null);
+                                      } catch {
+                                        setDocPreview(prev => prev ? { ...prev, url: null, loading: false, error: true } : null);
+                                      }
                                     };
                                     return (
                                       <a
@@ -1371,7 +1381,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
     {/* Document Preview Modal */}
     {docPreview && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setDocPreview(null)}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { if (docPreview.url) URL.revokeObjectURL(docPreview.url); setDocPreview(null); }}>
         <div className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-[900px] h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e6e1] bg-[#faf9f7]">
@@ -1383,21 +1393,30 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <a
-                href={docPreview.url}
-                download={docPreview.filename || true}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold font-heading rounded-lg border border-[#e8e6e1] bg-white text-[#1e3a5f] hover:bg-[#f0f0ec] transition-colors"
-              >
-                <Download size={12} /> Download
-              </a>
-              <button onClick={() => setDocPreview(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+              {docPreview.url && (
+                <a
+                  href={docPreview.url}
+                  download={docPreview.filename || true}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold font-heading rounded-lg border border-[#e8e6e1] bg-white text-[#1e3a5f] hover:bg-[#f0f0ec] transition-colors"
+                >
+                  <Download size={12} /> Download
+                </a>
+              )}
+              <button onClick={() => { if (docPreview.url) URL.revokeObjectURL(docPreview.url); setDocPreview(null); }} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
                 <X size={16} />
               </button>
             </div>
           </div>
           {/* Content */}
           <div className="flex-1 overflow-auto">
-            {docPreview.type === 'pdf' ? (
+            {docPreview.loading ? (
+              <div className="flex items-center justify-center h-full">
+                <RotateCcw size={20} className="animate-spin text-[#1e3a5f]" />
+                <span className="ml-2 text-[13px] text-[#6b6b65]">Loading document...</span>
+              </div>
+            ) : docPreview.error ? (
+              <div className="flex items-center justify-center h-full text-[13px] text-red-500">Failed to load document</div>
+            ) : docPreview.type === 'pdf' ? (
               <iframe src={docPreview.url} className="w-full h-full border-0" title={docPreview.title} />
             ) : (
               <div className="p-6 max-w-[700px] mx-auto">
