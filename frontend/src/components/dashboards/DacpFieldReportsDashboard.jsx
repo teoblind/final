@@ -80,7 +80,7 @@ export default function DacpFieldReportsDashboard() {
           className="px-3 py-1.5 bg-terminal-panel border border-terminal-border rounded-lg text-[12px] text-terminal-text min-w-[200px]"
         >
           <option value="">All Jobs</option>
-          {jobs.filter(j => j.status === 'complete' && j.margin_pct != null).map(j => (
+          {jobs.map(j => (
             <option key={j.id} value={j.id}>{j.id} - {j.project_name}</option>
           ))}
         </select>

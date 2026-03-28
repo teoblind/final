@@ -1824,37 +1824,95 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
 }
 
 // ─── Inbox Tab ──────────────────────────────────────────────────────────────────
-const INBOX_ITEMS = [
-  { id: 1, gc: 'Turner Construction', project: 'Memorial Hermann Phase 2', scope: 'Concrete foundation package - 8,500 SF slab, 1,200 LF curb, 450 LF sidewalk', amount: '$266,000', status: 'Estimated', due: 'Mar 8', daysLeft: 0, urgent: true, contact: 'Mike Rodriguez', email: 'mrodriguez@turner.com' },
-  { id: 2, gc: 'McCarthy Building', project: 'Samsung Fab Expansion', scope: 'Structural concrete - grade beams, piers, elevated slab. Cleanroom specs required.', amount: '$1,850,000', status: 'In Progress', due: 'Mar 14', daysLeft: 6, urgent: false, contact: 'James Chen', email: 'jchen@mccarthy.com' },
-  { id: 3, gc: 'Hensel Phelps', project: 'I-35 Retaining Walls', scope: 'Cast-in-place retaining walls - 2,400 LF, heights 6-14 ft, TxDOT specs', amount: null, status: 'New', due: 'Mar 22', daysLeft: 14, urgent: false, contact: 'Sarah Davis', email: 'sdavis@henselphelps.com' },
-  { id: 4, gc: 'DPR Construction', project: 'Legacy West Tower', scope: 'Post-tension slab package - 42 floors, PT slabs, shear walls, core', amount: null, status: 'New', due: 'Mar 16', daysLeft: 8, urgent: true, contact: 'Tom Walsh', email: 'twalsh@dpr.com' },
-  { id: 5, gc: 'Rogers-O\'Brien', project: 'McKinney Town Center', scope: 'Site concrete - parking garage slab, sidewalks, loading docks, curb cuts', amount: '$420,000', status: 'Estimated', due: 'Mar 18', daysLeft: 10, urgent: false, contact: 'Lisa Park', email: 'lpark@r-o.com' },
-  { id: 6, gc: 'Balfour Beatty', project: 'UT Dallas Science Bldg', scope: 'Foundation and SOG - drilled piers, grade beams, 12,000 SF lab floor', amount: null, status: 'New', due: 'Mar 25', daysLeft: 17, urgent: false, contact: 'Kevin Brown', email: 'kbrown@balfourbeatty.us' },
-];
-
 function InboxTab({ accent }) {
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
-  const filters = ['All', 'New', 'In Progress', 'Estimated', 'Won', 'Lost'];
+  const [bids, setBids] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const filters = ['All', 'new', 'reviewing', 'estimated', 'won', 'lost', 'passed'];
 
-  const filtered = INBOX_ITEMS.filter(item => {
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchInbox() {
+      setLoading(true);
+      setError(null);
+      try {
+        const token = getAuthToken();
+        const res = await fetch(`${API_BASE}/v1/estimates/inbox`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        });
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json();
+        if (!cancelled) setBids(data.bidRequests || []);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchInbox();
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = bids.filter(item => {
     if (filter !== 'All' && item.status !== filter) return false;
-    if (search && !`${item.gc} ${item.project} ${item.scope}`.toLowerCase().includes(search.toLowerCase())) return false;
+    const hay = `${item.gc_name || ''} ${item.subject || ''} ${item.from_name || ''}`.toLowerCase();
+    if (search && !hay.includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const sel = selected ? INBOX_ITEMS.find(i => i.id === selected) : null;
+  const sel = selected ? bids.find(i => i.id === selected) : null;
+
+  const daysLeft = (dueDate) => {
+    if (!dueDate) return null;
+    const diff = Math.ceil((new Date(dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const formatDue = (dueDate) => {
+    if (!dueDate) return '-';
+    return new Date(dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const urgencyBadge = (urgency) => {
+    if (urgency === 'high' || urgency === 'urgent') return 'text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-mono';
+    if (urgency === 'medium') return 'text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-mono';
+    return null;
+  };
 
   const statusColor = (s) => {
-    if (s === 'New') return 'bg-blue-100 text-blue-700';
-    if (s === 'In Progress') return 'bg-amber-100 text-amber-700';
-    if (s === 'Estimated') return 'bg-green-100 text-green-700';
-    if (s === 'Won') return 'bg-emerald-100 text-emerald-800';
-    if (s === 'Lost') return 'bg-red-100 text-red-700';
+    if (s === 'new') return 'bg-blue-100 text-blue-700';
+    if (s === 'reviewing') return 'bg-amber-100 text-amber-700';
+    if (s === 'estimated') return 'bg-green-100 text-green-700';
+    if (s === 'won') return 'bg-emerald-100 text-emerald-800';
+    if (s === 'lost') return 'bg-red-100 text-red-700';
+    if (s === 'passed') return 'bg-gray-100 text-gray-600';
     return 'bg-gray-100 text-gray-600';
   };
+
+  const filterLabel = (f) => {
+    if (f === 'All') return 'All';
+    return f.charAt(0).toUpperCase() + f.slice(1);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-[#e8e6e1] border-t-[#1e3a5f] animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
+        <div className="text-[13px] text-red-600 font-heading">Failed to load inbox</div>
+        <div className="text-[11px] text-[#9a9a92]">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -1863,59 +1921,110 @@ function InboxTab({ accent }) {
         {/* Filters + Search */}
         <div className="px-5 py-3 border-b border-terminal-border flex items-center gap-2 flex-wrap">
           {filters.map(f => (
-            <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors font-heading ${filter === f ? 'text-white border-transparent' : 'bg-terminal-panel text-[#9a9a92] border-terminal-border hover:bg-[#f5f4f0]'}`} style={filter === f ? { backgroundColor: accent } : undefined}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-colors font-heading ${filter === f ? 'text-white border-transparent' : 'bg-terminal-panel text-[#9a9a92] border-terminal-border hover:bg-[#f5f4f0]'}`} style={filter === f ? { backgroundColor: accent } : undefined}>{filterLabel(f)}</button>
           ))}
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search bids..." className="ml-auto px-3 py-1.5 rounded-lg border border-terminal-border bg-[#f5f4f0] text-[11px] w-44 outline-none focus:border-[#9a9a92]" />
         </div>
         {/* Items */}
         <div className="flex-1 overflow-y-auto">
-          {filtered.map(item => (
-            <div key={item.id} onClick={() => setSelected(item.id)} className={`px-5 py-3.5 border-b border-terminal-border cursor-pointer hover:bg-[#f5f4f0] transition-colors ${selected === item.id ? 'bg-[#f5f4f0]' : ''}`}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[13px] font-semibold text-terminal-text font-heading">{item.gc}</span>
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusColor(item.status)}`}>{item.status}</span>
+          {filtered.map(item => {
+            const dl = daysLeft(item.due_date);
+            const isUrgent = item.urgency === 'high' || item.urgency === 'urgent' || (dl !== null && dl <= 2 && dl >= 0);
+            return (
+              <div key={item.id} onClick={() => setSelected(item.id)} className={`px-5 py-3.5 border-b border-terminal-border cursor-pointer hover:bg-[#f5f4f0] transition-colors ${selected === item.id ? 'bg-[#f5f4f0]' : ''}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[13px] font-semibold text-terminal-text font-heading">{item.gc_name || item.from_name || 'Unknown'}</span>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusColor(item.status)}`}>{item.status}</span>
+                </div>
+                <div className="text-[12px] text-terminal-text mb-1 truncate">{item.subject || 'No subject'}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-[#9a9a92]">{item.due_date ? `Due ${formatDue(item.due_date)}` : 'No due date'}</span>
+                  <div className="flex items-center gap-2">
+                    {dl !== null && dl >= 0 && <span className="text-[10px] text-[#9a9a92] font-mono">{dl === 0 ? 'Today' : `${dl}d left`}</span>}
+                    {dl !== null && dl < 0 && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-mono">OVERDUE</span>}
+                    {isUrgent && dl >= 0 && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-mono">URGENT</span>}
+                  </div>
+                </div>
               </div>
-              <div className="text-[12px] text-terminal-text mb-1">{item.project}</div>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-[#9a9a92]">Due {item.due}</span>
-                {item.amount && <span className="text-[11px] font-mono font-semibold text-terminal-text">{item.amount}</span>}
-                {item.urgent && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-mono">URGENT</span>}
-              </div>
-            </div>
-          ))}
-          {filtered.length === 0 && <div className="px-5 py-10 text-center text-[#9a9a92] text-[13px]">No bid requests match your filter</div>}
+            );
+          })}
+          {filtered.length === 0 && <div className="px-5 py-10 text-center text-[#9a9a92] text-[13px]">{bids.length === 0 ? 'No bid requests yet' : 'No bid requests match your filter'}</div>}
         </div>
       </div>
       {/* Detail Panel */}
       {sel && (
         <div className="flex-[2] min-w-0 overflow-y-auto bg-[#f5f4f0] p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[15px] font-semibold text-terminal-text font-heading">{sel.project}</h3>
-            <button onClick={() => setSelected(null)} className="text-[#9a9a92] hover:text-terminal-text"><X size={16} /></button>
+            <h3 className="text-[15px] font-semibold text-terminal-text font-heading truncate mr-2">{sel.subject || sel.gc_name || 'Bid Request'}</h3>
+            <button onClick={() => setSelected(null)} className="text-[#9a9a92] hover:text-terminal-text shrink-0"><X size={16} /></button>
           </div>
           <div className="space-y-3">
             <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
               <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">General Contractor</div>
-              <div className="text-[13px] font-semibold text-terminal-text">{sel.gc}</div>
-              <div className="text-[11px] text-[#9a9a92] mt-0.5">{sel.contact} &middot; {sel.email}</div>
+              <div className="text-[13px] font-semibold text-terminal-text">{sel.gc_name || 'Unknown'}</div>
+              <div className="text-[11px] text-[#9a9a92] mt-0.5">{sel.from_name || ''}{sel.from_email ? ` \u00b7 ${sel.from_email}` : ''}</div>
             </div>
-            <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
-              <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">Scope of Work</div>
-              <div className="text-[12px] text-terminal-text leading-relaxed">{sel.scope}</div>
-            </div>
+            {sel.scope && typeof sel.scope === 'object' && Object.keys(sel.scope).length > 0 && (
+              <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">Scope of Work</div>
+                {sel.scope.summary && <div className="text-[12px] text-terminal-text leading-relaxed mb-2">{sel.scope.summary}</div>}
+                {sel.scope.items && sel.scope.items.length > 0 && (
+                  <div className="space-y-1">
+                    {sel.scope.items.map((item, i) => (
+                      <div key={i} className="text-[11px] text-[#9a9a92] flex items-start gap-1.5">
+                        <span className="text-[#9a9a92] mt-0.5 shrink-0">&bull;</span>
+                        <span>{typeof item === 'string' ? item : item.description || item.name || JSON.stringify(item)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {sel.body && (!sel.scope || Object.keys(sel.scope).length === 0) && (
+              <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">Request Details</div>
+                <div className="text-[12px] text-terminal-text leading-relaxed whitespace-pre-wrap">{sel.body.slice(0, 600)}{sel.body.length > 600 ? '...' : ''}</div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
                 <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1 font-heading">Bid Due</div>
-                <div className="text-[15px] font-semibold text-terminal-text font-display">{sel.due}</div>
-                <div className="text-[11px] text-[#9a9a92]">{sel.daysLeft === 0 ? 'Today' : `${sel.daysLeft} days left`}</div>
+                <div className="text-[15px] font-semibold text-terminal-text font-display">{formatDue(sel.due_date)}</div>
+                {sel.due_date && <div className="text-[11px] text-[#9a9a92]">{(() => { const d = daysLeft(sel.due_date); return d === null ? '' : d < 0 ? 'Overdue' : d === 0 ? 'Today' : `${d} days left`; })()}</div>}
               </div>
               <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
-                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1 font-heading">Estimate</div>
-                <div className="text-[15px] font-semibold text-terminal-text font-display">{sel.amount || '-'}</div>
-                <div className={`text-[11px] ${statusColor(sel.status)} inline-block px-1.5 py-0.5 rounded mt-0.5`}>{sel.status}</div>
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-1 font-heading">Status</div>
+                <div className={`text-[11px] ${statusColor(sel.status)} inline-block px-2 py-0.5 rounded mt-1 font-mono font-bold`}>{sel.status}</div>
+                {sel.urgency && <div className="text-[11px] text-[#9a9a92] mt-1">Urgency: {sel.urgency}</div>}
               </div>
             </div>
-            {sel.status === 'New' && (
+            {sel.attachments && sel.attachments.length > 0 && (
+              <div className="bg-terminal-panel rounded-xl border border-terminal-border p-4">
+                <div className="text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider mb-2 font-heading">Attachments ({sel.attachments.length})</div>
+                <div className="space-y-1.5">
+                  {sel.attachments.map((att, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px] text-terminal-text">
+                      <FileText size={12} className="text-[#9a9a92] shrink-0" />
+                      <span className="truncate">{att.name || att.filename || `Attachment ${i + 1}`}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {sel.missing_info && sel.missing_info.length > 0 && (
+              <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+                <div className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider mb-2 font-heading">Missing Information</div>
+                <div className="space-y-1">
+                  {sel.missing_info.map((info, i) => (
+                    <div key={i} className="text-[11px] text-amber-800 flex items-start gap-1.5">
+                      <span className="mt-0.5 shrink-0">&bull;</span>
+                      <span>{typeof info === 'string' ? info : info.description || JSON.stringify(info)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {sel.status === 'new' && (
               <button onClick={() => alert('Estimate generation started - the bot will analyze the scope and produce a draft estimate.')} className="w-full py-2.5 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90 font-heading" style={{ backgroundColor: accent }}>Generate Estimate</button>
             )}
           </div>
@@ -1926,47 +2035,92 @@ function InboxTab({ accent }) {
 }
 
 // ─── History Tab ────────────────────────────────────────────────────────────────
-const HISTORY_DATA = [
-  { id: 1, project: 'Memorial Hermann Phase 1', gc: 'Turner Construction', date: 'Jun 2024', bid: '$214,500', actual: '$198,200', margin: '7.6%', status: 'Won' },
-  { id: 2, project: 'Methodist Hospital Expansion', gc: 'McCarthy Building', date: 'Mar 2024', bid: '$186,000', actual: '$172,400', margin: '7.3%', status: 'Won' },
-  { id: 3, project: 'St. Luke\'s Parking Structure', gc: 'DPR Construction', date: 'Jan 2025', bid: '$342,000', actual: null, margin: null, status: 'Lost', note: 'Winner bid $310K (-9.4%)' },
-  { id: 4, project: 'Parkland Clinic Phase 3', gc: 'Hensel Phelps', date: 'Nov 2024', bid: '$127,500', actual: '$119,800', margin: '6.0%', status: 'Won' },
-  { id: 5, project: 'DFW Airport Terminal C', gc: 'Austin Industries', date: 'Sep 2024', bid: '$1,420,000', actual: null, margin: null, status: 'Lost', note: 'Scope changed after bid' },
-  { id: 6, project: 'Frisco Station Mixed-Use', gc: 'Rogers-O\'Brien', date: 'Aug 2024', bid: '$385,000', actual: '$362,100', margin: '5.9%', status: 'Won' },
-  { id: 7, project: 'Allen Premium Outlets', gc: 'Cadence McShane', date: 'Jul 2024', bid: '$268,000', actual: '$251,300', margin: '6.2%', status: 'Won' },
-  { id: 8, project: 'Bishop Arts Mixed-Use', gc: 'Turner Construction', date: 'Feb 2025', bid: '$342,000', actual: null, margin: null, status: 'Pending' },
-];
-
-const LEARNING_ITEMS = [
-  { text: 'Ready-mix concrete pricing up 8% - recommend updating base rate from $142 to $153/CY', action: 'Update Pricing', type: 'price' },
-  { text: 'Win rate on foundation-only bids is 62% vs 38% overall - consider specializing', action: 'View Analysis', type: 'insight' },
-  { text: 'Turner Construction repeat bids have 75% win rate - prioritize their RFQs', action: 'View Details', type: 'pattern' },
-  { text: 'Overhead at 15% may be too high for jobs under $200K - competitors using 12-13%', action: 'Adjust Model', type: 'price' },
-];
-
 function HistoryTab({ accent }) {
-  const won = HISTORY_DATA.filter(h => h.status === 'Won');
-  const lost = HISTORY_DATA.filter(h => h.status === 'Lost');
-  const pending = HISTORY_DATA.filter(h => h.status === 'Pending');
-  const winRate = Math.round((won.length / (won.length + lost.length)) * 100);
-  const avgMargin = won.length ? (won.reduce((s, h) => s + parseFloat(h.margin), 0) / won.length).toFixed(1) : '0';
-  const totalBid = HISTORY_DATA.reduce((s, h) => s + parseInt(h.bid.replace(/[$,]/g, '')), 0);
+  const [stats, setStats] = useState(null);
+  const [estimates, setEstimates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const token = getAuthToken();
+        const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+        const [statsRes, estimatesRes] = await Promise.all([
+          fetch(`${API_BASE}/v1/estimates/stats`, { headers }),
+          fetch(`${API_BASE}/v1/estimates/estimates`, { headers }),
+        ]);
+        if (!statsRes.ok) throw new Error(`Stats: ${statsRes.status}`);
+        if (!estimatesRes.ok) throw new Error(`Estimates: ${estimatesRes.status}`);
+        const statsData = await statsRes.json();
+        const estimatesData = await estimatesRes.json();
+        if (!cancelled) {
+          setStats(statsData.stats || {});
+          setEstimates(estimatesData.estimates || []);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchData();
+    return () => { cancelled = true; };
+  }, []);
 
   const statusBadge = (s) => {
-    if (s === 'Won') return 'bg-emerald-100 text-emerald-700';
-    if (s === 'Lost') return 'bg-red-100 text-red-700';
-    return 'bg-amber-100 text-amber-700';
+    if (s === 'sent') return 'bg-green-100 text-green-700';
+    if (s === 'won') return 'bg-emerald-100 text-emerald-700';
+    if (s === 'lost') return 'bg-red-100 text-red-700';
+    if (s === 'draft') return 'bg-amber-100 text-amber-700';
+    return 'bg-gray-100 text-gray-600';
   };
+
+  const formatCurrency = (val) => {
+    if (!val && val !== 0) return '-';
+    const num = typeof val === 'string' ? parseFloat(val) : val;
+    if (isNaN(num)) return '-';
+    if (num >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
+    if (num >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
+    return `$${num.toLocaleString()}`;
+  };
+
+  const formatDate = (d) => {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center py-20">
+        <div className="w-8 h-8 rounded-full border-2 border-[#e8e6e1] border-t-[#1e3a5f] animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
+        <div className="text-[13px] text-red-600 font-heading">Failed to load history</div>
+        <div className="text-[11px] text-[#9a9a92]">{error}</div>
+      </div>
+    );
+  }
+
+  const totalBidVolume = estimates.reduce((s, e) => s + (e.total_bid || 0), 0);
 
   return (
     <div className="flex-1 overflow-y-auto">
       {/* Stats Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-terminal-border border-b border-terminal-border">
         {[
-          { label: 'Total Estimates', value: HISTORY_DATA.length },
-          { label: 'Win Rate', value: `${winRate}%` },
-          { label: 'Avg Margin', value: `${avgMargin}%` },
-          { label: 'Total Bid Volume', value: `$${(totalBid / 1e6).toFixed(1)}M` },
+          { label: 'Total Estimates', value: stats?.totalEstimates ?? estimates.length },
+          { label: 'Win Rate', value: `${stats?.winRate ?? 0}%` },
+          { label: 'Avg Margin', value: `${stats?.avgMargin ?? 0}%` },
+          { label: 'Total Bid Volume', value: formatCurrency(stats?.totalRevenue || totalBidVolume) },
         ].map((s, i) => (
           <div key={i} className="bg-terminal-panel px-5 py-4 text-center">
             <div className="text-[18px] font-bold text-terminal-text font-display">{s.value}</div>
@@ -1978,51 +2132,59 @@ function HistoryTab({ accent }) {
       {/* Table */}
       <div className="px-5 py-4">
         <div className="text-[13px] font-semibold text-terminal-text mb-3 font-heading">Past Estimates</div>
-        <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="border-b border-terminal-border">
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Project</th>
-                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">GC</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Bid</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Actual</th>
-                <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Margin</th>
-                <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {HISTORY_DATA.map(h => (
-                <tr key={h.id} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
-                  <td className="px-4 py-2.5 font-semibold text-terminal-text">{h.project}</td>
-                  <td className="px-4 py-2.5 text-[#9a9a92]">{h.gc}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.bid}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.actual || '-'}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{h.margin || '-'}</td>
-                  <td className="px-4 py-2.5 text-center"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusBadge(h.status)}`}>{h.status}</span></td>
+        {estimates.length === 0 ? (
+          <div className="bg-terminal-panel border border-terminal-border rounded-xl px-5 py-10 text-center text-[#9a9a92] text-[13px]">No estimates yet</div>
+        ) : (
+          <div className="bg-terminal-panel border border-terminal-border rounded-xl overflow-hidden">
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="border-b border-terminal-border">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Project</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">GC</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Total Bid</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Margin</th>
+                  <th className="text-center px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Status</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-[#9a9a92] uppercase tracking-wider font-heading">Date</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {estimates.map(e => (
+                  <tr key={e.id} className="border-b border-terminal-border/50 hover:bg-[#f5f4f0]">
+                    <td className="px-4 py-2.5 font-semibold text-terminal-text truncate max-w-[200px]">{e.project_name || '-'}</td>
+                    <td className="px-4 py-2.5 text-[#9a9a92] truncate max-w-[150px]">{e.gc_name || '-'}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{formatCurrency(e.total_bid)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-terminal-text">{e.profit_pct ? `${e.profit_pct}%` : '-'}</td>
+                    <td className="px-4 py-2.5 text-center"><span className={`text-[9px] font-bold px-2 py-0.5 rounded-full font-mono ${statusBadge(e.status)}`}>{e.status}</span></td>
+                    <td className="px-4 py-2.5 text-right text-[#9a9a92] font-mono">{formatDate(e.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Bot Learning */}
-      <div className="px-5 pb-5">
-        <div className="text-[13px] font-semibold text-terminal-text mb-3 font-heading">Bot Learning</div>
-        <div className="space-y-2">
-          {LEARNING_ITEMS.map((item, i) => (
-            <div key={i} className="bg-terminal-panel border border-terminal-border rounded-xl px-4 py-3 flex items-start gap-3">
-              <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold ${item.type === 'price' ? 'bg-amber-100 text-amber-700' : item.type === 'insight' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                {item.type === 'price' ? '$' : item.type === 'insight' ? 'i' : 'P'}
+      {/* Pipeline Summary */}
+      {stats && (
+        <div className="px-5 pb-5">
+          <div className="text-[13px] font-semibold text-terminal-text mb-3 font-heading">Pipeline Summary</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Open RFQs', value: stats.openRfqs, color: 'bg-blue-100 text-blue-700' },
+              { label: 'Draft Estimates', value: stats.draftEstimates, color: 'bg-amber-100 text-amber-700' },
+              { label: 'Sent Estimates', value: stats.sentEstimates, color: 'bg-green-100 text-green-700' },
+              { label: 'Active Jobs', value: stats.activeJobs, color: 'bg-emerald-100 text-emerald-700' },
+              { label: 'Jobs Won', value: stats.wonJobs, color: 'bg-emerald-100 text-emerald-800' },
+              { label: 'Jobs Lost', value: stats.lostJobs, color: 'bg-red-100 text-red-700' },
+            ].map((item, i) => (
+              <div key={i} className="bg-terminal-panel border border-terminal-border rounded-xl p-4 flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[14px] font-bold font-display ${item.color}`}>{item.value}</div>
+                <div className="text-[11px] text-[#9a9a92] font-heading font-semibold">{item.label}</div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[12px] text-terminal-text leading-relaxed">{item.text}</div>
-              </div>
-              <button onClick={() => alert(`${item.action}: ${item.text.slice(0, 60)}...`)} className="shrink-0 px-2.5 py-1 rounded-md text-[10px] font-semibold text-white" style={{ backgroundColor: accent }}>{item.action}</button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

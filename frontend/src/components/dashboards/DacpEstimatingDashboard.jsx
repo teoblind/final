@@ -102,15 +102,28 @@ function DocumentOrganizationPanel({ bid, token, onAdvance }) {
   const handleAnalyzeDocs = async () => {
     setAnalyzing(true);
     try {
+      // Step 1: Upload files to the upload-documents endpoint
       const formData = new FormData();
-      files.forEach(f => formData.append('documents', f));
-      const res = await fetch(`${API_BASE}/v1/estimates/inbox/${bid.id}/analyze-documents`, {
+      files.forEach(f => formData.append('files', f));
+      const uploadRes = await fetch(`${API_BASE}/v1/estimates/inbox/${bid.id}/upload-documents`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json();
+        throw new Error(err.error || 'Upload failed');
+      }
+
+      // Step 2: Analyze the uploaded documents
+      const res = await fetch(`${API_BASE}/v1/estimates/inbox/${bid.id}/analyze-documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
       const data = await res.json();
-      if (data.divisions) {
+      if (data.analysis?.divisions) {
+        setDivisions(data.analysis.divisions.map(d => ({ ...d, relevant: d.relevant !== false })));
+      } else if (data.divisions) {
         setDivisions(data.divisions.map(d => ({ ...d, relevant: d.relevant !== false })));
       }
     } catch (e) { console.error(e); }
@@ -264,15 +277,28 @@ function PlanAnalysisPanel({ bid, token, onAdvance }) {
   const handleAnalyzePlans = async () => {
     setAnalyzing(true);
     try {
+      // Step 1: Upload files to the upload-plans endpoint
       const formData = new FormData();
-      files.forEach(f => formData.append('plans', f));
-      const res = await fetch(`${API_BASE}/v1/estimates/inbox/${bid.id}/analyze-plans`, {
+      files.forEach(f => formData.append('files', f));
+      const uploadRes = await fetch(`${API_BASE}/v1/estimates/inbox/${bid.id}/upload-plans`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json();
+        throw new Error(err.error || 'Upload failed');
+      }
+
+      // Step 2: Analyze the uploaded plans
+      const res = await fetch(`${API_BASE}/v1/estimates/inbox/${bid.id}/analyze-plans`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
       const data = await res.json();
-      if (data.elements) {
+      if (data.analysis?.sheets) {
+        setAnalysis(data.analysis.sheets);
+      } else if (data.elements) {
         setAnalysis(data.elements);
       }
     } catch (e) { console.error(e); }

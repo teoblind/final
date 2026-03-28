@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Building2, DollarSign, BarChart3, MessageSquare, FileText,
-  Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon, Activity,
+  Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon, Activity, X,
 } from 'lucide-react';
 import SettingsTeamPanel from './SettingsTeamPanel';
 import api from '../lib/hooks/useApi';
@@ -252,6 +252,97 @@ export default function DacpSettingsPanel() {
     });
   };
 
+  // Inline form visibility + state
+  const [showAddPricing, setShowAddPricing] = useState(false);
+  const [newPricing, setNewPricing] = useState({ category: 'Concrete', item: '', unit: 'CY', material: '', labor: '', equipment: '' });
+  const [addingPricing, setAddingPricing] = useState(false);
+
+  const [showAddGc, setShowAddGc] = useState(false);
+  const [newGc, setNewGc] = useState({ company: '', contact: '', domain: '', jobs: 0, winRate: 0 });
+
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [newSupplier, setNewSupplier] = useState({ name: '', material: '', price: '' });
+  const [extraSuppliers, setExtraSuppliers] = useState([]);
+
+  // Load extra suppliers from settings
+  useEffect(() => {
+    const s = settingsRef.current;
+    if (s.extraSuppliers) setExtraSuppliers(s.extraSuppliers);
+  }, [suppliers]); // re-run after settings load triggers suppliers update
+
+  const handleAddPricing = async () => {
+    if (!newPricing.item.trim()) return;
+    setAddingPricing(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const m = parseFloat(newPricing.material) || 0;
+      const l = parseFloat(newPricing.labor) || 0;
+      const e = parseFloat(newPricing.equipment) || 0;
+      const unitPrice = +(m + l + e).toFixed(2);
+      // Generate a simple slug id from category + item
+      const id = `${newPricing.category}-${newPricing.item}`.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/-+$/, '').substring(0, 30);
+      const res = await fetch(`${API_BASE}/v1/estimates/pricing`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          category: newPricing.category,
+          item: newPricing.item,
+          unit: newPricing.unit,
+          material_cost: m,
+          labor_cost: l,
+          equipment_cost: e,
+          unit_price: unitPrice,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to create');
+      }
+      const data = await res.json();
+      // Refresh the pricing list from backend response
+      const items = (data.pricing || []).slice(0, 20);
+      setPricing(items.map(p => ({
+        id: p.id,
+        item: p.item,
+        unit: p.unit,
+        material: String(p.material_cost ?? ''),
+        labor: String(p.labor_cost ?? ''),
+        equipment: String(p.equipment_cost ?? ''),
+        total: p.unit_price,
+      })));
+      setNewPricing({ category: 'Concrete', item: '', unit: 'CY', material: '', labor: '', equipment: '' });
+      setShowAddPricing(false);
+    } catch (err) {
+      alert('Failed to add pricing item: ' + err.message);
+    } finally {
+      setAddingPricing(false);
+    }
+  };
+
+  const handleAddGc = () => {
+    if (!newGc.company.trim()) return;
+    setGcContacts(prev => [...prev, { ...newGc, jobs: parseInt(newGc.jobs) || 0, winRate: parseInt(newGc.winRate) || 0 }]);
+    setNewGc({ company: '', contact: '', domain: '', jobs: 0, winRate: 0 });
+    setShowAddGc(false);
+  };
+
+  const handleAddSupplier = () => {
+    if (!newSupplier.name.trim() || !newSupplier.material.trim()) return;
+    const updated = [...extraSuppliers, { ...newSupplier }];
+    setExtraSuppliers(updated);
+    // Persist immediately
+    saveSettings('extraSuppliers', updated);
+    setNewSupplier({ name: '', material: '', price: '' });
+    setShowAddSupplier(false);
+  };
+
+  const removeExtraSupplier = (index) => {
+    const updated = extraSuppliers.filter((_, i) => i !== index);
+    setExtraSuppliers(updated);
+    saveSettings('extraSuppliers', updated);
+  };
+
   const [settingsTab, setSettingsTab] = useState('general');
   const storedUser = JSON.parse(localStorage.getItem('coppice_user') || '{}');
   const isAdmin = ['owner', 'admin'].includes(storedUser.role);
@@ -374,9 +465,51 @@ export default function DacpSettingsPanel() {
             </table>
           </div>
         )}
+        {showAddPricing && (
+          <div className="mt-4 p-4 bg-[#f5f4f0] border border-terminal-border rounded-[10px]">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-semibold text-terminal-text">New Pricing Item</span>
+              <button onClick={() => setShowAddPricing(false)} className="text-terminal-muted hover:text-terminal-text"><X size={14} /></button>
+            </div>
+            <div className="grid grid-cols-6 gap-3">
+              <Field label="Category" className="col-span-1">
+                <Select value={newPricing.category} onChange={v => setNewPricing(p => ({ ...p, category: v }))} options={[
+                  'Concrete', 'Labor', 'Reinforcement', 'Formwork', 'Equipment', 'Finishing', 'Other',
+                ]} />
+              </Field>
+              <Field label="Item Name" className="col-span-2">
+                <Input value={newPricing.item} onChange={v => setNewPricing(p => ({ ...p, item: v }))} placeholder="e.g. 4000 PSI Concrete" />
+              </Field>
+              <Field label="Unit" className="col-span-1">
+                <Select value={newPricing.unit} onChange={v => setNewPricing(p => ({ ...p, unit: v }))} options={[
+                  'CY', 'SF', 'LF', 'TON', 'EA', 'HR', 'LS',
+                ]} />
+              </Field>
+              <Field label="Material $" className="col-span-1">
+                <Input value={newPricing.material} onChange={v => setNewPricing(p => ({ ...p, material: v }))} placeholder="0.00" mono />
+              </Field>
+              <Field label="Labor $" className="col-span-1">
+                <Input value={newPricing.labor} onChange={v => setNewPricing(p => ({ ...p, labor: v }))} placeholder="0.00" mono />
+              </Field>
+            </div>
+            <div className="grid grid-cols-6 gap-3 mt-3">
+              <Field label="Equipment $" className="col-span-1">
+                <Input value={newPricing.equipment} onChange={v => setNewPricing(p => ({ ...p, equipment: v }))} placeholder="0.00" mono />
+              </Field>
+              <div className="col-span-1 flex items-end">
+                <span className="text-[12px] font-mono text-terminal-muted pb-2.5">
+                  Total: ${((parseFloat(newPricing.material) || 0) + (parseFloat(newPricing.labor) || 0) + (parseFloat(newPricing.equipment) || 0)).toFixed(2)}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2.5 mt-3">
+              <Btn onClick={handleAddPricing} saving={addingPricing}>Add Item</Btn>
+              <Btn variant="secondary" onClick={() => setShowAddPricing(false)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
         <div className="flex gap-2.5 mt-4">
-          <Btn variant="secondary">+ Add Line Item</Btn>
-          <Btn variant="secondary">Import from Excel</Btn>
+          <Btn variant="secondary" onClick={() => setShowAddPricing(true)}>+ Add Line Item</Btn>
           <Btn onClick={() => saveSettings('pricing', pricing)} saving={saving} saved={savedSection === 'pricing'}>Save Pricing</Btn>
         </div>
       </Section>
@@ -565,8 +698,48 @@ export default function DacpSettingsPanel() {
             <Input value={suppliers.lumber} onChange={v => setSuppliers(p => ({ ...p, lumber: v }))} />
           </Field>
         </div>
+        {extraSuppliers.length > 0 && (
+          <>
+            <Divider />
+            <div className="text-[12px] font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-3">Additional Suppliers</div>
+            <div className="grid grid-cols-2 gap-4">
+              {extraSuppliers.map((s, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-terminal-text truncate">{s.name}</div>
+                    <div className="text-[11px] text-terminal-muted">{s.material}{s.price ? ` — $${s.price}` : ''}</div>
+                  </div>
+                  <button onClick={() => removeExtraSupplier(i)} className="text-terminal-muted hover:text-red-600 shrink-0"><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        {showAddSupplier && (
+          <div className="mt-4 p-4 bg-[#f5f4f0] border border-terminal-border rounded-[10px]">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-semibold text-terminal-text">New Supplier</span>
+              <button onClick={() => setShowAddSupplier(false)} className="text-terminal-muted hover:text-terminal-text"><X size={14} /></button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Supplier Name">
+                <Input value={newSupplier.name} onChange={v => setNewSupplier(p => ({ ...p, name: v }))} placeholder="e.g. Vulcan Materials" />
+              </Field>
+              <Field label="Material Type">
+                <Input value={newSupplier.material} onChange={v => setNewSupplier(p => ({ ...p, material: v }))} placeholder="e.g. Aggregate, Sand" />
+              </Field>
+              <Field label="Price ($/unit)">
+                <Input value={newSupplier.price} onChange={v => setNewSupplier(p => ({ ...p, price: v }))} placeholder="Optional" mono />
+              </Field>
+            </div>
+            <div className="flex gap-2.5 mt-3">
+              <Btn onClick={handleAddSupplier}>Add Supplier</Btn>
+              <Btn variant="secondary" onClick={() => setShowAddSupplier(false)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
         <div className="flex gap-2.5 mt-4">
-          <Btn variant="secondary">+ Add Supplier</Btn>
+          <Btn variant="secondary" onClick={() => setShowAddSupplier(true)}>+ Add Supplier</Btn>
           <Btn onClick={() => saveSettings('suppliers', suppliers)} saving={saving} saved={savedSection === 'suppliers'}>Save Suppliers</Btn>
         </div>
       </Section>
@@ -597,9 +770,37 @@ export default function DacpSettingsPanel() {
             </tbody>
           </table>
         </div>
+        {showAddGc && (
+          <div className="mt-4 p-4 bg-[#f5f4f0] border border-terminal-border rounded-[10px]">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-semibold text-terminal-text">New GC Contact</span>
+              <button onClick={() => setShowAddGc(false)} className="text-terminal-muted hover:text-terminal-text"><X size={14} /></button>
+            </div>
+            <div className="grid grid-cols-5 gap-3">
+              <Field label="Company" className="col-span-1">
+                <Input value={newGc.company} onChange={v => setNewGc(p => ({ ...p, company: v }))} placeholder="e.g. Kiewit" />
+              </Field>
+              <Field label="Contact Name" className="col-span-1">
+                <Input value={newGc.contact} onChange={v => setNewGc(p => ({ ...p, contact: v }))} placeholder="e.g. John Smith" />
+              </Field>
+              <Field label="Email Domain" className="col-span-1">
+                <Input value={newGc.domain} onChange={v => setNewGc(p => ({ ...p, domain: v }))} placeholder="@kiewit.com" mono />
+              </Field>
+              <Field label="Jobs (12mo)" className="col-span-1">
+                <Input value={newGc.jobs} onChange={v => setNewGc(p => ({ ...p, jobs: v }))} type="number" placeholder="0" mono />
+              </Field>
+              <Field label="Win Rate (%)" className="col-span-1">
+                <Input value={newGc.winRate} onChange={v => setNewGc(p => ({ ...p, winRate: v }))} type="number" placeholder="0" mono />
+              </Field>
+            </div>
+            <div className="flex gap-2.5 mt-3">
+              <Btn onClick={handleAddGc}>Add GC</Btn>
+              <Btn variant="secondary" onClick={() => setShowAddGc(false)}>Cancel</Btn>
+            </div>
+          </div>
+        )}
         <div className="flex gap-2.5 mt-4">
-          <Btn variant="secondary">+ Add GC</Btn>
-          <Btn variant="secondary">Import from Contacts</Btn>
+          <Btn variant="secondary" onClick={() => setShowAddGc(true)}>+ Add GC</Btn>
           <Btn onClick={() => saveSettings('gcContacts', gcContacts)} saving={saving} saved={savedSection === 'gcContacts'}>Save GC List</Btn>
         </div>
       </Section>

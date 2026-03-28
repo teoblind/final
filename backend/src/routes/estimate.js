@@ -825,6 +825,27 @@ router.get('/inbox/:id/plan-analysis', (req, res) => {
   }
 });
 
+// ─── Advance Workflow Step ───────────────────────────────────────────────────
+
+router.post('/inbox/:id/advance-step', (req, res) => {
+  try {
+    const bid = getDacpBidRequest(req.user.tenantId, req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid request not found' });
+
+    const { workflow_step } = req.body;
+    if (workflow_step == null || typeof workflow_step !== 'number') {
+      return res.status(400).json({ error: 'workflow_step (number) is required' });
+    }
+
+    updateDacpBidRequest(req.user.tenantId, req.params.id, { workflow_step });
+    const updated = getDacpBidRequest(req.user.tenantId, req.params.id);
+    res.json(updated);
+  } catch (error) {
+    console.error('Advance step error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ─── Stats ──────────────────────────────────────────────────────────────────
 
 router.get('/stats', (req, res) => {

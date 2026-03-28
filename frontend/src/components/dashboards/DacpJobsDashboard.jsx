@@ -46,6 +46,7 @@ export default function DacpJobsDashboard() {
   }, []);
 
   const filteredJobs = filterTab === 'all' ? jobs
+    : filterTab === 'active' ? jobs.filter(j => j.status === 'active' || j.status === 'in_progress')
     : jobs.filter(j => j.status === filterTab);
 
   const wonJobs = jobs.filter(j => j.status === 'complete' && j.margin_pct != null);
@@ -55,7 +56,9 @@ export default function DacpJobsDashboard() {
 
   const tabs = [
     { id: 'all', label: 'All', count: jobs.length },
+    { id: 'active', label: 'Active', count: jobs.filter(j => j.status === 'active' || j.status === 'in_progress').length },
     { id: 'complete', label: 'Complete', count: jobs.filter(j => j.status === 'complete').length },
+    { id: 'on_hold', label: 'On Hold', count: jobs.filter(j => j.status === 'on_hold').length },
     { id: 'lost', label: 'Lost', count: jobs.filter(j => j.status === 'lost').length },
   ];
 
