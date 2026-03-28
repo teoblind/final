@@ -197,19 +197,6 @@ function initSchemaForDb(targetDb) {
     )
   `);
 
-  // Manual data entries
-  targetDb.exec(`
-    CREATE TABLE IF NOT EXISTS manual_data (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      category TEXT NOT NULL,
-      metric TEXT NOT NULL,
-      value REAL NOT NULL,
-      date TEXT NOT NULL,
-      notes TEXT,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
   // Alerts configuration
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS alerts (
@@ -1002,6 +989,32 @@ function initSchemaForDb(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_assignments_tenant ON agent_assignments(tenant_id, status)'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN output_artifacts_json TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN user_id TEXT'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_agent_assignments_user ON agent_assignments(tenant_id, user_id, status)'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN job_id TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN source_type TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN source_thread_id TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN knowledge_entry_ids_json TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN info_requests_pending INTEGER DEFAULT 0'); } catch (e) {}
+
+  // CC thread tracking — auto-trigger assignments from accumulated observations
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS cc_thread_tracker (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      gmail_thread_id TEXT NOT NULL,
+      subject TEXT,
+      participants_json TEXT DEFAULT '[]',
+      observation_count INTEGER DEFAULT 0,
+      attachment_count INTEGER DEFAULT 0,
+      first_observed_at TEXT DEFAULT (datetime('now')),
+      last_observed_at TEXT DEFAULT (datetime('now')),
+      auto_assignment_id TEXT,
+      status TEXT DEFAULT 'accumulating'
+    )
+  `);
+  try { targetDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_cc_thread_tenant ON cc_thread_tracker(tenant_id, gmail_thread_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_cc_thread_status ON cc_thread_tracker(tenant_id, status)'); } catch (e) {}
 
   // MCP server configurations per tenant
   targetDb.exec(`
@@ -1022,7 +1035,7 @@ function initSchemaForDb(targetDb) {
 
   // Add tenant_id to ALL existing tables (idempotent) — kept for defense-in-depth
   const tablesToMigrate = [
-    'cache', 'manual_data', 'alerts', 'alert_history', 'notes', 'imec_milestones',
+    'cache', 'alerts', 'alert_history', 'notes', 'imec_milestones',
     'datacenter_projects', 'fiber_deals', 'btc_wallets',
     'energy_prices', 'system_load', 'grid_events', 'energy_settings',
     'fleet_config', 'fleet_snapshots', 'machine_snapshots',
@@ -1365,39 +1378,6 @@ export function setCache(key, data, ttlMinutes = 60) {
   `);
 
   stmt.run(key, JSON.stringify(data), now.toISOString(), expiresAt.toISOString());
-}
-
-// Manual data helpers
-export function addManualData(category, metric, value, date, notes = null) {
-  const stmt = db.prepare(`
-    INSERT INTO manual_data (category, metric, value, date, notes)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  return stmt.run(category, metric, value, date, notes);
-}
-
-export function getManualData(category, metric = null, startDate = null, endDate = null) {
-  let query = 'SELECT * FROM manual_data WHERE category = ?';
-  const params = [category];
-
-  if (metric) {
-    query += ' AND metric = ?';
-    params.push(metric);
-  }
-
-  if (startDate) {
-    query += ' AND date >= ?';
-    params.push(startDate);
-  }
-
-  if (endDate) {
-    query += ' AND date <= ?';
-    params.push(endDate);
-  }
-
-  query += ' ORDER BY date DESC';
-
-  return db.prepare(query).all(...params);
 }
 
 // Alert helpers
@@ -6319,9 +6299,15 @@ export function getDueScheduledTasks() {
 
 // ─── Agent Assignments CRUD ───────────────────────────────────────────────
 
-export function getAgentAssignments(tenantId, status = null) {
+export function getAgentAssignments(tenantId, status = null, userId = null) {
+  if (status && userId) {
+    return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? AND (user_id = ? OR user_id IS NULL) ORDER BY priority DESC, created_at DESC').all(tenantId, status, userId);
+  }
   if (status) {
     return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = ? ORDER BY priority DESC, created_at DESC').all(tenantId, status);
+  }
+  if (userId) {
+    return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? AND (user_id = ? OR user_id IS NULL) ORDER BY CASE status WHEN \'proposed\' THEN 0 WHEN \'confirmed\' THEN 1 WHEN \'in_progress\' THEN 2 WHEN \'completed\' THEN 3 WHEN \'dismissed\' THEN 4 END, created_at DESC').all(tenantId, userId);
   }
   return db.prepare('SELECT * FROM agent_assignments WHERE tenant_id = ? ORDER BY CASE status WHEN \'proposed\' THEN 0 WHEN \'confirmed\' THEN 1 WHEN \'in_progress\' THEN 2 WHEN \'completed\' THEN 3 WHEN \'dismissed\' THEN 4 END, created_at DESC').all(tenantId);
 }
@@ -6332,15 +6318,15 @@ export function getAgentAssignment(tenantId, id) {
 
 export function insertAgentAssignment(assignment) {
   db.prepare(`
-    INSERT INTO agent_assignments (id, tenant_id, agent_id, title, description, category, priority, action_prompt, context_json, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed')
+    INSERT INTO agent_assignments (id, tenant_id, agent_id, title, description, category, priority, action_prompt, context_json, status, user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?)
   `).run(assignment.id, assignment.tenant_id, assignment.agent_id || 'estimating', assignment.title,
     assignment.description, assignment.category || 'general', assignment.priority || 'medium',
-    assignment.action_prompt || null, assignment.context_json || null);
+    assignment.action_prompt || null, assignment.context_json || null, assignment.user_id || null);
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {
@@ -6357,6 +6343,69 @@ export function clearOldAssignments(tenantId, daysOld = 7) {
 
 export function clearProposedAssignments(tenantId) {
   db.prepare(`DELETE FROM agent_assignments WHERE tenant_id = ? AND status = 'proposed'`).run(tenantId);
+}
+
+// ─── CC Thread Tracker CRUD ──────────────────────────────────────────────
+
+export function upsertCcThreadTracker(tenantId, threadId, { subject, participant, hasAttachment }) {
+  const id = `cct-${tenantId}-${threadId}`;
+  const existing = db.prepare('SELECT * FROM cc_thread_tracker WHERE tenant_id = ? AND gmail_thread_id = ?').get(tenantId, threadId);
+  if (existing) {
+    const participants = JSON.parse(existing.participants_json || '[]');
+    if (participant && !participants.includes(participant)) participants.push(participant);
+    db.prepare(`
+      UPDATE cc_thread_tracker SET
+        observation_count = observation_count + 1,
+        attachment_count = attachment_count + ?,
+        participants_json = ?,
+        last_observed_at = datetime('now'),
+        subject = COALESCE(?, subject)
+      WHERE tenant_id = ? AND gmail_thread_id = ?
+    `).run(hasAttachment ? 1 : 0, JSON.stringify(participants), subject, tenantId, threadId);
+    return db.prepare('SELECT * FROM cc_thread_tracker WHERE id = ?').get(id);
+  }
+  db.prepare(`
+    INSERT INTO cc_thread_tracker (id, tenant_id, gmail_thread_id, subject, participants_json, observation_count, attachment_count)
+    VALUES (?, ?, ?, ?, ?, 1, ?)
+  `).run(id, tenantId, threadId, subject || null, JSON.stringify(participant ? [participant] : []), hasAttachment ? 1 : 0);
+  return db.prepare('SELECT * FROM cc_thread_tracker WHERE id = ?').get(id);
+}
+
+export function getCcThreadsReadyForTrigger(tenantId, minObservations = 3) {
+  return db.prepare(`
+    SELECT * FROM cc_thread_tracker
+    WHERE tenant_id = ? AND status = 'accumulating'
+      AND (observation_count >= ? OR (observation_count >= 1 AND attachment_count >= 2))
+    ORDER BY last_observed_at DESC
+  `).all(tenantId, minObservations);
+}
+
+export function markCcThreadTriggered(tenantId, threadId, assignmentId) {
+  db.prepare(`
+    UPDATE cc_thread_tracker SET status = 'triggered', auto_assignment_id = ?
+    WHERE tenant_id = ? AND gmail_thread_id = ?
+  `).run(assignmentId, tenantId, threadId);
+}
+
+export function getConfirmedAssignments(tenantId) {
+  return db.prepare(`
+    SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = 'confirmed'
+    ORDER BY created_at ASC
+  `).all(tenantId);
+}
+
+export function getPausedAssignmentsWithResponses(tenantId) {
+  return db.prepare(`
+    SELECT aa.* FROM agent_assignments aa
+    JOIN background_jobs bj ON bj.id = aa.job_id
+    WHERE aa.tenant_id = ? AND aa.status = 'in_progress' AND bj.status = 'paused'
+      AND EXISTS (
+        SELECT 1 FROM job_messages jm
+        WHERE jm.job_id = bj.id AND jm.message_type = 'request' AND jm.response IS NOT NULL
+          AND jm.id = (SELECT MAX(id) FROM job_messages WHERE job_id = bj.id AND message_type = 'request')
+      )
+    ORDER BY aa.created_at ASC
+  `).all(tenantId);
 }
 
 // ─── MCP Server CRUD ──────────────────────────────────────────────────────

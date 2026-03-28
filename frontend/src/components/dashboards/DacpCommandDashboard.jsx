@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2 } from 'lucide-react';
+import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -68,6 +69,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [assignmentsPage, setAssignmentsPage] = useState(0);
   const [taskTab, setTaskTab] = useState('suggested'); // 'suggested' | 'active' | 'completed'
   const [processingAssignment, setProcessingAssignment] = useState(null);
+  const [sharedAssignments, setSharedAssignments] = useState({});
+  const [infoRequests, setInfoRequests] = useState({});
   // Inline assignment chat
   const [chatOpenFor, setChatOpenFor] = useState(null);
   const [chatMessages, setChatMessages] = useState({});
@@ -138,14 +141,33 @@ export default function DacpCommandDashboard({ onNavigate }) {
     finally { setDriveSearching(false); }
   }, []);
 
+  const fetchInfoRequests = useCallback(async (jobId) => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/jobs/${jobId}`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      const pending = (data.messages || []).filter(m => m.message_type === 'request' && !m.response);
+      if (pending.length > 0) {
+        setInfoRequests(prev => ({ ...prev, [jobId]: pending }));
+      }
+    } catch {}
+  }, []);
+
   const fetchAssignments = useCallback(() => {
     setAssignmentsLoading(true);
     fetch(`${API_BASE}/v1/estimates/assignments`, { headers: getAuthHeaders() })
       .then(r => r.json())
-      .then(data => setAssignments((data.assignments || []).filter(a => a.status !== 'dismissed')))
+      .then(data => {
+        const all = (data.assignments || []).filter(a => a.status !== 'dismissed');
+        setAssignments(all);
+        // Fetch info requests for active assignments
+        const active = all.filter(a => a.status === 'in_progress' && a.job_id);
+        for (const a of active) {
+          fetchInfoRequests(a.job_id);
+        }
+      })
       .catch(() => {})
       .finally(() => setAssignmentsLoading(false));
-  }, []);
+  }, [fetchInfoRequests]);
 
   const handleConfirmAssignment = useCallback(async (id) => {
     setProcessingAssignment(id);
@@ -175,6 +197,24 @@ export default function DacpCommandDashboard({ onNavigate }) {
       await fetch(`${API_BASE}/v1/estimates/assignments/${id}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
       setAssignments(prev => prev.filter(a => a.id !== id));
     } catch {}
+  }, []);
+
+  const handleShareToHivemind = useCallback(async (sourceId, sourceType = 'assignment') => {
+    try {
+      setSharedAssignments(prev => ({ ...prev, [sourceId]: 'sharing' }));
+      const res = await fetch(`${API_BASE}/v1/knowledge/share-to-hivemind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ source_type: sourceType, source_id: sourceId }),
+      });
+      if (res.ok) {
+        setSharedAssignments(prev => ({ ...prev, [sourceId]: 'shared' }));
+      } else {
+        setSharedAssignments(prev => ({ ...prev, [sourceId]: 'error' }));
+      }
+    } catch {
+      setSharedAssignments(prev => ({ ...prev, [sourceId]: 'error' }));
+    }
   }, []);
 
   const handleAssignmentChat = useCallback(async (assignmentId) => {
@@ -559,7 +599,10 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       )}
                       {a.status === 'in_progress' && (
                         <span className="flex items-center gap-1 text-[11px] text-[#1e3a5f] font-medium">
-                          <RotateCcw size={11} className="animate-spin" /> Working...
+                          {infoRequests[a.job_id]?.length > 0
+                            ? <><AlertCircle size={11} className="text-amber-600" /> Needs input</>
+                            : <><RotateCcw size={11} className="animate-spin" /> Working...</>
+                          }
                         </span>
                       )}
                       {a.status === 'completed' && (
@@ -576,10 +619,41 @@ export default function DacpCommandDashboard({ onNavigate }) {
                           <span className={`flex items-center gap-1 text-[11px] font-medium ${a.result_summary?.startsWith('Failed') ? 'text-red-500' : 'text-emerald-600'}`}>
                             {a.result_summary?.startsWith('Failed') ? <><XCircle size={11} /> Failed</> : <><CheckCircle size={11} /> Done</>}
                           </span>
+                          {!a.result_summary?.startsWith('Failed') && (
+                            <button
+                              onClick={() => handleShareToHivemind(a.id, 'assignment')}
+                              disabled={!!sharedAssignments[a.id]}
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] disabled:opacity-50 transition-colors"
+                              title="Share to Hivemind"
+                            >
+                              <Share2 size={10} />
+                              {sharedAssignments[a.id] === 'shared' ? 'Shared' : sharedAssignments[a.id] === 'sharing' ? 'Sharing...' : 'Share'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
+                  {/* Info request cards for paused jobs */}
+                  {a.status === 'in_progress' && a.job_id && infoRequests[a.job_id]?.length > 0 && (
+                    <div className="border-t border-[#f0eeea]">
+                      {infoRequests[a.job_id].map(req => (
+                        <InfoRequestCard
+                          key={req.id}
+                          jobId={a.job_id}
+                          request={req}
+                          onResolved={() => {
+                            setInfoRequests(prev => {
+                              const updated = { ...prev };
+                              updated[a.job_id] = (updated[a.job_id] || []).filter(r => r.id !== req.id);
+                              return updated;
+                            });
+                            fetchAssignments();
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   {/* Inline chat for refining this assignment */}
                   {chatOpenFor === a.id && a.status === 'proposed' && (
                     <div className="px-[18px] pb-3">

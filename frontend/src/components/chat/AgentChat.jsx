@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -2082,7 +2082,7 @@ function formatRelativeTime(dateStr) {
 }
 
 // ─── Thread Sidebar ─────────────────────────────────────────────────────────
-function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, onUpdateVisibility, onRenameThread, onPinThread, onDeleteThread, agentDef, currentUserId, isAdmin }) {
+function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, onUpdateVisibility, onRenameThread, onPinThread, onDeleteThread, onShareToHivemind, agentDef, currentUserId, isAdmin }) {
   const accent = agentDef?.accentColor || '#1e3a5f';
   const [editingThreadId, setEditingThreadId] = React.useState(null);
   const [editTitle, setEditTitle] = React.useState('');
@@ -2194,6 +2194,15 @@ function ThreadSidebar({ threads, activeThreadId, onSelectThread, onNewThread, o
                   >
                     <Pencil size={9} />
                   </button>
+                  {onShareToHivemind && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onShareToHivemind(thread.id); }}
+                      className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#1e3a5f] hover:bg-[#1e3a5f15] opacity-0 group-hover:opacity-100 transition-all"
+                      title="Share to Hivemind"
+                    >
+                      <Share2 size={9} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onDeleteThread(thread.id); }}
                     className="w-4 h-4 rounded flex items-center justify-center text-[#c5c5bc] hover:text-[#dc2626] hover:bg-[#dc262615] opacity-0 group-hover:opacity-100 transition-all"
@@ -2612,6 +2621,22 @@ export default function AgentChat({ agentId = 'estimating' }) {
     }
   }, [agentId, activeThreadId]);
 
+  const handleShareToHivemind = useCallback(async (threadId) => {
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE}/v1/knowledge/share-to-hivemind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ source_type: 'thread', source_id: threadId }),
+      });
+      if (res.ok) {
+        // Brief visual feedback — could use toast in future
+        console.log('[Hivemind] Thread shared successfully');
+      }
+    } catch (err) {
+      console.error('Failed to share to hivemind:', err);
+    }
+  }, []);
 
   // Keep ref in sync with state (so callbacks see latest value)
   useEffect(() => { autoVoiceRef.current = autoVoice; }, [autoVoice]);
@@ -3128,6 +3153,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
             onRenameThread={handleRenameThread}
             onPinThread={handlePinThread}
             onDeleteThread={handleDeleteThread}
+            onShareToHivemind={handleShareToHivemind}
             agentDef={agent}
             currentUserId={authUser?.id || 'anonymous'}
             isAdmin={isAdmin}

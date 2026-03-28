@@ -986,7 +986,8 @@ router.get('/assignments', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
     const status = req.query.status || null;
-    const assignments = getAgentAssignments(tenantId, status);
+    const userId = req.user?.id || null;
+    const assignments = getAgentAssignments(tenantId, status, userId);
     res.json({ assignments });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1008,55 +1009,9 @@ router.post('/assignments/:id/confirm', async (req, res) => {
       confirmed_at: new Date().toISOString(),
     });
 
-    // Execute asynchronously via chat
-    const basePrompt = assignment.action_prompt || `Execute this task: ${assignment.title}\n\n${assignment.description}`;
-    const agentId = assignment.agent_id || 'estimating';
-
-    // Append deliverable instructions so the agent produces tangible output
-    const deliverableInstructions = `
-
-IMPORTANT - DELIVERABLE REQUIREMENTS:
-You are executing an autonomous task for the user's dashboard. Produce tangible deliverables:
-1. If the task involves analysis or modeling, create a Google Sheet using workspace_create_sheet with the data, formulas, and scenarios. Include the sheet URL in your response.
-2. If the task involves a report or document, create a Google Doc using workspace_create_doc. Include the doc URL in your response.
-3. After creating deliverables, email the user a brief summary with links using send_email (to: the tenant admin).
-4. At the END of your response, include a JSON block tagged with <!--ARTIFACTS followed by the JSON array and then ARTIFACTS--> containing any files/links you created. Format:
-<!--ARTIFACTS[{"type":"sheet","url":"...","title":"..."},{"type":"doc","url":"...","title":"..."},{"type":"email","subject":"..."}]ARTIFACTS-->`;
-
-    const prompt = basePrompt + deliverableInstructions;
-
-    // Start execution in background
+    // Mark as in-progress — the assignment executor job will pick it up
     updateAgentAssignment(tenantId, id, { status: 'in_progress' });
-
-    (async () => {
-      try {
-        const { chat } = await import('../services/chatService.js');
-        const result = await chat(tenantId, agentId, 'system', prompt, null, { helpMode: false });
-        const response = result.response || '';
-
-        // Extract artifacts from response
-        let artifacts = null;
-        const artifactMatch = response.match(/<!--ARTIFACTS(\[.*?\])ARTIFACTS-->/s);
-        if (artifactMatch) {
-          try { artifacts = JSON.parse(artifactMatch[1]); } catch (e) { /* ignore parse error */ }
-        }
-
-        updateAgentAssignment(tenantId, id, {
-          status: 'completed',
-          result_summary: response.replace(/<!--ARTIFACTS.*?ARTIFACTS-->/s, '').trim().slice(0, 4000),
-          completed_at: new Date().toISOString(),
-          thread_id: result.threadId || null,
-          output_artifacts_json: artifacts ? JSON.stringify(artifacts) : null,
-        });
-        console.log(`[Assignments] Completed: ${assignment.title}${artifacts ? ` (${artifacts.length} artifacts)` : ''}`);
-      } catch (err) {
-        updateAgentAssignment(tenantId, id, {
-          status: 'proposed',
-          result_summary: `Failed: ${err.message}`,
-        });
-        console.error(`[Assignments] Failed: ${assignment.title}:`, err.message);
-      }
-    })();
+    console.log(`[Assignments] Confirmed: ${assignment.title} — executor will pick up`);
 
     res.json({ success: true, status: 'in_progress' });
   } catch (error) {

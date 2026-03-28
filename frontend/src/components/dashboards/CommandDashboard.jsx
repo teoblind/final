@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
+import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+function getAuthHeaders() {
+  try {
+    const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+    if (session?.tokens?.accessToken) return { Authorization: `Bearer ${session.tokens.accessToken}` };
+  } catch {}
+  const legacy = localStorage.getItem('auth_token');
+  if (legacy) return { Authorization: `Bearer ${legacy}` };
+  return {};
+}
 
 const AGENT_ICON_COLORS = {
   outreach:       { letter: 'O', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
@@ -345,6 +357,12 @@ export default function CommandDashboard({ onNavigate }) {
   const [insightModal, setInsightModal] = useState(null);
   const [threadModal, setThreadModal] = useState(null); // { thread, messages, loading }
   const [leadStats, setLeadStats] = useState(null);
+  // Agent Assignments
+  const [assignments, setAssignments] = useState([]);
+  const [processingAssignment, setProcessingAssignment] = useState(null);
+  const [sharedAssignments, setSharedAssignments] = useState({});
+  const [infoRequests, setInfoRequests] = useState({});
+  const [assignmentExpanded, setAssignmentExpanded] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -532,6 +550,85 @@ export default function CommandDashboard({ onNavigate }) {
       });
     } catch {}
   }, [actionItems]);
+
+  const fetchInfoRequests = useCallback(async (jobId) => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/jobs/${jobId}`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      const pending = (data.messages || []).filter(m => m.message_type === 'request' && !m.response);
+      if (pending.length > 0) {
+        setInfoRequests(prev => ({ ...prev, [jobId]: pending }));
+      }
+    } catch {}
+  }, []);
+
+  // Fetch agent assignments
+  const fetchAssignments = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/assignments`, { headers: getAuthHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      const all = data.assignments || [];
+      setAssignments(all);
+      // Fetch info requests for active assignments
+      const active = all.filter(a => a.status === 'in_progress' && a.job_id);
+      for (const a of active) {
+        fetchInfoRequests(a.job_id);
+      }
+    } catch {}
+  }, [fetchInfoRequests]);
+
+  useEffect(() => {
+    fetchAssignments();
+    const interval = setInterval(fetchAssignments, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAssignments]);
+
+  const handleConfirmAssignment = useCallback(async (id) => {
+    setProcessingAssignment(id);
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${id}/confirm`, { method: 'POST', headers: getAuthHeaders() });
+      setAssignments(prev => prev.map(a => a.id === id ? { ...a, status: 'in_progress' } : a));
+      const poll = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/v1/estimates/assignments`, { headers: getAuthHeaders() });
+          const data = await res.json();
+          const updated = (data.assignments || []).find(a => a.id === id);
+          if (updated && updated.status !== 'in_progress') {
+            setAssignments(prev => prev.map(a => a.id === id ? updated : a));
+            clearInterval(poll);
+          }
+        } catch {}
+      }, 5000);
+      setTimeout(() => clearInterval(poll), 300000);
+    } catch {}
+    finally { setProcessingAssignment(null); }
+  }, []);
+
+  const handleDismissAssignment = useCallback(async (id) => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/assignments/${id}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
+      setAssignments(prev => prev.filter(a => a.id !== id));
+    } catch {}
+  }, []);
+
+  const handleShareToHivemind = useCallback(async (sourceId, sourceType = 'assignment') => {
+    try {
+      setSharedAssignments(prev => ({ ...prev, [sourceId]: 'sharing' }));
+      const res = await fetch(`${API_BASE}/v1/knowledge/share-to-hivemind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ source_type: sourceType, source_id: sourceId }),
+      });
+      if (res.ok) {
+        setSharedAssignments(prev => ({ ...prev, [sourceId]: 'shared' }));
+      } else {
+        setSharedAssignments(prev => ({ ...prev, [sourceId]: 'error' }));
+      }
+    } catch {
+      setSharedAssignments(prev => ({ ...prev, [sourceId]: 'error' }));
+    }
+  }, []);
 
   const handleApprove = useCallback(async (id) => {
     const item = approvals.find(a => a.id === id);
@@ -799,6 +896,137 @@ export default function CommandDashboard({ onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Agent Assignments */}
+      {assignments.filter(a => !['dismissed'].includes(a.status)).length > 0 && (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Agent Tasks</span>
+              <span className="text-[10px] font-mono font-bold text-white bg-[var(--t-ui-accent)] px-1.5 py-[1px] rounded-full tabular-nums">
+                {assignments.filter(a => ['proposed', 'in_progress'].includes(a.status)).length}
+              </span>
+            </div>
+            <span className="text-[11px] text-terminal-muted">Overnight analysis</span>
+          </div>
+          <div>
+            {assignments.filter(a => !['dismissed'].includes(a.status)).map((a) => (
+              <div key={a.id} className="border-b border-[#f0eeea] last:border-b-0">
+                <div className="flex items-start gap-3 px-[18px] py-3 hover:bg-[#f5f4f0] transition-colors">
+                  <span
+                    className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                    style={{ background: 'var(--t-ui-accent-bg)', color: 'var(--t-ui-accent)' }}
+                  >
+                    {(a.agent_id || 'A').charAt(0).toUpperCase()}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="text-[13px] font-medium text-terminal-text leading-[1.4] cursor-pointer"
+                      onClick={() => setAssignmentExpanded(assignmentExpanded === a.id ? null : a.id)}
+                    >
+                      {a.title}
+                    </div>
+                    {a.category && (
+                      <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0] mr-1.5">
+                        {a.category}
+                      </span>
+                    )}
+                    {a.priority && a.priority !== 'medium' && (
+                      <span className={`text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded ${
+                        a.priority === 'high' ? 'bg-[#fdedf0] text-terminal-red border border-red-200' : 'bg-[#f5f4f0] text-terminal-muted border border-[#e5e5e0]'
+                      }`}>
+                        {a.priority}
+                      </span>
+                    )}
+                    {assignmentExpanded === a.id && a.description && (
+                      <div className="text-[11px] text-terminal-muted mt-1.5 leading-[1.5]">{a.description}</div>
+                    )}
+                    {assignmentExpanded === a.id && a.status === 'completed' && a.result_summary && !a.result_summary.startsWith('Failed') && (
+                      <div className="text-[11px] text-[var(--t-ui-accent)] mt-1.5 leading-[1.5] bg-[var(--t-ui-accent-bg)] rounded-lg p-2.5 border border-[var(--t-ui-accent-border)]">
+                        {a.result_summary.slice(0, 500)}{a.result_summary.length > 500 ? '...' : ''}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                    {a.status === 'proposed' && (
+                      <>
+                        <button
+                          onClick={() => handleConfirmAssignment(a.id)}
+                          disabled={processingAssignment === a.id}
+                          className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                          {processingAssignment === a.id ? 'Running...' : 'Run'}
+                        </button>
+                        <button
+                          onClick={() => handleDismissAssignment(a.id)}
+                          className="w-6 h-6 rounded-md flex items-center justify-center text-terminal-muted hover:text-terminal-red hover:bg-red-50 transition-colors"
+                        >
+                          <X size={13} />
+                        </button>
+                      </>
+                    )}
+                    {a.status === 'in_progress' && (
+                      <span className="flex items-center gap-1 text-[11px] text-[var(--t-ui-accent)] font-medium">
+                        {infoRequests[a.job_id]?.length > 0
+                          ? <><AlertCircle size={11} className="text-amber-600" /> Needs input</>
+                          : <><RotateCcw size={11} className="animate-spin" /> Working...</>
+                        }
+                      </span>
+                    )}
+                    {a.status === 'completed' && (
+                      <div className="flex items-center gap-2">
+                        {a.result_summary?.startsWith('Failed') && (
+                          <button
+                            onClick={() => handleConfirmAssignment(a.id)}
+                            disabled={processingAssignment === a.id}
+                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50"
+                          >
+                            <RotateCcw size={10} /> Retry
+                          </button>
+                        )}
+                        <span className={`flex items-center gap-1 text-[11px] font-medium ${a.result_summary?.startsWith('Failed') ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {a.result_summary?.startsWith('Failed') ? <><XCircle size={11} /> Failed</> : <><CheckCircle size={11} /> Done</>}
+                        </span>
+                        {!a.result_summary?.startsWith('Failed') && (
+                          <button
+                            onClick={() => handleShareToHivemind(a.id, 'assignment')}
+                            disabled={!!sharedAssignments[a.id]}
+                            className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text disabled:opacity-50 transition-colors"
+                            title="Share to Hivemind"
+                          >
+                            <Share2 size={10} />
+                            {sharedAssignments[a.id] === 'shared' ? 'Shared' : sharedAssignments[a.id] === 'sharing' ? '...' : 'Share'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Info request cards for paused jobs */}
+                {a.status === 'in_progress' && a.job_id && infoRequests[a.job_id]?.length > 0 && (
+                  <div className="border-t border-terminal-border">
+                    {infoRequests[a.job_id].map(req => (
+                      <InfoRequestCard
+                        key={req.id}
+                        jobId={a.job_id}
+                        request={req}
+                        onResolved={() => {
+                          setInfoRequests(prev => {
+                            const updated = { ...prev };
+                            updated[a.job_id] = (updated[a.job_id] || []).filter(r => r.id !== req.id);
+                            return updated;
+                          });
+                          fetchAssignments();
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Row 2: Upcoming Meetings + Deal Pipeline */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">

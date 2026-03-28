@@ -1,6 +1,6 @@
 import React, { Component, useState, useEffect, Suspense, lazy } from 'react';
 import {
-  Menu, X, Bell, FileText, Database, Plus, TrendingUp, Activity,
+  Menu, X, Bell, FileText, TrendingUp, Activity,
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
   HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2,
@@ -96,7 +96,6 @@ const OfficeDashboard = lazy(() => import('./components/dashboards/OfficeDashboa
 const HelpChatWidget = lazy(() => import('./components/HelpChatWidget'));
 
 // Non-lazy supporting components
-import ManualEntryModal from './components/ManualEntryModal';
 import NotificationBell from './components/NotificationBell';
 
 function LoadingSpinner() {
@@ -344,7 +343,6 @@ function AppContent() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [manualEntryOpen, setManualEntryOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
@@ -782,15 +780,6 @@ function AppContent() {
 
             <div className="flex items-center gap-3">
               <NotificationBell onNavigate={handleSetActiveTab} />
-              {hasPermission('exportData') && (
-                <button
-                  onClick={() => setManualEntryOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] text-white rounded-lg hover:bg-black text-sm font-heading font-semibold transition-colors"
-                >
-                  <Plus size={16} strokeWidth={2.5} />
-                  <span className="hidden sm:inline">Data Entry</span>
-                </button>
-              )}
             </div>
           </header>
         )}
@@ -802,11 +791,6 @@ function AppContent() {
           </Suspense>
         </main>
       </div>
-
-      {/* Manual Entry Modal */}
-      {manualEntryOpen && (
-        <ManualEntryModal onClose={() => setManualEntryOpen(false)} />
-      )}
 
       {/* Force set/change password overlays */}
       {showSetPassword && (

@@ -13,7 +13,7 @@ import {
   getAllTenants, runWithTenant,
   getDacpBidRequests, getDacpEstimates, getDacpJobs, getDacpStats,
   insertAgentAssignment, clearOldAssignments, clearProposedAssignments,
-  getAgentAssignments,
+  getAgentAssignments, getUsersByTenant,
 } from '../cache/database.js';
 
 let timer = null;
@@ -244,6 +244,10 @@ async function runOvernightAnalysis() {
         const assignments = await generateAssignments(tenant.id, context);
         console.log(`[OvernightAnalysis] Generated ${assignments.length} assignments for ${tenant.id}`);
 
+        // Find primary active admin/owner to assign tasks to
+        const users = getUsersByTenant(tenant.id);
+        const defaultUser = users.find(u => u.status === 'active' && ['admin', 'owner'].includes(u.role));
+
         // Store assignments
         for (const a of assignments) {
           insertAgentAssignment({
@@ -256,6 +260,7 @@ async function runOvernightAnalysis() {
             priority: a.priority || 'medium',
             action_prompt: a.action_prompt || null,
             context_json: JSON.stringify(context.stats),
+            user_id: defaultUser?.id || null,
           });
         }
       });

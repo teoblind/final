@@ -25,7 +25,6 @@ import datacenterRoutes from './routes/datacenter.js';
 import iranRoutes from './routes/iran.js';
 import brazilRoutes from './routes/brazil.js';
 import alertRoutes from './routes/alerts.js';
-import manualRoutes from './routes/manual.js';
 import notesRoutes from './routes/notes.js';
 import correlationRoutes from './routes/correlation.js';
 import liquidityRoutes from './routes/liquidity.js';
@@ -296,6 +295,14 @@ try {
   console.warn('Overnight analysis job not started:', err.message);
 }
 
+// Assignment executor — polls confirmed assignments and executes via CLI tunnel
+try {
+  const { startAssignmentExecutor } = await import('./jobs/assignmentExecutor.js');
+  startAssignmentExecutor(30000);
+} catch (err) {
+  console.warn('Assignment executor not started:', err.message);
+}
+
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
 // POST /api/v1/insurance/schedulers/start to start them
 // POST /api/v1/insurance/schedulers/stop to stop them
@@ -460,7 +467,6 @@ app.use('/api/v1/datacenter', datacenterRoutes);
 app.use('/api/v1/iran', iranRoutes);
 app.use('/api/v1/brazil', brazilRoutes);
 app.use('/api/v1/alerts', alertRoutes);
-app.use('/api/v1/manual', manualRoutes);
 app.use('/api/v1/notes', notesRoutes);
 app.use('/api/v1/correlation', correlationRoutes);
 app.use('/api/v1/liquidity', liquidityRoutes);
@@ -515,7 +521,6 @@ app.use('/api/datacenter', datacenterRoutes);
 app.use('/api/iran', iranRoutes);
 app.use('/api/brazil', brazilRoutes);
 app.use('/api/alerts', alertRoutes);
-app.use('/api/manual', manualRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/correlation', correlationRoutes);
 app.use('/api/liquidity', liquidityRoutes);

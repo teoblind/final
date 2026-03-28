@@ -18,7 +18,8 @@ import {
   getOpenActionItems,
 } from '../services/knowledgeProcessor.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
-import { insertActivity, getCurrentTenantId, getTenantDb } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb, getAgentAssignment, getThread } from '../cache/database.js';
+import { getThreadMessages } from '../services/chatService.js';
 import { authenticate } from '../middleware/auth.js';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
@@ -94,6 +95,83 @@ router.post('/ingest', async (req, res) => {
     res.json({ id: entryId, status: 'processing' });
   } catch (error) {
     console.error('Knowledge ingest error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /share-to-hivemind — Share a completed assignment or chat thread to the knowledge graph
+ */
+router.post('/share-to-hivemind', async (req, res) => {
+  try {
+    const { tenantId, userId } = resolveIds(req);
+    const { source_type, source_id } = req.body;
+
+    if (!source_type || !source_id) {
+      return res.status(400).json({ error: 'source_type and source_id are required' });
+    }
+    if (!['assignment', 'thread'].includes(source_type)) {
+      return res.status(400).json({ error: 'source_type must be "assignment" or "thread"' });
+    }
+
+    let title, content, type, source;
+
+    if (source_type === 'assignment') {
+      const assignment = getAgentAssignment(tenantId, source_id);
+      if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+      title = assignment.title;
+      content = [
+        `Task: ${assignment.title}`,
+        `Description: ${assignment.description || ''}`,
+        `Category: ${assignment.category || 'general'}`,
+        '',
+        'Result:',
+        assignment.result_summary || '(no result)',
+      ].join('\n');
+
+      if (assignment.output_artifacts_json) {
+        try {
+          const artifacts = JSON.parse(assignment.output_artifacts_json);
+          content += '\n\nArtifacts:\n' + artifacts.map(a => `- ${a.type}: ${a.url || a.title || ''}`).join('\n');
+        } catch (e) { /* ignore */ }
+      }
+      type = 'agent-task';
+      source = 'shared-assignment';
+    } else {
+      const thread = getThread(source_id);
+      if (!thread) return res.status(404).json({ error: 'Thread not found' });
+
+      const messages = getThreadMessages(source_id);
+      title = thread.title || 'Shared Conversation';
+      content = messages.map(m => `[${m.role}]: ${m.content || ''}`).join('\n\n');
+      type = 'conversation';
+      source = 'shared-thread';
+    }
+
+    const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    db.prepare(`
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(entryId, tenantId, type, title, content, source, 'hivemind', new Date().toISOString());
+
+    // Process asynchronously
+    processKnowledgeEntry(entryId, tenantId).catch(err => {
+      console.error(`Hivemind processing failed for ${entryId}:`, err.message);
+    });
+
+    insertActivity({
+      tenantId, type: 'doc',
+      title: `Shared to Hivemind: ${title}`,
+      subtitle: `${source_type} shared by ${userId}`,
+      detailJson: JSON.stringify({ source_type, source_id }),
+      sourceType: 'knowledge', sourceId: entryId, agentId: 'knowledge',
+    });
+
+    res.json({ id: entryId, status: 'processing' });
+  } catch (error) {
+    console.error('Share to hivemind error:', error);
     res.status(500).json({ error: error.message });
   }
 });
