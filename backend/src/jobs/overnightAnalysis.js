@@ -185,8 +185,8 @@ async function generateAssignments(tenantId, context) {
     tenantId,
     agentId: 'estimating',
     prompt,
-    maxTurns: 5,
-    timeoutMs: 180_000,
+    maxTurns: 30,
+    timeoutMs: 600_000,
     label: 'Overnight Analysis',
   });
 
