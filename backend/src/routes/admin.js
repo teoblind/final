@@ -930,6 +930,18 @@ router.get('/system/health', async (req, res) => {
   }
 });
 
+// ─── POST /overnight-analysis — Manually trigger overnight analysis ──────────
+
+router.post('/overnight-analysis', async (req, res) => {
+  try {
+    const { runOvernightAnalysis } = await import('../jobs/overnightAnalysis.js');
+    runOvernightAnalysis().catch(err => console.error('[Admin] Manual overnight analysis error:', err.message));
+    res.json({ success: true, message: 'Overnight analysis triggered' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── GET /usage/opus — Opus Report Usage Per Tenant ─────────────────────────
 
 router.get('/usage/opus', (req, res) => {

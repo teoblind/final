@@ -43,6 +43,23 @@ const MAX_CONCURRENT_PER_TENANT = 2;
 export function startAssignmentExecutor(intervalMs = 30000) {
   if (pollInterval) return; // already running
   console.log(`[AssignmentExecutor] Started (polling every ${intervalMs / 1000}s)`);
+
+  // Recover orphaned in_progress tasks (from PM2 restarts killing tunnel calls)
+  try {
+    const tenants = getAllTenants();
+    for (const tenant of tenants) {
+      runWithTenant(tenant.id, () => {
+        const stuck = getAgentAssignments(tenant.id, 'in_progress');
+        for (const a of stuck) {
+          console.log(`[AssignmentExecutor] Recovering orphaned task: ${a.title} (${a.id})`);
+          updateAgentAssignment(tenant.id, a.id, { status: 'confirmed', job_id: null, result_summary: null });
+        }
+      });
+    }
+  } catch (err) {
+    console.warn(`[AssignmentExecutor] Orphan recovery failed: ${err.message}`);
+  }
+
   pollInterval = setInterval(() => tick(), intervalMs);
   // Run an initial tick after a short delay to pick up anything waiting
   setTimeout(() => tick(), 5000);
