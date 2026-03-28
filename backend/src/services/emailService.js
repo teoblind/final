@@ -278,9 +278,13 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
   ].filter(Boolean);
 
   const isHtml = !!html;
-  const rawContent = html || body;
-  const withSig = rawContent + getSignature(tenantId, isHtml);
-  const content = isHtml ? withSig + getTrackingPixel(tenantId, inReplyTo || threadId) : withSig;
+  const rawContent = isHtml ? wrapHtmlBody(html) : (body || '');
+  const withSig = isHtml
+    ? rawContent.replace('</body>', getSignature(tenantId, true) + '\n</body>')
+    : rawContent + getSignature(tenantId, false);
+  const content = isHtml
+    ? withSig.replace('</body>', getTrackingPixel(tenantId, inReplyTo || threadId) + '\n</body>')
+    : withSig;
   const contentType = isHtml ? 'text/html' : 'text/plain';
   const contentBase64 = Buffer.from(content, 'utf-8').toString('base64');
   let messageParts = [
@@ -355,13 +359,23 @@ export async function sendEstimateEmail({ to, subject, body, estimateFilename, t
 }
 
 /**
+ * Wrap raw HTML content in a proper <html><body> envelope with default font styling.
+ * Skips wrapping if the content already has an <html> or <body> tag.
+ */
+function wrapHtmlBody(html) {
+  if (/<html[\s>]/i.test(html) || /<body[\s>]/i.test(html)) return html;
+  return `<html>\n<body style="font-family:Arial,sans-serif;font-size:14px;color:#222;line-height:1.6">\n${html}\n</body>\n</html>`;
+}
+
+/**
  * Send an HTML email.
  */
 export async function sendHtmlEmail({ to, subject, html, cc, tenantId, threadId, inReplyTo, references, skipSignature }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
-  const htmlWithSig = skipSignature ? html : html + getSignature(tenantId, true);
-  const htmlWithTracking = htmlWithSig + getTrackingPixel(tenantId, inReplyTo || threadId);
+  const wrappedHtml = wrapHtmlBody(html);
+  const htmlWithSig = skipSignature ? wrappedHtml : wrappedHtml.replace('</body>', getSignature(tenantId, true) + '\n</body>');
+  const htmlWithTracking = htmlWithSig.replace('</body>', getTrackingPixel(tenantId, inReplyTo || threadId) + '\n</body>');
   const htmlBase64 = Buffer.from(htmlWithTracking, 'utf-8').toString('base64');
   const headers = [
     `From: ${sender}`,

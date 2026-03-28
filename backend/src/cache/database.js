@@ -1130,7 +1130,7 @@ function seedTenantsInSystemDb() {
   if (!defaultTenant) {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, settings_json, limits_json)
-      VALUES ('default', 'Default Organization', 'default', 'professional', 'active', ?, ?)
+      VALUES ('default', 'Sangha Renewables', 'default', 'professional', 'active', ?, ?)
     `).run(
       JSON.stringify({
         industry: 'mining',
@@ -1151,6 +1151,9 @@ function seedTenantsInSystemDb() {
     );
     console.log('[DB] Default tenant created in systemDb');
   }
+
+  // Fix: ensure default tenant name is correct (was 'Default Organization' in older deploys)
+  systemDb.prepare(`UPDATE tenants SET name = 'Sangha Renewables' WHERE id = 'default' AND name = 'Default Organization'`).run();
 
   // Create DACP tenant if not exists
   const dacpTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('dacp-construction-001');
