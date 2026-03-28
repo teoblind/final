@@ -359,6 +359,7 @@ export default function CommandDashboard({ onNavigate }) {
   const [leadStats, setLeadStats] = useState(null);
   // Agent Assignments
   const [assignments, setAssignments] = useState([]);
+  const [docPreview, setDocPreview] = useState(null);
   const [processingAssignment, setProcessingAssignment] = useState(null);
   const [sharedAssignments, setSharedAssignments] = useState({});
   const [infoRequests, setInfoRequests] = useState({});
@@ -954,15 +955,19 @@ export default function CommandDashboard({ onNavigate }) {
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
                             {artifacts.map((art, i) => {
                               const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
-                              const isDownload = art.type === 'docx' || art.type === 'pdf';
                               const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
                                 : art.type === 'pdf' ? <FileText size={10} />
                                 : art.type === 'docx' ? <Download size={10} />
                                 : <ExternalLink size={10} />;
+                              const openPreview = (e) => {
+                                if (art.type === 'gdoc') return;
+                                e.preventDefault();
+                                setDocPreview({ type: art.type, url: href, title: a.title, filename: art.filename, assignment: a });
+                              };
                               return (
-                                <a key={i} href={href} target={isDownload ? '_self' : '_blank'} rel="noopener noreferrer"
-                                  download={isDownload ? (art.filename || true) : undefined}
-                                  className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+                                <a key={i} href={href} target={art.type === 'gdoc' ? '_blank' : '_self'} rel="noopener noreferrer"
+                                  onClick={openPreview}
+                                  className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
                                     art.type === 'gdoc' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
                                     : art.type === 'pdf' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
                                     : art.type === 'docx' ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
@@ -1482,6 +1487,50 @@ export default function CommandDashboard({ onNavigate }) {
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-terminal-text text-white text-[13px] font-medium px-5 py-3 rounded-xl shadow-lg animate-fade-in">
           {toast}
+        </div>
+      )}
+
+      {/* Document Preview Modal */}
+      {docPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setDocPreview(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[90vw] max-w-[900px] h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--t-border)] bg-[var(--t-surface-dim)]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {docPreview.type === 'pdf' ? <FileText size={16} className="text-red-600 shrink-0" /> : <Download size={16} className="text-indigo-600 shrink-0" />}
+                <div className="min-w-0">
+                  <h3 className="text-[14px] font-bold text-terminal-text font-heading truncate">{docPreview.title}</h3>
+                  <span className="text-[11px] text-terminal-muted uppercase">{docPreview.type === 'pdf' ? 'PDF Document' : 'Word Document'}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a href={docPreview.url} download={docPreview.filename || true}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold font-heading rounded-lg border border-[var(--t-border)] bg-white text-[var(--t-ui-accent)] hover:bg-[var(--t-surface-dim)] transition-colors">
+                  <Download size={12} /> Download
+                </a>
+                <button onClick={() => setDocPreview(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-terminal-muted hover:text-terminal-text hover:bg-[var(--t-surface-dim)] transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {docPreview.type === 'pdf' ? (
+                <iframe src={docPreview.url} className="w-full h-full border-0" title={docPreview.title} />
+              ) : (
+                <div className="p-6 max-w-[700px] mx-auto">
+                  <div className="text-[13px] leading-[1.7] text-[#333]">
+                    {(docPreview.assignment?.result_summary || '').split('\n').map((line, i) => {
+                      if (line.startsWith('# ')) return <h1 key={i} className="text-[18px] font-bold text-[var(--t-ui-accent)] mt-6 mb-2 font-heading">{line.slice(2)}</h1>;
+                      if (line.startsWith('## ')) return <h2 key={i} className="text-[15px] font-bold text-[var(--t-ui-accent)] mt-5 mb-1.5 font-heading">{line.slice(3)}</h2>;
+                      if (line.startsWith('### ')) return <h3 key={i} className="text-[13px] font-bold text-[var(--t-ui-accent)] mt-4 mb-1 font-heading">{line.slice(4)}</h3>;
+                      if (line.startsWith('- ')) return <li key={i} className="ml-4 text-[12px] text-[#444] mb-0.5">{line.slice(2)}</li>;
+                      if (line.trim() === '') return <div key={i} className="h-2" />;
+                      return <p key={i} className="text-[12px] text-[#444] mb-1">{line}</p>;
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
