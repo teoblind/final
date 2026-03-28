@@ -15,6 +15,7 @@ import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuar
 import { tunnelOrChat } from '../services/cliTunnel.js';
 import { sendEmail, sendHtmlEmail, sendEmailWithAttachments, markdownToEmailHtml } from '../services/emailService.js';
 import { processKnowledgeEntry, getThreadKnowledge, getContactKnowledge } from '../services/knowledgeProcessor.js';
+import { extractFirefliesMeetingId, fetchFirefliesTranscript, formatTranscriptAsMarkdown } from '../services/firefliesService.js';
 
 let pollInterval = null;
 let lastPoll = null;
@@ -629,6 +630,48 @@ async function pollSingleInbox(gmail, tenantId, label) {
             });
           } catch (knErr) {
             console.warn(`[GmailPoll] CC knowledge storage failed: ${knErr.message}`);
+          }
+
+          // Auto-fetch Fireflies transcripts if URL detected in email body
+          try {
+            const firefliesUrlMatch = body.match(/https?:\/\/app\.fireflies\.ai\/view\/[^\s"<>]+/i);
+            if (firefliesUrlMatch) {
+              const meetingId = extractFirefliesMeetingId(firefliesUrlMatch[0]);
+              if (meetingId) {
+                console.log(`[GmailPoll] Fireflies URL detected in CC email — fetching transcript for ${meetingId}`);
+                const transcript = await fetchFirefliesTranscript(ccTenant, meetingId);
+                if (transcript) {
+                  // Store the full transcript as a separate knowledge entry
+                  const ffEntryId = `KN-ff-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                  const tdb = getTenantDb(ccTenant);
+                  tdb.prepare(`
+                    INSERT INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+                    VALUES (?, ?, 'meeting-transcript', ?, ?, ?, 'gmail-poll', datetime('now'))
+                  `).run(
+                    ffEntryId, ccTenant,
+                    `Meeting Transcript: ${transcript.raw?.title || 'Fireflies Meeting'}`,
+                    JSON.stringify({
+                      meetingId,
+                      title: transcript.raw?.title,
+                      date: transcript.raw?.date,
+                      duration: transcript.raw?.duration,
+                      speakers: transcript.speakers,
+                      summary: transcript.summary,
+                      actionItems: transcript.actionItems,
+                      formattedTranscript: transcript.formatted,
+                      threadId: msgThreadId,
+                    }),
+                    `fireflies:${meetingId}`
+                  );
+                  processKnowledgeEntry(ffEntryId, ccTenant).catch(err => {
+                    console.warn(`[GmailPoll] Fireflies knowledge processing failed: ${err.message}`);
+                  });
+                  console.log(`[GmailPoll] Stored Fireflies transcript as ${ffEntryId} (${transcript.speakers?.length || 0} speakers, ${transcript.raw?.duration || '?'} min)`);
+                }
+              }
+            }
+          } catch (ffErr) {
+            console.warn(`[GmailPoll] Fireflies transcript fetch failed: ${ffErr.message}`);
           }
 
           // Track CC thread for auto-trigger
