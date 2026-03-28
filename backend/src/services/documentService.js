@@ -66,8 +66,24 @@ const THEMES = {
 
 // ---- Markdown -> HTML conversion ----
 
+/** Strip conversational agent text that shouldn't appear in a formal report */
+function cleanForReport(text) {
+  let cleaned = text;
+  // Remove conversational preamble lines
+  cleaned = cleaned.replace(/^(The Google Doc is live\..*|Here['']s the (?:full )?summary:?|✅|📄.*|📁.*)$/gm, '');
+  // Remove markdown link syntax but keep text: [text](url) -> text
+  cleaned = cleaned.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1');
+  // Remove raw URLs on their own line
+  cleaned = cleaned.replace(/^\s*https?:\/\/\S+\s*$/gm, '');
+  // Remove "Note: Per standing policy..." agent disclaimers
+  cleaned = cleaned.replace(/^\*?Note:?\s*Per standing policy.*$/gm, '');
+  // Remove leading/trailing blank lines
+  cleaned = cleaned.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '');
+  return cleaned;
+}
+
 function markdownToHtml(markdown) {
-  let html = markdown;
+  let html = cleanForReport(markdown);
 
   // Tables: find blocks of | delimited lines
   html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
@@ -75,7 +91,7 @@ function markdownToHtml(markdown) {
     let tableHtml = '<table>';
     let isFirstRow = true;
     for (const row of rows) {
-      if (/^\|[\s\-:]+\|$/.test(row)) continue;
+      if (/^\|[\s\-:|]+\|$/.test(row) || /^[\s\-:|]+$/.test(row)) continue;
       const cells = row.split('|').filter((_, i, a) => i > 0 && i < a.length - 1).map(c => c.trim());
       const tag = isFirstRow ? 'th' : 'td';
       tableHtml += `<tr>${cells.map(c => `<${tag}>${inlineFormat(c)}</${tag}>`).join('')}</tr>`;

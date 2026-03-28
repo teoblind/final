@@ -500,10 +500,11 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     }
   }
 
-  // Complete the assignment
+  // Complete the assignment — save full response for document regeneration
   updateAgentAssignment(tenantId, assignment.id, {
     status: 'completed',
     result_summary: cleanResponse.slice(0, 4000),
+    full_response: cleanResponse,
     completed_at: new Date().toISOString(),
     output_artifacts_json: artifacts ? JSON.stringify(artifacts) : null,
   });
