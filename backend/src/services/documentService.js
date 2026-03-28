@@ -64,6 +64,131 @@ const THEMES = {
   },
 };
 
+// ---- Plain text (Google Docs export) -> Markdown conversion ----
+
+/**
+ * Detect if content is Google Docs plain text export (not markdown).
+ * Google Docs exports use tab-indented tables, ________________ separators,
+ * and numbered headings without # prefixes.
+ */
+function isGoogleDocPlainText(text) {
+  const hasUnderscoreSeparators = (text.match(/_{10,}/g) || []).length >= 2;
+  const hasTabIndents = (text.match(/^\t/gm) || []).length >= 3;
+  const lacksMarkdownHeadings = !(/#\s/.test(text));
+  return hasUnderscoreSeparators && hasTabIndents && lacksMarkdownHeadings;
+}
+
+/**
+ * Convert Google Docs plain text export into clean markdown.
+ * Handles: numbered headings, tab-separated tables, ____ separators, * bullets.
+ */
+function googleDocToMarkdown(text) {
+  let lines = text.split('\n');
+  let md = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    let line = lines[i];
+
+    // Skip ____ separators -> horizontal rule
+    if (/^_{5,}$/.test(line.trim())) {
+      md.push('---');
+      i++;
+      continue;
+    }
+
+    // Detect tab-separated table blocks:
+    // Pattern: a header line followed by lines starting with tab
+    // Google Docs exports 2-column tables as alternating key/value on separate lines
+    // OR as tab-separated columns on a single line
+    if (i + 1 < lines.length && /\t/.test(lines[i]) && /\t/.test(lines[i + 1])) {
+      // Collect all consecutive lines with tabs
+      const tableLines = [];
+      while (i < lines.length && (/\t/.test(lines[i]) || lines[i].trim() === '')) {
+        if (lines[i].trim() !== '') tableLines.push(lines[i]);
+        i++;
+      }
+
+      if (tableLines.length >= 2) {
+        // Split each line by tab to get columns
+        const rows = tableLines.map(l => l.split('\t').map(c => c.trim()).filter(c => c));
+        const maxCols = Math.max(...rows.map(r => r.length));
+
+        if (maxCols >= 2) {
+          // Render as markdown table
+          const header = rows[0];
+          while (header.length < maxCols) header.push('');
+          md.push('| ' + header.join(' | ') + ' |');
+          md.push('| ' + header.map(() => '---').join(' | ') + ' |');
+          for (let r = 1; r < rows.length; r++) {
+            while (rows[r].length < maxCols) rows[r].push('');
+            md.push('| ' + rows[r].join(' | ') + ' |');
+          }
+          md.push('');
+        } else {
+          // Single-column tab data -> just output as text
+          for (const tl of tableLines) md.push(tl.replace(/^\t+/, ''));
+        }
+      }
+      continue;
+    }
+
+    // Numbered section headings: "1. Title" or "2. Title" at start of line
+    if (/^\d+\.\s+[A-Z]/.test(line.trim()) && line.trim().length < 100) {
+      const heading = line.trim().replace(/^\d+\.\s+/, '');
+      md.push(`## ${heading}`);
+      i++;
+      continue;
+    }
+
+    // Sub-section headings: "2.1 Title" or "Step 1 —" patterns
+    if (/^\d+\.\d+\s+/.test(line.trim()) && line.trim().length < 120) {
+      const heading = line.trim();
+      md.push(`### ${heading}`);
+      i++;
+      continue;
+    }
+
+    // "Step N —" headings
+    if (/^Step\s+\d+\s*[—–-]/i.test(line.trim())) {
+      md.push(`### ${line.trim()}`);
+      i++;
+      continue;
+    }
+
+    // Standalone short bold-looking lines (all caps or title case, < 80 chars, no punctuation at end)
+    // These are likely sub-headings from the Google Doc
+    if (line.trim().length > 0 && line.trim().length < 80 &&
+        !line.trim().endsWith('.') && !line.trim().endsWith(',') &&
+        !line.trim().startsWith('*') && !line.trim().startsWith('-') &&
+        !/\t/.test(line) &&
+        i + 1 < lines.length && lines[i + 1].trim() === '') {
+      // Check if next non-empty line is body text (not another heading)
+      let nextNonEmpty = i + 2;
+      while (nextNonEmpty < lines.length && lines[nextNonEmpty].trim() === '') nextNonEmpty++;
+      if (nextNonEmpty < lines.length && lines[nextNonEmpty].trim().length > 80) {
+        // This line is likely a heading followed by body text
+        md.push(`### ${line.trim()}`);
+        i++;
+        continue;
+      }
+    }
+
+    // "* " bullets -> "- " (markdown standard)
+    if (/^\*\s+/.test(line.trim())) {
+      md.push(line.replace(/^\*\s+/, '- '));
+      i++;
+      continue;
+    }
+
+    // Regular line
+    md.push(line);
+    i++;
+  }
+
+  return md.join('\n');
+}
+
 // ---- Markdown -> HTML conversion ----
 
 /** Strip conversational agent text that shouldn't appear in a formal report */
@@ -90,7 +215,12 @@ function cleanForReport(text) {
 }
 
 function markdownToHtml(markdown) {
-  let html = cleanForReport(markdown);
+  // If content is Google Docs plain text export, convert to markdown first
+  let cleaned = cleanForReport(markdown);
+  if (isGoogleDocPlainText(cleaned)) {
+    cleaned = googleDocToMarkdown(cleaned);
+  }
+  let html = cleaned;
 
   // Tables: find blocks of | delimited lines
   html = html.replace(/((?:^\|.+\|$\n?)+)/gm, (tableBlock) => {
