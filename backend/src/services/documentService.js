@@ -69,8 +69,9 @@ const THEMES = {
 /** Strip conversational agent text that shouldn't appear in a formal report */
 function cleanForReport(text) {
   let cleaned = text;
-  // Remove lines with emoji indicators of agent chat
-  cleaned = cleaned.replace(/^.*[✅📄📁📋🔗💡🤖].*$/gm, '');
+  // Remove specific agent chat indicator lines (not content lines that happen to have emoji)
+  cleaned = cleaned.replace(/^.*[✅].*$/gm, ''); // checkmark = status line
+  cleaned = cleaned.replace(/^[📄📁📋🔗💡🤖]\s.*$/gm, ''); // emoji at START of line = agent metadata
   // Remove conversational preamble/postamble
   cleaned = cleaned.replace(/^(The Google Doc is live\.?.*|Here['']s the (?:full )?summary:?.*|I['']ve (?:created|generated|uploaded|prepared|built|saved|shared).*|The (?:report|document|brief) (?:is|has been).*|Let me know if.*|Would you like.*|I haven['']t sent an email.*|Per standing policy.*)$/gmi, '');
   // Remove "Document:" / "Saved to:" / "Full Report:" reference lines
