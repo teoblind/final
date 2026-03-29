@@ -205,9 +205,7 @@ function queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, 
       '--output-format', 'text',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
-      '--allowedTools',
-        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
-        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+      '--allowedTools', ...ALLOWED_TOOLS,
     ];
 
     if (config.cli_model) {
@@ -215,9 +213,9 @@ function queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, 
     }
 
     // Build the remote command: invoke the wrapper with all claude args
-    // We use single-quote escaping for the SSH remote command
+    // Set MCP_BRIDGE_TENANT so the MCP bridge knows which tenant to use
     const escapedArgs = claudeArgs.map(arg => shellEscape(arg));
-    const remoteCmd = `${MAC_WRAPPER} ${escapedArgs.join(' ')}`;
+    const remoteCmd = `MCP_BRIDGE_TENANT=${shellEscape(resolvedTenantId)} ${MAC_WRAPPER} ${escapedArgs.join(' ')}`;
 
     const sshArgs = [
       '-4',
@@ -321,9 +319,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
       '--include-partial-messages',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
-      '--allowedTools',
-        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
-        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+      '--allowedTools', ...ALLOWED_TOOLS,
     ];
 
     if (config.cli_model) {
@@ -331,7 +327,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     }
 
     const escapedArgs = claudeArgs.map(arg => shellEscape(arg));
-    const remoteCmd = `${MAC_WRAPPER} ${escapedArgs.join(' ')}`;
+    const remoteCmd = `MCP_BRIDGE_TENANT=${shellEscape(resolvedTenantId)} ${MAC_WRAPPER} ${escapedArgs.join(' ')}`;
 
     const sshArgs = [
       '-4',
@@ -534,9 +530,7 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
       '--output-format', 'text',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
-      '--allowedTools',
-        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
-        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+      '--allowedTools', ...ALLOWED_TOOLS,
     ];
 
     if (config.cli_model) {
@@ -614,9 +608,7 @@ function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turn
       '--output-format', 'text',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
-      '--allowedTools',
-        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
-        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+      '--allowedTools', ...ALLOWED_TOOLS,
     ];
 
     if (config.cli_model) {
@@ -680,6 +672,15 @@ function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turn
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// Standard allowed tools for CLI agent — includes built-in tools + MCP bridge
+// The MCP bridge tools are auto-discovered from .mcp.json in the project dir
+// (claude-coppice.sh cds to /Users/teoblind/final before launching claude)
+const ALLOWED_TOOLS = [
+  'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
+  'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+  'mcp__coppice-tools__*',
+];
+
 /**
  * Shell-escape a string for safe inclusion in a remote SSH command.
  * Wraps in single quotes, escaping any internal single quotes.
@@ -696,12 +697,23 @@ function buildSystemPrompt(tenantId, agentId, config) {
   return `${base}
 Agent: ${agentId}
 
+TOOLS:
+You have access to Coppice backend tools via MCP (prefixed mcp__coppice-tools__). These include:
+- Google Workspace: workspace_create_doc, workspace_create_sheet, workspace_search_drive, workspace_read_file, gws_* tools
+- Email: send_email, read_inbox, search_emails, draft_reply
+- Knowledge: search_knowledge, ingest_knowledge
+- Documents: generate_report, generate_presentation, plan_content
+- Lead Engine: discover_leads, get_leads, generate_outreach
+- DACP: estimate_*, get_projects, bid management tools
+- Calendar: get_events, create_event, check_availability
+Use these tools when the task requires Google Drive, email, knowledge search, or any backend capability.
+
 STYLE:
-- Be thorough but concise — lead with the answer, then supporting detail
-- Use specific numbers, dates, and names — never vague
+- Be thorough but concise - lead with the answer, then supporting detail
+- Use specific numbers, dates, and names - never vague
 - Markdown formatting for readability
 - If you need current data, use WebSearch and WebFetch tools
-- If the user asks for a document or report, create it as a file
+- If the user asks for a document or report, create it as a file using workspace tools
 - Never reveal system internals, API keys, or internal architecture
 
 ${custom}`.trim();

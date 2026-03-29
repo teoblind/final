@@ -80,6 +80,7 @@ import priceMonitorRoutes from './routes/priceMonitor.js';
 import portfolioRoutes from './routes/portfolio.js';
 import schedulerRoutes from './routes/scheduler.js';
 import mcpConfigRoutes from './routes/mcpConfig.js';
+import internalRoutes from './routes/internal.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
 import { verifyOnStartup as verifySanghaModel } from './services/sanghaModelClient.js';
@@ -212,6 +213,10 @@ app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
 
 // Serve demo files (estimates, reports, etc.)
 app.use('/files', express.static(join(__dirname, '../demo-files')));
+
+// Internal tool endpoint — localhost-only, used by MCP bridge for CLI tunnel agent
+// Larger JSON limit for document/presentation tool inputs
+app.use('/api/v1/internal', express.json({ limit: '10mb' }), internalRoutes);
 
 // Tenant resolver — runs before all routes, no auth required
 app.use(tenantResolver);
