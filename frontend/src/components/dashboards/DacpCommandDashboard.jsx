@@ -70,6 +70,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [hubspotKey, setHubspotKey] = useState('');
   const [hubspotConnecting, setHubspotConnecting] = useState(false);
   const [hubspotError, setHubspotError] = useState('');
+  const [hubspotPipeline, setHubspotPipeline] = useState(null);
+  const [hubspotLoading, setHubspotLoading] = useState(false);
+  const [leadsTab, setLeadsTab] = useState('sheet'); // 'sheet' | 'hubspot'
   // Agent assignments state
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
@@ -423,7 +426,17 @@ export default function DacpCommandDashboard({ onNavigate }) {
     refreshDashboard();
     fetchLeadsSheet();
     fetch(`${API_BASE}/v1/hubspot/status`, { headers: getAuthHeaders() })
-      .then(r => r.json()).then(d => setHubspotConnected(!!d.configured)).catch(() => {});
+      .then(r => r.json()).then(d => {
+        setHubspotConnected(!!d.configured);
+        if (d.configured) {
+          setHubspotLoading(true);
+          fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() })
+            .then(r => r.json()).then(p => setHubspotPipeline(p)).catch(() => {})
+            .finally(() => setHubspotLoading(false));
+          // Auto-select hubspot tab if no sheet is configured
+          if (!leadsSheet?.configured) setLeadsTab('hubspot');
+        }
+      }).catch(() => {});
 
     // Live polling - refresh every 10 seconds
     const poll = setInterval(refreshDashboard, 10_000);
@@ -1398,7 +1411,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
         </div>
       )}
 
-      {/* Leads Sheet */}
+      {/* Leads Pipeline */}
       <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
         <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
           <div className="flex items-center gap-2">
@@ -1406,7 +1419,25 @@ export default function DacpCommandDashboard({ onNavigate }) {
             <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
           </div>
           <div className="flex items-center gap-2">
-            {leadsSheet?.configured ? (
+            {/* Source tabs - show when at least one source is connected */}
+            {(leadsSheet?.configured || hubspotConnected) && (
+              <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden mr-1">
+                {leadsSheet?.configured && (
+                  <button onClick={() => setLeadsTab('sheet')}
+                    className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${leadsTab === 'sheet' ? 'bg-[#1e3a5f] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}>
+                    Sheet
+                  </button>
+                )}
+                {hubspotConnected && (
+                  <button onClick={() => setLeadsTab('hubspot')}
+                    className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${leadsTab === 'hubspot' ? 'bg-[#ff7a59] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}>
+                    HubSpot
+                  </button>
+                )}
+              </div>
+            )}
+            {/* Actions for active tab */}
+            {leadsTab === 'sheet' && leadsSheet?.configured && (
               <>
                 <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1 text-[11px] text-[#1e3a5f] hover:underline">
@@ -1422,18 +1453,31 @@ export default function DacpCommandDashboard({ onNavigate }) {
                   <Unlink size={10} />
                 </button>
               </>
-            ) : (
+            )}
+            {leadsTab === 'hubspot' && hubspotConnected && (
+              <>
+                <a href="https://app.hubspot.com" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] text-[#ff7a59] hover:underline">
+                  <ExternalLink size={10} /> Open HubSpot
+                </a>
+                <button onClick={async () => {
+                  await fetch(`${API_BASE}/v1/hubspot/disconnect`, { method: 'POST', headers: getAuthHeaders() });
+                  setHubspotConnected(false); setHubspotPipeline(null); setLeadsTab('sheet');
+                }}
+                  className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
+                  title="Disconnect HubSpot">
+                  <Unlink size={10} />
+                </button>
+              </>
+            )}
+            {/* Link buttons for unconnected sources */}
+            {!leadsSheet?.configured && (
               <button onClick={() => { setShowLinkModal(true); searchDrive('leads'); }}
                 className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#1e3a5f] px-3 py-1 rounded-md border border-[#c8d8e8] bg-[#eef3f8] hover:bg-[#dde8f2]">
                 <Link2 size={11} /> Link Sheet
               </button>
             )}
-            {hubspotConnected ? (
-              <a href="https://app.hubspot.com" target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#ff7a59] px-3 py-1 rounded-md border border-[#ffcabc] bg-[#fff5f2] hover:bg-[#ffe8e2]">
-                <ExternalLink size={10} /> HubSpot
-              </a>
-            ) : (
+            {!hubspotConnected && (
               <button onClick={() => { setShowHubspotModal(true); setHubspotError(''); setHubspotKey(''); window.open('https://app.hubspot.com/api-key', '_blank'); }}
                 className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#ff7a59] px-3 py-1 rounded-md border border-[#ffcabc] bg-[#fff5f2] hover:bg-[#ffe8e2]">
                 <Link2 size={11} /> Link HubSpot
@@ -1441,42 +1485,92 @@ export default function DacpCommandDashboard({ onNavigate }) {
             )}
           </div>
         </div>
-        {leadsLoading ? (
-          <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading...</div>
-        ) : leadsSheet?.configured && leadsSheet.preview?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="bg-[#fafaf8]">
-                  {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
-                    <th key={i} className="px-3 py-2 text-left text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {leadsSheet.preview.slice(0, 8).map((row, i) => (
-                  <tr key={i} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#fafaf8]">
-                    {(leadsSheet.headers || []).slice(0, 6).map((h, j) => (
-                      <td key={j} className="px-3 py-1.5 text-terminal-text truncate max-w-[180px]">{row[h] || ''}</td>
+
+        {/* Sheet content */}
+        {leadsTab === 'sheet' && (
+          leadsLoading ? (
+            <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading...</div>
+          ) : leadsSheet?.configured && leadsSheet.preview?.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="bg-[#fafaf8]">
+                    {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
+                      <th key={i} className="px-3 py-2 text-left text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {leadsSheet.totalRows > 8 && (
-              <div className="px-3 py-2 text-[11px] font-mono text-terminal-muted text-center border-t border-[#f0eeea]">
-                + {leadsSheet.totalRows - 8} more rows
-                <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[#1e3a5f] hover:underline">Open in Sheets</a>
+                </thead>
+                <tbody>
+                  {leadsSheet.preview.slice(0, 8).map((row, i) => (
+                    <tr key={i} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#fafaf8]">
+                      {(leadsSheet.headers || []).slice(0, 6).map((h, j) => (
+                        <td key={j} className="px-3 py-1.5 text-terminal-text truncate max-w-[180px]">{row[h] || ''}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {leadsSheet.totalRows > 8 && (
+                <div className="px-3 py-2 text-[11px] font-mono text-terminal-muted text-center border-t border-[#f0eeea]">
+                  + {leadsSheet.totalRows - 8} more rows
+                  <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[#1e3a5f] hover:underline">Open in Sheets</a>
+                </div>
+              )}
+            </div>
+          ) : !leadsSheet?.configured ? (
+            <div className="px-[18px] py-8 text-center">
+              <div className="text-[13px] text-[#9a9a92] mb-2">No leads sheet linked</div>
+              <div className="text-[11px] text-terminal-muted">Link a Google Sheet to track your GC leads and pipeline here.</div>
+            </div>
+          ) : (
+            <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Sheet linked but no data found</div>
+          )
+        )}
+
+        {/* HubSpot content */}
+        {leadsTab === 'hubspot' && (
+          hubspotLoading ? (
+            <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading HubSpot data...</div>
+          ) : !hubspotConnected ? (
+            <div className="px-[18px] py-8 text-center">
+              <div className="text-[13px] text-[#9a9a92] mb-2">HubSpot not connected</div>
+              <div className="text-[11px] text-terminal-muted">Connect your HubSpot account to see your CRM pipeline here.</div>
+            </div>
+          ) : hubspotPipeline && hubspotPipeline.total_deals > 0 ? (
+            <div className="px-[18px] py-4">
+              <div className="flex items-center gap-6 mb-4">
+                <div>
+                  <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px]">Total Deals</div>
+                  <div className="text-lg font-heading font-bold text-terminal-text">{hubspotPipeline.total_deals}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px]">Pipeline Value</div>
+                  <div className="text-lg font-heading font-bold text-terminal-text">${(hubspotPipeline.total_value || 0).toLocaleString()}</div>
+                </div>
               </div>
-            )}
-          </div>
-        ) : !leadsSheet?.configured ? (
-          <div className="px-[18px] py-8 text-center">
-            <div className="text-[13px] text-[#9a9a92] mb-2">No leads sheet linked</div>
-            <div className="text-[11px] text-terminal-muted">Link a Google Sheet to track your GC leads and pipeline here.</div>
-          </div>
-        ) : (
-          <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Sheet linked but no data found</div>
+              {Object.keys(hubspotPipeline.by_stage || {}).length > 0 && (
+                <div className="space-y-2">
+                  {Object.entries(hubspotPipeline.by_stage).map(([stage, data]) => (
+                    <div key={stage} className="flex items-center justify-between py-1.5 border-b border-[#f0eeea] last:border-b-0">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-[#ff7a59]" />
+                        <span className="text-[12px] text-terminal-text capitalize">{stage.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-[11px] font-mono text-terminal-muted">{data.count} deal{data.count !== 1 ? 's' : ''}</span>
+                        <span className="text-[11px] font-mono text-terminal-text">${(data.value || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-[18px] py-8 text-center">
+              <div className="text-[13px] text-[#9a9a92] mb-2">No deals in pipeline</div>
+              <div className="text-[11px] text-terminal-muted">Deals from your HubSpot CRM will appear here.</div>
+            </div>
+          )
         )}
       </div>
 
@@ -1593,7 +1687,11 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       const data = await res.json();
                       if (!res.ok) { setHubspotError(data.error || 'Failed to connect'); return; }
                       setHubspotConnected(true);
+                      setLeadsTab('hubspot');
                       setShowHubspotModal(false);
+                      // Fetch pipeline data
+                      fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() })
+                        .then(r => r.json()).then(p => setHubspotPipeline(p)).catch(() => {});
                     } catch (e) { setHubspotError(e.message); }
                     finally { setHubspotConnecting(false); }
                   }}
