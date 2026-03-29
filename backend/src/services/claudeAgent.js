@@ -314,6 +314,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     const claudeArgs = [
       '-p', fullMessage,
       '--output-format', 'stream-json',
+      '--verbose',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools',
@@ -516,6 +517,7 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
     const args = [
       '-p', fullMessage,
       '--output-format', 'stream-json',
+      '--verbose',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools',

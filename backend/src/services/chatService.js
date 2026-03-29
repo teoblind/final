@@ -3818,7 +3818,14 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     } catch (error) {
       console.error(`[ClaudeAgent] CLI error (agent=${agentId}, tenant=${tenantId}):`, error.message);
       _recordRun({ output: null, model: 'claude-code-cli', route: 'cli', status: 'failed', errorMessage: error.message });
-      // Fall through to API route on CLI failure
+      // If API key is disabled, don't fall through
+      const apiKey = process.env.ANTHROPIC_API_KEY || '';
+      if (!apiKey || apiKey === 'DISABLED' || apiKey.length < 10) {
+        console.error(`[ClaudeAgent] API key disabled, cannot fall back. CLI error: ${error.message}`);
+        const errResponse = 'I\'m having trouble connecting right now. The SSH tunnel may be down. Please try again in a moment.';
+        saveMessage(tenantId, agentId, userId, 'assistant', errResponse, { model: 'error', route: 'cli-failed' }, threadId);
+        return { response: errResponse };
+      }
       console.log(`[ClaudeAgent] Falling back to API route`);
     }
   }
@@ -4565,6 +4572,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     } catch (cliError) {
       console.error(`[chatStream] CLI error (agent=${agentId}, tenant=${tenantId}):`, cliError.message);
       _recordRun({ output: null, model: 'claude-code-cli', route: 'cli-stream', status: 'failed', errorMessage: cliError.message });
+      // If API key is disabled, don't fall through - throw so user sees the real error
+      const apiKey = process.env.ANTHROPIC_API_KEY || '';
+      if (!apiKey || apiKey === 'DISABLED' || apiKey.length < 10) {
+        console.error(`[chatStream] API key disabled, cannot fall back. CLI error: ${cliError.message}`);
+        onChunk('I\'m having trouble connecting to the AI service right now. The SSH tunnel may be down. Please try again in a moment.');
+        const errResponse = 'CLI tunnel failed and API fallback is disabled.';
+        saveMessage(tenantId, agentId, userId, 'assistant', errResponse, { model: 'error', route: 'cli-stream-failed' }, threadId);
+        return { response: errResponse };
+      }
       console.log(`[chatStream] Falling back to API route`);
       // Fall through to API below
     }
