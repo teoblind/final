@@ -127,24 +127,10 @@ router.get('/', async (req, res) => {
     const now = new Date();
     let timeMin, timeMax;
 
-    if (range === 'day') {
-      timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      timeMax = new Date(timeMin);
-      timeMax.setDate(timeMax.getDate() + 1);
-    } else if (range === 'month') {
-      timeMin = new Date(now.getFullYear(), now.getMonth(), 1);
-      timeMax = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    } else if (range === '90') {
-      timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 90);
-      timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
-    } else {
-      // 'week' — Monday to Sunday
-      const day = now.getDay();
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
-      timeMax = new Date(timeMin);
-      timeMax.setDate(timeMax.getDate() + 7);
-    }
+    // All ranges look forward from now
+    timeMin = now;
+    const days = range === 'month' ? 30 : range === '90' ? 90 : 7;
+    timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
 
     const response = await cal.events.list({
       calendarId: 'primary',
