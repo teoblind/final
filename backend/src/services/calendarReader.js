@@ -9,8 +9,14 @@
 import { google } from 'googleapis';
 import { getTenantDb } from '../cache/database.js';
 
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+const CLIENT_PAIRS = [
+  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+].filter(p => p.id && p.secret);
+
+const CLIENT_ID = CLIENT_PAIRS[0]?.id;
+const CLIENT_SECRET = CLIENT_PAIRS[0]?.secret;
 const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
 
 // Cache calendar clients per tenant to avoid re-creating OAuth on every call
@@ -20,8 +26,9 @@ const calClientCache = new Map();
  * Get a Calendar API client for a tenant.
  * Uses the tenant's agent OAuth token from tenant_email_config,
  * falling back to the default agent token from env vars.
+ * Tries both OAuth client pairs in case the token was issued by the other client.
  */
-function getCalendarForTenant(tenantId) {
+async function getCalendarForTenant(tenantId) {
   if (calClientCache.has(tenantId)) return calClientCache.get(tenantId);
 
   let refreshToken = FALLBACK_REFRESH_TOKEN;
@@ -37,16 +44,33 @@ function getCalendarForTenant(tenantId) {
     // tenant_email_config may not exist — use fallback
   }
 
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) {
+  if (!refreshToken || CLIENT_PAIRS.length === 0) {
     return null;
   }
 
-  const oauth2 = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
-  oauth2.setCredentials({ refresh_token: refreshToken });
-  const cal = google.calendar({ version: 'v3', auth: oauth2 });
-
-  calClientCache.set(tenantId, cal);
-  return cal;
+  // Try each OAuth client pair — token may have been issued by either
+  for (const pair of CLIENT_PAIRS) {
+    try {
+      const oauth2 = new google.auth.OAuth2(pair.id, pair.secret);
+      oauth2.setCredentials({ refresh_token: refreshToken });
+      const cal = google.calendar({ version: 'v3', auth: oauth2 });
+      // Verify the token works
+      await cal.calendarList.list({ maxResults: 1 });
+      calClientCache.set(tenantId, cal);
+      return cal;
+    } catch (err) {
+      const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+        err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client');
+      if (isAuthError && CLIENT_PAIRS.indexOf(pair) < CLIENT_PAIRS.length - 1) {
+        console.log(`[CalendarReader] Primary OAuth client failed for ${tenantId}, trying fallback...`);
+        continue;
+      }
+      // Last pair or non-auth error
+      console.warn(`[CalendarReader] Calendar auth failed for ${tenantId}: ${err.message}`);
+      return null;
+    }
+  }
+  return null;
 }
 
 /**
@@ -54,7 +78,7 @@ function getCalendarForTenant(tenantId) {
  * Reads the tenant agent's own calendar (primary).
  */
 export async function getMeetingCount(tenantId, days = 30) {
-  const cal = getCalendarForTenant(tenantId);
+  const cal = await getCalendarForTenant(tenantId);
   if (!cal) return null;
 
   try {

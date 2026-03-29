@@ -38,8 +38,15 @@ import { processMeetingComplete } from '../services/meetingProcessor.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+// (tokens may be issued by either client depending on how the account was authed)
+const CLIENT_PAIRS = [
+  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+].filter(p => p.id && p.secret);
+
+const CLIENT_ID = CLIENT_PAIRS[0]?.id;
+const CLIENT_SECRET = CLIENT_PAIRS[0]?.secret;
 const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
 
 const JOIN_BEFORE_MIN = 2;       // join meetings starting within N minutes
@@ -49,6 +56,9 @@ const POLL_INTERVAL_SEC = 30;    // how often to check calendars
 const BOT_CHECK_SEC = 30;        // how often to check bot status
 
 // ─── State ───────────────────────────────────────────────────────────────────
+
+// Track which tenant calendars need the fallback OAuth client (persists across poll cycles)
+const useFallbackClient = new Set();
 
 // eventKey = `${tenantId}:${eventId}` — prevents duplicate joins
 const joinedEvents = new Set();
@@ -64,8 +74,15 @@ let pollTimer = null;
 // ─── OAuth Helpers ───────────────────────────────────────────────────────────
 
 function makeOAuth2(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
-  const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
+  if (!refreshToken || CLIENT_PAIRS.length === 0) return null;
+  const client = new google.auth.OAuth2(CLIENT_PAIRS[0].id, CLIENT_PAIRS[0].secret);
+  client.setCredentials({ refresh_token: refreshToken });
+  return client;
+}
+
+function makeOAuth2Fallback(refreshToken) {
+  if (!refreshToken || CLIENT_PAIRS.length < 2) return null;
+  const client = new google.auth.OAuth2(CLIENT_PAIRS[1].id, CLIENT_PAIRS[1].secret);
   client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
@@ -76,8 +93,20 @@ function makeCalendarClient(refreshToken) {
   return google.calendar({ version: 'v3', auth });
 }
 
+function makeCalendarClientFallback(refreshToken) {
+  const auth = makeOAuth2Fallback(refreshToken);
+  if (!auth) return null;
+  return google.calendar({ version: 'v3', auth });
+}
+
 function makeGmailClient(refreshToken) {
   const auth = makeOAuth2(refreshToken);
+  if (!auth) return null;
+  return google.gmail({ version: 'v1', auth });
+}
+
+function makeGmailClientFallback(refreshToken) {
+  const auth = makeOAuth2Fallback(refreshToken);
   if (!auth) return null;
   return google.gmail({ version: 'v1', auth });
 }
@@ -118,8 +147,14 @@ function getTenantCalendars() {
         const tdb = getTenantDb(tenant.id);
         const rows = tdb.prepare('SELECT * FROM tenant_email_config').all();
         for (const row of rows) {
-          const cal = makeCalendarClient(row.gmail_refresh_token);
-          const gmail = makeGmailClient(row.gmail_refresh_token);
+          const calLabel = `${row.sender_email} (${tenant.id})`;
+          const useFallback = useFallbackClient.has(calLabel);
+          const cal = useFallback
+            ? (makeCalendarClientFallback(row.gmail_refresh_token) || makeCalendarClient(row.gmail_refresh_token))
+            : makeCalendarClient(row.gmail_refresh_token);
+          const gmail = useFallback
+            ? (makeGmailClientFallback(row.gmail_refresh_token) || makeGmailClient(row.gmail_refresh_token))
+            : makeGmailClient(row.gmail_refresh_token);
           if (cal || gmail) {
             calendars.push({
               tenantId: tenant.id,
@@ -127,6 +162,7 @@ function getTenantCalendars() {
               gmailClient: gmail,
               agentEmail: row.sender_email,
               refreshToken: row.gmail_refresh_token,
+              label: calLabel,
             });
           }
         }
@@ -144,8 +180,14 @@ function getTenantCalendars() {
       c.agentEmail === 'agent@zhan.coppice.ai'
     );
     if (!hasDefault) {
-      const cal = makeCalendarClient(FALLBACK_REFRESH_TOKEN);
-      const gmail = makeGmailClient(FALLBACK_REFRESH_TOKEN);
+      const defLabel = 'agent@zhan.coppice.ai (default)';
+      const useFallback = useFallbackClient.has(defLabel);
+      const cal = useFallback
+        ? (makeCalendarClientFallback(FALLBACK_REFRESH_TOKEN) || makeCalendarClient(FALLBACK_REFRESH_TOKEN))
+        : makeCalendarClient(FALLBACK_REFRESH_TOKEN);
+      const gmail = useFallback
+        ? (makeGmailClientFallback(FALLBACK_REFRESH_TOKEN) || makeGmailClient(FALLBACK_REFRESH_TOKEN))
+        : makeGmailClient(FALLBACK_REFRESH_TOKEN);
       if (cal || gmail) {
         calendars.push({
           tenantId: 'zhan-capital',
@@ -153,6 +195,7 @@ function getTenantCalendars() {
           gmailClient: gmail,
           agentEmail: 'agent@zhan.coppice.ai',
           refreshToken: FALLBACK_REFRESH_TOKEN,
+          label: defLabel,
         });
       }
     }
@@ -229,6 +272,10 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         });
       }
     } catch (err) {
+      const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+        err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+        err.message?.includes('Token has been expired or revoked');
+      if (isAuthError) throw err; // Propagate to poll() for fallback client retry
       // Calendar scope may not be available — fall through to Gmail
       if (err.message?.includes('insufficient')) {
         console.warn(`[CalendarPoll] ${agentEmail}: Calendar scope missing — using Gmail fallback`);
@@ -328,6 +375,10 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         console.log(`[CalendarPoll] ${agentEmail}: Meeting invite in email: ${subject} — ${link} (inviter: ${inviterEmail})`);
       }
     } catch (err) {
+      const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+        err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+        err.message?.includes('Token has been expired or revoked');
+      if (isAuthError) throw err; // Propagate to poll() for fallback client retry
       console.warn(`[CalendarPoll] ${agentEmail}: Gmail check error: ${err.message}`);
     }
   }
@@ -701,7 +752,36 @@ async function poll() {
         await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
       }
     } catch (err) {
-      console.error(`[CalendarPoll] Error polling ${cal.agentEmail}:`, err.message);
+      const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+        err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+        err.message?.includes('Token has been expired or revoked');
+
+      if (isAuthError && cal.refreshToken && CLIENT_PAIRS.length >= 2) {
+        // Try fallback OAuth client (token may have been issued by a different client)
+        try {
+          console.log(`[CalendarPoll] [${cal.agentEmail}] Primary client failed, trying fallback client...`);
+          const fallbackCal = {
+            ...cal,
+            calendarClient: makeCalendarClientFallback(cal.refreshToken),
+            gmailClient: makeGmailClientFallback(cal.refreshToken),
+          };
+          await autoAcceptInvites(fallbackCal);
+          const meetings = await pollTenantCalendar(fallbackCal);
+          if (meetings.length > 0) {
+            console.log(`[CalendarPoll] [${cal.agentEmail}] (fallback) Found ${meetings.length} meeting(s) in window`);
+          }
+          for (const meeting of meetings) {
+            await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
+          }
+          // Fallback worked — remember for future poll cycles
+          if (cal.label) useFallbackClient.add(cal.label);
+          console.log(`[CalendarPoll] [${cal.agentEmail}] Fallback client succeeded, will use it going forward`);
+        } catch (err2) {
+          console.error(`[CalendarPoll] [${cal.agentEmail}] Both OAuth clients failed: ${err2.message}`);
+        }
+      } else {
+        console.error(`[CalendarPoll] Error polling ${cal.agentEmail}:`, err.message);
+      }
     }
   }
 }

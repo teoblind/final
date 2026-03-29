@@ -613,6 +613,13 @@ export function generateHtml({ title, content, meta = {}, theme }) {
 
 const SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '/root/google-service-account.json';
 
+// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+// (tokens may be issued by either client depending on how the account was authed)
+const DOC_CLIENT_PAIRS = [
+  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+].filter(p => p.id && p.secret);
+
 /** Get Drive client using tenant's OAuth token (real Workspace storage) */
 async function getTenantDrive(tenantId) {
   if (!tenantId) return null;
@@ -621,12 +628,28 @@ async function getTenantDrive(tenantId) {
     const tdb = getTenantDb(tenantId);
     const row = tdb.prepare('SELECT gmail_refresh_token FROM tenant_email_config WHERE tenant_id = ? LIMIT 1').get(tenantId);
     if (!row?.gmail_refresh_token) return null;
-    const oauth2 = new google.auth.OAuth2(
-      process.env.GMAIL_CLIENT_ID,
-      process.env.GMAIL_CLIENT_SECRET,
-    );
-    oauth2.setCredentials({ refresh_token: row.gmail_refresh_token });
-    return google.drive({ version: 'v3', auth: oauth2 });
+
+    // Try primary OAuth client first
+    for (const pair of DOC_CLIENT_PAIRS) {
+      try {
+        const oauth2 = new google.auth.OAuth2(pair.id, pair.secret);
+        oauth2.setCredentials({ refresh_token: row.gmail_refresh_token });
+        const drive = google.drive({ version: 'v3', auth: oauth2 });
+        // Verify the token works with a lightweight call
+        await drive.about.get({ fields: 'user' });
+        return drive;
+      } catch (err) {
+        const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+          err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+          err.message?.includes('Token has been expired or revoked');
+        if (isAuthError && DOC_CLIENT_PAIRS.indexOf(pair) < DOC_CLIENT_PAIRS.length - 1) {
+          console.log(`[DocumentService] Primary OAuth client failed for ${tenantId}, trying fallback...`);
+          continue; // Try next client pair
+        }
+        throw err; // Last pair or non-auth error — propagate
+      }
+    }
+    return null;
   } catch (err) {
     console.warn(`[DocumentService] Tenant OAuth drive failed: ${err.message}`);
     return null;
