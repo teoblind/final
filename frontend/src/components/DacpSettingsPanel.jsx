@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Building2, DollarSign, BarChart3, MessageSquare, FileText,
   Truck, Users, AlertTriangle, ChevronDown, Mail, Settings as SettingsIcon, Activity, X,
+  Plug, Lock, ExternalLink, Check, Unlink,
 } from 'lucide-react';
 import SettingsTeamPanel from './SettingsTeamPanel';
 import api from '../lib/hooks/useApi';
@@ -126,6 +127,186 @@ function Btn({ children, variant = 'primary', onClick, saving, saved: savedProp 
 
 function Divider() {
   return <div className="h-px bg-[#f0eeea] my-[18px]" />;
+}
+
+/* ── integrations config ─────────────────────────────────────────────────────── */
+const INTEGRATIONS = [
+  // Self-serve: API key based
+  { id: 'hubspot', name: 'HubSpot', desc: 'Sync your CRM pipeline, contacts, and deals', category: 'CRM', color: '#ff7a59', service: 'hubspot', selfServe: true,
+    logo: <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff7a59"><path d="M18.16 7.58V4.22a1.74 1.74 0 0 0 1-1.56V2.6A1.74 1.74 0 0 0 17.42.87h-.06a1.74 1.74 0 0 0-1.74 1.74v.06a1.74 1.74 0 0 0 1 1.56v3.32a5.32 5.32 0 0 0-2.38 1.22l-7.9-6.14a2.13 2.13 0 0 0 .06-.52 2.08 2.08 0 1 0-2.08 2.08 2.06 2.06 0 0 0 1.16-.36l7.76 6.04a5.35 5.35 0 0 0 .17 6.16l-2.34 2.34a1.63 1.63 0 0 0-.48-.08 1.68 1.68 0 1 0 1.68 1.68 1.63 1.63 0 0 0-.08-.48l2.3-2.3A5.36 5.36 0 1 0 18.16 7.58zM17.36 16a3.16 3.16 0 1 1 3.16-3.16A3.16 3.16 0 0 1 17.36 16z"/></svg> },
+  { id: 'salesforce', name: 'Salesforce', desc: 'Sync opportunities, accounts, and contacts', category: 'CRM', color: '#00a1e0', service: 'salesforce', selfServe: true,
+    logo: <div className="text-[16px] font-bold" style={{ color: '#00a1e0' }}>SF</div> },
+  { id: 'procore', name: 'Procore', desc: 'Sync projects, RFIs, submittals, and budgets', category: 'Construction', color: '#f47e20', service: 'procore', selfServe: true,
+    logo: <div className="text-[16px] font-bold" style={{ color: '#f47e20' }}>P</div> },
+  { id: 'quickbooks', name: 'QuickBooks', desc: 'Sync invoices, expenses, and job costing', category: 'Accounting', color: '#2ca01c', service: 'quickbooks', selfServe: true,
+    logo: <div className="text-[16px] font-bold" style={{ color: '#2ca01c' }}>QB</div> },
+  { id: 'canva', name: 'Canva', desc: 'Generate presentations, proposals, and marketing materials', category: 'Design', color: '#00c4cc', service: 'canva', selfServe: true,
+    logo: <div className="text-[16px] font-bold" style={{ color: '#00c4cc' }}>C</div> },
+  { id: 'slack', name: 'Slack', desc: 'Get notified on bids, approvals, and task completions', category: 'Notifications', color: '#4a154b', service: 'slack', selfServe: true,
+    logo: <div className="text-[16px] font-bold" style={{ color: '#4a154b' }}>S</div> },
+  // Mac Mini required
+  { id: 'premiere', name: 'Adobe Premiere Pro', desc: 'Automated video editing, rendering, and export', category: 'Creative', color: '#9999ff', macRequired: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#9999ff' }}>Pr</div> },
+  { id: 'aftereffects', name: 'Adobe After Effects', desc: 'Motion graphics, compositing, and visual effects', category: 'Creative', color: '#9999ff', macRequired: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#9999ff' }}>Ae</div> },
+  { id: 'photoshop', name: 'Adobe Photoshop', desc: 'Image editing, compositing, and batch processing', category: 'Creative', color: '#31a8ff', macRequired: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#31a8ff' }}>Ps</div> },
+  { id: 'indesign', name: 'Adobe InDesign', desc: 'Automated report layout, typesetting, and PDF generation', category: 'Creative', color: '#ff3366', macRequired: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#ff3366' }}>Id</div> },
+  { id: 'blender', name: 'Blender', desc: '3D modeling, rendering, and animation', category: 'Creative', color: '#e87d0d', macRequired: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#e87d0d' }}>B</div> },
+];
+
+function IntegrationsPanel() {
+  const [statuses, setStatuses] = useState({});
+  const [connecting, setConnecting] = useState(null);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [error, setError] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+
+  useEffect(() => {
+    // Check HubSpot status (the only one with a backend right now)
+    const token = localStorage.getItem('auth_token');
+    fetch(`${API_BASE}/v1/hubspot/status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.configured) setStatuses(prev => ({ ...prev, hubspot: true })); })
+      .catch(() => {});
+  }, []);
+
+  const handleConnect = async (integration) => {
+    if (!apiKeyInput.trim()) return;
+    setConnecting(integration.id);
+    setError('');
+    try {
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch(`${API_BASE}/v1/hubspot/connect`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: apiKeyInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Failed to connect'); return; }
+      setStatuses(prev => ({ ...prev, [integration.id]: true }));
+      setExpandedId(null);
+      setApiKeyInput('');
+    } catch (e) { setError(e.message); }
+    finally { setConnecting(null); }
+  };
+
+  const handleDisconnect = async (integration) => {
+    const token = localStorage.getItem('auth_token');
+    await fetch(`${API_BASE}/v1/hubspot/disconnect`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    });
+    setStatuses(prev => { const n = { ...prev }; delete n[integration.id]; return n; });
+  };
+
+  const selfServe = INTEGRATIONS.filter(i => i.selfServe);
+  const macRequired = INTEGRATIONS.filter(i => i.macRequired);
+
+  return (
+    <>
+      <Section icon={Plug} iconClass="bg-[#eef3f9] text-[#1e3a5f]" title="Integrations" desc="Connect your existing tools to Coppice">
+        <div className="space-y-1">
+          {selfServe.map(int => {
+            const connected = statuses[int.id];
+            const expanded = expandedId === int.id;
+            return (
+              <div key={int.id} className="border border-[#f0eeea] rounded-[10px] overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-9 h-9 rounded-[10px] bg-[#f5f4f0] flex items-center justify-center shrink-0">
+                    {int.logo}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-semibold text-terminal-text">{int.name}</span>
+                      <span className="text-[9px] font-heading font-bold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-terminal-muted uppercase tracking-[0.3px]">{int.category}</span>
+                    </div>
+                    <div className="text-[11px] text-terminal-muted mt-px">{int.desc}</div>
+                  </div>
+                  {connected ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="flex items-center gap-1 text-[11px] font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-lg">
+                        <Check size={11} /> Connected
+                      </span>
+                      <button onClick={() => handleDisconnect(int)}
+                        className="text-terminal-muted hover:text-red-500 p-1 rounded hover:bg-red-50" title="Disconnect">
+                        <Unlink size={13} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setExpandedId(expanded ? null : int.id); setApiKeyInput(''); setError(''); }}
+                      className="flex items-center gap-1.5 text-[11px] font-heading font-semibold px-3 py-1.5 rounded-lg border transition-colors shrink-0"
+                      style={{ color: int.color, borderColor: int.color + '40', backgroundColor: int.color + '08' }}
+                    >
+                      <Plug size={11} /> Connect
+                    </button>
+                  )}
+                </div>
+                {expanded && !connected && (
+                  <div className="px-4 pb-4 border-t border-[#f0eeea] pt-3">
+                    {int.id === 'hubspot' ? (
+                      <>
+                        <p className="text-[11px] text-terminal-muted mb-3">
+                          Enter your HubSpot private app access token. Create one in{' '}
+                          <a href="https://app.hubspot.com/private-apps" target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: int.color }}>
+                            HubSpot Settings <ExternalLink size={9} className="inline" />
+                          </a>
+                        </p>
+                        <div className="flex gap-2">
+                          <input type="password" value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)}
+                            placeholder="pat-na1-..." className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-lg focus:outline-none font-mono" style={{ focusBorderColor: int.color }} />
+                          <button onClick={() => handleConnect(int)} disabled={!apiKeyInput.trim() || connecting === int.id}
+                            className="px-4 py-2 text-[12px] font-semibold text-white rounded-lg disabled:opacity-50" style={{ backgroundColor: int.color }}>
+                            {connecting === int.id ? '...' : 'Connect'}
+                          </button>
+                        </div>
+                        {error && <div className="text-[11px] text-red-500 mt-2">{error}</div>}
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-3 py-2">
+                        <div className="text-[12px] text-terminal-muted">Coming soon. API integration for {int.name} is on the roadmap.</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section icon={Lock} iconClass="bg-[#f5f0fa] text-[#7c3aed]" title="Creative Suite" desc="Desktop application integrations powered by dedicated hardware">
+        <div className="space-y-1">
+          {macRequired.map(int => (
+            <div key={int.id} className="border border-[#f0eeea] rounded-[10px] overflow-hidden opacity-60">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="w-9 h-9 rounded-[10px] bg-[#f5f4f0] flex items-center justify-center shrink-0">
+                  {int.logo}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-terminal-text">{int.name}</span>
+                    <span className="text-[9px] font-heading font-bold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-terminal-muted uppercase tracking-[0.3px]">{int.category}</span>
+                  </div>
+                  <div className="text-[11px] text-terminal-muted mt-px">{int.desc}</div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#7c3aed] bg-[#f5f0fa] px-2.5 py-1.5 rounded-lg shrink-0">
+                  <Lock size={11} /> Mac Mini Required
+                </div>
+              </div>
+              <div className="px-4 pb-3 border-t border-[#f0eeea] pt-2.5 bg-[#fafaf8]">
+                <p className="text-[11px] text-terminal-muted">
+                  This integration requires a dedicated Mac Mini workstation. Contact your administrator to upgrade your package.
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+    </>
+  );
 }
 
 /* ── main component ──────────────────────────────────────────────────────────── */
@@ -349,6 +530,7 @@ export default function DacpSettingsPanel() {
 
   const SETTINGS_TABS = [
     { id: 'general', label: 'General', icon: SettingsIcon },
+    { id: 'integrations', label: 'Integrations', icon: Plug },
     ...(isAdmin ? [{ id: 'email-security', label: 'Email Security', icon: Mail }] : []),
   ];
 
@@ -382,6 +564,8 @@ export default function DacpSettingsPanel() {
           <EmailSecurityPanel />
         </Suspense>
       )}
+
+      {settingsTab === 'integrations' && <IntegrationsPanel />}
 
       {settingsTab === 'general' && <>
       {/* ═══ TEAM MANAGEMENT ═══ */}
