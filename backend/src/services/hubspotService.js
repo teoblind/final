@@ -5,19 +5,30 @@
  * Command Dashboard (pipeline widget).
  */
 
+import { getKeyVaultValue } from '../cache/database.js';
+
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 
-function getApiKey() {
+// Resolve API key: per-tenant vault first, then env fallback
+export function getApiKey(tenantId) {
+  if (tenantId) {
+    const vaultKey = getKeyVaultValue(tenantId, 'hubspot', 'api_key');
+    if (vaultKey) return vaultKey;
+  }
   const key = process.env.HUBSPOT_API_KEY;
   if (!key) throw new Error('HUBSPOT_API_KEY not configured');
   return key;
 }
 
-async function hubspotFetch(endpoint, method = 'GET', body = null) {
+export function isConfigured(tenantId) {
+  try { getApiKey(tenantId); return true; } catch { return false; }
+}
+
+async function hubspotFetch(endpoint, method = 'GET', body = null, tenantId = null) {
   const res = await fetch(`${HUBSPOT_BASE}${endpoint}`, {
     method,
     headers: {
-      'Authorization': `Bearer ${getApiKey()}`,
+      'Authorization': `Bearer ${getApiKey(tenantId)}`,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : null,
@@ -33,7 +44,7 @@ async function hubspotFetch(endpoint, method = 'GET', body = null) {
 
 // ─── SEARCH ─────────────────────────────────────────────────────────────────
 
-export async function searchContacts(query) {
+export async function searchContacts(query, tenantId) {
   const data = await hubspotFetch('/crm/v3/objects/contacts/search', 'POST', {
     query,
     limit: 10,
@@ -42,7 +53,7 @@ export async function searchContacts(query) {
       'jobtitle', 'lifecyclestage', 'hs_lead_status',
       'notes_last_contacted', 'lastmodifieddate', 'createdate',
     ],
-  });
+  }, tenantId);
 
   return data.results.map(c => ({
     id: c.id,
@@ -59,7 +70,7 @@ export async function searchContacts(query) {
   }));
 }
 
-export async function searchCompanies(query) {
+export async function searchCompanies(query, tenantId) {
   const data = await hubspotFetch('/crm/v3/objects/companies/search', 'POST', {
     query,
     limit: 10,
@@ -69,7 +80,7 @@ export async function searchCompanies(query) {
       'notes_last_contacted', 'hs_lead_status',
       'createdate', 'lastmodifieddate',
     ],
-  });
+  }, tenantId);
 
   return data.results.map(c => ({
     id: c.id,
@@ -206,8 +217,8 @@ export async function logActivity(contactId, note) {
 
 // ─── PIPELINE STATS ─────────────────────────────────────────────────────────
 
-export async function getPipelineStats() {
-  const data = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline');
+export async function getPipelineStats(tenantId) {
+  const data = await hubspotFetch('/crm/v3/objects/deals?limit=100&properties=dealname,dealstage,amount,closedate,pipeline', 'GET', null, tenantId);
 
   const stages = {};
   let totalValue = 0;
@@ -225,8 +236,8 @@ export async function getPipelineStats() {
   return { total_deals: data.results.length, total_value: totalValue, by_stage: stages };
 }
 
-export async function getRecentActivity(limit = 20) {
-  const data = await hubspotFetch(`/crm/v3/objects/contacts?limit=${limit}&properties=firstname,lastname,email,company,jobtitle,lastmodifieddate&sorts=-lastmodifieddate`);
+export async function getRecentActivity(limit = 20, tenantId) {
+  const data = await hubspotFetch(`/crm/v3/objects/contacts?limit=${limit}&properties=firstname,lastname,email,company,jobtitle,lastmodifieddate&sorts=-lastmodifieddate`, 'GET', null, tenantId);
 
   return data.results.map(c => ({
     id: c.id,

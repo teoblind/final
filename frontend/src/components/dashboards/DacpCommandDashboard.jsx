@@ -64,6 +64,12 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [linking, setLinking] = useState(false);
   const [driveResults, setDriveResults] = useState([]);
   const [driveSearching, setDriveSearching] = useState(false);
+  // HubSpot state
+  const [hubspotConnected, setHubspotConnected] = useState(false);
+  const [showHubspotModal, setShowHubspotModal] = useState(false);
+  const [hubspotKey, setHubspotKey] = useState('');
+  const [hubspotConnecting, setHubspotConnecting] = useState(false);
+  const [hubspotError, setHubspotError] = useState('');
   // Agent assignments state
   const [assignments, setAssignments] = useState([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
@@ -416,6 +422,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
     refreshDashboard();
     fetchLeadsSheet();
+    fetch(`${API_BASE}/v1/hubspot/status`, { headers: getAuthHeaders() })
+      .then(r => r.json()).then(d => setHubspotConnected(!!d.configured)).catch(() => {});
 
     // Live polling - refresh every 10 seconds
     const poll = setInterval(refreshDashboard, 10_000);
@@ -1397,28 +1405,41 @@ export default function DacpCommandDashboard({ onNavigate }) {
             <FileSpreadsheet size={14} className="text-[#1e3a5f]" />
             <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
           </div>
-          {leadsSheet?.configured ? (
-            <div className="flex items-center gap-2">
-              <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[11px] text-[#1e3a5f] hover:underline">
-                <ExternalLink size={10} /> {leadsSheet.sheetTitle}
+          <div className="flex items-center gap-2">
+            {leadsSheet?.configured ? (
+              <>
+                <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] text-[#1e3a5f] hover:underline">
+                  <ExternalLink size={10} /> {leadsSheet.sheetTitle}
+                </a>
+                <button onClick={() => setShowLinkModal(true)}
+                  className="text-[10px] text-terminal-muted hover:text-terminal-text px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#f5f4f0]">
+                  Change
+                </button>
+                <button onClick={handleUnlinkSheet}
+                  className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
+                  title="Unlink sheet">
+                  <Unlink size={10} />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => { setShowLinkModal(true); searchDrive('leads'); }}
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#1e3a5f] px-3 py-1 rounded-md border border-[#c8d8e8] bg-[#eef3f8] hover:bg-[#dde8f2]">
+                <Link2 size={11} /> Link Sheet
+              </button>
+            )}
+            {hubspotConnected ? (
+              <a href="https://app.hubspot.com" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#ff7a59] px-3 py-1 rounded-md border border-[#ffcabc] bg-[#fff5f2] hover:bg-[#ffe8e2]">
+                <ExternalLink size={10} /> HubSpot
               </a>
-              <button onClick={() => setShowLinkModal(true)}
-                className="text-[10px] text-terminal-muted hover:text-terminal-text px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#f5f4f0]">
-                Change
+            ) : (
+              <button onClick={() => { setShowHubspotModal(true); setHubspotError(''); setHubspotKey(''); window.open('https://app.hubspot.com/api-key', '_blank'); }}
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#ff7a59] px-3 py-1 rounded-md border border-[#ffcabc] bg-[#fff5f2] hover:bg-[#ffe8e2]">
+                <Link2 size={11} /> Link HubSpot
               </button>
-              <button onClick={handleUnlinkSheet}
-                className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
-                title="Unlink sheet">
-                <Unlink size={10} />
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => { setShowLinkModal(true); searchDrive('leads'); }}
-              className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#1e3a5f] px-3 py-1 rounded-md border border-[#c8d8e8] bg-[#eef3f8] hover:bg-[#dde8f2]">
-              <Link2 size={11} /> Link Sheet
-            </button>
-          )}
+            )}
+          </div>
         </div>
         {leadsLoading ? (
           <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading...</div>
@@ -1532,6 +1553,57 @@ export default function DacpCommandDashboard({ onNavigate }) {
                   <div className="text-[11px] text-terminal-muted text-center py-2">No spreadsheets found</div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HubSpot Connect Modal */}
+      {showHubspotModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowHubspotModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[#e8e6e2] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff7a59"><path d="M18.16 7.58V4.22a1.74 1.74 0 0 0 1-1.56V2.6A1.74 1.74 0 0 0 17.42.87h-.06a1.74 1.74 0 0 0-1.74 1.74v.06a1.74 1.74 0 0 0 1 1.56v3.32a5.32 5.32 0 0 0-2.38 1.22l-7.9-6.14a2.13 2.13 0 0 0 .06-.52 2.08 2.08 0 1 0-2.08 2.08 2.06 2.06 0 0 0 1.16-.36l7.76 6.04a5.35 5.35 0 0 0 .17 6.16l-2.34 2.34a1.63 1.63 0 0 0-.48-.08 1.68 1.68 0 1 0 1.68 1.68 1.63 1.63 0 0 0-.08-.48l2.3-2.3A5.36 5.36 0 1 0 18.16 7.58zM17.36 16a3.16 3.16 0 1 1 3.16-3.16A3.16 3.16 0 0 1 17.36 16z"/></svg>
+                <span className="text-sm font-heading font-bold text-terminal-text">Connect HubSpot</span>
+              </div>
+              <button onClick={() => setShowHubspotModal(false)} className="text-terminal-muted hover:text-terminal-text"><X size={16} /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-[12px] text-terminal-muted mb-4">
+                Enter your HubSpot private app access token to sync your CRM pipeline. You can create one in <a href="https://app.hubspot.com/private-apps" target="_blank" rel="noopener noreferrer" className="text-[#ff7a59] hover:underline">HubSpot Settings &gt; Private Apps</a>.
+              </p>
+              <label className="text-[11px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Access Token</label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={hubspotKey}
+                  onChange={e => setHubspotKey(e.target.value)}
+                  placeholder="pat-na1-..."
+                  className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-md focus:outline-none focus:border-[#ff7a59] font-mono"
+                />
+                <button
+                  onClick={async () => {
+                    setHubspotConnecting(true); setHubspotError('');
+                    try {
+                      const res = await fetch(`${API_BASE}/v1/hubspot/connect`, {
+                        method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ apiKey: hubspotKey }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) { setHubspotError(data.error || 'Failed to connect'); return; }
+                      setHubspotConnected(true);
+                      setShowHubspotModal(false);
+                    } catch (e) { setHubspotError(e.message); }
+                    finally { setHubspotConnecting(false); }
+                  }}
+                  disabled={!hubspotKey.trim() || hubspotConnecting}
+                  className="px-4 py-2 text-[12px] font-heading font-semibold bg-[#ff7a59] text-white rounded-md hover:bg-[#e5694d] disabled:opacity-50"
+                >
+                  {hubspotConnecting ? '...' : 'Connect'}
+                </button>
+              </div>
+              {hubspotError && <div className="text-[11px] text-red-500 mt-2">{hubspotError}</div>}
             </div>
           </div>
         </div>
