@@ -1830,6 +1830,37 @@ export default function DacpCommandDashboard({ onNavigate }) {
                   <div className="text-[12px] text-[#555] leading-relaxed bg-[#f5f4f0] rounded-lg px-3 py-2.5 whitespace-pre-wrap">{a.action_prompt}</div>
                 </div>
               )}
+              {/* Expected Output (for proposed/active tasks - detect from action_prompt) */}
+              {a.status !== 'completed' && a.action_prompt && (() => {
+                const prompt = (a.action_prompt || '').toLowerCase();
+                const outputs = [];
+                if (prompt.includes('pdf') || prompt.includes('bid package') || prompt.includes('one-pager') || prompt.includes('capability statement'))
+                  outputs.push({ icon: <FileText size={14} className="text-red-500" />, label: 'PDF Document', bg: 'bg-red-50 border-red-200' });
+                if (prompt.includes('google doc') || prompt.includes('gdoc') || prompt.includes('letter') || prompt.includes('submission'))
+                  outputs.push({ icon: <FileText size={14} className="text-blue-500" />, label: 'Google Doc', bg: 'bg-blue-50 border-blue-200' });
+                if (prompt.includes('spreadsheet') || prompt.includes('sheet') || prompt.includes('excel') || prompt.includes('csv') || prompt.includes('pricing'))
+                  outputs.push({ icon: <FileSpreadsheet size={14} className="text-green-600" />, label: 'Spreadsheet', bg: 'bg-green-50 border-green-200' });
+                if (prompt.includes('email') || prompt.includes('draft') || prompt.includes('send'))
+                  outputs.push({ icon: <Mail size={14} className="text-amber-500" />, label: 'Email Draft', bg: 'bg-amber-50 border-amber-200' });
+                if (prompt.includes('presentation') || prompt.includes('deck') || prompt.includes('slides'))
+                  outputs.push({ icon: <ExternalLink size={14} className="text-purple-500" />, label: 'Presentation', bg: 'bg-purple-50 border-purple-200' });
+                if (outputs.length === 0 && (prompt.includes('report') || prompt.includes('analysis') || prompt.includes('summary')))
+                  outputs.push({ icon: <FileText size={14} className="text-indigo-500" />, label: 'Report', bg: 'bg-indigo-50 border-indigo-200' });
+                if (outputs.length === 0) return null;
+                return (
+                  <div>
+                    <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1.5">Expected Output</div>
+                    <div className="flex flex-wrap gap-2">
+                      {outputs.map((o, i) => (
+                        <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${o.bg} text-[12px] font-medium text-[#333]`}>
+                          {o.icon}
+                          <span>{o.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Sources / Context */}
               {sources.length > 0 && (
                 <div>
@@ -1881,6 +1912,10 @@ export default function DacpCommandDashboard({ onNavigate }) {
             <div className="px-5 py-3 border-t border-[#e8e6e1] bg-[#faf9f7] flex items-center justify-between">
               <div className="text-[10px] text-[#9a9a92] font-mono">{a.id}</div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss this task: "${a.title}"\n\nDescription: ${a.description}\n${a.action_prompt ? `\nExecution plan: ${a.action_prompt.slice(0, 500)}` : ''}`); window.location.hash = 'hivemind-chat'; setTaskDetail(null); }}
+                  className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-[#1e3a5f] transition-colors"
+                ><MessageSquare size={11} /> Chat</button>
                 {a.status === 'proposed' && (
                   <>
                     <button
