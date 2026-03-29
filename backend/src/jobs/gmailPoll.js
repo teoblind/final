@@ -25,6 +25,9 @@ let repliesFound = 0;
 const tokenHealth = new Map();
 let lastHealthCheck = null;
 
+// Track which inboxes need the fallback client (persists across poll cycles)
+const useFallbackClient = new Set();
+
 // In-memory set of message IDs currently being processed — prevents overlapping
 // poll cycles from double-processing the same message concurrently.
 const currentlyProcessing = new Set();
@@ -66,7 +69,9 @@ function getInboxes() {
   // Default inbox (agent@zhan.coppice.ai from env vars)
   const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
   if (defaultToken) {
-    inboxes.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', gmail: makeGmailClient(defaultToken), refreshToken: defaultToken });
+    const label = 'agent@zhan.coppice.ai';
+    const gmail = useFallbackClient.has(label) ? makeGmailClientFallback(defaultToken) || makeGmailClient(defaultToken) : makeGmailClient(defaultToken);
+    inboxes.push({ tenantId: 'zhan-capital', label, gmail, refreshToken: defaultToken });
   }
 
   // Tenant inboxes from each tenant DB
@@ -77,9 +82,10 @@ function getInboxes() {
         const tdb = getTenantDb(tenant.id);
         const rows = tdb.prepare('SELECT * FROM tenant_email_config').all();
         for (const row of rows) {
-          const gmail = makeGmailClient(row.gmail_refresh_token);
+          const label = `${row.sender_email} (${row.tenant_id})`;
+          const gmail = useFallbackClient.has(label) ? makeGmailClientFallback(row.gmail_refresh_token) || makeGmailClient(row.gmail_refresh_token) : makeGmailClient(row.gmail_refresh_token);
           if (gmail) {
-            inboxes.push({ tenantId: row.tenant_id, label: `${row.sender_email} (${row.tenant_id})`, gmail, refreshToken: row.gmail_refresh_token });
+            inboxes.push({ tenantId: row.tenant_id, label, gmail, refreshToken: row.gmail_refresh_token });
           }
         }
       } catch (e) {
@@ -1310,8 +1316,8 @@ async function pollInbox() {
             console.log(`[GmailPoll] [${inbox.label}] Primary client failed, trying fallback client...`);
             const count = await runWithTenant(resolvedId, () => pollSingleInbox(fallbackGmail, inbox.tenantId, inbox.label));
             totalNew += count;
-            // Fallback worked — swap the client for future polls
-            inbox.gmail = fallbackGmail;
+            // Fallback worked — remember for future poll cycles
+            useFallbackClient.add(inbox.label);
             continue;
           } catch (err2) {
             console.error(`[GmailPoll] [${inbox.label}] Both OAuth clients failed: ${err2.message}`);
