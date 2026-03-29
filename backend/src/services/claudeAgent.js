@@ -332,7 +332,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     const sshArgs = [
       '-4',
-      '-tt',  // Force pseudo-TTY so output streams in real-time (no pipe buffering)
+      '-tt',  // Force pseudo-TTY so output streams in real-time
       '-i', SSH_KEY,
       '-p', String(SSH_PORT),
       '-o', 'StrictHostKeyChecking=no',
