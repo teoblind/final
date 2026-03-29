@@ -293,12 +293,12 @@ function IntegrationsPanel() {
                   <div className="text-[11px] text-terminal-muted mt-px">{int.desc}</div>
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#7c3aed] bg-[#f5f0fa] px-2.5 py-1.5 rounded-lg shrink-0">
-                  <Lock size={11} /> Mac Mini Required
+                  <Lock size={11} /> Hardware Required
                 </div>
               </div>
               <div className="px-4 pb-3 border-t border-[#f0eeea] pt-2.5 bg-[#fafaf8]">
                 <p className="text-[11px] text-terminal-muted">
-                  This integration requires a dedicated Mac Mini workstation. Contact your administrator to upgrade your package.
+                  This integration requires a dedicated hardware integration. Contact your administrator to upgrade your package.
                 </p>
               </div>
             </div>
