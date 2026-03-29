@@ -679,11 +679,14 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       })()}
                       {a.status === 'completed' && (
                         <div className="mt-1.5 space-y-1.5">
-                          {a.result_summary && (
-                            <div className="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-1.5 rounded leading-relaxed">
-                              {a.result_summary.slice(0, 300)}{a.result_summary.length > 300 ? '...' : ''}
-                            </div>
-                          )}
+                          {a.result_summary && (() => {
+                            const isFailed = /^(Failed|Error|Execution failed|Resume failed|Could not|Failed to authenticate)/i.test(a.result_summary) || /\berror\b.*\b(401|403|500|authentication|credentials)\b/i.test(a.result_summary);
+                            return (
+                              <div className={`text-[11px] px-2 py-1.5 rounded leading-relaxed ${isFailed ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50'}`}>
+                                {a.result_summary.slice(0, 300)}{a.result_summary.length > 300 ? '...' : ''}
+                              </div>
+                            );
+                          })()}
                           {(() => {
                             try {
                               const artifacts = JSON.parse(a.output_artifacts_json || '[]');
@@ -1877,12 +1880,15 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 </div>
               )}
               {/* Result (if completed) */}
-              {a.result_summary && (
-                <div>
-                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Result</div>
-                  <div className="text-[12px] text-[#333] leading-relaxed bg-emerald-50 rounded-lg px-3 py-2.5 whitespace-pre-wrap">{a.result_summary}</div>
-                </div>
-              )}
+              {a.result_summary && (() => {
+                const isFailed = /^(Failed|Error|Execution failed|Resume failed|Could not|Failed to authenticate)/i.test(a.result_summary) || /\berror\b.*\b(401|403|500|authentication|credentials)\b/i.test(a.result_summary);
+                return (
+                  <div>
+                    <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Result</div>
+                    <div className={`text-[12px] leading-relaxed rounded-lg px-3 py-2.5 whitespace-pre-wrap ${isFailed ? 'text-red-600 bg-red-50' : 'text-[#333] bg-emerald-50'}`}>{a.result_summary}</div>
+                  </div>
+                );
+              })()}
               {/* Artifacts */}
               {artifacts.length > 0 && (
                 <div>
