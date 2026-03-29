@@ -331,6 +331,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     const sshArgs = [
       '-4',
+      '-tt',  // Force pseudo-TTY so output streams in real-time (no pipe buffering)
       '-i', SSH_KEY,
       '-p', String(SSH_PORT),
       '-o', 'StrictHostKeyChecking=no',
@@ -351,12 +352,18 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     proc.stdin.end();
 
-    // With --output-format text, stdout gets raw text as tokens are generated.
-    // SSH forwards stdout chunks in real-time, giving us natural streaming.
+    // With --output-format text + SSH -tt, stdout streams tokens in real-time.
+    // The pseudo-TTY may inject \r\n and ANSI escape codes — strip them.
     proc.stdout.on('data', (chunk) => {
-      const text = chunk.toString();
-      fullResponse += text;
-      onText(text);
+      let text = chunk.toString();
+      // Strip ANSI escape sequences (colors, cursor movement, etc.)
+      text = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+      // Normalize \r\n to \n
+      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '');
+      if (text) {
+        fullResponse += text;
+        onText(text);
+      }
     });
 
     proc.stderr.on('data', (chunk) => { stderr += chunk; });
