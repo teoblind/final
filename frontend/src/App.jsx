@@ -25,6 +25,18 @@ class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary] Caught:', error, info);
+    // Auto-reload on stale chunk errors (happens after deploy when old JS hashes are gone)
+    if (error?.message?.includes('Failed to fetch dynamically imported module') ||
+        error?.message?.includes('Importing a module script failed')) {
+      const key = '_err_reload';
+      const last = sessionStorage.getItem(key);
+      // Only auto-reload once per session to avoid infinite loops
+      if (!last || Date.now() - Number(last) > 10000) {
+        sessionStorage.setItem(key, String(Date.now()));
+        window.location.reload();
+        return;
+      }
+    }
   }
 
   render() {
