@@ -16,6 +16,8 @@ export default function AdminConsoleDashboard() {
   const [byTenant, setByTenant] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [emailHealth, setEmailHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -43,6 +45,12 @@ export default function AdminConsoleDashboard() {
       setUsage(usageRes.data);
       setByTenant(tenantUsageRes.data?.tenants || []);
       setError(null);
+
+      // Fetch email token health (non-blocking)
+      try {
+        const healthRes = await api.get('/v1/admin/email/health');
+        setEmailHealth(healthRes.data);
+      } catch { /* non-critical */ }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to load admin data');
     } finally {
@@ -124,6 +132,63 @@ export default function AdminConsoleDashboard() {
         <StatCard label="Output Tokens" value={fmtTokens(summary.totalOutputTokens)} />
         <StatCard label="Estimated Cost" value={fmtCost(summary.totalCost)} accent />
       </div>
+
+      {/* Email Token Health */}
+      {emailHealth && emailHealth.tokens?.length > 0 && (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[10px] font-bold text-terminal-muted uppercase tracking-[1px]">
+              Email Integration Health
+            </h3>
+            <div className="flex items-center gap-3">
+              {emailHealth.lastChecked && (
+                <span className="text-[10px] text-terminal-muted">
+                  Checked {new Date(emailHealth.lastChecked).toLocaleTimeString()}
+                </span>
+              )}
+              <button
+                onClick={async () => {
+                  setHealthLoading(true);
+                  try {
+                    const res = await api.post('/v1/admin/email/health/refresh');
+                    setEmailHealth(res.data);
+                  } catch {}
+                  setHealthLoading(false);
+                }}
+                disabled={healthLoading}
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-[#f0eeea] text-terminal-muted hover:text-terminal-text transition-colors disabled:opacity-50"
+              >
+                {healthLoading ? 'Checking...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {emailHealth.tokens.map((t) => (
+              <div
+                key={t.label}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                  t.status === 'healthy'
+                    ? 'border-[#d1e7dd] bg-[#f8fdf9]'
+                    : 'border-[#f5c2c7] bg-[#fef2f2]'
+                }`}
+              >
+                <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  t.status === 'healthy' ? 'bg-[#1a6b3c]' : 'bg-[#c0392b] animate-pulse'
+                }`} />
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold text-terminal-text truncate">{t.label}</p>
+                  <p className={`text-[10px] ${t.status === 'healthy' ? 'text-[#1a6b3c]' : 'text-[#c0392b]'}`}>
+                    {t.status === 'healthy' ? 'Token valid' : `Token dead - needs re-auth`}
+                  </p>
+                  {t.error && t.status !== 'healthy' && (
+                    <p className="text-[9px] text-terminal-muted truncate mt-0.5">{t.error}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Two-column: Chart + By-Model */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-6">

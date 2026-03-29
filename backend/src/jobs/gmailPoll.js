@@ -21,6 +21,10 @@ let pollInterval = null;
 let lastPoll = null;
 let repliesFound = 0;
 
+// Token health tracking — in-memory map of { label -> { status, lastChecked, error } }
+const tokenHealth = new Map();
+let lastHealthCheck = null;
+
 // In-memory set of message IDs currently being processed — prevents overlapping
 // poll cycles from double-processing the same message concurrently.
 const currentlyProcessing = new Set();
@@ -506,6 +510,9 @@ async function pollSingleInbox(gmail, tenantId, label) {
       q: 'is:unread newer_than:1h -from:me',
       maxResults: 10,
     });
+
+    // Token is working - update health
+    tokenHealth.set(label, { label, tenantId, status: 'healthy', lastChecked: new Date().toISOString(), error: null });
 
     const messages = listRes.data.messages || [];
     console.log(`[GmailPoll] [${label}] Found ${messages.length} unread message(s)`);
@@ -1269,8 +1276,29 @@ async function pollInbox() {
   for (const inbox of inboxes) {
     // Wrap each inbox poll in the appropriate tenant context
     const resolvedId = inbox.tenantId || 'default';
-    const count = await runWithTenant(resolvedId, () => pollSingleInbox(inbox.gmail, inbox.tenantId, inbox.label));
-    totalNew += count;
+    try {
+      const count = await runWithTenant(resolvedId, () => pollSingleInbox(inbox.gmail, inbox.tenantId, inbox.label));
+      totalNew += count;
+    } catch (err) {
+      const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+        err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+        err.message?.includes('Token has been expired or revoked');
+      if (isAuthError) {
+        console.error(`[GmailPoll] [${inbox.label}] AUTH FAILED - token is dead: ${err.message}`);
+        tokenHealth.set(inbox.label, {
+          label: inbox.label, tenantId: inbox.tenantId,
+          status: 'dead', lastChecked: new Date().toISOString(),
+          error: err.message,
+        });
+      } else {
+        console.error(`[GmailPoll] [${inbox.label}] Poll error: ${err.message}`);
+        tokenHealth.set(inbox.label, {
+          label: inbox.label, tenantId: inbox.tenantId,
+          status: 'error', lastChecked: new Date().toISOString(),
+          error: err.message,
+        });
+      }
+    }
   }
 
   repliesFound += totalNew;
@@ -1313,5 +1341,68 @@ export function getGmailPollStatus() {
     running: pollInterval !== null,
     lastPoll,
     repliesFound,
+  };
+}
+
+/**
+ * Check token health for all configured inboxes by attempting a token exchange.
+ * Returns array of { label, tenantId, status, lastChecked, error }.
+ */
+export async function checkAllTokenHealth() {
+  const results = [];
+
+  // Build inbox list with raw refresh tokens for testing
+  const entries = [];
+  const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
+  if (defaultToken) {
+    entries.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', refreshToken: defaultToken });
+  }
+  try {
+    const tenants = getAllTenants();
+    for (const tenant of tenants) {
+      try {
+        const tdb = getTenantDb(tenant.id);
+        const rows = tdb.prepare('SELECT * FROM tenant_email_config').all();
+        for (const row of rows) {
+          if (row.gmail_refresh_token) {
+            entries.push({ tenantId: row.tenant_id, label: row.sender_email, refreshToken: row.gmail_refresh_token });
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+
+  for (const entry of entries) {
+    const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString() };
+    try {
+      const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
+      client.setCredentials({ refresh_token: entry.refreshToken });
+      const { token } = await client.getAccessToken();
+      if (token) {
+        result.status = 'healthy';
+        result.error = null;
+      } else {
+        result.status = 'dead';
+        result.error = 'No access token returned';
+      }
+    } catch (err) {
+      result.status = 'dead';
+      result.error = err.message || 'Token exchange failed';
+    }
+    tokenHealth.set(entry.label, result);
+    results.push(result);
+  }
+
+  lastHealthCheck = new Date().toISOString();
+  return results;
+}
+
+/**
+ * Get cached token health (from last check).
+ */
+export function getTokenHealthStatus() {
+  return {
+    lastChecked: lastHealthCheck,
+    tokens: Array.from(tokenHealth.values()),
   };
 }

@@ -39,6 +39,7 @@ import {
   checkOpusLimit,
 } from '../cache/database.js';
 import { isTunnelHealthy } from '../services/claudeAgent.js';
+import { checkAllTokenHealth, getTokenHealthStatus } from '../jobs/gmailPoll.js';
 
 const router = express.Router();
 
@@ -1005,6 +1006,37 @@ router.put('/tenants/:id/opus-limit', (req, res) => {
   } catch (error) {
     console.error('Update opus limit error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /email/health — Token Health for All Tenant Inboxes ────────────────
+
+router.get('/email/health', async (req, res) => {
+  try {
+    // If we have cached results less than 5 minutes old, return those
+    const cached = getTokenHealthStatus();
+    const cacheAge = cached.lastChecked ? (Date.now() - new Date(cached.lastChecked).getTime()) : Infinity;
+    if (cacheAge < 5 * 60 * 1000 && cached.tokens.length > 0) {
+      return res.json(cached);
+    }
+    // Otherwise run a fresh check
+    const tokens = await checkAllTokenHealth();
+    res.json({ lastChecked: new Date().toISOString(), tokens });
+  } catch (error) {
+    console.error('Token health check error:', error);
+    res.status(500).json({ error: 'Failed to check token health' });
+  }
+});
+
+// ─── POST /email/health/refresh — Force fresh token health check ────────────
+
+router.post('/email/health/refresh', async (req, res) => {
+  try {
+    const tokens = await checkAllTokenHealth();
+    res.json({ lastChecked: new Date().toISOString(), tokens });
+  } catch (error) {
+    console.error('Token health refresh error:', error);
+    res.status(500).json({ error: 'Failed to check token health' });
   }
 });
 
