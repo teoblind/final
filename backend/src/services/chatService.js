@@ -2368,21 +2368,143 @@ function buildKnowledgeContext(tenantId, userMessage) {
 // ─── Workspace Tool Caller ──────────────────────────────────────────────────
 
 async function callWorkspaceTool(toolName, toolInput, tenantId) {
-  const url = `${WORKSPACE_AGENT_URL}/tools/${toolName}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Tenant-Id': tenantId,
-      'X-Internal-Secret': process.env.WORKSPACE_INTERNAL_SECRET || 'dev-secret',
-    },
-    body: JSON.stringify(toolInput),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Workspace tool ${toolName} failed (${res.status}): ${errText}`);
+  // Handle sheet/doc creation directly via OAuth (workspace Python agent may not be running)
+  if (toolName === 'workspace_create_sheet' || toolName === 'workspace_create_doc') {
+    return await createGoogleFileDirectly(toolName, toolInput, tenantId);
   }
-  return res.json();
+
+  // Fall through to workspace agent for other tools
+  const url = `${WORKSPACE_AGENT_URL}/tools/${toolName}`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Tenant-Id': tenantId,
+        'X-Internal-Secret': process.env.WORKSPACE_INTERNAL_SECRET || 'dev-secret',
+      },
+      body: JSON.stringify(toolInput),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Workspace tool ${toolName} failed (${res.status}): ${errText}`);
+    }
+    return res.json();
+  } catch (err) {
+    // If workspace agent is down, try handling directly for search
+    if (toolName === 'workspace_search_drive') {
+      return await searchDriveDirectly(toolInput, tenantId);
+    }
+    throw err;
+  }
+}
+
+async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
+  const { getKeyVaultValue: kvGet, getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
+  const { google: googleapis } = await import('googleapis');
+
+  const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+  const csecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+  let rToken = kvGet(tenantId, 'google-docs', 'refresh_token');
+  if (!rToken) {
+    const eCfg = getEmailCfg(tenantId);
+    rToken = eCfg?.gmailRefreshToken;
+  }
+  if (!cid || !csecret || !rToken) {
+    throw new Error('No Google account connected. Connect Google Docs & Drive in Settings first.');
+  }
+
+  const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
+  oauth.setCredentials({ refresh_token: rToken });
+
+  if (toolName === 'workspace_create_sheet') {
+    const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
+    const title = toolInput.title || 'Untitled Spreadsheet';
+    const sheetDefs = toolInput.sheets || [{ name: 'Sheet1', headers: [], rows: [] }];
+
+    const sheetProps = sheetDefs.map((s, i) => ({ properties: { sheetId: i, title: s.name || `Sheet${i + 1}` } }));
+    const createRes = await sheets.spreadsheets.create({ requestBody: { properties: { title }, sheets: sheetProps } });
+    const spreadsheetId = createRes.data.spreadsheetId;
+
+    // Populate data
+    for (const s of sheetDefs) {
+      const tabName = s.name || 'Sheet1';
+      const values = [];
+      if (s.headers?.length) values.push(s.headers);
+      if (s.rows?.length) values.push(...s.rows);
+      if (values.length) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId, range: `'${tabName}'!A1`, valueInputOption: 'USER_ENTERED',
+          requestBody: { values },
+        });
+      }
+    }
+
+    // Bold headers
+    if (sheetDefs[0]?.headers?.length) {
+      await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [{
+        repeatCell: {
+          range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1 },
+          cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.93 } } },
+          fields: 'userEnteredFormat(textFormat,backgroundColor)',
+        },
+      }] } });
+    }
+
+    // Share with anyone with the link
+    const drive = googleapis.drive({ version: 'v3', auth: oauth });
+    try {
+      await drive.permissions.create({ fileId: spreadsheetId, requestBody: { type: 'anyone', role: 'writer' } });
+    } catch (e) { console.warn('[Workspace] Failed to share sheet:', e.message); }
+
+    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
+    return { file_id: spreadsheetId, url };
+  }
+
+  if (toolName === 'workspace_create_doc') {
+    const docs = googleapis.docs({ version: 'v1', auth: oauth });
+    const title = toolInput.title || 'Untitled Document';
+    const doc = await docs.documents.create({ requestBody: { title } });
+    const docId = doc.data.documentId;
+
+    if (toolInput.content) {
+      await docs.documents.batchUpdate({ documentId: docId, requestBody: { requests: [{ insertText: { location: { index: 1 }, text: toolInput.content } }] } });
+    }
+
+    // Share with anyone with the link
+    const drive = googleapis.drive({ version: 'v3', auth: oauth });
+    try {
+      await drive.permissions.create({ fileId: docId, requestBody: { type: 'anyone', role: 'writer' } });
+    } catch (e) { console.warn('[Workspace] Failed to share doc:', e.message); }
+
+    const url = `https://docs.google.com/document/d/${docId}/edit`;
+    return { file_id: docId, url };
+  }
+}
+
+async function searchDriveDirectly(toolInput, tenantId) {
+  const { getKeyVaultValue: kvGet, getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
+  const { google: googleapis } = await import('googleapis');
+
+  const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+  const csecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+  let rToken = kvGet(tenantId, 'google-docs', 'refresh_token');
+  if (!rToken) {
+    const eCfg = getEmailCfg(tenantId);
+    rToken = eCfg?.gmailRefreshToken;
+  }
+  if (!cid || !csecret || !rToken) return [];
+
+  const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
+  oauth.setCredentials({ refresh_token: rToken });
+  const drive = googleapis.drive({ version: 'v3', auth: oauth });
+
+  const q = toolInput.query ? `name contains '${toolInput.query.replace(/'/g, "\\'")}'` : '';
+  const res = await drive.files.list({ q: q || undefined, pageSize: 10, fields: 'files(id,name,mimeType,webViewLink,owners)' });
+  return (res.data.files || []).map(f => ({
+    name: f.name, url: f.webViewLink, type: f.mimeType?.includes('spreadsheet') ? 'sheet' : f.mimeType?.includes('document') ? 'doc' : 'doc',
+    owner: f.owners?.[0]?.emailAddress,
+  }));
 }
 
 // ─── Lead Engine Tool Caller ─────────────────────────────────────────────────

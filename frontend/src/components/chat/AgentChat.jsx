@@ -1693,7 +1693,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
 
       {/* Recent Files */}
       {recentFiles.length > 0 && (
-        <ContextSection title="Files" meta={`${recentFiles.length}`} defaultOpen={false} onAdd={() => openPinSearch('files')}>
+        <ContextSection title="Files" meta={`${recentFiles.length}`} defaultOpen={recentFiles.length > 0} onAdd={() => openPinSearch('files')}>
           <div className="space-y-1">
             {recentFiles.map((f, i) => (
               <a
@@ -2508,6 +2508,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [contextPanelWidth, setContextPanelWidth] = useState(340); // px, 0 = minimized
   const [approvalCtx, setApprovalCtx] = useState(null); // approval context from "Edit in DACP Agent"
   const [contextData, setContextData] = useState(null); // dynamic context panel data
+  const workspaceFilesRef = useRef([]); // workspace files created this session (survive API refreshes)
   const contextDragRef = useRef(null);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -2737,7 +2738,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
   // Load context panel data when thread changes
   useEffect(() => {
-    if (!activeThreadId) { setContextData(null); return; }
+    if (!activeThreadId) { setContextData(null); workspaceFilesRef.current = []; return; }
+    workspaceFilesRef.current = []; // Reset workspace files for new thread
     const token = getAuthToken();
     fetch(`${API_BASE}/v1/chat/context/${activeThreadId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -2747,7 +2749,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
       .catch(() => {});
   }, [activeThreadId]);
 
-  // Refresh context data helper
+  // Refresh context data helper — merges workspace files created this session
   const refreshContextData = useCallback(() => {
     if (!activeThreadId) return;
     const token = getAuthToken();
@@ -2755,7 +2757,18 @@ export default function AgentChat({ agentId = 'estimating' }) {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data) setContextData(data); })
+      .then(data => {
+        if (data) {
+          // Merge workspace files created this session into the API response
+          const wsFiles = workspaceFilesRef.current || [];
+          if (wsFiles.length) {
+            const existingUrls = new Set((data.recentFiles || []).map(f => f.drive_url));
+            const unique = wsFiles.filter(f => !existingUrls.has(f.drive_url));
+            data.recentFiles = [...unique, ...(data.recentFiles || [])];
+          }
+          setContextData(data);
+        }
+      })
       .catch(() => {});
   }, [activeThreadId]);
 
@@ -3210,13 +3223,15 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 setMessages(prev => prev.map(m =>
                   m.id === agentMsgId ? { ...m, workspace: { action: event.action, type: event.wsType, fileId: event.fileId, url: event.url, title: event.title, folder: event.folder } } : m
                 ));
-                // Add to context panel FILES section immediately
+                // Add to context panel FILES section immediately + persist in ref
                 if (event.url) {
+                  const wsFile = { name: event.title || 'Untitled', drive_url: event.url, category: event.wsType || 'doc' };
+                  workspaceFilesRef.current = [wsFile, ...workspaceFilesRef.current.filter(f => f.drive_url !== event.url)];
                   setContextData(prev => ({
                     ...prev,
                     recentFiles: [
-                      { name: event.title || 'Untitled', drive_url: event.url, category: event.wsType || 'doc' },
-                      ...(prev?.recentFiles || []),
+                      wsFile,
+                      ...(prev?.recentFiles || []).filter(f => f.drive_url !== event.url),
                     ],
                   }));
                 }
@@ -3246,15 +3261,18 @@ export default function AgentChat({ agentId = 'estimating' }) {
               const newFiles = googleUrls.map(url => {
                 const type = url.includes('/spreadsheets/') ? 'sheet' : url.includes('/document/') ? 'doc' : 'slides';
                 const label = type === 'sheet' ? 'Spreadsheet' : type === 'doc' ? 'Document' : 'Presentation';
-                // Extract title from markdown link if available
                 const mdMatch = agentMsg.content.match(new RegExp(`\\[([^\\]]+)\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
                 const name = mdMatch ? mdMatch[1] : label;
                 return { name, drive_url: url.split('?')[0], category: type };
               });
+              // Persist in ref so API refreshes don't wipe them out
+              const existingRefUrls = new Set(workspaceFilesRef.current.map(f => f.drive_url));
+              const unique = newFiles.filter(f => !existingRefUrls.has(f.drive_url));
+              if (unique.length) workspaceFilesRef.current = [...unique, ...workspaceFilesRef.current];
               setContextData(cd => {
                 const existing = new Set((cd?.recentFiles || []).map(f => f.drive_url));
-                const unique = newFiles.filter(f => !existing.has(f.drive_url));
-                if (unique.length) return { ...cd, recentFiles: [...unique, ...(cd?.recentFiles || [])] };
+                const uniqueCtx = newFiles.filter(f => !existing.has(f.drive_url));
+                if (uniqueCtx.length) return { ...cd, recentFiles: [...uniqueCtx, ...(cd?.recentFiles || [])] };
                 return cd;
               });
             }
