@@ -1,16 +1,10 @@
 {
   "mcpServers": {
     "coppice-tools": {
-      "command": "ssh",
+      "command": "sh",
       "args": [
-        "-4",
-        "-T",
-        "-i", "/Users/teoblind/.ssh/id_ed25519",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "BatchMode=yes",
-        "-o", "ConnectTimeout=10",
-        "root@104.238.162.227",
-        "node /root/coppice/backend/src/mcp-bridge.js"
+        "-c",
+        "exec ssh -4 -T -i /Users/teoblind/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=10 root@104.238.162.227 \"MCP_BRIDGE_TENANT=${MCP_BRIDGE_TENANT:-default} exec node /root/coppice/backend/src/mcp-bridge.js\""
       ]
     }
   }
