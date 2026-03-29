@@ -1834,17 +1834,18 @@ export default function DacpCommandDashboard({ onNavigate }) {
               {a.status !== 'completed' && a.action_prompt && (() => {
                 const prompt = (a.action_prompt || '').toLowerCase();
                 const outputs = [];
-                if (prompt.includes('pdf') || prompt.includes('bid package') || prompt.includes('one-pager') || prompt.includes('capability statement'))
+                // Only match explicit output verbs - "create a PDF", "produce a PDF", "generate a PDF", "as a PDF", "save as PDF"
+                if (/\b(create|produce|generate|export|save|deliver)\b.{0,20}\bpdf\b/.test(prompt) || /\bas a pdf\b/.test(prompt))
                   outputs.push({ icon: <FileText size={14} className="text-red-500" />, label: 'PDF Document', bg: 'bg-red-50 border-red-200' });
-                if (prompt.includes('google doc') || prompt.includes('gdoc') || prompt.includes('letter') || prompt.includes('submission'))
+                if (/\b(create|produce|generate|save)\b.{0,20}\bgoogle doc\b/.test(prompt) || /\bas a google doc\b/.test(prompt) || /\bsave the google doc\b/.test(prompt))
                   outputs.push({ icon: <FileText size={14} className="text-blue-500" />, label: 'Google Doc', bg: 'bg-blue-50 border-blue-200' });
-                if (prompt.includes('spreadsheet') || prompt.includes('sheet') || prompt.includes('excel') || prompt.includes('csv') || prompt.includes('pricing'))
+                if (/\b(create|produce|generate|build)\b.{0,20}\b(spreadsheet|google sheet|excel)\b/.test(prompt) || /\bas a (spreadsheet|csv|excel)\b/.test(prompt))
                   outputs.push({ icon: <FileSpreadsheet size={14} className="text-green-600" />, label: 'Spreadsheet', bg: 'bg-green-50 border-green-200' });
-                if (prompt.includes('email') || prompt.includes('draft') || prompt.includes('send'))
+                if (/\b(draft|compose|write)\b.{0,20}\b(email|e-mail)\b/.test(prompt) || /\bdraft the.{0,30}email\b/.test(prompt))
                   outputs.push({ icon: <Mail size={14} className="text-amber-500" />, label: 'Email Draft', bg: 'bg-amber-50 border-amber-200' });
-                if (prompt.includes('presentation') || prompt.includes('deck') || prompt.includes('slides'))
+                if (/\b(create|produce|generate|build)\b.{0,20}\b(presentation|deck|slides)\b/.test(prompt))
                   outputs.push({ icon: <ExternalLink size={14} className="text-purple-500" />, label: 'Presentation', bg: 'bg-purple-50 border-purple-200' });
-                if (outputs.length === 0 && (prompt.includes('report') || prompt.includes('analysis') || prompt.includes('summary')))
+                if (outputs.length === 0 && /\b(create|produce|generate|write)\b.{0,20}\b(report|analysis|one-pager|memo)\b/.test(prompt))
                   outputs.push({ icon: <FileText size={14} className="text-indigo-500" />, label: 'Report', bg: 'bg-indigo-50 border-indigo-200' });
                 if (outputs.length === 0) return null;
                 return (
