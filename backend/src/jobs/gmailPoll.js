@@ -32,13 +32,27 @@ const currentlyProcessing = new Set();
 // Maximum number of retry attempts before giving up permanently.
 const MAX_RETRIES = 3;
 
-// Shared OAuth app credentials
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+// (tokens may be issued by either client depending on how the account was authed)
+const CLIENT_PAIRS = [
+  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+].filter(p => p.id && p.secret);
+
+// Default for non-gmail-poll usage
+const CLIENT_ID = CLIENT_PAIRS[0]?.id;
+const CLIENT_SECRET = CLIENT_PAIRS[0]?.secret;
 
 function makeGmailClient(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
-  const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
+  if (!refreshToken || CLIENT_PAIRS.length === 0) return null;
+  const client = new google.auth.OAuth2(CLIENT_PAIRS[0].id, CLIENT_PAIRS[0].secret, 'http://localhost:8099');
+  client.setCredentials({ refresh_token: refreshToken });
+  return google.gmail({ version: 'v1', auth: client });
+}
+
+function makeGmailClientFallback(refreshToken) {
+  if (!refreshToken || CLIENT_PAIRS.length < 2) return null;
+  const client = new google.auth.OAuth2(CLIENT_PAIRS[1].id, CLIENT_PAIRS[1].secret, 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return google.gmail({ version: 'v1', auth: client });
 }
@@ -52,7 +66,7 @@ function getInboxes() {
   // Default inbox (agent@zhan.coppice.ai from env vars)
   const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
   if (defaultToken) {
-    inboxes.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', gmail: makeGmailClient(defaultToken) });
+    inboxes.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', gmail: makeGmailClient(defaultToken), refreshToken: defaultToken });
   }
 
   // Tenant inboxes from each tenant DB
@@ -65,7 +79,7 @@ function getInboxes() {
         for (const row of rows) {
           const gmail = makeGmailClient(row.gmail_refresh_token);
           if (gmail) {
-            inboxes.push({ tenantId: row.tenant_id, label: `${row.sender_email} (${row.tenant_id})`, gmail });
+            inboxes.push({ tenantId: row.tenant_id, label: `${row.sender_email} (${row.tenant_id})`, gmail, refreshToken: row.gmail_refresh_token });
           }
         }
       } catch (e) {
@@ -1283,7 +1297,28 @@ async function pollInbox() {
       const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
         err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
         err.message?.includes('Token has been expired or revoked');
-      if (isAuthError) {
+      if (isAuthError && inbox.refreshToken) {
+        // Try fallback OAuth client (token may have been issued by a different client)
+        const fallbackGmail = makeGmailClientFallback(inbox.refreshToken);
+        if (fallbackGmail) {
+          try {
+            console.log(`[GmailPoll] [${inbox.label}] Primary client failed, trying fallback client...`);
+            const count = await runWithTenant(resolvedId, () => pollSingleInbox(fallbackGmail, inbox.tenantId, inbox.label));
+            totalNew += count;
+            // Fallback worked — swap the client for future polls
+            inbox.gmail = fallbackGmail;
+            continue;
+          } catch (err2) {
+            console.error(`[GmailPoll] [${inbox.label}] Both OAuth clients failed: ${err2.message}`);
+          }
+        }
+        console.error(`[GmailPoll] [${inbox.label}] AUTH FAILED - token is dead: ${err.message}`);
+        tokenHealth.set(inbox.label, {
+          label: inbox.label, tenantId: inbox.tenantId,
+          status: 'dead', lastChecked: new Date().toISOString(),
+          error: err.message,
+        });
+      } else if (isAuthError) {
         console.error(`[GmailPoll] [${inbox.label}] AUTH FAILED - token is dead: ${err.message}`);
         tokenHealth.set(inbox.label, {
           label: inbox.label, tenantId: inbox.tenantId,
@@ -1374,20 +1409,23 @@ export async function checkAllTokenHealth() {
 
   for (const entry of entries) {
     const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString() };
-    try {
-      const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
-      client.setCredentials({ refresh_token: entry.refreshToken });
-      const { token } = await client.getAccessToken();
-      if (token) {
-        result.status = 'healthy';
-        result.error = null;
-      } else {
-        result.status = 'dead';
-        result.error = 'No access token returned';
-      }
-    } catch (err) {
+    let healthy = false;
+    for (const pair of CLIENT_PAIRS) {
+      try {
+        const client = new google.auth.OAuth2(pair.id, pair.secret, 'http://localhost:8099');
+        client.setCredentials({ refresh_token: entry.refreshToken });
+        const { token } = await client.getAccessToken();
+        if (token) {
+          healthy = true;
+          result.status = 'healthy';
+          result.error = null;
+          break;
+        }
+      } catch {}
+    }
+    if (!healthy) {
       result.status = 'dead';
-      result.error = err.message || 'Token exchange failed';
+      result.error = 'Token exchange failed with all OAuth clients';
     }
     tokenHealth.set(entry.label, result);
     results.push(result);
