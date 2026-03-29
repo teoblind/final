@@ -3565,6 +3565,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   }
 
   // Task proposal addon — tells agents when/how to use propose_task
+  const taskProposalAgents = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   const taskProposalAddon = taskProposalAgents.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + knowledgeContext + siblingContext;
@@ -3607,7 +3608,6 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   // Web browsing — available to all agents
   tools.push(...WEB_TOOLS);
   // Task proposal — allows agent to propose background tasks during chat
-  const taskProposalAgents = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   if (taskProposalAgents.includes(agentId)) {
     tools.push(...TASK_PROPOSAL_TOOLS);
   }
