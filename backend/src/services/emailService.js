@@ -168,7 +168,9 @@ const SIGNATURES = {
 };
 
 function getSignature(tenantId, isHtml = true) {
-  const sig = SIGNATURES[tenantId] || SIGNATURES.default;
+  // Fallback sender is agent@zhan.coppice.ai, so no tenantId = Zhan signature
+  const key = tenantId || 'zhan-capital';
+  const sig = SIGNATURES[key] || SIGNATURES['zhan-capital'];
   return isHtml ? sig.html : sig.text;
 }
 
