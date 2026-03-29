@@ -37,13 +37,157 @@ import {
   getOpusUsageAllTenants,
   getOpusDailyCount,
   checkOpusLimit,
+  getTenantDb,
 } from '../cache/database.js';
 import { isTunnelHealthy } from '../services/claudeAgent.js';
 import { checkAllTokenHealth, getTokenHealthStatus } from '../jobs/gmailPoll.js';
+import { google } from 'googleapis';
+import { verifyAccessToken } from '../services/authService.js';
 
 const router = express.Router();
 
-// All routes require authentication + sangha_admin or sangha_underwriter role
+// ─── Re-Auth Routes (unauthenticated - OAuth redirects have no JWT header) ──
+
+const REAUTH_OAUTH_BASE = process.env.OAUTH_BASE_URL || 'https://coppice.ai';
+const REAUTH_REDIRECT_URI = `${REAUTH_OAUTH_BASE}/api/v1/admin/email/reauth/callback`;
+const REAUTH_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'openid',
+  'email',
+];
+
+router.get('/email/reauth/start', (req, res) => {
+  try {
+    const { tenantId, token } = req.query;
+    if (!token) return res.status(401).send('Authentication required');
+    if (!tenantId) return res.status(400).send('tenantId is required');
+
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (err) {
+      return res.status(401).send('Invalid or expired token');
+    }
+
+    // Look up current sender email for login_hint
+    let loginHint = null;
+    try {
+      const tdb = getTenantDb(tenantId);
+      const row = tdb.prepare('SELECT sender_email FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+      if (row) loginHint = row.sender_email;
+    } catch {}
+
+    const originHost = req.headers['x-forwarded-host'] || req.get('host');
+    const originProto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+    const state = Buffer.from(JSON.stringify({
+      tenantId,
+      userId: decoded.userId,
+      origin: `${originProto}://${originHost}`,
+    })).toString('base64url');
+
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, REAUTH_REDIRECT_URI);
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: REAUTH_SCOPES,
+      state,
+      login_hint: loginHint,
+    });
+
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('[Re-Auth] Start error:', error);
+    res.status(500).send('Failed to start re-auth flow');
+  }
+});
+
+router.get('/email/reauth/callback', async (req, res) => {
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError || !code || !state) {
+      return res.status(400).send(`<html><body style="font-family:-apple-system,sans-serif;text-align:center;margin-top:40px;color:#c0392b;">
+        <p>Re-auth failed: ${oauthError || 'missing code or state'}</p>
+        <script>setTimeout(()=>window.close(),3000);</script>
+      </body></html>`);
+    }
+
+    let stateData;
+    try {
+      stateData = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+    } catch {
+      return res.status(400).send('Invalid state parameter');
+    }
+
+    const { tenantId, origin } = stateData;
+    if (!tenantId) return res.status(400).send('Missing tenantId in state');
+
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, REAUTH_REDIRECT_URI);
+    const { tokens } = await oauth2Client.getToken(code);
+
+    if (!tokens.refresh_token) {
+      return res.status(400).send(`<html><body style="font-family:-apple-system,sans-serif;text-align:center;margin-top:40px;color:#c0392b;">
+        <p>No refresh token received. Make sure to grant all permissions.</p>
+        <script>setTimeout(()=>window.close(),3000);</script>
+      </body></html>`);
+    }
+
+    // Get email from id_token
+    let email = null;
+    if (tokens.id_token) {
+      try {
+        const payload = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64').toString());
+        email = payload.email;
+      } catch {}
+    }
+
+    // Update the tenant's DB with new refresh token + timestamp
+    try {
+      const tdb = getTenantDb(tenantId);
+      tdb.prepare(`
+        UPDATE tenant_email_config
+        SET gmail_refresh_token = ?, token_last_authed_at = datetime('now'), updated_at = datetime('now')
+        WHERE tenant_id = ?
+      `).run(tokens.refresh_token, tenantId);
+      console.log(`[Re-Auth] Token updated for tenant ${tenantId} (${email || 'unknown email'})`);
+    } catch (dbErr) {
+      console.error('[Re-Auth] DB update error:', dbErr);
+      return res.status(500).send('Failed to save new token');
+    }
+
+    const postMessageOrigin = origin || '*';
+    return res.send(`<!DOCTYPE html><html><head><title>Re-Auth Success</title></head><body>
+      <p style="font-family:-apple-system,sans-serif;text-align:center;margin-top:40px;color:#1a6b3c;">
+        Token refreshed for ${email || tenantId}. This window will close.
+      </p>
+      <script>
+        if(window.opener){
+          window.opener.postMessage({type:'email-reauth-success',tenantId:${JSON.stringify(tenantId)},email:${JSON.stringify(email)}},${JSON.stringify(postMessageOrigin)});
+        }
+        setTimeout(()=>window.close(),2000);
+      </script>
+    </body></html>`);
+  } catch (error) {
+    console.error('[Re-Auth] Callback error:', error);
+    res.status(500).send(`<html><body style="font-family:-apple-system,sans-serif;text-align:center;margin-top:40px;color:#c0392b;">
+      <p>Re-auth error: ${error.message}</p>
+      <script>setTimeout(()=>window.close(),5000);</script>
+    </body></html>`);
+  }
+});
+
+// All remaining routes require authentication + sangha_admin or sangha_underwriter role
 router.use(authenticate);
 router.use(requireRole('sangha_admin', 'sangha_underwriter'));
 

@@ -1401,7 +1401,7 @@ export async function checkAllTokenHealth() {
   const entries = [];
   const defaultToken = process.env.GMAIL_REFRESH_TOKEN;
   if (defaultToken) {
-    entries.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', refreshToken: defaultToken });
+    entries.push({ tenantId: 'zhan-capital', label: 'agent@zhan.coppice.ai', refreshToken: defaultToken, isEnvVar: true });
   }
   try {
     const tenants = getAllTenants();
@@ -1411,7 +1411,13 @@ export async function checkAllTokenHealth() {
         const rows = tdb.prepare('SELECT * FROM tenant_email_config').all();
         for (const row of rows) {
           if (row.gmail_refresh_token) {
-            entries.push({ tenantId: row.tenant_id, label: row.sender_email, refreshToken: row.gmail_refresh_token });
+            entries.push({
+              tenantId: row.tenant_id,
+              label: row.sender_email,
+              refreshToken: row.gmail_refresh_token,
+              tokenLastAuthedAt: row.token_last_authed_at || row.updated_at || row.created_at,
+              isEnvVar: false,
+            });
           }
         }
       } catch {}
@@ -1419,7 +1425,7 @@ export async function checkAllTokenHealth() {
   } catch {}
 
   for (const entry of entries) {
-    const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString() };
+    const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString(), isEnvVar: !!entry.isEnvVar };
     let healthy = false;
     for (const pair of CLIENT_PAIRS) {
       try {
@@ -1438,6 +1444,18 @@ export async function checkAllTokenHealth() {
       result.status = 'dead';
       result.error = 'Token exchange failed with all OAuth clients';
     }
+
+    // Token expiry countdown (7-day limit in Google Testing mode)
+    if (entry.tokenLastAuthedAt && !entry.isEnvVar) {
+      result.tokenLastAuthedAt = entry.tokenLastAuthedAt;
+      const daysSince = (Date.now() - new Date(entry.tokenLastAuthedAt).getTime()) / (1000 * 60 * 60 * 24);
+      result.expiresInDays = Math.max(0, Math.round((7 - daysSince) * 10) / 10);
+      result.expiryWarning = result.expiresInDays <= 2 ? 'critical' : result.expiresInDays <= 4 ? 'warning' : null;
+    } else {
+      result.expiresInDays = null;
+      result.expiryWarning = null;
+    }
+
     tokenHealth.set(entry.label, result);
     results.push(result);
   }

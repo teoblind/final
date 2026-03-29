@@ -5674,6 +5674,9 @@ function initActivityLogTableSchema(targetDb) {
     )
   `);
 
+  // Add token_last_authed_at column (migration - safe to re-run)
+  try { targetDb.exec('ALTER TABLE tenant_email_config ADD COLUMN token_last_authed_at DATETIME'); } catch (e) { /* column already exists */ }
+
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5869,6 +5872,9 @@ export function getTenantEmailConfig(tenantId) {
     senderEmail: row.sender_email,
     senderName: row.sender_name,
     gmailRefreshToken: row.gmail_refresh_token,
+    tokenLastAuthedAt: row.token_last_authed_at,
+    updatedAt: row.updated_at,
+    createdAt: row.created_at,
   };
 }
 
@@ -5882,6 +5888,18 @@ export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailR
       gmail_refresh_token = excluded.gmail_refresh_token,
       updated_at = datetime('now')
   `).run(tenantId, senderEmail, senderName, gmailRefreshToken);
+}
+
+/**
+ * Update only the refresh token and mark token_last_authed_at.
+ * Used by the re-auth flow - doesn't touch sender_email/sender_name.
+ */
+export function updateTenantEmailToken(tenantId, gmailRefreshToken) {
+  db.prepare(`
+    UPDATE tenant_email_config
+    SET gmail_refresh_token = ?, token_last_authed_at = datetime('now'), updated_at = datetime('now')
+    WHERE tenant_id = ?
+  `).run(gmailRefreshToken, tenantId);
 }
 
 // ─── Email Trust & Anti-Spoofing ─────────────────────────────────────────────
