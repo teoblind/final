@@ -350,6 +350,17 @@ const LEAD_ENGINE_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'link_leads_sheet',
+    description: 'Link an existing Google Sheet to the Leads Pipeline section on the Command Dashboard. Pass a spreadsheet URL or ID. This replaces any previously linked sheet.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sheet_url: { type: 'string', description: 'Google Sheets URL (e.g. https://docs.google.com/spreadsheets/d/ABC123/edit) or just the spreadsheet ID' },
+      },
+      required: ['sheet_url'],
+    },
+  },
 ];
 
 // ─── HubSpot CRM Tools (Sangha tenant only) ────────────────────────────────
@@ -2826,10 +2837,50 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
         },
       });
 
-      // Store in key vault
+      // Store in key vault — both 'crm' (legacy) and 'dacp-leads' (dashboard reads this)
       kvSet({ tenantId, service: 'crm', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
+      kvSet({ tenantId, service: 'dacp-leads', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
 
       return { success: true, sheet_id: newSheetId, sheet_url: sheetUrl, message: `Created "${companyName} — Deal Pipeline" and connected it to your dashboard.` };
+    }
+    case 'link_leads_sheet': {
+      const { getKeyVaultValue: kvGet, upsertKeyVaultEntry: kvSet, getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
+      const { google: googleapis } = await import('googleapis');
+
+      const sheetUrl = toolInput.sheet_url || '';
+      const match = sheetUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      const sheetId = match ? match[1] : sheetUrl.trim();
+      if (!sheetId) return { error: 'Please provide a Google Sheets URL or spreadsheet ID.' };
+
+      // Get OAuth
+      const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+      const csecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+      let rToken = kvGet(tenantId, 'google-docs', 'refresh_token');
+      if (!rToken) {
+        const eCfg = getEmailCfg(tenantId);
+        rToken = eCfg?.gmailRefreshToken;
+      }
+      if (!cid || !csecret || !rToken) {
+        return { error: 'No Google account connected. Connect Google Docs & Drive in Settings first.' };
+      }
+
+      const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
+      oauth.setCredentials({ refresh_token: rToken });
+      const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
+
+      // Verify access
+      let sheetTitle = 'Leads Sheet';
+      try {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title' });
+        sheetTitle = meta.data.properties?.title || sheetTitle;
+      } catch (err) {
+        return { error: `Cannot access sheet: ${err.message}. Make sure it's shared with the agent account.` };
+      }
+
+      // Store in key vault — dashboard reads 'dacp-leads'
+      kvSet({ tenantId, service: 'dacp-leads', keyName: 'sheet_id', keyValue: sheetId, addedBy: 'agent' });
+
+      return { success: true, sheet_id: sheetId, sheet_title: sheetTitle, sheet_url: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`, message: `Linked "${sheetTitle}" to the Leads Pipeline on the Command Dashboard.` };
     }
     default:
       throw new Error(`Unknown lead engine tool: ${toolName}`);
@@ -3403,9 +3454,10 @@ You also have access to the Lead Engine — an automated lead discovery and outr
 - Run a complete pipeline cycle: discover → enrich → outreach → follow-ups (run_full_cycle)
 - Update lead status, notes, or priority (update_lead)
 - View or modify discovery configuration — queries, schedule, sender, mode (get_discovery_config, update_discovery_config)
-- Create a CRM pipeline Google Sheet and connect it to the dashboard (setup_crm_sheet) — only one sheet active at a time
+- Create a CRM pipeline Google Sheet and connect it to the dashboard (setup_crm_sheet) - only one sheet active at a time
+- Link an existing Google Sheet to the Leads Pipeline on the Command Dashboard (link_leads_sheet) - use when the user wants to connect a sheet that already exists
 
-When the user asks about leads, pipeline, outreach, or prospecting, use these tools. You can configure the entire discovery pipeline through chat — set search queries, enable nightly automation, change sender identity, etc. If the user asks to set up a pipeline sheet or CRM, use setup_crm_sheet.`;
+When the user asks about leads, pipeline, outreach, or prospecting, use these tools. You can configure the entire discovery pipeline through chat - set search queries, enable nightly automation, change sender identity, etc. If the user asks to set up a pipeline sheet or CRM, use setup_crm_sheet. If they ask to link or connect an existing spreadsheet to the dashboard, use link_leads_sheet.`;
 
 const HUBSPOT_PROMPT_ADDON = `
 
@@ -3528,7 +3580,7 @@ const TOOL_CATEGORIES = {
   emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
   email: ['send_email', 'list_emails', 'read_email'],
   calendar: ['create_meeting'],
-  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config', 'setup_crm_sheet'],
+  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config', 'setup_crm_sheet', 'link_leads_sheet'],
   knowledge: ['search_knowledge'],
   hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'],
   mining: ['generate_mine_specs'],
@@ -4023,6 +4075,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           workspace_create_doc: () => `Create document: "${toolInput.title || 'untitled'}"`,
           workspace_create_sheet: () => `Create spreadsheet: "${toolInput.title || 'untitled'}"`,
           setup_crm_sheet: () => 'Create CRM pipeline sheet and connect to dashboard',
+          link_leads_sheet: () => 'Linking sheet to Leads Pipeline',
           workspace_create_slides: () => `Create presentation: "${toolInput.title || 'untitled'}"`,
           gws_sheets_update: () => `Update spreadsheet cells: ${toolInput.range} in ${toolInput.spreadsheet_id}`,
           gws_docs_update: () => `${toolInput.mode === 'replace' ? 'Replace' : 'Append to'} document: ${toolInput.document_id}`,

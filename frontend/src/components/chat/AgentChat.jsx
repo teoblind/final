@@ -90,6 +90,7 @@ const TOOL_LABELS = {
   run_full_cycle: 'Running Full Cycle',
   update_lead: 'Updating Lead',
   setup_crm_sheet: 'Setting Up CRM Sheet',
+  link_leads_sheet: 'Linking to Leads Pipeline',
   // DACP / Construction
   lookup_pricing: 'Looking Up Pricing',
   get_bid_requests: 'Loading Bid Requests',
