@@ -310,11 +310,12 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     let stderr = '';
     let settled = false;
 
-    // Use --output-format text so stdout streams tokens in real-time through SSH.
-    // stream-json emits complete message events (no per-token deltas).
+    // Use --output-format stream-json --verbose for real-time streaming events.
+    // The SSH -tt flag forces a pseudo-TTY to prevent pipe buffering.
     const claudeArgs = [
       '-p', fullMessage,
-      '--output-format', 'text',
+      '--output-format', 'stream-json',
+      '--verbose',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools',
@@ -352,17 +353,45 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     proc.stdin.end();
 
-    // With --output-format text + SSH -tt, stdout streams tokens in real-time.
-    // The pseudo-TTY may inject \r\n and ANSI escape codes — strip them.
+    let buffer = '';
+    // Parse stream-json events. SSH -tt gives us real-time delivery with TTY.
+    // Each line is a JSON object. We extract text from assistant messages and results.
     proc.stdout.on('data', (chunk) => {
-      let text = chunk.toString();
-      // Strip ANSI escape sequences (colors, cursor movement, etc.)
-      text = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-      // Normalize \r\n to \n
-      text = text.replace(/\r\n/g, '\n').replace(/\r/g, '');
-      if (text) {
-        fullResponse += text;
-        onText(text);
+      let raw = chunk.toString();
+      // Strip ANSI escape sequences and normalize line endings from TTY
+      raw = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+      raw = raw.replace(/\r\n/g, '\n').replace(/\r/g, '');
+      buffer += raw;
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete last line
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+          if (event.type === 'assistant' && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullResponse += block.text;
+                onText(block.text);
+              }
+            }
+          }
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            fullResponse += event.delta.text;
+            onText(event.delta.text);
+          }
+          if (event.type === 'result' && event.result && !fullResponse) {
+            const resultText = typeof event.result === 'string' ? event.result : '';
+            if (resultText) {
+              fullResponse = resultText;
+              onText(resultText);
+            }
+          }
+        } catch {
+          // Not valid JSON - skip
+        }
       }
     });
 
@@ -388,6 +417,28 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
       settled = true;
       clearTimeout(timer);
       const durationMs = Date.now() - start;
+
+      // Process remaining buffer
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          if (event.type === 'assistant' && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullResponse += block.text;
+                onText(block.text);
+              }
+            }
+          }
+          if (event.type === 'result' && event.result && !fullResponse) {
+            const resultText = typeof event.result === 'string' ? event.result : '';
+            if (resultText) {
+              fullResponse = resultText;
+              onText(resultText);
+            }
+          }
+        } catch {}
+      }
 
       if (code !== 0 && !fullResponse.trim()) {
         const errMsg = stderr.slice(0, 500);
