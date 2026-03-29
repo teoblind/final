@@ -57,6 +57,7 @@ router.post('/demo-request', (req, res) => {
       to: 'teo@zhan.capital',
       subject: `New Demo Request: ${name} @ ${company}`,
       body: `New demo request from coppice.ai:\n\nName: ${name}\nCompany: ${company}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSpecialty: ${specialty || 'N/A'}\nNotes: ${notes || 'N/A'}\n\nSubmitted: ${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })}`,
+      tenantId: 'zhan-capital',
     }).catch(err => console.error('Demo notification email error:', err.message));
 
     res.json({ success: true, message: "Thanks! We'll be in touch within 24 hours." });
