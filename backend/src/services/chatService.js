@@ -3794,7 +3794,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   const forceApi = agentConfig.force_api === true;
   const forceCli = agentConfig.force_cli === true;
 
-  if (cliEnabled && cliAgents.includes(agentId) && !forceApi && (forceCli || isComplexQuery(userContent))) {
+  if (cliEnabled && cliAgents.includes(agentId) && !forceApi) {
     try {
       const historyForContext = messages.slice(0, -1);
       const cliResult = await queryClaudeAgent({
@@ -4539,7 +4539,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const streamForceApi = streamAgentConfig.force_api === true || !!options.helpMode;
   const streamForceCli = streamAgentConfig.force_cli === true;
 
-  if (cliStreamEnabled && cliStreamAgents.includes(agentId) && !streamForceApi && (streamForceCli || isComplexQuery(userContent))) {
+  if (cliStreamEnabled && cliStreamAgents.includes(agentId) && !streamForceApi) {
     try {
       const historyForContext = messages.slice(0, -1);
       const cliResult = await queryClaudeAgent({
