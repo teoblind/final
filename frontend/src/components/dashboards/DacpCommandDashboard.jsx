@@ -873,7 +873,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       )}
                       {a.status === 'completed' && (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {a.result_summary?.startsWith('Failed') ? (
+                          {(a.result_summary && /^(Failed|Error|Execution failed|Resume failed|Google Sheet creation hit a permissions error|Could not)/i.test(a.result_summary)) ? (
                             <>
                               <button
                                 onClick={() => handleConfirmAssignment(a.id)}
