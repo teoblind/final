@@ -206,12 +206,14 @@ function formatContent(text) {
         }
         // Bare URL
         if (/^https?:\/\//.test(part)) {
-          const label = part.includes('docs.google.com/spreadsheets') ? 'Open Spreadsheet'
-            : part.includes('docs.google.com/document') ? 'Open Document'
-            : part.includes('docs.google.com/presentation') ? 'Open Presentation'
-            : part.includes('drive.google.com') ? 'Open in Drive'
-            : 'Open Link';
-          return <a key={j} href={part} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#eef3f9] text-[#1e3a5f] text-[11px] font-semibold hover:bg-[#dde8f3] transition-colors"><ExternalLink size={10} />{label}</a>;
+          const isSheet = part.includes('docs.google.com/spreadsheets');
+          const isDoc = part.includes('docs.google.com/document');
+          const isSlides = part.includes('docs.google.com/presentation');
+          const isDrive = part.includes('drive.google.com');
+          const isGoogle = isSheet || isDoc || isSlides || isDrive;
+          const label = isSheet ? 'Open Spreadsheet' : isDoc ? 'Open Document' : isSlides ? 'Open Presentation' : isDrive ? 'Open in Drive' : 'Open Link';
+          const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
+          return <a key={j} href={part} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm`} style={{ backgroundColor: color }}><ExternalLink size={14} />{label}</a>;
         }
         return part;
       });
