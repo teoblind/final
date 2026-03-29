@@ -245,10 +245,17 @@ export default function OfficeDashboard() {
               {activities.slice(0, 30).map((act, i) => (
                 <div key={act.id || i} className="flex items-start gap-3 px-4 py-2.5 border-b border-[#f0eeea] last:border-b-0">
                   <div className="w-6 h-6 rounded-lg bg-[#f5f4f0] flex items-center justify-center shrink-0 mt-0.5">
-                    {act.type === 'email' ? <span className="text-[11px]">📧</span>
-                    : act.type === 'doc' ? <span className="text-[11px]">📄</span>
-                    : act.type === 'meeting' ? <span className="text-[11px]">🎙️</span>
-                    : <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--t-ui-accent, #1e3a5f)' }} />}
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor:
+                      act.type === 'in' ? '#3b82f6'
+                      : act.type === 'out' ? '#10b981'
+                      : act.type === 'agent' ? '#8b5cf6'
+                      : act.type === 'lead' ? '#f59e0b'
+                      : act.type === 'meet' || act.type === 'meeting' ? '#ec4899'
+                      : act.type === 'alert' ? '#ef4444'
+                      : act.type === 'calendar' ? '#06b6d4'
+                      : act.type === 'doc' ? '#6366f1'
+                      : '#9ca3af'
+                    }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[12px] font-medium text-terminal-text truncate">{act.title}</p>
