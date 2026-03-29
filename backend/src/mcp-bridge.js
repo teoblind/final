@@ -160,6 +160,7 @@ function processInput() {
 
     try {
       const msg = JSON.parse(body);
+      pendingRequests++;
       handleMessage(msg).then(response => {
         if (response) sendMessage(response);
       }).catch(err => {
@@ -171,6 +172,9 @@ function processInput() {
             error: { code: -32603, message: err.message },
           });
         }
+      }).finally(() => {
+        pendingRequests--;
+        if (stdinEnded && pendingRequests <= 0) process.exit(0);
       });
     } catch (err) {
       process.stderr.write(`[MCP Bridge] Parse error: ${err.message}\n`);
@@ -178,14 +182,19 @@ function processInput() {
   }
 }
 
+let pendingRequests = 0;
+
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
   inputBuffer += chunk;
   processInput();
 });
 
+let stdinEnded = false;
 process.stdin.on('end', () => {
-  process.exit(0);
+  stdinEnded = true;
+  // Wait for pending async requests to complete before exiting
+  if (pendingRequests <= 0) process.exit(0);
 });
 
 process.stderr.write(`[MCP Bridge] Started (tenant: ${DEFAULT_TENANT}, backend: ${BASE_URL})\n`);
