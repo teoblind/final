@@ -1419,9 +1419,22 @@ export default function DacpCommandDashboard({ onNavigate }) {
             <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
           </div>
           <div className="flex items-center gap-2">
-            {/* Source tabs - show when at least one source is connected */}
+            {/* Active tab external link - comes first */}
+            {leadsTab === 'hubspot' && hubspotConnected && (
+              <a href="https://app.hubspot.com" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-[#ff7a59] hover:underline">
+                <ExternalLink size={10} /> HubSpot
+              </a>
+            )}
+            {leadsTab === 'sheet' && leadsSheet?.configured && (
+              <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-[#1e3a5f] hover:underline">
+                <ExternalLink size={10} /> {leadsSheet.sheetTitle}
+              </a>
+            )}
+            {/* Source tabs */}
             {(leadsSheet?.configured || hubspotConnected) && (
-              <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden mr-1">
+              <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden">
                 {leadsSheet?.configured && (
                   <button onClick={() => setLeadsTab('sheet')}
                     className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${leadsTab === 'sheet' ? 'bg-[#1e3a5f] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}>
@@ -1436,13 +1449,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 )}
               </div>
             )}
-            {/* Actions for active tab */}
+            {/* Tab-specific action buttons */}
             {leadsTab === 'sheet' && leadsSheet?.configured && (
               <>
-                <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[11px] text-[#1e3a5f] hover:underline">
-                  <ExternalLink size={10} /> {leadsSheet.sheetTitle}
-                </a>
                 <button onClick={() => setShowLinkModal(true)}
                   className="text-[10px] text-terminal-muted hover:text-terminal-text px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#f5f4f0]">
                   Change
@@ -1455,20 +1464,14 @@ export default function DacpCommandDashboard({ onNavigate }) {
               </>
             )}
             {leadsTab === 'hubspot' && hubspotConnected && (
-              <>
-                <a href="https://app.hubspot.com" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-[11px] text-[#ff7a59] hover:underline">
-                  <ExternalLink size={10} /> Open HubSpot
-                </a>
-                <button onClick={async () => {
-                  await fetch(`${API_BASE}/v1/hubspot/disconnect`, { method: 'POST', headers: getAuthHeaders() });
-                  setHubspotConnected(false); setHubspotPipeline(null); setLeadsTab('sheet');
-                }}
-                  className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
-                  title="Disconnect HubSpot">
-                  <Unlink size={10} />
-                </button>
-              </>
+              <button onClick={async () => {
+                await fetch(`${API_BASE}/v1/hubspot/disconnect`, { method: 'POST', headers: getAuthHeaders() });
+                setHubspotConnected(false); setHubspotPipeline(null); setLeadsTab('sheet');
+              }}
+                className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
+                title="Disconnect HubSpot">
+                <Unlink size={10} />
+              </button>
             )}
             {/* Link buttons for unconnected sources */}
             {!leadsSheet?.configured && (
