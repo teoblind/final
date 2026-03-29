@@ -309,12 +309,12 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     let fullResponse = '';
     let stderr = '';
     let settled = false;
-    let buffer = '';  // Buffer for incomplete JSON lines
 
+    // Use --output-format text so stdout streams tokens in real-time through SSH.
+    // stream-json emits complete message events (no per-token deltas).
     const claudeArgs = [
       '-p', fullMessage,
-      '--output-format', 'stream-json',
-      '--verbose',
+      '--output-format', 'text',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools',
@@ -351,48 +351,12 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     proc.stdin.end();
 
+    // With --output-format text, stdout gets raw text as tokens are generated.
+    // SSH forwards stdout chunks in real-time, giving us natural streaming.
     proc.stdout.on('data', (chunk) => {
-      buffer += chunk.toString();
-      // Process complete lines (stream-json is newline-delimited JSON)
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // Keep incomplete last line in buffer
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-          // Extract text from stream-json events
-          // Claude CLI stream-json emits objects with type: "assistant" containing content blocks
-          if (event.type === 'assistant' && event.message?.content) {
-            for (const block of event.message.content) {
-              if (block.type === 'text' && block.text) {
-                fullResponse += block.text;
-                onText(block.text);
-              }
-            }
-          }
-          // Content block delta events (partial text as it streams)
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            fullResponse += event.delta.text;
-            onText(event.delta.text);
-          }
-          // Result message at the end contains the full text
-          if (event.type === 'result' && event.result) {
-            // If we haven't captured any text yet (e.g., different event format),
-            // extract from the result
-            if (!fullResponse && typeof event.result === 'string') {
-              fullResponse = event.result;
-              onText(event.result);
-            }
-          }
-        } catch {
-          // Not valid JSON - might be plain text output, forward it
-          if (line.trim() && !fullResponse) {
-            fullResponse += line;
-            onText(line);
-          }
-        }
-      }
+      const text = chunk.toString();
+      fullResponse += text;
+      onText(text);
     });
 
     proc.stderr.on('data', (chunk) => { stderr += chunk; });
@@ -417,34 +381,6 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
       settled = true;
       clearTimeout(timer);
       const durationMs = Date.now() - start;
-
-      // Process any remaining buffer
-      if (buffer.trim()) {
-        try {
-          const event = JSON.parse(buffer);
-          if (event.type === 'assistant' && event.message?.content) {
-            for (const block of event.message.content) {
-              if (block.type === 'text' && block.text) {
-                fullResponse += block.text;
-                onText(block.text);
-              }
-            }
-          }
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            fullResponse += event.delta.text;
-            onText(event.delta.text);
-          }
-          if (event.type === 'result' && event.result && !fullResponse) {
-            fullResponse = typeof event.result === 'string' ? event.result : '';
-            if (fullResponse) onText(fullResponse);
-          }
-        } catch {
-          if (!fullResponse) {
-            fullResponse = buffer.trim();
-            onText(buffer.trim());
-          }
-        }
-      }
 
       if (code !== 0 && !fullResponse.trim()) {
         const errMsg = stderr.slice(0, 500);
@@ -512,12 +448,10 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
     let fullResponse = '';
     let stderr = '';
     let settled = false;
-    let buffer = '';
 
     const args = [
       '-p', fullMessage,
-      '--output-format', 'stream-json',
-      '--verbose',
+      '--output-format', 'text',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools',
@@ -540,37 +474,9 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
     proc.stdin.end();
 
     proc.stdout.on('data', (chunk) => {
-      buffer += chunk.toString();
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-          if (event.type === 'assistant' && event.message?.content) {
-            for (const block of event.message.content) {
-              if (block.type === 'text' && block.text) {
-                fullResponse += block.text;
-                onText(block.text);
-              }
-            }
-          }
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            fullResponse += event.delta.text;
-            onText(event.delta.text);
-          }
-          if (event.type === 'result' && event.result && !fullResponse) {
-            fullResponse = typeof event.result === 'string' ? event.result : '';
-            if (fullResponse) onText(fullResponse);
-          }
-        } catch {
-          if (line.trim() && !fullResponse) {
-            fullResponse += line;
-            onText(line);
-          }
-        }
-      }
+      const text = chunk.toString();
+      fullResponse += text;
+      onText(text);
     });
 
     proc.stderr.on('data', (chunk) => { stderr += chunk; });
@@ -594,16 +500,6 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
       settled = true;
       clearTimeout(timer);
       const durationMs = Date.now() - start;
-
-      if (buffer.trim()) {
-        try {
-          const event = JSON.parse(buffer);
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            fullResponse += event.delta.text;
-            onText(event.delta.text);
-          }
-        } catch {}
-      }
 
       if (code !== 0 && !fullResponse.trim()) {
         reject(new Error(`Claude agent stream exited with code ${code}: ${stderr.slice(0, 200)}`));
