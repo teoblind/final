@@ -92,6 +92,7 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
 
     await chatStream(tenantId, agentId, visitorId, text, threadId, { helpMode: true }, (chunk) => {
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      if (res.flush) res.flush();
     });
 
     res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
@@ -606,6 +607,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
       res.flushHeaders();
       await chatStream(tenantId, agentId, userId, text, threadId, { helpMode: true }, (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      if (res.flush) res.flush();
       });
       res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       res.end();
@@ -635,7 +637,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
       // Detect special events from the tool loop
       try {
-        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"') || chunk.includes('"_type":"task_proposal"'))) {
+        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"') || chunk.includes('"_type":"task_proposal"') || chunk.includes('"_type":"workspace"'))) {
           const parsed = JSON.parse(chunk);
           if (parsed._type === 'progress') {
             res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
@@ -649,9 +651,14 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
             res.write(`data: ${JSON.stringify({ type: 'task_proposal', ...parsed })}\n\n`);
             return;
           }
+          if (parsed._type === 'workspace') {
+            res.write(`data: ${JSON.stringify({ type: 'workspace', action: parsed.action, wsType: parsed.wsType, fileId: parsed.fileId, url: parsed.url, title: parsed.title, folder: parsed.folder })}\n\n`);
+            return;
+          }
         }
       } catch {}
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      if (res.flush) res.flush();
     });
 
     res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
@@ -695,6 +702,7 @@ router.post('/:agentId/messages/stream', async (req, res) => {
       res.flushHeaders();
       await chatStream(tenantId, agentId, userId, text, threadId, { helpMode: true }, (chunk) => {
         res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      if (res.flush) res.flush();
       });
       res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
       res.end();
@@ -721,7 +729,7 @@ router.post('/:agentId/messages/stream', async (req, res) => {
     await streamFn(tenantId, agentId, userId, content.trim(), threadId, { helpMode: !!helpMode }, (chunk) => {
       // Detect special events from the tool loop
       try {
-        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"') || chunk.includes('"_type":"task_proposal"'))) {
+        if (chunk.startsWith('{') && (chunk.includes('"_type":"progress"') || chunk.includes('"_type":"context_update"') || chunk.includes('"_type":"task_proposal"') || chunk.includes('"_type":"workspace"'))) {
           const parsed = JSON.parse(chunk);
           if (parsed._type === 'progress') {
             res.write(`data: ${JSON.stringify({ type: 'progress', iteration: parsed.iteration, maxTurns: parsed.maxTurns, tools: parsed.tools })}\n\n`);
@@ -735,9 +743,14 @@ router.post('/:agentId/messages/stream', async (req, res) => {
             res.write(`data: ${JSON.stringify({ type: 'task_proposal', ...parsed })}\n\n`);
             return;
           }
+          if (parsed._type === 'workspace') {
+            res.write(`data: ${JSON.stringify({ type: 'workspace', action: parsed.action, wsType: parsed.wsType, fileId: parsed.fileId, url: parsed.url, title: parsed.title, folder: parsed.folder })}\n\n`);
+            return;
+          }
         }
       } catch {}
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      if (res.flush) res.flush();
     });
 
     res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
@@ -834,6 +847,7 @@ router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('
         }
       } catch {}
       res.write(`data: ${JSON.stringify({ type: 'text', text: chunk })}\n\n`);
+      if (res.flush) res.flush();
     });
 
     res.write('data: [DONE]\n\n');

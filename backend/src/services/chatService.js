@@ -4269,6 +4269,20 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
           lastToolInput = toolInput;
           lastToolResult = toolResult;
 
+          // Emit workspace file created event so frontend can show inline Drive card
+          if (toolName.startsWith('workspace_create_') && toolResult && !toolIsError) {
+            const wsTypeMap = { workspace_create_doc: 'doc', workspace_create_sheet: 'sheet', workspace_create_slides: 'slides' };
+            onChunk(JSON.stringify({
+              _type: 'workspace',
+              action: 'created',
+              wsType: wsTypeMap[toolName] || 'doc',
+              fileId: toolResult.file_id,
+              url: toolResult.url,
+              title: toolInput?.title || 'Untitled',
+              folder: toolInput?.folder || '',
+            }));
+          }
+
           // Emit task proposal as a special SSE event so frontend can render an inline card
           if (toolName === 'propose_task' && toolResult?._task_proposal) {
             onChunk(JSON.stringify({

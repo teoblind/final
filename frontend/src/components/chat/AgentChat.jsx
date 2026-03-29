@@ -3188,6 +3188,21 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 const newThread = { id: event.threadId, title: 'New chat', visibility: 'private', userId: null, isPinned: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
                 setThreads(prev => [newThread, ...prev]);
                 setActiveThreadId(event.threadId);
+              } else if (event.type === 'workspace') {
+                // Attach workspace card (Google Drive file) to the current agent message
+                setMessages(prev => prev.map(m =>
+                  m.id === agentMsgId ? { ...m, workspace: { action: event.action, type: event.wsType, fileId: event.fileId, url: event.url, title: event.title, folder: event.folder } } : m
+                ));
+                // Add to context panel FILES section immediately
+                if (event.url) {
+                  setContextData(prev => ({
+                    ...prev,
+                    recentFiles: [
+                      { name: event.title || 'Untitled', drive_url: event.url, category: event.wsType || 'doc' },
+                      ...(prev?.recentFiles || []),
+                    ],
+                  }));
+                }
               } else if (event.type === 'task_proposal') {
                 // Add task proposal card to the current agent message
                 setMessages(prev => prev.map(m =>

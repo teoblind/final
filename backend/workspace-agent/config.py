@@ -35,9 +35,16 @@ TENANT_CONFIG = {
 }
 
 
+TENANT_ALIASES = {
+    "dacp-construction-001": "dacp",
+    "sangha-renewables": "sangha",
+    "zhan-capital": "zhan",
+}
+
 def get_tenant_config(tenant_id: str) -> dict:
     """Return config for a given tenant, falling back to defaults."""
-    return TENANT_CONFIG.get(tenant_id, TENANT_CONFIG.get("sangha", {}))
+    normalized = TENANT_ALIASES.get(tenant_id, tenant_id)
+    return TENANT_CONFIG.get(normalized, TENANT_CONFIG.get("sangha", {}))
 
 # Fal AI (image generation)
 FAL_AI_API_KEY = os.getenv("FAL_AI_API_KEY", "")
