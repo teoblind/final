@@ -4111,6 +4111,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   }
 
   // Task proposal addon — tells agents when/how to use propose_task
+  const taskProposalAgentsStream = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   const taskProposalAddonStream = taskProposalAgentsStream.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + knowledgeContext + siblingContext;
@@ -4129,7 +4130,6 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (emailAgents.includes(agentId)) tools.push(...EMAIL_TOOLS);
   if (esAgents.includes(agentId)) tools.push(...EMAIL_SECURITY_TOOLS);
   tools.push(...WEB_TOOLS);
-  const taskProposalAgentsStream = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   if (taskProposalAgentsStream.includes(agentId)) tools.push(...TASK_PROPOSAL_TOOLS);
   if (legalAgents.includes(agentId)) tools.push(...LEGAL_TOOLS);
   if (docAgents.includes(agentId)) tools.push(...DOCUMENT_TOOLS);
