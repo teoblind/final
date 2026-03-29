@@ -639,6 +639,57 @@ HOW TO USE IT WELL:
 - If the user mentioned specific entities or documents in the conversation, include them in the sources array
 - After proposing, tell the user what you proposed and that they can review/approve it in chat or on the Command dashboard`;
 
+// ─── Agent Delegation Tools ──────────────────────────────────────────────────
+
+const DELEGATION_TOOLS = [
+  {
+    name: 'delegate_to_agent',
+    description: `Delegate a task to a specialized sub-agent. Use this when the user's request falls under another agent's domain. The sub-agent will execute the task in its own thread (visible in its chat section) and return the results here.
+
+Available agents to delegate to:
+- "comms" — Communications, spreadsheets, CRM data, outreach tracking
+- "email" — Email drafting, inbox management, sending emails
+- "estimating" — Construction estimates, bid analysis, takeoffs
+- "documents" — Document creation, Google Docs/Sheets
+- "lead-engine" — Lead discovery, enrichment, outreach pipeline
+- "sales" — Sales calls, follow-ups, CRM pipeline management
+- "workflow" — Job tracking, project management, scheduling
+
+WHEN TO DELEGATE:
+- User asks Hivemind for something that clearly belongs to a sub-agent's specialty
+- User asks for spreadsheet creation, email sending, lead generation, etc.
+- The task requires a specific agent's tools and context
+
+WHEN NOT TO DELEGATE:
+- Simple questions you can answer directly
+- The user is already chatting with the right agent
+- General conversation or brainstorming`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        target_agent: { type: 'string', description: 'Agent ID to delegate to (comms, email, estimating, documents, lead-engine, sales, workflow)' },
+        task_description: { type: 'string', description: 'Clear instruction for the sub-agent. Include all relevant context from the current conversation.' },
+        thread_title: { type: 'string', description: 'Short title for the delegated thread (shown in the sub-agent chat sidebar)' },
+      },
+      required: ['target_agent', 'task_description'],
+    },
+  },
+];
+
+const DELEGATION_AGENTS = ['hivemind', 'sangha', 'zhan']; // only orchestrator agents can delegate
+
+const DELEGATION_PROMPT_ADDON = `
+
+--- AGENT DELEGATION ---
+You have a "delegate_to_agent" tool that lets you hand off tasks to specialized sub-agents. When the user asks for something that belongs to another agent's domain (like creating a spreadsheet, sending an email, running lead discovery, generating an estimate), delegate instead of attempting it yourself.
+
+The sub-agent will:
+1. Execute the task in its own chat thread (visible in its section of the sidebar)
+2. Use its specialized tools and system prompt
+3. Return the results back to you
+
+After delegating, summarize what the sub-agent accomplished and provide any links/outputs.`;
+
 // ─── Mining / IPP Tools (Sangha tenant) ─────────────────────────────────────
 
 // ─── Web Browsing Tools ──────────────────────────────────────────────────────
@@ -2507,6 +2558,84 @@ async function searchDriveDirectly(toolInput, tenantId) {
   }));
 }
 
+// ─── Agent Delegation Tool Caller ────────────────────────────────────────────
+
+const DELEGATABLE_AGENTS = new Set(['comms', 'email', 'estimating', 'documents', 'lead-engine', 'sales', 'workflow', 'curtailment', 'pools']);
+
+async function callDelegationTool(toolInput, tenantId) {
+  const { target_agent, task_description, thread_title } = toolInput;
+  const userId = _toolContext.userId;
+  const onChunk = _toolContext.onChunk;
+
+  if (!DELEGATABLE_AGENTS.has(target_agent)) {
+    return { error: `Cannot delegate to "${target_agent}". Valid targets: ${[...DELEGATABLE_AGENTS].join(', ')}` };
+  }
+
+  if (!userId) {
+    return { error: 'Delegation requires a user context.' };
+  }
+
+  // 1. Create a thread in the target agent's chat
+  const threadId = `thread_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const title = thread_title || `Delegated: ${task_description.slice(0, 50)}`;
+  createThread(threadId, tenantId, target_agent, userId, title, 'private');
+
+  // 2. Emit delegation event to frontend so it can show the card
+  if (onChunk) {
+    onChunk(JSON.stringify({
+      _type: 'delegation',
+      action: 'started',
+      targetAgent: target_agent,
+      threadId,
+      threadTitle: title,
+      taskDescription: task_description,
+    }));
+  }
+
+  // 3. Execute the task via chat() in the target agent's context
+  try {
+    const result = await chat(tenantId, target_agent, userId, task_description, threadId, { skipDelegation: true });
+
+    // 4. Emit completion event
+    if (onChunk) {
+      onChunk(JSON.stringify({
+        _type: 'delegation',
+        action: 'completed',
+        targetAgent: target_agent,
+        threadId,
+        threadTitle: title,
+      }));
+    }
+
+    return {
+      status: 'completed',
+      target_agent,
+      thread_id: threadId,
+      thread_title: title,
+      response_summary: result.response?.slice(0, 2000) || 'Task completed.',
+      workspace: result.workspace || null,
+    };
+  } catch (err) {
+    // Emit failure event
+    if (onChunk) {
+      onChunk(JSON.stringify({
+        _type: 'delegation',
+        action: 'failed',
+        targetAgent: target_agent,
+        threadId,
+        error: err.message,
+      }));
+    }
+
+    return {
+      status: 'failed',
+      target_agent,
+      thread_id: threadId,
+      error: err.message,
+    };
+  }
+}
+
 // ─── Lead Engine Tool Caller ─────────────────────────────────────────────────
 
 async function callLeadEngineTool(toolName, toolInput, tenantId) {
@@ -3414,11 +3543,11 @@ async function executeToolWithRetry(toolName, toolInput, tenantId) {
   return { toolResult, toolIsError };
 }
 
-// _toolContext is set per-request to provide threadId and onContextUpdate for context tools
-let _toolContext = { threadId: null, onContextUpdate: null, agentId: null };
+// _toolContext is set per-request to provide threadId, userId, tenantId, onContextUpdate, onChunk for context + delegation tools
+let _toolContext = { threadId: null, onContextUpdate: null, agentId: null, userId: null, tenantId: null, onChunk: null };
 
-function setToolContext(threadId, onContextUpdate, agentId) {
-  _toolContext = { threadId, onContextUpdate, agentId };
+function setToolContext(threadId, onContextUpdate, agentId, userId = null, tenantId = null, onChunk = null) {
+  _toolContext = { threadId, onContextUpdate, agentId, userId, tenantId, onChunk };
 }
 
 async function routeToolCall(toolName, toolInput, tenantId) {
@@ -3443,6 +3572,7 @@ async function routeToolCall(toolName, toolInput, tenantId) {
   if (TOOL_CATEGORIES.dacp.includes(toolName)) return await callDacpTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.scheduler.includes(toolName)) return await callSchedulerTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.taskProposal.includes(toolName)) return await callTaskProposalTool(toolName, toolInput, tenantId);
+  if (toolName === 'delegate_to_agent') return await callDelegationTool(toolInput, tenantId);
   return await callWorkspaceTool(toolName, toolInput, tenantId);
 }
 
@@ -3690,7 +3820,10 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   const taskProposalAgents = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   const taskProposalAddon = taskProposalAgents.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
 
-  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + knowledgeContext + siblingContext;
+  // Agent delegation addon — tells orchestrator agents about delegation (skip if already in a delegation)
+  const delegationAddon = (DELEGATION_AGENTS.includes(agentId) && !options.skipDelegation) ? DELEGATION_PROMPT_ADDON : '';
+
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + delegationAddon + knowledgeContext + siblingContext;
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -3733,6 +3866,10 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   if (taskProposalAgents.includes(agentId)) {
     tools.push(...TASK_PROPOSAL_TOOLS);
   }
+  // Agent delegation — allows orchestrator agents to delegate to sub-agents (skip if already in a delegation to prevent recursion)
+  if (DELEGATION_AGENTS.includes(agentId) && !options.skipDelegation) {
+    tools.push(...DELEGATION_TOOLS);
+  }
   // Legal document tools
   if (legalAgents.includes(agentId)) {
     tools.push(...LEGAL_TOOLS);
@@ -3773,7 +3910,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   }
 
   // Set tool context for context panel tools (threadId needed for pin_to_context)
-  setToolContext(threadId, null, agentId);
+  setToolContext(threadId, null, agentId, userId, tenantId);
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -4236,7 +4373,10 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const taskProposalAgentsStream = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   const taskProposalAddonStream = taskProposalAgentsStream.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
 
-  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + knowledgeContext + siblingContext;
+  // Agent delegation addon — tells orchestrator agents about delegation
+  const delegationAddonStream = DELEGATION_AGENTS.includes(agentId) ? DELEGATION_PROMPT_ADDON : '';
+
+  let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + delegationAddonStream + knowledgeContext + siblingContext;
 
   // ─── Build tools list (must match chat()) ───────────────────────────────
   const tools = [...WORKSPACE_TOOLS];
@@ -4253,6 +4393,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (esAgents.includes(agentId)) tools.push(...EMAIL_SECURITY_TOOLS);
   tools.push(...WEB_TOOLS);
   if (taskProposalAgentsStream.includes(agentId)) tools.push(...TASK_PROPOSAL_TOOLS);
+  if (DELEGATION_AGENTS.includes(agentId)) tools.push(...DELEGATION_TOOLS);
   if (legalAgents.includes(agentId)) tools.push(...LEGAL_TOOLS);
   if (docAgents.includes(agentId)) tools.push(...DOCUMENT_TOOLS);
   const calendarAgents = ['hivemind', 'sangha', 'zhan'];
@@ -4278,7 +4419,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   // Set tool context for context panel tools — emits SSE context_update events
   setToolContext(threadId, (update) => {
     onChunk(JSON.stringify({ _type: 'context_update', ...update }));
-  }, agentId);
+  }, agentId, userId, tenantId, onChunk);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     const fallback = 'I\'m currently running in demo mode (no API key configured).';

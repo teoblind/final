@@ -354,6 +354,20 @@ function AppContent() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+
+  // Listen for cross-agent navigation events (delegation "View Thread" button)
+  useEffect(() => {
+    const onNav = (e) => {
+      const { tab, threadId } = e.detail || {};
+      if (tab) {
+        handleSetActiveTab(tab);
+        // Store pending threadId so AgentChat auto-selects it on mount (uses existing open_thread_id pattern)
+        if (threadId) localStorage.setItem('open_thread_id', threadId);
+      }
+    };
+    window.addEventListener('coppice:navigate', onNav);
+    return () => window.removeEventListener('coppice:navigate', onNav);
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);

@@ -133,6 +133,10 @@ const TOOL_LABELS = {
   delete_scheduled_task: 'Deleting Scheduled Task',
   // Code execution
   execute_code: 'Running Code',
+  // Delegation
+  delegate_to_agent: 'Delegating to Agent',
+  // Task proposal
+  propose_task: 'Proposing Task',
 };
 
 function formatContent(text) {
@@ -609,6 +613,51 @@ function WorkspaceCard({ data }) {
   }
 
   return null;
+}
+
+// ─── Delegation Card ─────────────────────────────────────────────────────────────
+function DelegationCard({ data, onNavigate }) {
+  const agentMeta = AGENTS[data.targetAgent] || { name: data.targetAgent, initial: data.targetAgent?.[0]?.toUpperCase() || '?', color: '#6b7280' };
+  const isCompleted = data.action === 'completed';
+  const isFailed = data.action === 'failed';
+  const isStarted = data.action === 'started';
+
+  return (
+    <div className="mt-2.5 bg-terminal-panel border border-[#e8e6e1] rounded-[14px] overflow-hidden">
+      <div className="px-3.5 py-3 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 relative" style={{ backgroundColor: agentMeta.bgColor || '#eef3f9' }}>
+          <span className="text-[15px] font-bold" style={{ color: agentMeta.color }}>{agentMeta.initial}</span>
+          {isStarted && (
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-yellow-400 border-2 border-white animate-pulse" />
+          )}
+          {isCompleted && (
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white" />
+          )}
+          {isFailed && (
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-500 border-2 border-white" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-terminal-text truncate">
+            {isStarted ? `Delegating to ${agentMeta.name}...` : isCompleted ? `${agentMeta.name} completed task` : `${agentMeta.name} failed`}
+          </div>
+          <div className="text-[11px] text-[#9a9a92] mt-0.5 truncate">{data.threadTitle || data.taskDescription}</div>
+        </div>
+        {data.threadId && (
+          <button
+            onClick={() => onNavigate?.(data.targetAgent, data.threadId)}
+            className="px-3 py-[6px] rounded-lg text-[11px] font-semibold text-white shrink-0 hover:opacity-90 transition-opacity"
+            style={{ backgroundColor: agentMeta.color }}
+          >
+            View Thread
+          </button>
+        )}
+      </div>
+      {isFailed && data.error && (
+        <div className="px-3.5 py-2 border-t border-[#f0eeea] text-[11px] text-red-600">{data.error}</div>
+      )}
+    </div>
+  );
 }
 
 // ─── Invoke Indicator ───────────────────────────────────────────────────────────
@@ -1297,6 +1346,10 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
         {msg.email && <EmailCard data={msg.email} />}
         {msg.workspace && <WorkspaceCard data={msg.workspace} />}
         {msg.taskProposal && <TaskProposalCard data={msg.taskProposal} />}
+        {msg.delegation && <DelegationCard data={msg.delegation} onNavigate={(targetAgent, threadId) => {
+          // Navigate to the delegated thread via custom event (App.jsx listens)
+          window.dispatchEvent(new CustomEvent('coppice:navigate', { detail: { tab: `${targetAgent}-chat`, threadId } }));
+        }} />}
 
         {/* After-content text */}
         {msg.afterContent && (
@@ -3239,6 +3292,11 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 // Add task proposal card to the current agent message
                 setMessages(prev => prev.map(m =>
                   m.id === agentMsgId ? { ...m, taskProposal: { assignment_id: event.assignment_id, title: event.title, description: event.description, category: event.category, priority: event.priority, sources: event.sources } } : m
+                ));
+              } else if (event.type === 'delegation') {
+                // Add/update delegation card on the current agent message
+                setMessages(prev => prev.map(m =>
+                  m.id === agentMsgId ? { ...m, delegation: { action: event.action, targetAgent: event.targetAgent, threadId: event.threadId, threadTitle: event.threadTitle, taskDescription: event.taskDescription, error: event.error } } : m
                 ));
               } else if (event.type === 'error') {
                 throw new Error(event.error);
