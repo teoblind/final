@@ -87,6 +87,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [driveQuery, setDriveQuery] = useState('');
+  // Task detail popup
+  const [taskDetail, setTaskDetail] = useState(null); // assignment object or null
   // Document preview modal
   const [docPreview, setDocPreview] = useState(null); // { type, url, title, assignment }
   // Share modal state
@@ -647,14 +649,19 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 <div key={a.id} className="border-b border-[#f0eeea] last:border-b-0">
                   <div className="flex items-start gap-3 px-[18px] py-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
-                        <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
-                        <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
-                          {a.category?.replace('_', ' ')}
-                        </span>
+                      <div
+                        className="cursor-pointer hover:bg-[#f5f4f0] -mx-1 px-1 rounded transition-colors"
+                        onClick={() => setTaskDetail(a)}
+                      >
+                        <div className="flex items-center gap-2 mb-0.5">
+                          {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
+                          <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
+                          <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
+                            {a.category?.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
                       </div>
-                      <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
                       {a.status === 'proposed' && a.input_fields_json && (() => {
                         try {
                           const fields = JSON.parse(a.input_fields_json);
@@ -1765,6 +1772,140 @@ export default function DacpCommandDashboard({ onNavigate }) {
         </div>
       </div>
     </div>
+
+    {/* Task Detail Modal */}
+    {taskDetail && (() => {
+      const a = taskDetail;
+      const catColors = {
+        follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
+        estimate: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+        outreach: 'bg-purple-50 text-purple-600 border-purple-200',
+        admin: 'bg-gray-50 text-gray-600 border-gray-200',
+        research: 'bg-amber-50 text-amber-600 border-amber-200',
+        analysis: 'bg-indigo-50 text-indigo-600 border-indigo-200',
+        document: 'bg-rose-50 text-rose-600 border-rose-200',
+      };
+      let sources = [];
+      try { sources = JSON.parse(a.context_json || '[]'); } catch {}
+      let artifacts = [];
+      try { artifacts = JSON.parse(a.output_artifacts_json || '[]'); } catch {}
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setTaskDetail(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-[#e8e6e1] bg-[#faf9f7]">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0 pr-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">HIGH</span>}
+                    {a.priority === 'medium' && <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">MED</span>}
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
+                      {a.category?.replace('_', ' ')}
+                    </span>
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-semibold ${
+                      a.status === 'proposed' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                      a.status === 'in_progress' || a.status === 'confirmed' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                      a.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                      'bg-gray-50 text-gray-600 border-gray-200'
+                    }`}>{a.status?.replace('_', ' ')}</span>
+                  </div>
+                  <h3 className="text-[15px] font-bold text-[#111110] font-heading leading-snug">{a.title}</h3>
+                </div>
+                <button onClick={() => setTaskDetail(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors shrink-0">
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              {/* Description */}
+              <div>
+                <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Description</div>
+                <div className="text-[13px] text-[#333] leading-relaxed">{a.description}</div>
+              </div>
+              {/* Action Prompt (what the agent will do) */}
+              {a.action_prompt && (
+                <div>
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Execution Plan</div>
+                  <div className="text-[12px] text-[#555] leading-relaxed bg-[#f5f4f0] rounded-lg px-3 py-2.5 whitespace-pre-wrap">{a.action_prompt}</div>
+                </div>
+              )}
+              {/* Sources / Context */}
+              {sources.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Data Sources</div>
+                  <div className="space-y-1">
+                    {sources.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[12px] text-[#555]">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#1e3a5f] shrink-0" />
+                        <span>{s.name || s.type || JSON.stringify(s)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Result (if completed) */}
+              {a.result_summary && (
+                <div>
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Result</div>
+                  <div className="text-[12px] text-[#333] leading-relaxed bg-emerald-50 rounded-lg px-3 py-2.5 whitespace-pre-wrap">{a.result_summary}</div>
+                </div>
+              )}
+              {/* Artifacts */}
+              {artifacts.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1">Deliverables</div>
+                  <div className="space-y-1.5">
+                    {artifacts.map((art, i) => {
+                      const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
+                      return (
+                        <a key={i} href={href} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#e8e6e1] hover:bg-[#f5f4f0] transition-colors text-[12px] text-[#1e3a5f] font-medium">
+                          <ExternalLink size={12} className="shrink-0" />
+                          <span className="truncate">{art.label || art.filename || art.type}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Metadata */}
+              <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-[#9a9a92] pt-2 border-t border-[#f0eeea]">
+                {a.created_at && <span>Created: {new Date(a.created_at).toLocaleDateString()}</span>}
+                {a.confirmed_at && <span>Started: {new Date(a.confirmed_at).toLocaleDateString()}</span>}
+                {a.completed_at && <span>Completed: {new Date(a.completed_at).toLocaleDateString()}</span>}
+                {a.agent_id && <span>Agent: {a.agent_id}</span>}
+              </div>
+            </div>
+            {/* Footer actions */}
+            <div className="px-5 py-3 border-t border-[#e8e6e1] bg-[#faf9f7] flex items-center justify-between">
+              <div className="text-[10px] text-[#9a9a92] font-mono">{a.id}</div>
+              <div className="flex items-center gap-2">
+                {a.status === 'proposed' && (
+                  <>
+                    <button
+                      onClick={() => { handleDismissAssignment(a.id); setTaskDetail(null); }}
+                      className="px-3 py-1.5 text-[11px] font-heading font-semibold text-[#9a9a92] hover:text-red-500 rounded-md hover:bg-red-50 transition-colors"
+                    >Dismiss</button>
+                    <button
+                      onClick={() => { handleConfirmAssignment(a.id); setTaskDetail(null); }}
+                      disabled={processingAssignment === a.id}
+                      className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                    ><Check size={11} /> Run Task</button>
+                  </>
+                )}
+                {a.status === 'completed' && a.thread_id && (
+                  <button
+                    onClick={() => { localStorage.setItem('open_thread_id', a.thread_id); window.location.hash = 'hivemind-chat'; setTaskDetail(null); }}
+                    className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a]"
+                  ><MessageSquare size={11} /> View Thread</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
 
     {/* Document Preview Modal */}
     {docPreview && (
