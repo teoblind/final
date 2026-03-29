@@ -194,54 +194,14 @@ function encodeSubject(subject) {
 }
 
 /**
- * Send a plain-text email (no attachments).
+ * Send an email (no attachments).
+ * ALWAYS converts body to HTML - plain text emails are never sent.
+ * Callers can pass plain text or markdown in `body` - it gets auto-converted.
  */
 export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references }) {
-  const { gmail, sender } = getGmailClient(tenantId);
-
-  const bodyWithSig = body + getSignature(tenantId, false);
-  const bodyBase64 = Buffer.from(bodyWithSig, 'utf-8').toString('base64');
-  const headers = [
-    `From: ${sender}`,
-    `To: ${to}`,
-    cc ? `Cc: ${cc}` : null,
-    bcc ? `Bcc: ${bcc}` : null,
-    `Subject: ${encodeSubject(subject)}`,
-    inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
-    references ? `References: ${references}` : null,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
-    'Content-Transfer-Encoding: base64',
-  ].filter(Boolean);
-
-  const rawMessage = [...headers, '', bodyBase64].join('\r\n');
-  const encodedMessage = Buffer.from(rawMessage)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  const requestBody = { raw: encodedMessage };
-  if (threadId) requestBody.threadId = threadId;
-
-  const result = await gmail.users.messages.send({
-    userId: 'me',
-    requestBody,
-  });
-
-  console.log(`Email sent to ${to}: ${result.data.id}`);
-
-  try {
-    insertActivity({
-      tenantId: tenantId || 'default', type: 'out',
-      title: `Email sent to ${to}`,
-      subtitle: subject,
-      detailJson: JSON.stringify({ to, subject, body: body.slice(0, 5000), cc, bcc }),
-      sourceType: 'email', agentId: 'coppice',
-    });
-  } catch (e) { /* non-critical */ }
-
-  return { messageId: result.data.id, threadId: result.data.threadId };
+  console.warn(`[emailService] sendEmail() called - auto-converting body to HTML for ${to}`);
+  const html = markdownToEmailHtml(body || '');
+  return sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references });
 }
 
 /**
@@ -277,15 +237,15 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
   ].filter(Boolean);
 
-  const isHtml = !!html;
-  const rawContent = isHtml ? wrapHtmlBody(html) : (body || '');
-  const withSig = isHtml
-    ? rawContent.replace('</body>', getSignature(tenantId, true) + '\n</body>')
-    : rawContent + getSignature(tenantId, false);
-  const content = isHtml
-    ? withSig.replace('</body>', getTrackingPixel(tenantId, inReplyTo || threadId) + '\n</body>')
-    : withSig;
-  const contentType = isHtml ? 'text/html' : 'text/plain';
+  // ALWAYS send as HTML - convert body to HTML if no html param provided
+  const htmlContent = html || markdownToEmailHtml(body || '');
+  if (!html) {
+    console.warn(`[emailService] sendEmailWithAttachments() auto-converting body to HTML for ${to}`);
+  }
+  const rawContent = wrapHtmlBody(htmlContent);
+  const withSig = rawContent.replace('</body>', getSignature(tenantId, true) + '\n</body>');
+  const content = withSig.replace('</body>', getTrackingPixel(tenantId, inReplyTo || threadId) + '\n</body>');
+  const contentType = 'text/html';
   const contentBase64 = Buffer.from(content, 'utf-8').toString('base64');
   let messageParts = [
     ...headers,
@@ -370,7 +330,7 @@ function wrapHtmlBody(html) {
 /**
  * Send an HTML email.
  */
-export async function sendHtmlEmail({ to, subject, html, cc, tenantId, threadId, inReplyTo, references, skipSignature }) {
+export async function sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references, skipSignature }) {
   const { gmail, sender } = getGmailClient(tenantId);
 
   const wrappedHtml = wrapHtmlBody(html);
@@ -381,6 +341,7 @@ export async function sendHtmlEmail({ to, subject, html, cc, tenantId, threadId,
     `From: ${sender}`,
     `To: ${to}`,
     cc ? `Cc: ${cc}` : null,
+    bcc ? `Bcc: ${bcc}` : null,
     `Subject: ${encodeSubject(subject)}`,
     inReplyTo ? `In-Reply-To: ${inReplyTo}` : null,
     references ? `References: ${references}` : null,
