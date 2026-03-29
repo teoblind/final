@@ -2803,12 +2803,28 @@ export default function AgentChat({ agentId = 'estimating' }) {
       .then(res => res.json())
       .then(data => {
         if (data.messages && data.messages.length > 0) {
-          setMessages(data.messages.map(m => ({
-            id: m.id,
-            role: m.role === 'assistant' ? 'agent' : m.role,
-            content: m.content,
-            time: new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-          })));
+          setMessages(data.messages.map(m => {
+            // Reconstruct attachments from metadata for messages with uploaded files
+            let attachments;
+            const meta = m.metadata;
+            if (meta?.multimodal && meta.files?.length > 0) {
+              const safeName = (n) => n.replace(/[^a-zA-Z0-9._\-() ]/g, '_');
+              attachments = meta.files.map(f => ({
+                name: f.name,
+                isImage: f.type?.startsWith('image/'),
+                previewUrl: f.type?.startsWith('image/')
+                  ? `${API_BASE}/v1/chat/uploads/${data.threadId}/${encodeURIComponent(safeName(f.name))}?token=${encodeURIComponent(token)}`
+                  : null,
+              }));
+            }
+            return {
+              id: m.id,
+              role: m.role === 'assistant' ? 'agent' : m.role,
+              content: m.content,
+              attachments,
+              time: new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+            };
+          }));
         } else {
           setMessages([]);
         }
@@ -3613,6 +3629,21 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  onPaste={e => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    const imageFiles = [];
+                    for (const item of items) {
+                      if (item.type.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) imageFiles.push(file);
+                      }
+                    }
+                    if (imageFiles.length > 0) {
+                      e.preventDefault();
+                      addFiles(imageFiles);
+                    }
+                  }}
                   placeholder={pendingFiles.length > 0 ? 'Add a message about these files...' : agent.placeholder}
                   rows={1}
                   className="w-full px-4 py-3 pr-11 border-[1.5px] border-terminal-border rounded-[14px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none resize-none min-h-[44px] max-h-[120px] focus:bg-terminal-panel transition-colors placeholder:text-[#c5c5bc]"

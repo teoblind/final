@@ -15,6 +15,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { unlinkSync, mkdirSync, copyFileSync, existsSync } from 'fs';
 import { authenticate } from '../middleware/auth.js';
+import { verifyAccessToken } from '../services/authService.js';
 import { getMessages, getThreadMessages, chat, chatStream, saveMessage } from '../services/chatService.js';
 import { chatStreamSdk, isSdkEnabled } from '../services/agentSdkService.js';
 import { sendEmail, sendEstimateEmail } from '../services/emailService.js';
@@ -105,6 +106,45 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
     } else {
       res.status(500).json({ error: DOWNTIME_MSG });
     }
+  }
+});
+
+// ─── Serve uploaded files (images, etc.) ─────────────────────────────────────
+// Before general auth middleware — uses query param token for <img> tags
+router.get('/uploads/:threadId/:filename', async (req, res) => {
+  try {
+    // Auth via query param (img tags can't send headers) or header
+    const token = req.query.token || req.headers.authorization?.slice(7);
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const tenantId = decoded.tenantId || 'default';
+    const { threadId, filename } = req.params;
+
+    const thread = getThread(threadId);
+    if (!thread || thread.tenant_id !== tenantId) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const safeName = filename.replace(/[^a-zA-Z0-9._\-() ]/g, '_');
+    const filePath = join(UPLOADS_DIR, tenantId, threadId, safeName);
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const ext = safeName.split('.').pop().toLowerCase();
+    const mimeTypes = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', pdf: 'application/pdf' };
+    res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.sendFile(filePath);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
