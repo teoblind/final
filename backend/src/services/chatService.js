@@ -4529,6 +4529,47 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     return { response: fallback };
   }
 
+  // ─── CLI Tunnel Route (Max subscription — no API credits) ─────────────
+  // Route complex streaming queries through Claude Code CLI on Mac via SSH tunnel.
+  // This uses the Max subscription (flat rate) instead of per-token API billing.
+  // Falls through to API for simple queries (Haiku) or when CLI fails.
+  const cliStreamAgents = ['sangha', 'hivemind', 'zhan', 'estimating', 'documents', 'email', 'workflow', 'comms'];
+  const cliStreamEnabled = process.env.CLAUDE_CLI_ENABLED === 'true';
+  const streamAgentConfig = getAgentConfig(agentId);
+  const streamForceApi = streamAgentConfig.force_api === true || !!options.helpMode;
+  const streamForceCli = streamAgentConfig.force_cli === true;
+
+  if (cliStreamEnabled && cliStreamAgents.includes(agentId) && !streamForceApi && (streamForceCli || isComplexQuery(userContent))) {
+    try {
+      const historyForContext = messages.slice(0, -1);
+      const cliResult = await queryClaudeAgent({
+        tenantId,
+        agentId,
+        message: userContent,
+        history: historyForContext,
+        maxTurns: streamAgentConfig.max_turns,
+      });
+
+      const cliResponse = cliResult.response || '';
+      onChunk(cliResponse);
+
+      saveMessage(tenantId, agentId, userId, 'assistant', cliResponse, {
+        model: 'claude-code-cli',
+        duration_ms: cliResult.durationMs,
+        timed_out: cliResult.timedOut || false,
+        route: 'cli-stream',
+      }, threadId);
+
+      _recordRun({ output: cliResponse, model: 'claude-code-cli', route: 'cli-stream', status: cliResult.timedOut ? 'timeout' : 'completed' });
+      return { response: cliResponse };
+    } catch (cliError) {
+      console.error(`[chatStream] CLI error (agent=${agentId}, tenant=${tenantId}):`, cliError.message);
+      _recordRun({ output: null, model: 'claude-code-cli', route: 'cli-stream', status: 'failed', errorMessage: cliError.message });
+      console.log(`[chatStream] Falling back to API route`);
+      // Fall through to API below
+    }
+  }
+
   try {
     // Pass hasTools=true for agents that have tool addons so model routing doesn't downgrade to Haiku
     const hasToolAddons = emailAgents.includes(agentId) || docAgents.includes(agentId) || dacpPromptAgents.includes(agentId);
