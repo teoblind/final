@@ -358,11 +358,11 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     let buffer = '';
     let streamedViaDeltas = false;
+    let hasEmittedText = false; // Track if we've sent any text to add separators between turns
     // Parse stream-json events from claude CLI with --include-partial-messages.
     // Events come as: {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
     // We extract text_delta events for per-token streaming.
-    // The "assistant" events contain full accumulated text - only use as fallback if no deltas arrived.
-    // The "result" event at the end contains the complete response text.
+    // Between agentic turns (text -> tool use -> text), we add newline separators.
     proc.stdout.on('data', (chunk) => {
       let raw = chunk.toString();
       // Strip ANSI escape sequences and normalize line endings from TTY
@@ -378,6 +378,15 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
         try {
           const event = JSON.parse(line);
 
+          // Detect new content block start — add separator between turns
+          if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
+            if (hasEmittedText) {
+              // New text block after previous text — agent did a tool call between turns
+              fullResponse += '\n\n';
+              onText('\n\n');
+            }
+          }
+
           // Per-token streaming: stream_event wrapping content_block_delta
           if (event.type === 'stream_event' && event.event?.type === 'content_block_delta') {
             const delta = event.event.delta;
@@ -385,6 +394,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
               fullResponse += delta.text;
               onText(delta.text);
               streamedViaDeltas = true;
+              hasEmittedText = true;
             }
           }
 
