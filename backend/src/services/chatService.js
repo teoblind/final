@@ -2451,7 +2451,7 @@ async function callWorkspaceTool(toolName, toolInput, tenantId) {
 }
 
 async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
-  const { getKeyVaultValue: kvGet, getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
+  const { getKeyVaultValue: kvGet, getTenantEmailConfig: getEmailCfg, getUserById } = await import('../cache/database.js');
   const { google: googleapis } = await import('googleapis');
 
   const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
@@ -2467,6 +2467,15 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
 
   const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
   oauth.setCredentials({ refresh_token: rToken });
+
+  // Resolve user email for ownership transfer (so file lives in user's Drive, not agent's)
+  let userEmail = null;
+  if (_toolContext.userId) {
+    try {
+      const user = getUserById(_toolContext.userId);
+      if (user?.email) userEmail = user.email;
+    } catch {}
+  }
 
   if (toolName === 'workspace_create_sheet') {
     const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
@@ -2502,11 +2511,32 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
       }] } });
     }
 
-    // Share with anyone with the link
     const drive = googleapis.drive({ version: 'v3', auth: oauth });
-    try {
-      await drive.permissions.create({ fileId: spreadsheetId, requestBody: { type: 'anyone', role: 'writer' } });
-    } catch (e) { console.warn('[Workspace] Failed to share sheet:', e.message); }
+    // Share with user directly (shows in their "Shared with me") + transfer ownership if same domain
+    if (userEmail) {
+      try {
+        // Try ownership transfer first (works within same Workspace domain, no acceptance needed)
+        await drive.permissions.create({
+          fileId: spreadsheetId,
+          transferOwnership: true,
+          sendNotificationEmail: false,
+          requestBody: { type: 'user', role: 'owner', emailAddress: userEmail },
+        });
+      } catch (e) {
+        // Cross-domain: give them writer access + share with link as fallback
+        console.warn('[Workspace] Ownership transfer failed (cross-domain), sharing as writer:', e.message);
+        try {
+          await drive.permissions.create({ fileId: spreadsheetId, sendNotificationEmail: false, requestBody: { type: 'user', role: 'writer', emailAddress: userEmail } });
+        } catch {}
+        try {
+          await drive.permissions.create({ fileId: spreadsheetId, requestBody: { type: 'anyone', role: 'writer' } });
+        } catch {}
+      }
+    } else {
+      try {
+        await drive.permissions.create({ fileId: spreadsheetId, requestBody: { type: 'anyone', role: 'writer' } });
+      } catch (e) { console.warn('[Workspace] Failed to share sheet:', e.message); }
+    }
 
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
     return { file_id: spreadsheetId, url };
@@ -2522,11 +2552,29 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
       await docs.documents.batchUpdate({ documentId: docId, requestBody: { requests: [{ insertText: { location: { index: 1 }, text: toolInput.content } }] } });
     }
 
-    // Share with anyone with the link
     const drive = googleapis.drive({ version: 'v3', auth: oauth });
-    try {
-      await drive.permissions.create({ fileId: docId, requestBody: { type: 'anyone', role: 'writer' } });
-    } catch (e) { console.warn('[Workspace] Failed to share doc:', e.message); }
+    if (userEmail) {
+      try {
+        await drive.permissions.create({
+          fileId: docId,
+          transferOwnership: true,
+          sendNotificationEmail: false,
+          requestBody: { type: 'user', role: 'owner', emailAddress: userEmail },
+        });
+      } catch (e) {
+        console.warn('[Workspace] Ownership transfer failed (cross-domain), sharing as writer:', e.message);
+        try {
+          await drive.permissions.create({ fileId: docId, sendNotificationEmail: false, requestBody: { type: 'user', role: 'writer', emailAddress: userEmail } });
+        } catch {}
+        try {
+          await drive.permissions.create({ fileId: docId, requestBody: { type: 'anyone', role: 'writer' } });
+        } catch {}
+      }
+    } else {
+      try {
+        await drive.permissions.create({ fileId: docId, requestBody: { type: 'anyone', role: 'writer' } });
+      } catch (e) { console.warn('[Workspace] Failed to share doc:', e.message); }
+    }
 
     const url = `https://docs.google.com/document/d/${docId}/edit`;
     return { file_id: docId, url };
