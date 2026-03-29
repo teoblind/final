@@ -1277,6 +1277,11 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
     return newReplies;
   } catch (err) {
+    // Re-throw auth errors so the outer loop can try the fallback OAuth client
+    const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+      err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+      err.message?.includes('Token has been expired or revoked');
+    if (isAuthError) throw err;
     console.error(`[GmailPoll] [${label}] Poll error:`, err.message);
     return 0;
   }
