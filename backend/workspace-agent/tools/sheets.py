@@ -2,7 +2,7 @@
 
 from typing import Optional
 from google_auth import sheets_service, drive_service
-from tools.drive import move_to_folder
+from tools.drive import move_to_folder, share_file
 from tools.comments import add_comment
 
 
@@ -173,6 +173,9 @@ def create_sheet(
                     spreadsheetId=spreadsheet_id,
                     body={"requests": fmt_requests},
                 ).execute()
+
+    # Share with anyone (link) so tenant users can access
+    share_file(spreadsheet_id, tenant_id)
 
     # Move to folder
     if folder:

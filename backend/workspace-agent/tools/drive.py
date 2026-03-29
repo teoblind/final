@@ -208,6 +208,19 @@ def move_to_folder(file_id: str, folder_path: str, tenant_id: str) -> None:
     ).execute()
 
 
+def share_file(file_id: str, tenant_id: str, role: str = "writer") -> None:
+    """Share a file so anyone with the link can access it."""
+    svc = drive_service(tenant_id)
+    try:
+        svc.permissions().create(
+            fileId=file_id,
+            body={"type": "anyone", "role": role},
+            fields="id",
+        ).execute()
+    except Exception as e:
+        print(f"[Drive] Failed to share file {file_id}: {e}")
+
+
 def move_file(file_id: str, destination_folder: str, tenant_id: str) -> dict:
     """Move a file to a new folder (public API)."""
     move_to_folder(file_id, destination_folder, tenant_id)

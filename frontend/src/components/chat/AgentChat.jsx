@@ -3237,6 +3237,31 @@ export default function AgentChat({ agentId = 'estimating' }) {
         // Clear progress indicator when streaming ends
         setProgressInfo(null);
 
+        // Extract Google Docs/Sheets/Slides URLs from the final message and add to Files
+        setMessages(prev => {
+          const agentMsg = prev.find(m => m.id === agentMsgId);
+          if (agentMsg?.content) {
+            const googleUrls = agentMsg.content.match(/https:\/\/docs\.google\.com\/(?:spreadsheets|document|presentation)\/d\/[^\s)]+/g);
+            if (googleUrls?.length) {
+              const newFiles = googleUrls.map(url => {
+                const type = url.includes('/spreadsheets/') ? 'sheet' : url.includes('/document/') ? 'doc' : 'slides';
+                const label = type === 'sheet' ? 'Spreadsheet' : type === 'doc' ? 'Document' : 'Presentation';
+                // Extract title from markdown link if available
+                const mdMatch = agentMsg.content.match(new RegExp(`\\[([^\\]]+)\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+                const name = mdMatch ? mdMatch[1] : label;
+                return { name, drive_url: url.split('?')[0], category: type };
+              });
+              setContextData(cd => {
+                const existing = new Set((cd?.recentFiles || []).map(f => f.drive_url));
+                const unique = newFiles.filter(f => !existing.has(f.drive_url));
+                if (unique.length) return { ...cd, recentFiles: [...unique, ...(cd?.recentFiles || [])] };
+                return cd;
+              });
+            }
+          }
+          return prev;
+        });
+
         // Refresh context panel after stream completes
         refreshContextData();
 
