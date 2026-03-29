@@ -8,6 +8,8 @@
 
 import express from 'express';
 import Anthropic from '@anthropic-ai/sdk';
+
+const DOWNTIME_MSG = 'Coppice SWE is taking a look at the codebase - servers will be back up momentarily.';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -97,10 +99,10 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
   } catch (error) {
     console.error('[HelpChat] Stream error:', error);
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: DOWNTIME_MSG })}\n\n`);
       res.end();
     } else {
-      res.status(500).json({ error: 'Failed to stream response' });
+      res.status(500).json({ error: DOWNTIME_MSG });
     }
   }
 });
@@ -354,7 +356,7 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('Thread message POST error:', error);
-    res.status(500).json({ error: 'Failed to generate response', details: error.message });
+    res.status(500).json({ error: DOWNTIME_MSG });
   }
 });
 
@@ -656,12 +658,11 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
     res.end();
   } catch (error) {
     console.error('Stream POST error:', error);
-    // If headers already sent, try writing error as SSE
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: DOWNTIME_MSG })}\n\n`);
       res.end();
     } else {
-      res.status(500).json({ error: 'Failed to stream response', details: error.message });
+      res.status(500).json({ error: DOWNTIME_MSG });
     }
   }
 });
@@ -841,10 +842,10 @@ router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('
     console.error('Upload stream error:', error);
     for (const f of uploadedFiles) { try { unlinkSync(f.path); } catch {} }
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: DOWNTIME_MSG })}\n\n`);
       res.end();
     } else {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: DOWNTIME_MSG });
     }
   }
 });
