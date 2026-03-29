@@ -1428,6 +1428,7 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
   const [pinSearchResults, setPinSearchResults] = useState([]);
   const [pinSearchTab, setPinSearchTab] = useState('entities');
   const [expandedEntity, setExpandedEntity] = useState(null);
+  const [entitySearch, setEntitySearch] = useState('');
   const [addingNote, setAddingNote] = useState(false);
   const [noteText, setNoteText] = useState('');
 
@@ -1606,10 +1607,28 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
       )}
 
       {/* Entity Profiles */}
-      {entities.length > 0 && (
+      {entities.length > 0 && (() => {
+        const MAX_VISIBLE = 5;
+        const q = entitySearch?.toLowerCase() || '';
+        const filtered = q ? entities.filter(e => e.name?.toLowerCase().includes(q) || e.entity_type?.toLowerCase().includes(q)) : entities;
+        const visible = filtered.slice(0, MAX_VISIBLE);
+        const hiddenCount = filtered.length - visible.length;
+        return (
         <ContextSection title="Entities" meta={`${entities.length}`} onAdd={() => openPinSearch('entities')}>
+          {entities.length > MAX_VISIBLE && (
+            <div className="relative mb-2">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[#9a9a92]" />
+              <input
+                type="text"
+                value={entitySearch || ''}
+                onChange={(ev) => setEntitySearch(ev.target.value)}
+                placeholder="Search entities..."
+                className="w-full pl-7 pr-2 py-1.5 text-[11px] bg-[#faf9f7] border border-[#e8e6e1] rounded-md text-terminal-text placeholder-[#b5b5ae] outline-none focus:border-[#1e3a5f] transition-colors"
+              />
+            </div>
+          )}
           <div className="space-y-1.5">
-            {entities.map((e) => (
+            {visible.map((e) => (
               <div key={e.id}
                 className="p-2 bg-terminal-panel border border-[#f0eeea] rounded-lg cursor-pointer hover:border-[#1e3a5f] transition-colors group/entity"
                 onClick={() => setExpandedEntity(expandedEntity === e.id ? null : e.id)}
@@ -1646,9 +1665,16 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
                 )}
               </div>
             ))}
+            {hiddenCount > 0 && !q && (
+              <div className="text-[10px] text-[#9a9a92] text-center py-1">+ {hiddenCount} more - search to find</div>
+            )}
+            {q && filtered.length === 0 && (
+              <div className="text-[10px] text-[#9a9a92] text-center py-2">No entities matching "{entitySearch}"</div>
+            )}
           </div>
         </ContextSection>
-      )}
+        );
+      })()}
 
       {/* Pinned Items */}
       <ContextSection title="Pinned" meta={pinnedItems.length > 0 ? `${pinnedItems.length}` : ''} onAdd={() => { setAddingNote(true); setShowPinSearch(false); }}>

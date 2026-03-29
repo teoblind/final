@@ -123,8 +123,12 @@ export default function DacpCommandDashboard({ onNavigate }) {
     fetch(`${API_BASE}/v1/estimates/leads-sheet`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => {
-        if (data.configured && data.sheetId !== '__unlinked__') setLeadsSheet(data);
-        else setLeadsSheet({ configured: false });
+        if (data.configured && data.sheetId !== '__unlinked__') {
+          setLeadsSheet(data);
+          setLeadsTab('sheet'); // auto-switch to sheet tab when configured
+        } else {
+          setLeadsSheet({ configured: false });
+        }
       })
       .catch(() => setLeadsSheet({ configured: false }))
       .finally(() => setLeadsLoading(false));
