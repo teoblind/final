@@ -192,11 +192,26 @@ function formatContent(text) {
         </div>
       );
     }
-    // Regular text - render with bold/line breaks
+    // Regular text - render with bold, markdown links, bare URLs, and line breaks
     return seg.value.split('\n').map((line, i, arr) => {
-      const parts = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
+      // Split on markdown links [text](url), bold **text**, and bare URLs
+      const parts = line.split(/(\[.*?\]\(https?:\/\/[^\s)]+\)|\*\*.*?\*\*|https?:\/\/[^\s)]+)/g).map((part, j) => {
         if (part.startsWith('**') && part.endsWith('**')) {
           return <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>;
+        }
+        // Markdown link: [text](url)
+        const mdLink = part.match(/^\[(.+?)\]\((https?:\/\/[^\s)]+)\)$/);
+        if (mdLink) {
+          return <a key={j} href={mdLink[2]} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline font-medium"><ExternalLink size={11} className="inline shrink-0" />{mdLink[1]}</a>;
+        }
+        // Bare URL
+        if (/^https?:\/\//.test(part)) {
+          const label = part.includes('docs.google.com/spreadsheets') ? 'Open Spreadsheet'
+            : part.includes('docs.google.com/document') ? 'Open Document'
+            : part.includes('docs.google.com/presentation') ? 'Open Presentation'
+            : part.includes('drive.google.com') ? 'Open in Drive'
+            : 'Open Link';
+          return <a key={j} href={part} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#eef3f9] text-[#1e3a5f] text-[11px] font-semibold hover:bg-[#dde8f3] transition-colors"><ExternalLink size={10} />{label}</a>;
         }
         return part;
       });
