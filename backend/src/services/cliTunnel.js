@@ -34,16 +34,8 @@ export async function tunnelPrompt({ tenantId, agentId, prompt, maxTurns = 5, ti
     console.log(`[CLITunnel] ${label} completed via ${result.route || 'cli'} in ${(result.durationMs / 1000).toFixed(1)}s`);
     return result.response || '';
   } catch (err) {
-    console.warn(`[CLITunnel] ${label} tunnel failed, falling back to API: ${err.message}`);
-    // Fallback: direct Anthropic SDK call
-    const Anthropic = (await import('@anthropic-ai/sdk')).default;
-    const anthropic = new Anthropic();
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    return response.content[0]?.text || '';
+    console.error(`[CLITunnel] ${label} tunnel failed: ${err.message}`);
+    throw new Error(`CLI tunnel failed: ${err.message}`);
   }
 }
 
