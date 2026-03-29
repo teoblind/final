@@ -186,6 +186,7 @@ let pendingRequests = 0;
 
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
+  process.stderr.write(`[MCP Bridge] stdin chunk (${chunk.length} bytes): ${JSON.stringify(chunk.slice(0, 200))}\n`);
   inputBuffer += chunk;
   processInput();
 });
