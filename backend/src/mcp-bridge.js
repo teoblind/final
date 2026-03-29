@@ -81,16 +81,19 @@ async function handleMessage(msg) {
   const { id, method, params } = msg;
 
   switch (method) {
-    case 'initialize':
+    case 'initialize': {
+      // Match the client's requested protocol version
+      const clientVersion = params?.protocolVersion || '2024-11-05';
       return {
         jsonrpc: '2.0',
         id,
         result: {
-          protocolVersion: '2024-11-05',
+          protocolVersion: clientVersion,
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: 'coppice-tools', version: '1.0.0' },
         },
       };
+    }
 
     case 'notifications/initialized':
       // No response needed for notifications
@@ -126,75 +129,121 @@ async function handleMessage(msg) {
   }
 }
 
-// ─── Content-Length Framed stdio Transport ───────────────────────────────────
+// ─── stdio Transport (auto-detect Content-Length or NDJSON) ─────────────────
+// Claude Code MCP client sends newline-delimited JSON (no Content-Length headers).
+// We detect the format from the first chunk and adapt.
+
+let useContentLength = null; // null = auto-detect, true = Content-Length, false = NDJSON
+let pendingRequests = 0;
+let stdinEnded = false;
 
 function sendMessage(msg) {
   const json = JSON.stringify(msg);
-  const header = `Content-Length: ${Buffer.byteLength(json)}\r\n\r\n`;
-  process.stdout.write(header + json);
+  if (useContentLength) {
+    process.stdout.write(`Content-Length: ${Buffer.byteLength(json)}\r\n\r\n${json}`);
+  } else {
+    // NDJSON: one JSON object per line
+    process.stdout.write(json + '\n');
+  }
+}
+
+function dispatchMessage(msg) {
+  pendingRequests++;
+  handleMessage(msg).then(response => {
+    if (response) sendMessage(response);
+  }).catch(err => {
+    process.stderr.write(`[MCP Bridge] Error: ${err.message}\n`);
+    if (msg.id) {
+      sendMessage({
+        jsonrpc: '2.0',
+        id: msg.id,
+        error: { code: -32603, message: err.message },
+      });
+    }
+  }).finally(() => {
+    pendingRequests--;
+    if (stdinEnded && pendingRequests <= 0) process.exit(0);
+  });
 }
 
 let inputBuffer = '';
 
 function processInput() {
+  // Auto-detect format from first data
+  if (useContentLength === null) {
+    if (inputBuffer.startsWith('Content-Length:')) {
+      useContentLength = true;
+    } else {
+      useContentLength = false;
+    }
+    process.stderr.write(`[MCP Bridge] Transport: ${useContentLength ? 'Content-Length' : 'NDJSON'}\n`);
+  }
+
+  if (useContentLength) {
+    processContentLength();
+  } else {
+    processNDJSON();
+  }
+}
+
+function processContentLength() {
   while (true) {
-    // Look for Content-Length header
     const headerEnd = inputBuffer.indexOf('\r\n\r\n');
     if (headerEnd === -1) break;
 
     const header = inputBuffer.slice(0, headerEnd);
     const match = header.match(/Content-Length:\s*(\d+)/i);
     if (!match) {
-      // Skip malformed header
       inputBuffer = inputBuffer.slice(headerEnd + 4);
       continue;
     }
 
     const contentLength = parseInt(match[1], 10);
     const bodyStart = headerEnd + 4;
-
-    if (inputBuffer.length < bodyStart + contentLength) break; // Need more data
+    if (inputBuffer.length < bodyStart + contentLength) break;
 
     const body = inputBuffer.slice(bodyStart, bodyStart + contentLength);
     inputBuffer = inputBuffer.slice(bodyStart + contentLength);
 
     try {
-      const msg = JSON.parse(body);
-      pendingRequests++;
-      handleMessage(msg).then(response => {
-        if (response) sendMessage(response);
-      }).catch(err => {
-        process.stderr.write(`[MCP Bridge] Error: ${err.message}\n`);
-        if (msg.id) {
-          sendMessage({
-            jsonrpc: '2.0',
-            id: msg.id,
-            error: { code: -32603, message: err.message },
-          });
-        }
-      }).finally(() => {
-        pendingRequests--;
-        if (stdinEnded && pendingRequests <= 0) process.exit(0);
-      });
+      dispatchMessage(JSON.parse(body));
     } catch (err) {
       process.stderr.write(`[MCP Bridge] Parse error: ${err.message}\n`);
     }
   }
 }
 
-let pendingRequests = 0;
+function processNDJSON() {
+  // Split on newlines, keeping incomplete last line in buffer
+  const lines = inputBuffer.split('\n');
+  inputBuffer = lines.pop(); // Keep incomplete last line
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      dispatchMessage(JSON.parse(trimmed));
+    } catch (err) {
+      process.stderr.write(`[MCP Bridge] Parse error: ${err.message}\n`);
+    }
+  }
+}
 
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => {
-  process.stderr.write(`[MCP Bridge] stdin chunk (${chunk.length} bytes): ${JSON.stringify(chunk.slice(0, 200))}\n`);
   inputBuffer += chunk;
   processInput();
 });
 
-let stdinEnded = false;
 process.stdin.on('end', () => {
   stdinEnded = true;
-  // Wait for pending async requests to complete before exiting
+  // Process any remaining data in buffer
+  if (inputBuffer.trim()) {
+    try {
+      dispatchMessage(JSON.parse(inputBuffer.trim()));
+      inputBuffer = '';
+    } catch {}
+  }
   if (pendingRequests <= 0) process.exit(0);
 });
 
