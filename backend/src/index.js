@@ -303,6 +303,14 @@ try {
   console.warn('Assignment executor not started:', err.message);
 }
 
+// Chat health check — BBB heartbeat monitor (every 5 minutes)
+try {
+  const { startChatHealthCheck } = await import('./jobs/chatHealthCheck.js');
+  startChatHealthCheck(5 * 60 * 1000);
+} catch (err) {
+  console.warn('Chat health check not started:', err.message);
+}
+
 // Phase 9 schedulers: NOT auto-started — enable via Settings or API
 // POST /api/v1/insurance/schedulers/start to start them
 // POST /api/v1/insurance/schedulers/stop to stop them
