@@ -291,6 +291,336 @@ function queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, 
   });
 }
 
+// ─── SSH Tunnel Streaming Query ─────────────────────────────────────────────
+
+/**
+ * Stream a query through Claude Code CLI via SSH tunnel.
+ * Uses --output-format stream-json to get real-time token streaming.
+ * SSH forwards stdout in real-time, so tokens appear as they're generated.
+ *
+ * @param {object} opts - Same as queryViaTunnel
+ * @param {function} opts.onText - Callback for each text chunk: onText(textDelta)
+ * @returns {Promise<{response: string, durationMs: number, timedOut?: boolean, route: string}>}
+ */
+function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText }) {
+  const start = Date.now();
+
+  return new Promise((resolve, reject) => {
+    let fullResponse = '';
+    let stderr = '';
+    let settled = false;
+    let buffer = '';  // Buffer for incomplete JSON lines
+
+    const claudeArgs = [
+      '-p', fullMessage,
+      '--output-format', 'stream-json',
+      '--max-turns', String(turns),
+      '--system-prompt', systemPrompt,
+      '--allowedTools',
+        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
+        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+    ];
+
+    if (config.cli_model) {
+      claudeArgs.push('--model', config.cli_model);
+    }
+
+    const escapedArgs = claudeArgs.map(arg => shellEscape(arg));
+    const remoteCmd = `${MAC_WRAPPER} ${escapedArgs.join(' ')}`;
+
+    const sshArgs = [
+      '-4',
+      '-i', SSH_KEY,
+      '-p', String(SSH_PORT),
+      '-o', 'StrictHostKeyChecking=no',
+      '-o', 'ConnectTimeout=10',
+      '-o', 'BatchMode=yes',
+      '-o', 'ServerAliveInterval=30',
+      '-o', 'ServerAliveCountMax=3',
+      `${SSH_USER}@${SSH_HOST}`,
+      remoteCmd,
+    ];
+
+    console.log(`[ClaudeAgent] Streaming ${agentId}@${resolvedTenantId} via SSH tunnel`);
+
+    const proc = spawn('ssh', sshArgs, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, LANG: 'en_US.UTF-8' },
+    });
+
+    proc.stdin.end();
+
+    proc.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      // Process complete lines (stream-json is newline-delimited JSON)
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete last line in buffer
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+          // Extract text from stream-json events
+          // Claude CLI stream-json emits objects with type: "assistant" containing content blocks
+          if (event.type === 'assistant' && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullResponse += block.text;
+                onText(block.text);
+              }
+            }
+          }
+          // Content block delta events (partial text as it streams)
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            fullResponse += event.delta.text;
+            onText(event.delta.text);
+          }
+          // Result message at the end contains the full text
+          if (event.type === 'result' && event.result) {
+            // If we haven't captured any text yet (e.g., different event format),
+            // extract from the result
+            if (!fullResponse && typeof event.result === 'string') {
+              fullResponse = event.result;
+              onText(event.result);
+            }
+          }
+        } catch {
+          // Not valid JSON - might be plain text output, forward it
+          if (line.trim() && !fullResponse) {
+            fullResponse += line;
+            onText(line);
+          }
+        }
+      }
+    });
+
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        proc.kill('SIGTERM');
+        const durationMs = Date.now() - start;
+        console.error(`[ClaudeAgent] ${agentId}@${resolvedTenantId} stream timed out after ${durationMs}ms`);
+        resolve({
+          response: fullResponse.trim() || `The task timed out after ${Math.round(timeout / 1000)}s.`,
+          durationMs,
+          timedOut: true,
+          route: 'tunnel-stream',
+        });
+      }
+    }, timeout);
+
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const durationMs = Date.now() - start;
+
+      // Process any remaining buffer
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          if (event.type === 'assistant' && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullResponse += block.text;
+                onText(block.text);
+              }
+            }
+          }
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            fullResponse += event.delta.text;
+            onText(event.delta.text);
+          }
+          if (event.type === 'result' && event.result && !fullResponse) {
+            fullResponse = typeof event.result === 'string' ? event.result : '';
+            if (fullResponse) onText(fullResponse);
+          }
+        } catch {
+          if (!fullResponse) {
+            fullResponse = buffer.trim();
+            onText(buffer.trim());
+          }
+        }
+      }
+
+      if (code !== 0 && !fullResponse.trim()) {
+        const errMsg = stderr.slice(0, 500);
+        console.error(`[ClaudeAgent] ${agentId} stream tunnel exited ${code}. stderr: ${errMsg}`);
+        if (errMsg.includes('Connection refused') || errMsg.includes('Connection timed out') || errMsg.includes('No route to host')) {
+          _tunnelHealthy = false;
+          _tunnelCheckTime = Date.now();
+        }
+        reject(new Error(`Claude agent stream (tunnel) exited with code ${code}: ${stderr.slice(0, 200)}`));
+        return;
+      }
+
+      console.log(`[ClaudeAgent] ${agentId}@${resolvedTenantId} stream completed via tunnel in ${(durationMs / 1000).toFixed(1)}s`);
+      resolve({ response: fullResponse.trim() || 'No response generated.', durationMs, route: 'tunnel-stream' });
+    });
+
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`Claude agent SSH stream spawn failed: ${err.message}`));
+    });
+  });
+}
+
+// ─── Streaming Entry Point ─────────────────────────────────────────────────
+
+/**
+ * Stream a query through Claude Code CLI (Max subscription via SSH tunnel).
+ * Same as queryClaudeAgent but streams text chunks via onText callback.
+ *
+ * @param {object} opts - Same as queryClaudeAgent plus onText
+ * @param {function} opts.onText - Called with each text delta as it arrives
+ * @returns {Promise<{response: string, durationMs: number, timedOut?: boolean, route: string}>}
+ */
+export async function streamClaudeAgent({ tenantId, agentId, message, history, maxTurns, timeoutMs, onText }) {
+  const config = getAgentCliConfig(agentId);
+  const resolvedTenantId = tenantId || 'default';
+  const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config);
+  const fullMessage = buildUserMessage(message, history);
+  const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
+  const timeout = timeoutMs || config.cli_timeout_ms || DEFAULT_TIMEOUT_MS;
+
+  let useTunnel = USE_TUNNEL;
+  if (useTunnel) {
+    useTunnel = await isTunnelHealthy();
+    if (!useTunnel) {
+      console.warn(`[ClaudeAgent] Tunnel down for stream - falling back to local for ${agentId}@${resolvedTenantId}`);
+    }
+  }
+
+  if (useTunnel) {
+    return streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText });
+  } else {
+    return streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText });
+  }
+}
+
+// ─── Local Fallback Streaming Query ────────────────────────────────────────
+
+function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText }) {
+  const start = Date.now();
+
+  return new Promise((resolve, reject) => {
+    let fullResponse = '';
+    let stderr = '';
+    let settled = false;
+    let buffer = '';
+
+    const args = [
+      '-p', fullMessage,
+      '--output-format', 'stream-json',
+      '--max-turns', String(turns),
+      '--system-prompt', systemPrompt,
+      '--allowedTools',
+        'Bash(*)', 'Read(*)', 'Write(*)', 'Edit(*)',
+        'Glob(*)', 'Grep(*)', 'WebSearch(*)', 'WebFetch(*)',
+    ];
+
+    if (config.cli_model) {
+      args.push('--model', config.cli_model);
+    }
+
+    console.log(`[ClaudeAgent] Streaming ${agentId}@${resolvedTenantId} locally (fallback)`);
+
+    const proc = spawn(CLAUDE_BIN, args, {
+      env: { ...process.env, LANG: 'en_US.UTF-8' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: '/root/coppice',
+    });
+
+    proc.stdin.end();
+
+    proc.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+          if (event.type === 'assistant' && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === 'text' && block.text) {
+                fullResponse += block.text;
+                onText(block.text);
+              }
+            }
+          }
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            fullResponse += event.delta.text;
+            onText(event.delta.text);
+          }
+          if (event.type === 'result' && event.result && !fullResponse) {
+            fullResponse = typeof event.result === 'string' ? event.result : '';
+            if (fullResponse) onText(fullResponse);
+          }
+        } catch {
+          if (line.trim() && !fullResponse) {
+            fullResponse += line;
+            onText(line);
+          }
+        }
+      }
+    });
+
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
+
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        proc.kill('SIGTERM');
+        const durationMs = Date.now() - start;
+        resolve({
+          response: fullResponse.trim() || `The task timed out after ${Math.round(timeout / 1000)}s.`,
+          durationMs,
+          timedOut: true,
+          route: 'local-stream',
+        });
+      }
+    }, timeout);
+
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const durationMs = Date.now() - start;
+
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+            fullResponse += event.delta.text;
+            onText(event.delta.text);
+          }
+        } catch {}
+      }
+
+      if (code !== 0 && !fullResponse.trim()) {
+        reject(new Error(`Claude agent stream exited with code ${code}: ${stderr.slice(0, 200)}`));
+        return;
+      }
+
+      console.log(`[ClaudeAgent] ${agentId}@${resolvedTenantId} stream completed locally in ${(durationMs / 1000).toFixed(1)}s`);
+      resolve({ response: fullResponse.trim() || 'No response generated.', durationMs, route: 'local-stream' });
+    });
+
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`Claude agent stream spawn failed: ${err.message}`));
+    });
+  });
+}
+
 // ─── Local Fallback Query ───────────────────────────────────────────────────
 
 function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config }) {

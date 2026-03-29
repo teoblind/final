@@ -30,7 +30,7 @@ function getAnthropic() {
 import { selectModel, estimateCost } from './modelRouter.js';
 import { searchKnowledge, getOpenActionItems } from './knowledgeProcessor.js';
 import { textToSpeech } from './elevenlabsService.js';
-import { queryClaudeAgent, isComplexQuery } from './claudeAgent.js';
+import { queryClaudeAgent, streamClaudeAgent, isComplexQuery } from './claudeAgent.js';
 
 const MODEL = process.env.CHAT_MODEL || 'claude-sonnet-4-20250514';
 const MAX_HISTORY = 50; // max messages to include in context
@@ -4542,25 +4542,25 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (cliStreamEnabled && cliStreamAgents.includes(agentId) && !streamForceApi) {
     try {
       const historyForContext = messages.slice(0, -1);
-      const cliResult = await queryClaudeAgent({
+      const cliResult = await streamClaudeAgent({
         tenantId,
         agentId,
         message: userContent,
         history: historyForContext,
         maxTurns: streamAgentConfig.max_turns,
+        onText: (textDelta) => onChunk(textDelta),
       });
 
       const cliResponse = cliResult.response || '';
-      onChunk(cliResponse);
 
       saveMessage(tenantId, agentId, userId, 'assistant', cliResponse, {
         model: 'claude-code-cli',
         duration_ms: cliResult.durationMs,
         timed_out: cliResult.timedOut || false,
-        route: 'cli-stream',
+        route: cliResult.route || 'cli-stream',
       }, threadId);
 
-      _recordRun({ output: cliResponse, model: 'claude-code-cli', route: 'cli-stream', status: cliResult.timedOut ? 'timeout' : 'completed' });
+      _recordRun({ output: cliResponse, model: 'claude-code-cli', route: cliResult.route || 'cli-stream', status: cliResult.timedOut ? 'timeout' : 'completed' });
       return { response: cliResponse };
     } catch (cliError) {
       console.error(`[chatStream] CLI error (agent=${agentId}, tenant=${tenantId}):`, cliError.message);
