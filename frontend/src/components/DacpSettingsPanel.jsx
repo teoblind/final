@@ -155,6 +155,11 @@ const INTEGRATIONS = [
     logo: <div className="text-[14px] font-bold" style={{ color: '#ff3366' }}>Id</div> },
   { id: 'blender', name: 'Blender', desc: '3D modeling, rendering, and animation', category: 'Creative', color: '#e87d0d', macRequired: true,
     logo: <div className="text-[14px] font-bold" style={{ color: '#e87d0d' }}>B</div> },
+  // Construction software — hardware required
+  { id: 'planswift', name: 'PlanSwift', desc: 'Automated takeoffs, material quantification, and cost estimation', category: 'Estimating', color: '#1a73e8', macRequired: true, construction: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#1a73e8' }}>PS</div> },
+  { id: 'bluebeam', name: 'Bluebeam Revu', desc: 'PDF markup, plan review, and punch list management', category: 'Plan Review', color: '#0054a6', macRequired: true, construction: true,
+    logo: <div className="text-[14px] font-bold" style={{ color: '#0054a6' }}>BB</div> },
 ];
 
 function IntegrationsPanel() {
@@ -202,7 +207,8 @@ function IntegrationsPanel() {
   };
 
   const selfServe = INTEGRATIONS.filter(i => i.selfServe);
-  const macRequired = INTEGRATIONS.filter(i => i.macRequired);
+  const creativeHw = INTEGRATIONS.filter(i => i.macRequired && !i.construction);
+  const constructionHw = INTEGRATIONS.filter(i => i.macRequired && i.construction);
 
   return (
     <>
@@ -277,9 +283,38 @@ function IntegrationsPanel() {
         </div>
       </Section>
 
+      <Section icon={Lock} iconClass="bg-[#eef3f9] text-[#1e3a5f]" title="Construction Software" desc="Estimating and plan review tools powered by dedicated hardware">
+        <div className="space-y-1">
+          {constructionHw.map(int => (
+            <div key={int.id} className="border border-[#f0eeea] rounded-[10px] overflow-hidden opacity-60">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <div className="w-9 h-9 rounded-[10px] bg-[#f5f4f0] flex items-center justify-center shrink-0">
+                  {int.logo}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-semibold text-terminal-text">{int.name}</span>
+                    <span className="text-[9px] font-heading font-bold px-1.5 py-0.5 rounded bg-[#f5f4f0] text-terminal-muted uppercase tracking-[0.3px]">{int.category}</span>
+                  </div>
+                  <div className="text-[11px] text-terminal-muted mt-px">{int.desc}</div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#7c3aed] bg-[#f5f0fa] px-2.5 py-1.5 rounded-lg shrink-0">
+                  <Lock size={11} /> Hardware Required
+                </div>
+              </div>
+              <div className="px-4 pb-3 border-t border-[#f0eeea] pt-2.5 bg-[#fafaf8]">
+                <p className="text-[11px] text-terminal-muted">
+                  This integration requires a dedicated hardware integration. Contact your administrator to upgrade your package.
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
       <Section icon={Lock} iconClass="bg-[#f5f0fa] text-[#7c3aed]" title="Creative Suite" desc="Desktop application integrations powered by dedicated hardware">
         <div className="space-y-1">
-          {macRequired.map(int => (
+          {creativeHw.map(int => (
             <div key={int.id} className="border border-[#f0eeea] rounded-[10px] overflow-hidden opacity-60">
               <div className="flex items-center gap-3 px-4 py-3">
                 <div className="w-9 h-9 rounded-[10px] bg-[#f5f4f0] flex items-center justify-center shrink-0">
