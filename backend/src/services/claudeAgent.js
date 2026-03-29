@@ -310,12 +310,15 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     let stderr = '';
     let settled = false;
 
-    // Use --output-format stream-json --verbose for real-time streaming events.
-    // The SSH -tt flag forces a pseudo-TTY to prevent pipe buffering.
+    // Use --output-format stream-json --verbose --include-partial-messages for
+    // real-time per-token streaming. The --include-partial-messages flag makes the
+    // CLI emit content_block_delta events (wrapped in stream_event) as tokens arrive.
+    // SSH -tt forces a pseudo-TTY to prevent pipe buffering.
     const claudeArgs = [
       '-p', fullMessage,
       '--output-format', 'stream-json',
       '--verbose',
+      '--include-partial-messages',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools',
@@ -354,8 +357,12 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     proc.stdin.end();
 
     let buffer = '';
-    // Parse stream-json events. SSH -tt gives us real-time delivery with TTY.
-    // Each line is a JSON object. We extract text from assistant messages and results.
+    let streamedViaDeltas = false;
+    // Parse stream-json events from claude CLI with --include-partial-messages.
+    // Events come as: {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
+    // We extract text_delta events for per-token streaming.
+    // The "assistant" events contain full accumulated text - only use as fallback if no deltas arrived.
+    // The "result" event at the end contains the complete response text.
     proc.stdout.on('data', (chunk) => {
       let raw = chunk.toString();
       // Strip ANSI escape sequences and normalize line endings from TTY
@@ -370,23 +377,26 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
         if (!line.trim()) continue;
         try {
           const event = JSON.parse(line);
-          if (event.type === 'assistant' && event.message?.content) {
-            for (const block of event.message.content) {
-              if (block.type === 'text' && block.text) {
-                fullResponse += block.text;
-                onText(block.text);
-              }
+
+          // Per-token streaming: stream_event wrapping content_block_delta
+          if (event.type === 'stream_event' && event.event?.type === 'content_block_delta') {
+            const delta = event.event.delta;
+            if (delta?.type === 'text_delta' && delta.text) {
+              fullResponse += delta.text;
+              onText(delta.text);
+              streamedViaDeltas = true;
             }
           }
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-            fullResponse += event.delta.text;
-            onText(event.delta.text);
-          }
-          if (event.type === 'result' && event.result && !fullResponse) {
+
+          // Final result - use to set fullResponse if deltas didn't capture everything
+          if (event.type === 'result' && event.result) {
             const resultText = typeof event.result === 'string' ? event.result : '';
-            if (resultText) {
+            if (resultText && !streamedViaDeltas) {
               fullResponse = resultText;
               onText(resultText);
+            } else if (resultText) {
+              // Deltas streamed, but use result as authoritative fullResponse
+              fullResponse = resultText;
             }
           }
         } catch {
@@ -422,19 +432,21 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
       if (buffer.trim()) {
         try {
           const event = JSON.parse(buffer);
-          if (event.type === 'assistant' && event.message?.content) {
-            for (const block of event.message.content) {
-              if (block.type === 'text' && block.text) {
-                fullResponse += block.text;
-                onText(block.text);
-              }
+          if (event.type === 'stream_event' && event.event?.type === 'content_block_delta') {
+            const delta = event.event.delta;
+            if (delta?.type === 'text_delta' && delta.text) {
+              fullResponse += delta.text;
+              onText(delta.text);
+              streamedViaDeltas = true;
             }
           }
-          if (event.type === 'result' && event.result && !fullResponse) {
+          if (event.type === 'result' && event.result) {
             const resultText = typeof event.result === 'string' ? event.result : '';
-            if (resultText) {
+            if (resultText && !streamedViaDeltas) {
               fullResponse = resultText;
               onText(resultText);
+            } else if (resultText) {
+              fullResponse = resultText;
             }
           }
         } catch {}
