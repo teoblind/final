@@ -2597,10 +2597,9 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
     }
 
     const drive = googleapis.drive({ version: 'v3', auth: oauth });
-    // Share with user directly (shows in their "Shared with me") + transfer ownership if same domain
+    // Share with user directly (shows in their "Shared with me")
     if (userEmail) {
       try {
-        // Try ownership transfer first (works within same Workspace domain, no acceptance needed)
         await drive.permissions.create({
           fileId: spreadsheetId,
           transferOwnership: true,
@@ -2608,19 +2607,12 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
           requestBody: { type: 'user', role: 'owner', emailAddress: userEmail },
         });
       } catch (e) {
-        // Cross-domain: give them writer access + share with link as fallback
+        // Cross-domain: give them writer access (no public fallback)
         console.warn('[Workspace] Ownership transfer failed (cross-domain), sharing as writer:', e.message);
         try {
           await drive.permissions.create({ fileId: spreadsheetId, sendNotificationEmail: false, requestBody: { type: 'user', role: 'writer', emailAddress: userEmail } });
-        } catch {}
-        try {
-          await drive.permissions.create({ fileId: spreadsheetId, requestBody: { type: 'anyone', role: 'writer' } });
-        } catch {}
+        } catch (e2) { console.warn('[Workspace] Writer share failed:', e2.message); }
       }
-    } else {
-      try {
-        await drive.permissions.create({ fileId: spreadsheetId, requestBody: { type: 'anyone', role: 'writer' } });
-      } catch (e) { console.warn('[Workspace] Failed to share sheet:', e.message); }
     }
 
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
@@ -2647,18 +2639,12 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
           requestBody: { type: 'user', role: 'owner', emailAddress: userEmail },
         });
       } catch (e) {
+        // Cross-domain: give them writer access (no public fallback)
         console.warn('[Workspace] Ownership transfer failed (cross-domain), sharing as writer:', e.message);
         try {
           await drive.permissions.create({ fileId: docId, sendNotificationEmail: false, requestBody: { type: 'user', role: 'writer', emailAddress: userEmail } });
-        } catch {}
-        try {
-          await drive.permissions.create({ fileId: docId, requestBody: { type: 'anyone', role: 'writer' } });
-        } catch {}
+        } catch (e2) { console.warn('[Workspace] Writer share failed:', e2.message); }
       }
-    } else {
-      try {
-        await drive.permissions.create({ fileId: docId, requestBody: { type: 'anyone', role: 'writer' } });
-      } catch (e) { console.warn('[Workspace] Failed to share doc:', e.message); }
     }
 
     const url = `https://docs.google.com/document/d/${docId}/edit`;

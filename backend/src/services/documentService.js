@@ -712,17 +712,7 @@ export async function uploadToGoogleDrive({ filePath, title, shareWithEmails = [
     const fileId = res.data.id;
     const webViewLink = res.data.webViewLink;
 
-    // Make file viewable by anyone with link (so "Open in Google Docs" always works)
-    try {
-      await drive.permissions.create({
-        fileId,
-        requestBody: { role: 'reader', type: 'anyone' },
-      });
-    } catch (permErr) {
-      console.warn(`[DocumentService] Failed to set public access: ${permErr.message}`);
-    }
-
-    // Also share as writer with specific emails
+    // Share as writer with specific emails (no public access - files stay restricted)
     for (const email of shareWithEmails) {
       if (!email || email.includes('localhost')) continue;
       try {
