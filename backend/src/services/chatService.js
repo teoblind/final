@@ -3931,6 +3931,14 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     }
   }
 
+  // Guard: if API key is disabled, don't try the API path
+  const _apiKey = process.env.ANTHROPIC_API_KEY || '';
+  if (!_apiKey || _apiKey === 'DISABLED' || _apiKey.length < 10) {
+    const errResponse = 'All messages route through the AI agent. Please try again.';
+    saveMessage(tenantId, agentId, userId, 'assistant', errResponse, { model: 'error', route: 'no-api-key' }, threadId);
+    return { response: errResponse };
+  }
+
   // 4. Get system prompt for this agent, enriched with knowledge context
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
   const knowledgeContext = buildKnowledgeContext(tenantId, displayContent);
@@ -4664,6 +4672,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       console.log(`[chatStream] Falling back to API route`);
       // Fall through to API below
     }
+  }
+
+  // Guard: if API key is disabled, don't even try the API path
+  const _apiKeyCheck = process.env.ANTHROPIC_API_KEY || '';
+  if (!_apiKeyCheck || _apiKeyCheck === 'DISABLED' || _apiKeyCheck.length < 10) {
+    const errMsg = 'All messages route through the AI agent. Please try again.';
+    onChunk(errMsg);
+    saveMessage(tenantId, agentId, userId, 'assistant', errMsg, { model: 'error', route: 'no-api-key' }, threadId);
+    return { response: errMsg };
   }
 
   try {
