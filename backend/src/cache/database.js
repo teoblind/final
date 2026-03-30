@@ -5526,21 +5526,26 @@ export function getPendingJobRequests(tenantId) {
 
 // Key Vault CRUD — values encrypted at rest with AES-256-GCM
 
-// Derive encryption key from env secret (or generate ephemeral for dev)
-const VAULT_MASTER_KEY = (() => {
+// Derive encryption key from env secret (lazy — dotenv may not have loaded yet at import time)
+let _vaultMasterKey = null;
+function getVaultMasterKey() {
+  if (_vaultMasterKey) return _vaultMasterKey;
   const envKey = process.env.VAULT_ENCRYPTION_KEY;
-  if (envKey) return scryptSync(envKey, 'coppice-vault-salt', 32);
+  if (envKey) {
+    _vaultMasterKey = scryptSync(envKey, 'coppice-vault-salt', 32);
+    return _vaultMasterKey;
+  }
   if (process.env.NODE_ENV === 'production') {
     console.error('FATAL: VAULT_ENCRYPTION_KEY not set in production. Key vault will be inaccessible.');
   }
-  // Dev fallback: derive from a static seed (NOT secure for prod)
-  console.warn('[KeyVault] VAULT_ENCRYPTION_KEY not set — using dev-only fallback');
-  return scryptSync('dev-only-insecure-key', 'coppice-vault-salt', 32);
-})();
+  console.warn('[KeyVault] VAULT_ENCRYPTION_KEY not set - using dev-only fallback');
+  _vaultMasterKey = scryptSync('dev-only-insecure-key', 'coppice-vault-salt', 32);
+  return _vaultMasterKey;
+}
 
 function encryptValue(plaintext) {
   const iv = randomBytes(16);
-  const cipher = createCipheriv('aes-256-gcm', VAULT_MASTER_KEY, iv);
+  const cipher = createCipheriv('aes-256-gcm', getVaultMasterKey(), iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   // Format: base64(iv:tag:ciphertext)
@@ -5554,7 +5559,7 @@ function decryptValue(stored) {
   const iv = raw.subarray(0, 16);
   const tag = raw.subarray(16, 32);
   const ciphertext = raw.subarray(32);
-  const decipher = createDecipheriv('aes-256-gcm', VAULT_MASTER_KEY, iv);
+  const decipher = createDecipheriv('aes-256-gcm', getVaultMasterKey(), iv);
   decipher.setAuthTag(tag);
   return decipher.update(ciphertext, null, 'utf8') + decipher.final('utf8');
 }
