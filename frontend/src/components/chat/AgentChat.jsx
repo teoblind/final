@@ -212,8 +212,48 @@ function formatContent(text) {
         </div>
       );
     }
-    // Regular text - render with bold, markdown links, bare URLs, and line breaks
-    return seg.value.split('\n').map((line, i, arr) => {
+    // Regular text - detect markdown tables first, then render inline formatting
+    const lines = seg.value.split('\n');
+    const rendered = [];
+    let li = 0;
+    while (li < lines.length) {
+      // Detect markdown table: line starts with |, next line is separator |---|
+      if (lines[li].trim().startsWith('|') && li + 1 < lines.length && /^\|[\s:]*-+/.test(lines[li + 1].trim())) {
+        const headerCells = lines[li].split('|').filter(c => c.trim()).map(c => c.trim());
+        li += 2; // skip header + separator
+        const bodyRows = [];
+        while (li < lines.length && lines[li].trim().startsWith('|')) {
+          bodyRows.push(lines[li].split('|').filter(c => c.trim()).map(c => c.trim()));
+          li++;
+        }
+        rendered.push(
+          <div key={`table-${li}`} className="my-2 overflow-x-auto">
+            <table className="w-full text-[12px] border-collapse">
+              <thead>
+                <tr className="bg-[#f5f4f0] border-b border-[#e5e3de]">
+                  {headerCells.map((h, hi) => <th key={hi} className="px-3 py-2 text-left font-semibold text-terminal-text">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyRows.map((row, ri) => (
+                  <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-[#faf9f7]'}>
+                    {row.map((cell, ci) => {
+                      const isBold = cell.startsWith('**') && cell.endsWith('**');
+                      return <td key={ci} className="px-3 py-1.5 border-b border-[#f0eeea] text-terminal-text">{isBold ? <strong className="font-semibold">{cell.slice(2, -2)}</strong> : cell}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+      // Non-table line - render with inline formatting
+      const line = lines[li];
+      li++;
+      const arr = lines;
+      const i = li - 1;
       // Split on markdown links [text](url), bold **text**, and bare URLs
       const parts = line.split(/(\[.*?\]\(https?:\/\/[^\s)]+\)|\*\*.*?\*\*|https?:\/\/[^\s)]+)/g).map((part, j) => {
         if (part.startsWith('**') && part.endsWith('**')) {
@@ -246,8 +286,9 @@ function formatContent(text) {
         }
         return part;
       });
-      return <span key={`${si}-${i}`}>{parts}{i < arr.length - 1 && <br />}</span>;
-    });
+      rendered.push(<span key={`${si}-${i}`}>{parts}{i < lines.length && <br />}</span>);
+    }
+    return rendered;
   });
 }
 

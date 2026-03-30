@@ -23,7 +23,10 @@ const MAC_WRAPPER = process.env.CLAUDE_MAC_WRAPPER || '/Users/teoblind/claude-co
 
 // Local fallback (if tunnel is down and VPS has its own claude auth)
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
-const USE_TUNNEL = process.env.CLAUDE_USE_TUNNEL !== 'false'; // default: true
+// Lazy — dotenv may not have loaded yet at ESM import time
+function useTunnelEnabled() {
+  return process.env.CLAUDE_USE_TUNNEL !== 'false'; // default: true
+}
 
 const DEFAULT_TIMEOUT_MS = parseInt(process.env.CLAUDE_AGENT_TIMEOUT_MS, 10) || 180_000; // 3 min
 const DEFAULT_MAX_TURNS = 25;
@@ -163,7 +166,7 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
   const timeout = timeoutMs || config.cli_timeout_ms || DEFAULT_TIMEOUT_MS;
 
   // Try tunnel first, fall back to local
-  let useTunnel = USE_TUNNEL;
+  let useTunnel = useTunnelEnabled();
   if (useTunnel) {
     useTunnel = await isTunnelHealthy();
     if (!useTunnel) {
@@ -513,7 +516,7 @@ export async function streamClaudeAgent({ tenantId, agentId, message, history, m
   const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
   const timeout = timeoutMs || config.cli_timeout_ms || DEFAULT_TIMEOUT_MS;
 
-  let useTunnel = USE_TUNNEL;
+  let useTunnel = useTunnelEnabled();
   if (useTunnel) {
     useTunnel = await isTunnelHealthy();
     if (!useTunnel) {
