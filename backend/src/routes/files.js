@@ -128,7 +128,9 @@ router.get('/', async (req, res) => {
     }
 
     // No cached files — try live Google Drive fetch
+    console.log(`[Files] No cached files for ${tenantId}, trying live Drive fetch...`);
     const driveResult = await fetchDriveFiles(tenantId, { search, limit: limit ? parseInt(limit) : 50 });
+    console.log(`[Files] Drive fetch result for ${tenantId}:`, driveResult ? `${driveResult.files.length} files` : 'null (no token)');
     if (driveResult && driveResult.files.length > 0) {
       let filteredFiles = driveResult.files;
       if (category) {
