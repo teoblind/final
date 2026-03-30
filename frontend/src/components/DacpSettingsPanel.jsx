@@ -131,6 +131,9 @@ function Divider() {
 
 /* ── integrations config ─────────────────────────────────────────────────────── */
 const INTEGRATIONS = [
+  // OAuth-based
+  { id: 'google-workspace', name: 'Google Workspace', desc: 'Connect Gmail, Drive, Calendar, and Sheets', category: 'Workspace', color: '#4285f4', selfServe: true, oauth: true,
+    logo: <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> },
   // Self-serve: API key based
   { id: 'hubspot', name: 'HubSpot', desc: 'Sync your CRM pipeline, contacts, and deals', category: 'CRM', color: '#ff7a59', service: 'hubspot', selfServe: true,
     logo: <svg width="20" height="20" viewBox="0 0 24 24" fill="#ff7a59"><path d="M18.16 7.58V4.22a1.74 1.74 0 0 0 1-1.56V2.6A1.74 1.74 0 0 0 17.42.87h-.06a1.74 1.74 0 0 0-1.74 1.74v.06a1.74 1.74 0 0 0 1 1.56v3.32a5.32 5.32 0 0 0-2.38 1.22l-7.9-6.14a2.13 2.13 0 0 0 .06-.52 2.08 2.08 0 1 0-2.08 2.08 2.06 2.06 0 0 0 1.16-.36l7.76 6.04a5.35 5.35 0 0 0 .17 6.16l-2.34 2.34a1.63 1.63 0 0 0-.48-.08 1.68 1.68 0 1 0 1.68 1.68 1.63 1.63 0 0 0-.08-.48l2.3-2.3A5.36 5.36 0 1 0 18.16 7.58zM17.36 16a3.16 3.16 0 1 1 3.16-3.16A3.16 3.16 0 0 1 17.36 16z"/></svg> },
@@ -170,15 +173,40 @@ function IntegrationsPanel() {
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
-    // Check HubSpot status (the only one with a backend right now)
     const token = localStorage.getItem('auth_token');
+    // Check HubSpot status
     fetch(`${API_BASE}/v1/hubspot/status`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { if (d.configured) setStatuses(prev => ({ ...prev, hubspot: true })); })
       .catch(() => {});
+    // Check Google Workspace status (key_vault has refresh_token for google-docs)
+    fetch(`${API_BASE}/v1/auth/google/integration-status`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => { if (d.connected) setStatuses(prev => ({ ...prev, 'google-workspace': true })); })
+      .catch(() => {});
+
+    // Listen for OAuth popup success
+    const handleOAuthMessage = (e) => {
+      if (e.data?.type === 'oauth-integration-success' && e.data?.source === 'google-all') {
+        setStatuses(prev => ({ ...prev, 'google-workspace': true }));
+        setConnecting(null);
+      }
+    };
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
   }, []);
 
   const handleConnect = async (integration) => {
+    // OAuth-based integrations (Google Workspace) - open popup
+    if (integration.oauth) {
+      setConnecting(integration.id);
+      const token = localStorage.getItem('auth_token');
+      const scopes = 'gmail.readonly,gmail.send,gmail.compose,gmail.modify,calendar,drive,spreadsheets,documents';
+      const url = `${API_BASE}/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=google-all&token=${encodeURIComponent(token)}`;
+      window.open(url, 'google-oauth', 'width=500,height=700,left=200,top=100');
+      return;
+    }
+    // API key-based integrations (HubSpot, etc.)
     if (!apiKeyInput.trim()) return;
     setConnecting(integration.id);
     setError('');
@@ -242,11 +270,15 @@ function IntegrationsPanel() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => { setExpandedId(expanded ? null : int.id); setApiKeyInput(''); setError(''); }}
-                      className="flex items-center gap-1.5 text-[11px] font-heading font-semibold px-3 py-1.5 rounded-lg border transition-colors shrink-0"
+                      onClick={() => {
+                        if (int.oauth) { handleConnect(int); }
+                        else { setExpandedId(expanded ? null : int.id); setApiKeyInput(''); setError(''); }
+                      }}
+                      disabled={connecting === int.id}
+                      className="flex items-center gap-1.5 text-[11px] font-heading font-semibold px-3 py-1.5 rounded-lg border transition-colors shrink-0 disabled:opacity-50"
                       style={{ color: int.color, borderColor: int.color + '40', backgroundColor: int.color + '08' }}
                     >
-                      <Plug size={11} /> Connect
+                      <Plug size={11} /> {connecting === int.id ? 'Connecting...' : 'Connect'}
                     </button>
                   )}
                 </div>

@@ -355,6 +355,17 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
     let buffer = '';
     let streamedViaDeltas = false;
     let hasEmittedText = false; // Track if we've sent any text to add separators between turns
+    let turnCount = 0; // Track agentic turns for progress indicator
+    let currentTools = []; // Tools being used in current turn
+
+    // Emit progress event (flows through to SSE as typing indicator status)
+    function emitProgress(tools, label) {
+      onText(JSON.stringify({ _type: 'progress', iteration: turnCount, maxTurns: turns, tools: tools || [label || 'Thinking...'] }));
+    }
+
+    // Initial progress - agent is connecting/thinking
+    emitProgress(null, 'Thinking...');
+
     // Parse stream-json events from claude CLI with --include-partial-messages.
     // Events come as: {"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"..."}}}
     // We extract text_delta events for per-token streaming.
@@ -374,12 +385,22 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
         try {
           const event = JSON.parse(line);
 
-          // Detect new content block start — add separator between turns
+          // Detect new content block start
           if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
-            if (hasEmittedText) {
-              // New text block after previous text — agent did a tool call between turns
-              fullResponse += '\n\n';
-              onText('\n\n');
+            const block = event.event.content_block;
+            if (block?.type === 'tool_use') {
+              // Agent is calling a tool - show it in the progress indicator
+              const toolName = block.name || 'tool';
+              currentTools.push(toolName);
+              emitProgress(currentTools);
+            } else if (block?.type === 'text') {
+              if (hasEmittedText) {
+                // New text block after previous text - agent did a tool call between turns
+                turnCount++;
+                currentTools = [];
+                fullResponse += '\n\n';
+                onText('\n\n');
+              }
             }
           }
 

@@ -21,6 +21,7 @@ import { spawn } from 'child_process';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { getTenantDb, getKeyVaultValue } from '../cache/database.js';
 
 const GWS_BIN = process.env.GWS_BIN || 'gws';
 const GWS_TIMEOUT_MS = 30_000;
@@ -33,20 +34,28 @@ const tenantConfigCache = new Map();
  * Writes the tenant's OAuth credentials so gws authenticates as the right agent.
  */
 function getTenantGwsConfig(tenantId) {
-  // Check cache — refresh token might have changed, so we re-resolve each time
-  const { getTenantDb } = require('../cache/database.js');
-
   const resolvedTenant = tenantId || 'default';
   let refreshToken = process.env.GMAIL_REFRESH_TOKEN; // fallback
-  let clientId = process.env.GMAIL_CLIENT_ID;
-  let clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  let clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+  let clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
 
+  // Check key_vault first (where Google integration flow stores tokens)
   try {
-    const tdb = getTenantDb(resolvedTenant);
-    const row = tdb.prepare('SELECT gmail_refresh_token FROM tenant_email_config WHERE tenant_id = ? LIMIT 1').get(resolvedTenant);
-    if (row?.gmail_refresh_token) refreshToken = row.gmail_refresh_token;
+    const kvToken = getKeyVaultValue(resolvedTenant, 'google-docs', 'refresh_token');
+    if (kvToken) refreshToken = kvToken;
   } catch {
-    // tenant_email_config may not exist — use fallback
+    // key_vault may not exist or have no entry
+  }
+
+  // Fall back to tenant_email_config
+  if (!refreshToken || refreshToken === process.env.GMAIL_REFRESH_TOKEN) {
+    try {
+      const tdb = getTenantDb(resolvedTenant);
+      const row = tdb.prepare('SELECT gmail_refresh_token FROM tenant_email_config WHERE tenant_id = ? LIMIT 1').get(resolvedTenant);
+      if (row?.gmail_refresh_token) refreshToken = row.gmail_refresh_token;
+    } catch {
+      // tenant_email_config may not exist - use fallback
+    }
   }
 
   if (!refreshToken || !clientId || !clientSecret) {

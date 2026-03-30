@@ -138,7 +138,22 @@ const TOOL_LABELS = {
   delegate_to_agent: 'Delegating to Agent',
   // Task proposal
   propose_task: 'Proposing Task',
+  // CLI tunnel tools (Claude Code native)
+  Bash: 'Running Command',
+  Read: 'Reading File',
+  Write: 'Writing File',
+  Edit: 'Editing File',
+  Glob: 'Searching Files',
+  Grep: 'Searching Code',
+  WebSearch: 'Searching Web',
+  WebFetch: 'Fetching Page',
 };
+
+// Clean up MCP tool names: mcp__coppice-tools__search_knowledge -> search_knowledge
+function cleanToolName(name) {
+  if (name?.startsWith('mcp__coppice-tools__')) return name.slice(20);
+  return name;
+}
 
 function formatContent(text) {
   if (!text) return null;
@@ -3590,7 +3605,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   {progressInfo && (
                     <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] text-[#8a8a82] font-medium font-mono">
                       <div className="w-2 h-2 rounded-full border border-[#c5c5bc] border-t-[#1e3a5f] animate-spin shrink-0" />
-                      <span>Step {progressInfo.iteration}/{progressInfo.maxTurns} - {(progressInfo.tools || []).map(t => TOOL_LABELS[t] || t.replace(/_/g, ' ')).join(', ')}</span>
+                      <span>{progressInfo.iteration > 0 ? `Step ${progressInfo.iteration}/${progressInfo.maxTurns} - ` : ''}{(progressInfo.tools || []).map(t => { const clean = cleanToolName(t); return TOOL_LABELS[clean] || clean.replace(/_/g, ' '); }).join(', ')}</span>
                     </div>
                   )}
                 </div>

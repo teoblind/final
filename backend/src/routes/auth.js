@@ -39,6 +39,7 @@ import {
   markPasswordResetUsed,
   upsertKeyVaultEntry,
   getKeyVaultEntries,
+  getKeyVaultValue,
   getCompanyEmailAccounts,
   addCompanyEmailAccount,
   updateCompanyEmailAccountToken,
@@ -757,7 +758,13 @@ router.get('/google', (req, res) => {
 
 router.get('/google/callback', async (req, res) => {
   try {
-    const { code, error: oauthError } = req.query;
+    const { code, state, error: oauthError } = req.query;
+
+    // If state param exists, this is an integration flow (not sign-in)
+    // Delegate to the integration callback handler
+    if (state && code) {
+      return handleIntegrationCallback(req, res, code, state);
+    }
 
     if (oauthError || !code) {
       return res.redirect('/?error=oauth_cancelled');
@@ -869,12 +876,34 @@ router.get('/google/callback', async (req, res) => {
 // Reuse the same "Coppice Web" OAuth client for integrations
 // IMPORTANT: Always route through the main coppice.ai domain so we only need
 // one redirect URI registered in Google Cloud Console (not one per subdomain).
-const INTEGRATION_OAUTH_BASE = process.env.OAUTH_BASE_URL || 'https://coppice.ai';
-const INTEGRATE_REDIRECT_URI = `${INTEGRATION_OAUTH_BASE}/api/v1/auth/google/integrate/callback`;
-
-function getIntegrationOAuth2Client() {
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, INTEGRATE_REDIRECT_URI);
+function getIntegrationOAuth2Client(req) {
+  // Reuse the sign-in callback path (/api/v1/auth/google/callback) which is already
+  // registered as an authorized redirect URI in Google Cloud Console.
+  // The state parameter distinguishes integration flow from sign-in flow.
+  let redirectUri = GOOGLE_REDIRECT_URI;
+  if (redirectUri.startsWith('/')) {
+    const proto = process.env.NODE_ENV === 'production' ? 'https' : (req?.headers?.['x-forwarded-proto'] || 'https');
+    const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || 'coppice.ai';
+    redirectUri = `${proto}://${host}${redirectUri}`;
+  }
+  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
 }
+
+// ─── GET /google/integration-status — Check if Google Workspace is connected ──
+
+router.get('/google/integration-status', authenticate, async (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    const connected = await runWithTenant(tenantId, () => {
+      const refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
+      return !!refreshToken;
+    });
+    res.json({ connected });
+  } catch (error) {
+    console.error('Google integration status error:', error);
+    res.json({ connected: false });
+  }
+});
 
 // ─── GET /google/integrate — Start integration OAuth flow ────────────────────
 
@@ -917,7 +946,7 @@ router.get('/google/integrate', (req, res) => {
       return OIDC_SCOPES.has(trimmed) ? trimmed : `https://www.googleapis.com/auth/${trimmed}`;
     });
 
-    const oauth2Client = getIntegrationOAuth2Client();
+    const oauth2Client = getIntegrationOAuth2Client(req);
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       prompt: 'consent',
@@ -933,19 +962,11 @@ router.get('/google/integrate', (req, res) => {
   }
 });
 
-// ─── GET /google/integrate/callback — Handle integration OAuth callback ──────
+// ─── Shared integration callback handler ──────────────────────────────────────
+// Called from both /google/callback (when state param present) and /google/integrate/callback
 
-router.get('/google/integrate/callback', async (req, res) => {
+async function handleIntegrationCallback(req, res, code, state) {
   try {
-    const { code, state, error: oauthError } = req.query;
-
-    if (oauthError || !code || !state) {
-      return res.status(400).send(renderIntegrationErrorPage(
-        'OAuth flow was cancelled or failed.',
-        oauthError || 'missing_code_or_state'
-      ));
-    }
-
     // Decode state
     let stateData;
     try {
@@ -966,15 +987,14 @@ router.get('/google/integrate/callback', async (req, res) => {
       ));
     }
 
-    // Exchange code for tokens
-    const oauth2Client = getIntegrationOAuth2Client();
+    // Exchange code for tokens using the same redirect URI as the auth URL
+    const oauth2Client = getIntegrationOAuth2Client(req);
     const { tokens } = await oauth2Client.getToken(code);
 
     // ── Portfolio company Gmail connection ──
     if (source.startsWith('portfolio-gmail:')) {
       const companyId = source.replace('portfolio-gmail:', '');
 
-      // Get email from id_token (JWT) — more reliable than userinfo API
       let gmailAddress = null;
       if (tokens.id_token) {
         try {
@@ -984,7 +1004,6 @@ router.get('/google/integrate/callback', async (req, res) => {
           console.warn('[Portfolio OAuth] Failed to decode id_token:', e.message);
         }
       }
-      // Fallback: call userinfo API
       if (!gmailAddress && tokens.access_token) {
         try {
           oauth2Client.setCredentials(tokens);
@@ -1003,7 +1022,6 @@ router.get('/google/integrate/callback', async (req, res) => {
         ));
       }
 
-      // Run DB operations in tenant context (OAuth callback has no tenant middleware)
       await runWithTenant(tenantId, async () => {
         if (tokens.refresh_token && gmailAddress) {
           const existing = getCompanyEmailAccounts(companyId, tenantId);
@@ -1020,7 +1038,6 @@ router.get('/google/integrate/callback', async (req, res) => {
             });
           }
         }
-
         insertAuditLog({ tenantId, userId, action: 'portfolio.gmail_connected', resourceType: 'portfolio_company', resourceId: companyId, details: { email: gmailAddress }, ipAddress: req.ip });
       });
 
@@ -1032,47 +1049,44 @@ router.get('/google/integrate/callback', async (req, res) => {
     }
 
     // ── Standard integration flow (key_vault storage) ──
-    // Determine which services to store tokens for
     const services = source === 'google-all'
       ? ['google-gmail', 'google-calendar', 'google-docs']
       : [source];
 
-    // Store tokens in key_vault for each service
-    for (const svc of services) {
-      if (tokens.refresh_token) {
-        upsertKeyVaultEntry({
-          tenantId,
-          service: svc,
-          keyName: 'refresh_token',
-          keyValue: tokens.refresh_token,
-          addedBy: userId,
-        });
+    await runWithTenant(tenantId, async () => {
+      for (const svc of services) {
+        if (tokens.refresh_token) {
+          upsertKeyVaultEntry({
+            tenantId,
+            service: svc,
+            keyName: 'refresh_token',
+            keyValue: tokens.refresh_token,
+            addedBy: userId,
+          });
+        }
+        if (tokens.access_token) {
+          upsertKeyVaultEntry({
+            tenantId,
+            service: svc,
+            keyName: 'access_token',
+            keyValue: tokens.access_token,
+            addedBy: userId,
+            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+          });
+        }
       }
-      if (tokens.access_token) {
-        upsertKeyVaultEntry({
-          tenantId,
-          service: svc,
-          keyName: 'access_token',
-          keyValue: tokens.access_token,
-          addedBy: userId,
-          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
-        });
-      }
-    }
 
-    // Audit log
-    insertAuditLog({
-      tenantId,
-      userId,
-      action: 'integration.connected',
-      resourceType: 'integration',
-      resourceId: source,
-      details: { source, services, hasRefreshToken: !!tokens.refresh_token },
-      ipAddress: req.ip,
+      insertAuditLog({
+        tenantId,
+        userId,
+        action: 'integration.connected',
+        resourceType: 'integration',
+        resourceId: source,
+        details: { source, services, hasRefreshToken: !!tokens.refresh_token },
+        ipAddress: req.ip,
+      });
     });
 
-    // Send success message to opener and close popup
-    // Use stored origin for postMessage target (popup opened from subdomain, callback on main domain)
     const postMessageOrigin = origin || '*';
     res.send(`<!DOCTYPE html>
 <html>
@@ -1096,6 +1110,18 @@ router.get('/google/integrate/callback', async (req, res) => {
       error.message
     ));
   }
+}
+
+// Legacy route - kept for backwards compat (redirect URIs already registered)
+router.get('/google/integrate/callback', async (req, res) => {
+  const { code, state, error: oauthError } = req.query;
+  if (oauthError || !code || !state) {
+    return res.status(400).send(renderIntegrationErrorPage(
+      'OAuth flow was cancelled or failed.',
+      oauthError || 'missing_code_or_state'
+    ));
+  }
+  return handleIntegrationCallback(req, res, code, state);
 });
 
 function renderIntegrationErrorPage(message, detail) {
