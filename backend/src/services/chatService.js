@@ -1880,29 +1880,103 @@ async function makeGoogleAuth(tenantId) {
 }
 
 async function callGwsTool(toolName, toolInput, tenantId) {
-  const gws = await import('./gwsService.js');
-  const ALLOWED_SERVICES = new Set(['drive', 'gmail', 'calendar', 'sheets', 'docs', 'slides', 'tasks', 'people']);
-
   switch (toolName) {
-    case 'gws_gmail_search':
-      return await gws.gmailSearch(toolInput.query, Math.min(toolInput.max_results || 10, 20), tenantId);
+    case 'gws_gmail_search': {
+      const auth = await makeGoogleAuth(tenantId);
+      const gmail = google.gmail({ version: 'v1', auth });
+      const maxResults = Math.min(toolInput.max_results || 10, 20);
+      const list = await gmail.users.messages.list({ userId: 'me', q: toolInput.query, maxResults });
+      if (!list.data.messages || list.data.messages.length === 0) {
+        return { messages: [], total: 0 };
+      }
+      const results = [];
+      for (const msg of list.data.messages.slice(0, maxResults)) {
+        try {
+          const full = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'metadata', metadataHeaders: ['From', 'To', 'Subject', 'Date'] });
+          const headers = full.data.payload?.headers || [];
+          results.push({
+            id: msg.id, threadId: msg.threadId,
+            from: headers.find(h => h.name === 'From')?.value,
+            to: headers.find(h => h.name === 'To')?.value,
+            subject: headers.find(h => h.name === 'Subject')?.value,
+            date: headers.find(h => h.name === 'Date')?.value,
+            snippet: full.data.snippet,
+          });
+        } catch { results.push({ id: msg.id, threadId: msg.threadId, error: 'Failed to fetch details' }); }
+      }
+      return { messages: results, total: list.data.resultSizeEstimate || results.length };
+    }
 
-    case 'gws_gmail_read':
-      return await gws.gmailRead(toolInput.message_id, tenantId);
+    case 'gws_gmail_read': {
+      const auth = await makeGoogleAuth(tenantId);
+      const gmail = google.gmail({ version: 'v1', auth });
+      const full = await gmail.users.messages.get({ userId: 'me', id: toolInput.message_id, format: 'full' });
+      const headers = full.data.payload?.headers || [];
+      let body = '';
+      const parts = full.data.payload?.parts || [];
+      if (parts.length > 0) {
+        const textPart = parts.find(p => p.mimeType === 'text/plain');
+        if (textPart?.body?.data) body = Buffer.from(textPart.body.data, 'base64url').toString('utf-8');
+      } else if (full.data.payload?.body?.data) {
+        body = Buffer.from(full.data.payload.body.data, 'base64url').toString('utf-8');
+      }
+      return {
+        id: full.data.id, threadId: full.data.threadId,
+        from: headers.find(h => h.name === 'From')?.value,
+        to: headers.find(h => h.name === 'To')?.value,
+        cc: headers.find(h => h.name === 'Cc')?.value,
+        subject: headers.find(h => h.name === 'Subject')?.value,
+        date: headers.find(h => h.name === 'Date')?.value,
+        body, snippet: full.data.snippet, labelIds: full.data.labelIds,
+      };
+    }
 
-    case 'gws_calendar_events':
-      return await gws.calendarListEvents('primary', toolInput.max_results || 10, toolInput.time_min || null, tenantId);
+    case 'gws_calendar_events': {
+      const auth = await makeGoogleAuth(tenantId);
+      const calendar = google.calendar({ version: 'v3', auth });
+      const maxResults = toolInput.max_results || 10;
+      const timeMin = toolInput.time_min || new Date().toISOString();
+      const res = await calendar.events.list({ calendarId: 'primary', maxResults, singleEvents: true, orderBy: 'startTime', timeMin });
+      return (res.data.items || []).map(e => ({
+        id: e.id, summary: e.summary,
+        start: e.start?.dateTime || e.start?.date,
+        end: e.end?.dateTime || e.end?.date,
+        location: e.location,
+        attendees: (e.attendees || []).map(a => a.email),
+        meetLink: e.hangoutLink || e.conferenceData?.entryPoints?.find(ep => ep.entryPointType === 'video')?.uri,
+        status: e.status,
+      }));
+    }
 
-    case 'gws_drive_search':
-      return await gws.driveSearch(toolInput.query, toolInput.max_results || 10, tenantId);
+    case 'gws_drive_search': {
+      const auth = await makeGoogleAuth(tenantId);
+      const drive = google.drive({ version: 'v3', auth });
+      const maxResults = toolInput.max_results || 10;
+      const res = await drive.files.list({ q: toolInput.query, pageSize: maxResults, fields: 'files(id,name,mimeType,modifiedTime,webViewLink,size)' });
+      return res.data.files || [];
+    }
 
-    case 'gws_sheets_read':
-      return await gws.sheetsRead(toolInput.spreadsheet_id, toolInput.range, tenantId);
+    case 'gws_sheets_read': {
+      const auth = await makeGoogleAuth(tenantId);
+      const sheets = google.sheets({ version: 'v4', auth });
+      const res = await sheets.spreadsheets.values.get({ spreadsheetId: toolInput.spreadsheet_id, range: toolInput.range });
+      return { range: res.data.range, values: res.data.values || [] };
+    }
 
-    case 'gws_sheets_append':
-      return await gws.sheetsAppend(toolInput.spreadsheet_id, toolInput.range, toolInput.values, tenantId);
+    case 'gws_sheets_append': {
+      const auth = await makeGoogleAuth(tenantId);
+      const sheets = google.sheets({ version: 'v4', auth });
+      const res = await sheets.spreadsheets.values.append({
+        spreadsheetId: toolInput.spreadsheet_id, range: toolInput.range,
+        valueInputOption: 'USER_ENTERED', requestBody: { values: toolInput.values },
+      });
+      return { updatedRange: res.data.updates?.updatedRange, updatedRows: res.data.updates?.updatedRows };
+    }
 
     case 'gws_workspace_command': {
+      // Fallback to gws CLI for generic workspace commands
+      const gws = await import('./gwsService.js');
+      const ALLOWED_SERVICES = new Set(['drive', 'gmail', 'calendar', 'sheets', 'docs', 'slides', 'tasks', 'people']);
       if (!ALLOWED_SERVICES.has(toolInput.service)) {
         throw new Error(`Service "${toolInput.service}" not allowed. Use: ${[...ALLOWED_SERVICES].join(', ')}`);
       }
