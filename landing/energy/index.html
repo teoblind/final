@@ -592,7 +592,7 @@
     <a href="/construction" class="footer-link">Construction</a>
     <a href="/energy" class="footer-link">Energy</a>
     <a href="/login" class="footer-link">Log In</a>
-    <a href="mailto:hello@coppice.ai" class="footer-link">hello@coppice.ai</a>
+    <a href="mailto:teo@coppice.ai" class="footer-link">teo@coppice.ai</a>
   </div>
 </footer>
 
@@ -649,7 +649,7 @@ async function submitDemo() {
   try {
     const res = await fetch('/api/v1/demo-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
     if (res.ok) { document.getElementById('demo-form').style.display = 'none'; document.getElementById('demo-success').style.display = 'block'; }
-  } catch (e) { alert('Something went wrong. Email us at hello@coppice.ai'); }
+  } catch (e) { alert('Something went wrong. Email us at teo@coppice.ai'); }
 }
 </script>
 

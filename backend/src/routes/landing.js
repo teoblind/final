@@ -54,7 +54,7 @@ router.post('/demo-request', (req, res) => {
 
     // Send notification email to Teo
     sendEmail({
-      to: 'teo@zhan.capital',
+      to: 'teo@coppice.ai',
       subject: `New Demo Request: ${name} @ ${company}`,
       body: `New demo request from coppice.ai:\n\nName: ${name}\nCompany: ${company}\nEmail: ${email}\nPhone: ${phone || 'N/A'}\nSpecialty: ${specialty || 'N/A'}\nNotes: ${notes || 'N/A'}\n\nSubmitted: ${new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' })}`,
       tenantId: 'zhan-capital',
