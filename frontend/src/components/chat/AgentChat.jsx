@@ -157,6 +157,8 @@ function cleanToolName(name) {
 
 function formatContent(text) {
   if (!text) return null;
+  // Normalize em/en dashes and double dashes to single hyphen
+  text = text.replace(/\u2014/g, '-').replace(/\u2013/g, '-').replace(/ -- /g, ' - ').replace(/^-- /gm, '- ');
 
   // Split text on tool invocation blocks: <tool_name>...</tool_name> (completed) or <tool_name>... (still running)
   const closedPattern = /<(\w+)>\s*[\s\S]*?<\/\1>/g;
@@ -212,6 +214,66 @@ function formatContent(text) {
         </div>
       );
     }
+    // Helper: render inline markdown (bold, links, bare URLs) within a text string
+    function renderInline(text, keyPrefix, compact) {
+      return text.split(/(\*\*\[.*?\]\(https?:\/\/[^\s)]+\)\*\*|\[.*?\]\(https?:\/\/[^\s)]+\)|\*\*.*?\*\*|https?:\/\/[^\s)]+)/g).map((part, j) => {
+        // Bold-wrapped markdown link: **[text](url)**
+        if (part.startsWith('**[') && part.endsWith(')**')) {
+          const inner = part.slice(2, -2);
+          const mdLink = inner.match(/^\[(.+?)\]\((https?:\/\/[^\s)]+)\)$/);
+          if (mdLink) {
+            const url = mdLink[2];
+            const isGWS = url.includes('docs.google.com') || url.includes('drive.google.com');
+            if (isGWS) {
+              const isSheet = url.includes('/spreadsheets');
+              const isDoc = url.includes('/document');
+              const isSlides = url.includes('/presentation');
+              const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
+              if (compact) return <a key={`${keyPrefix}-${j}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-white hover:opacity-90 transition-opacity" style={{ backgroundColor: color }}><ExternalLink size={10} />{mdLink[1]}</a>;
+              return <a key={`${keyPrefix}-${j}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm" style={{ backgroundColor: color }}><ExternalLink size={14} />{mdLink[1]}</a>;
+            }
+            return <a key={`${keyPrefix}-${j}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline font-bold"><ExternalLink size={11} className="inline shrink-0" />{mdLink[1]}</a>;
+          }
+        }
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={`${keyPrefix}-${j}`} className="font-semibold">{part.slice(2, -2)}</strong>;
+        }
+        const mdLink = part.match(/^\[(.+?)\]\((https?:\/\/[^\s)]+)\)$/);
+        if (mdLink) {
+          const url = mdLink[2];
+          const isGWS = url.includes('docs.google.com') || url.includes('drive.google.com');
+          if (isGWS) {
+            const isSheet = url.includes('/spreadsheets');
+            const isDoc = url.includes('/document');
+            const isSlides = url.includes('/presentation');
+            const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
+            if (compact) {
+              return <a key={`${keyPrefix}-${j}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-white hover:opacity-90 transition-opacity" style={{ backgroundColor: color }}><ExternalLink size={10} />{mdLink[1]}</a>;
+            }
+            return <a key={`${keyPrefix}-${j}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm" style={{ backgroundColor: color }}><ExternalLink size={14} />{mdLink[1]}</a>;
+          }
+          return <a key={`${keyPrefix}-${j}`} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline font-medium"><ExternalLink size={11} className="inline shrink-0" />{mdLink[1]}</a>;
+        }
+        if (/^https?:\/\//.test(part)) {
+          const isSheet = part.includes('docs.google.com/spreadsheets');
+          const isDoc = part.includes('docs.google.com/document');
+          const isSlides = part.includes('docs.google.com/presentation');
+          const isDrive = part.includes('drive.google.com');
+          const isGWS = isSheet || isDoc || isSlides || isDrive;
+          if (isGWS) {
+            const label = isSheet ? 'Open Spreadsheet' : isDoc ? 'Open Document' : isSlides ? 'Open Presentation' : 'Open in Drive';
+            const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
+            if (compact) {
+              return <a key={`${keyPrefix}-${j}`} href={part} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold text-white hover:opacity-90 transition-opacity" style={{ backgroundColor: color }}><ExternalLink size={10} />{label}</a>;
+            }
+            return <a key={`${keyPrefix}-${j}`} href={part} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm" style={{ backgroundColor: color }}><ExternalLink size={14} />{label}</a>;
+          }
+          return <a key={`${keyPrefix}-${j}`} href={part} target="_blank" rel="noopener noreferrer" className="text-[#1e3a5f] hover:underline break-all">{part}</a>;
+        }
+        return part;
+      });
+    }
+
     // Regular text - detect markdown tables first, then render inline formatting
     const lines = seg.value.split('\n');
     const rendered = [];
@@ -226,8 +288,16 @@ function formatContent(text) {
           bodyRows.push(lines[li].split('|').filter(c => c.trim()).map(c => c.trim()));
           li++;
         }
+        const tableKey = `table-${si}-${li}`;
+        const tsvText = [headerCells.join('\t'), ...bodyRows.map(r => r.join('\t'))].join('\n');
         rendered.push(
-          <div key={`table-${li}`} className="my-2 overflow-x-auto">
+          <div key={tableKey} className="my-2 overflow-x-auto relative group/table">
+            <button
+              onClick={() => { navigator.clipboard.writeText(tsvText); const el = document.getElementById(tableKey); if (el) { el.textContent = 'Copied!'; setTimeout(() => { el.textContent = 'Copy'; }, 1500); } }}
+              className="absolute top-1 right-1 opacity-0 group-hover/table:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-md bg-white/90 border border-[#e5e3de] text-[10px] text-[#6b6b65] hover:bg-[#f5f4f0] cursor-pointer z-10"
+            >
+              <Copy size={10} /><span id={tableKey}>Copy</span>
+            </button>
             <table className="w-full text-[12px] border-collapse">
               <thead>
                 <tr className="bg-[#f5f4f0] border-b border-[#e5e3de]">
@@ -237,10 +307,9 @@ function formatContent(text) {
               <tbody>
                 {bodyRows.map((row, ri) => (
                   <tr key={ri} className={ri % 2 === 0 ? '' : 'bg-[#faf9f7]'}>
-                    {row.map((cell, ci) => {
-                      const isBold = cell.startsWith('**') && cell.endsWith('**');
-                      return <td key={ci} className="px-3 py-1.5 border-b border-[#f0eeea] text-terminal-text">{isBold ? <strong className="font-semibold">{cell.slice(2, -2)}</strong> : cell}</td>;
-                    })}
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-3 py-1.5 border-b border-[#f0eeea] text-terminal-text">{renderInline(cell, `r${ri}c${ci}`, true)}</td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -252,40 +321,21 @@ function formatContent(text) {
       // Non-table line - render with inline formatting
       const line = lines[li];
       li++;
-      const arr = lines;
       const i = li - 1;
-      // Split on markdown links [text](url), bold **text**, and bare URLs
-      const parts = line.split(/(\[.*?\]\(https?:\/\/[^\s)]+\)|\*\*.*?\*\*|https?:\/\/[^\s)]+)/g).map((part, j) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={j} className="font-semibold">{part.slice(2, -2)}</strong>;
-        }
-        // Markdown link: [text](url)
-        const mdLink = part.match(/^\[(.+?)\]\((https?:\/\/[^\s)]+)\)$/);
-        if (mdLink) {
-          const url = mdLink[2];
-          const isGWS = url.includes('docs.google.com') || url.includes('drive.google.com');
-          if (isGWS) {
-            const isSheet = url.includes('/spreadsheets');
-            const isDoc = url.includes('/document');
-            const isSlides = url.includes('/presentation');
-            const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
-            return <a key={j} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm" style={{ backgroundColor: color }}><ExternalLink size={14} />{mdLink[1]}</a>;
-          }
-          return <a key={j} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline font-medium"><ExternalLink size={11} className="inline shrink-0" />{mdLink[1]}</a>;
-        }
-        // Bare URL
-        if (/^https?:\/\//.test(part)) {
-          const isSheet = part.includes('docs.google.com/spreadsheets');
-          const isDoc = part.includes('docs.google.com/document');
-          const isSlides = part.includes('docs.google.com/presentation');
-          const isDrive = part.includes('drive.google.com');
-          const isGoogle = isSheet || isDoc || isSlides || isDrive;
-          const label = isSheet ? 'Open Spreadsheet' : isDoc ? 'Open Document' : isSlides ? 'Open Presentation' : isDrive ? 'Open in Drive' : 'Open Link';
-          const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
-          return <a key={j} href={part} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm`} style={{ backgroundColor: color }}><ExternalLink size={14} />{label}</a>;
-        }
-        return part;
-      });
+      // Horizontal rule
+      if (/^---+$/.test(line.trim())) {
+        rendered.push(<hr key={`${si}-${i}`} className="my-2 border-t border-[#e8e6e1]" />);
+        continue;
+      }
+      // Headings
+      const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        const cls = level === 1 ? 'text-[15px] font-bold' : level === 2 ? 'text-[13px] font-bold' : 'text-[12px] font-semibold';
+        rendered.push(<div key={`${si}-${i}`} className={`${cls} text-terminal-text font-heading mt-2 mb-1`}>{renderInline(headingMatch[2], `${si}-${i}`, false)}</div>);
+        continue;
+      }
+      const parts = renderInline(line, `${si}-${i}`, false);
       rendered.push(<span key={`${si}-${i}`}>{parts}{i < lines.length && <br />}</span>);
     }
     return rendered;
@@ -2642,6 +2692,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   });
   const [sending, setSending] = useState(false);
   const [progressInfo, setProgressInfo] = useState(null); // { iteration, maxTurns, tools }
+  const abortControllerRef = useRef(null);
   const [activeTab, setActiveTab] = useState('Chat');
   const [autoVoice, setAutoVoice] = useState(false);
   const [showCallPanel, setShowCallPanel] = useState(false);
@@ -2770,6 +2821,18 @@ export default function AgentChat({ agentId = 'estimating' }) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [isMultiInstance, handleNewInstance, closeInstance, switchInstance, activeInstanceId, instances]);
+
+  // Global Escape key to stop generation
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape' && sending && abortControllerRef.current) {
+        e.preventDefault();
+        handleStop();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [sending, handleStop]);
 
   // Load threads on mount / agent change
   useEffect(() => {
@@ -3330,10 +3393,14 @@ export default function AgentChat({ agentId = 'estimating' }) {
           postUrl = `${API_BASE}/v1/chat/${agentId}/messages/stream`;
         }
 
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
         const res = await fetch(postUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ content: text }),
+          signal: controller.signal,
         });
 
         if (!res.ok) {
@@ -3466,24 +3533,46 @@ export default function AgentChat({ agentId = 'estimating' }) {
         ));
       }
     } catch (err) {
-      setMessages(prev => {
-        const filtered = prev.filter(m => !(m.id === agentMsgId && !m.content));
-        return [...filtered, {
-          id: Date.now() + 2, role: 'agent',
-          content: err?.message === 'Unauthorized'
-            ? 'Session expired - please refresh the page and log in again.'
-            : `Error: ${err?.message || 'Connection failed. Please try again.'}`,
-          error: true,
-          time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-        }];
-      });
+      // Abort is intentional - not an error
+      if (err?.name === 'AbortError') {
+        setMessages(prev => prev.map(m =>
+          m.id === agentMsgId && !m.content?.trim()
+            ? { ...m, content: 'Stopped.' }
+            : m
+        ));
+      } else {
+        setMessages(prev => {
+          const filtered = prev.filter(m => !(m.id === agentMsgId && !m.content));
+          return [...filtered, {
+            id: Date.now() + 2, role: 'agent',
+            content: err?.message === 'Unauthorized'
+              ? 'Session expired - please refresh the page and log in again.'
+              : `Error: ${err?.message || 'Connection failed. Please try again.'}`,
+            error: true,
+            time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+          }];
+        });
+      }
     } finally {
       setSending(false);
       setProgressInfo(null);
+      abortControllerRef.current = null;
     }
   };
 
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
   const handleKeyDown = (e) => {
+    if (e.key === 'Escape' && sending) {
+      e.preventDefault();
+      handleStop();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -3643,9 +3732,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
             {/* Typing indicator + progress */}
             {sending && (
               <div className="self-start flex gap-2.5 max-w-[85%]">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold text-white shrink-0" style={{ backgroundColor: agent.color }}>
-                  {agent.initial}
-                </div>
+                {/* Invisible spacer matching avatar width */}
+                <div className="w-7 shrink-0" />
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1 px-4 py-2.5 bg-terminal-panel border border-[#e8e6e1] rounded-[14px] rounded-tl-[4px]">
                     {[0, 1, 2].map(i => (
@@ -3724,15 +3812,25 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   <Paperclip size={16} />
                 </button>
               </div>
-              <button
-                data-send-btn
-                onClick={handleSend}
-                disabled={(!input.trim() && pendingFiles.length === 0) || sending}
-                className="w-11 h-11 rounded-xl text-white flex items-center justify-center transition-colors disabled:opacity-40 shrink-0"
-                style={{ backgroundColor: agent.accentColor }}
-              >
-                <Send size={18} />
-              </button>
+              {sending ? (
+                <button
+                  onClick={handleStop}
+                  className="w-11 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors shrink-0"
+                  title="Stop generating (Esc)"
+                >
+                  <Square size={16} fill="white" />
+                </button>
+              ) : (
+                <button
+                  data-send-btn
+                  onClick={handleSend}
+                  disabled={(!input.trim() && pendingFiles.length === 0)}
+                  className="w-11 h-11 rounded-xl text-white flex items-center justify-center transition-colors disabled:opacity-40 shrink-0"
+                  style={{ backgroundColor: agent.accentColor }}
+                >
+                  <Send size={18} />
+                </button>
+              )}
             </div>
             <div className="text-[10px] text-[#c5c5bc] text-center mt-1.5">{dragging ? 'Drop files here' : agent.hint}</div>
           </div>

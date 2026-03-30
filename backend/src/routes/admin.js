@@ -54,10 +54,14 @@ const REAUTH_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.compose',
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/calendar.events',
-  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/presentations',
   'openid',
   'email',
 ];
@@ -160,7 +164,22 @@ router.get('/email/reauth/callback', async (req, res) => {
         SET gmail_refresh_token = ?, token_last_authed_at = datetime('now'), updated_at = datetime('now')
         WHERE tenant_id = ?
       `).run(tokens.refresh_token, tenantId);
-      console.log(`[Re-Auth] Token updated for tenant ${tenantId} (${email || 'unknown email'})`);
+
+      // Also update ALL key vault services so calendar, docs, drive, sheets all work
+      const { upsertKeyVaultEntry, setTenantContext } = await import('../cache/database.js');
+      await new Promise((resolve) => {
+        setTenantContext(tenantId, () => {
+          for (const service of ['google-gmail', 'google-calendar', 'google-docs']) {
+            upsertKeyVaultEntry({ tenantId, service, keyName: 'refresh_token', keyValue: tokens.refresh_token, addedBy: 'reauth' });
+            if (tokens.access_token) {
+              upsertKeyVaultEntry({ tenantId, service, keyName: 'access_token', keyValue: tokens.access_token, addedBy: 'reauth' });
+            }
+          }
+          resolve();
+        });
+      });
+
+      console.log(`[Re-Auth] Token updated for tenant ${tenantId} (${email || 'unknown email'}) - email config + key vault (gmail, calendar, docs)`);
     } catch (dbErr) {
       console.error('[Re-Auth] DB update error:', dbErr);
       return res.status(500).send('Failed to save new token');

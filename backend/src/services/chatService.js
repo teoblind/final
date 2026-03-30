@@ -361,6 +361,17 @@ const LEAD_ENGINE_TOOLS = [
       required: ['sheet_url'],
     },
   },
+  {
+    name: 'share_leads_sheet',
+    description: 'Share your linked leads sheet with a team member. They will get a notification and can accept it into their own pipeline.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        user_email: { type: 'string', description: 'Email of the team member to share with' },
+      },
+      required: ['user_email'],
+    },
+  },
 ];
 
 // ─── HubSpot CRM Tools (Sangha tenant only) ────────────────────────────────
@@ -643,25 +654,28 @@ const TASK_PROPOSAL_TOOLS = [
 
 const TASK_PROPOSAL_PROMPT_ADDON = `
 
-═══ BACKGROUND TASK PROPOSALS ═══
-You have a "propose_task" tool that lets you propose background tasks the user can approve and run asynchronously.
+═══ BACKGROUND TASK PROPOSALS (CRITICAL) ═══
+You have a "propose_task" tool. You MUST use it when the user requests complex, multi-step work.
 
-WHEN TO USE propose_task:
-- The user describes work that requires multiple steps, research, document creation, or analysis
-- The task would take more than a quick conversational answer (e.g., "write a report on...", "research...", "put together a one-pager on...")
-- The user explicitly asks you to "run a task", "create a task", or "queue this up"
+MANDATORY — USE propose_task WHEN:
+- The user asks you to research something and send a report/PDF/email
+- The user asks for a document, one-pager, spreadsheet, or presentation as a deliverable
+- The user asks for analysis that requires web research or multiple data sources
+- The user says "run a task", "create a task", "queue this up", or describes work with multiple deliverables
+- ANY request that involves: research + compile + deliver (report/email/PDF/doc)
 
-WHEN NOT TO USE propose_task:
-- Simple questions you can answer directly in chat
+DO NOT USE propose_task WHEN:
+- Simple questions you can answer directly in chat (one reply, no deliverable)
 - Quick lookups or single-step operations
 - The user just wants information, not a deliverable
 
+CRITICAL: If you are about to make more than 3 tool calls to fulfill a request, you should have used propose_task instead. Do NOT execute complex multi-step work inline. Propose it, let the user review and approve it, THEN it runs in the background.
+
 HOW TO USE IT WELL:
-- Write a clear, specific action_prompt — this is the instruction the background executor will follow
-- Include any relevant entity names, file references, or data sources in the action_prompt
-- Set the right category: research, analysis, estimate, outreach, document, admin, or follow_up
-- If the user mentioned specific entities or documents in the conversation, include them in the sources array
-- After proposing, tell the user what you proposed and that they can review/approve it in chat or on the Command dashboard`;
+- Write a clear, specific action_prompt with detailed execution instructions
+- Include entity names, file references, data sources, and who to email results to
+- Set the right category: research, analysis, estimate, outreach, document, admin, follow_up, or pitch_deck
+- After proposing, tell the user what you proposed and that they can review/approve it`;
 
 // ─── Agent Delegation Tools ──────────────────────────────────────────────────
 
@@ -1874,8 +1888,10 @@ Notes:
  */
 async function makeGoogleAuth(tenantId) {
   const { getKeyVaultValue, getTenantEmailConfig } = await import('../cache/database.js');
-  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+  const clientPairs = [
+    { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+    { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  ].filter(p => p.id && p.secret);
 
   let refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
   if (!refreshToken) {
@@ -1883,13 +1899,23 @@ async function makeGoogleAuth(tenantId) {
     refreshToken = emailConfig?.gmailRefreshToken || emailConfig?.gmail_refresh_token;
   }
 
-  if (!clientId || !clientSecret || !refreshToken) {
+  if (!clientPairs.length || !refreshToken) {
     throw new Error(`No Google OAuth credentials available for tenant "${tenantId}"`);
   }
 
-  const auth = new google.auth.OAuth2(clientId, clientSecret, 'http://localhost:8099');
-  auth.setCredentials({ refresh_token: refreshToken });
-  return auth;
+  // Try each OAuth client - token may have been issued by either one
+  for (const pair of clientPairs) {
+    const auth = new google.auth.OAuth2(pair.id, pair.secret, 'http://localhost:8099');
+    auth.setCredentials({ refresh_token: refreshToken });
+    try {
+      await auth.getAccessToken();
+      return auth;
+    } catch (err) {
+      if (err.message?.includes('invalid_grant') || err.message?.includes('unauthorized_client')) continue;
+      throw err;
+    }
+  }
+  throw new Error(`Google OAuth token refresh failed for tenant "${tenantId}" - token may need re-auth`);
 }
 
 async function callGwsTool(toolName, toolInput, tenantId) {
@@ -2911,8 +2937,10 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
       });
 
       // Store in key vault — both 'crm' (legacy) and 'dacp-leads' (dashboard reads this)
+      // Use per-user key when userId is available
+      const crmUserId = _toolContext?.userId || 'system';
       kvSet({ tenantId, service: 'crm', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
-      kvSet({ tenantId, service: 'dacp-leads', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
+      kvSet({ tenantId, service: 'dacp-leads', keyName: `sheet_id:${crmUserId}`, keyValue: newSheetId, addedBy: 'agent' });
 
       return { success: true, sheet_id: newSheetId, sheet_url: sheetUrl, message: `Created "${companyName} — Deal Pipeline" and connected it to your dashboard.` };
     }
@@ -2925,35 +2953,118 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
       const sheetId = match ? match[1] : sheetUrl.trim();
       if (!sheetId) return { error: 'Please provide a Google Sheets URL or spreadsheet ID.' };
 
-      // Get OAuth
-      const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
-      const csecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+      // Get OAuth - try both clients
+      const clientPairs = [
+        { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+        { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+      ].filter(p => p.id && p.secret);
       let rToken = kvGet(tenantId, 'google-docs', 'refresh_token');
       if (!rToken) {
         const eCfg = getEmailCfg(tenantId);
         rToken = eCfg?.gmailRefreshToken;
       }
-      if (!cid || !csecret || !rToken) {
+      if (!clientPairs.length || !rToken) {
         return { error: 'No Google account connected. Connect Google Docs & Drive in Settings first.' };
       }
 
-      const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
-      oauth.setCredentials({ refresh_token: rToken });
-      const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
-
-      // Verify access
+      // Verify access - try each client pair
       let sheetTitle = 'Leads Sheet';
-      try {
-        const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title' });
-        sheetTitle = meta.data.properties?.title || sheetTitle;
-      } catch (err) {
-        return { error: `Cannot access sheet: ${err.message}. Make sure it's shared with the agent account.` };
+      let verified = false;
+      for (const pair of clientPairs) {
+        try {
+          const oauth = new googleapis.auth.OAuth2(pair.id, pair.secret, 'http://localhost:8099');
+          oauth.setCredentials({ refresh_token: rToken });
+          const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
+          const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title' });
+          sheetTitle = meta.data.properties?.title || sheetTitle;
+          verified = true;
+          break;
+        } catch (err) {
+          if (err.message?.includes('invalid_grant') || err.message?.includes('unauthorized_client')) continue;
+          return { error: `Cannot access sheet: ${err.message}. Make sure it's shared with the agent account.` };
+        }
       }
+      if (!verified) return { error: 'Google auth failed with all OAuth clients. Re-auth may be needed.' };
 
-      // Store in key vault — dashboard reads 'dacp-leads'
-      kvSet({ tenantId, service: 'dacp-leads', keyName: 'sheet_id', keyValue: sheetId, addedBy: 'agent' });
+      // Store in key vault - per-user key
+      const linkUserId = _toolContext?.userId || 'system';
+      kvSet({ tenantId, service: 'dacp-leads', keyName: `sheet_id:${linkUserId}`, keyValue: sheetId, addedBy: 'agent' });
 
       return { success: true, sheet_id: sheetId, sheet_title: sheetTitle, sheet_url: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`, message: `Linked "${sheetTitle}" to the Leads Pipeline on the Command Dashboard.` };
+    }
+    case 'share_leads_sheet': {
+      const { getKeyVaultValue: kvGet, getUsersByTenant: getUsers, createLeadsSheetShare, getUserByEmailAndTenant } = await import('../cache/database.js');
+
+      const shareUserId = _toolContext?.userId || 'system';
+      // Get current user's sheet
+      let mySheetId = kvGet(tenantId, 'dacp-leads', `sheet_id:${shareUserId}`);
+      if (!mySheetId || mySheetId === '__unlinked__') {
+        mySheetId = kvGet(tenantId, 'dacp-leads', 'sheet_id');
+      }
+      if (!mySheetId || mySheetId === '__unlinked__') {
+        return { error: 'You don\'t have a leads sheet linked. Link one first before sharing.' };
+      }
+
+      // Look up target user by email
+      const targetEmail = toolInput.user_email;
+      if (!targetEmail) return { error: 'Please provide the email of the team member to share with.' };
+
+      const targetUser = getUserByEmailAndTenant(targetEmail, tenantId);
+      if (!targetUser) return { error: `No user found with email "${targetEmail}" in this workspace.` };
+      if (targetUser.id === shareUserId) return { error: 'You can\'t share a sheet with yourself.' };
+
+      // Get sheet title for the notification
+      let sheetTitle = 'Leads Sheet';
+      try {
+        const { google: googleapis } = await import('googleapis');
+        const { getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
+        const cid = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
+        const csecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+        let rToken = kvGet(tenantId, 'google-docs', 'refresh_token');
+        if (!rToken) {
+          const eCfg = getEmailCfg(tenantId);
+          rToken = eCfg?.gmailRefreshToken;
+        }
+        if (cid && csecret && rToken) {
+          const oauth = new googleapis.auth.OAuth2(cid, csecret, 'http://localhost:8099');
+          oauth.setCredentials({ refresh_token: rToken });
+          const sheets = googleapis.sheets({ version: 'v4', auth: oauth });
+          const meta = await sheets.spreadsheets.get({ spreadsheetId: mySheetId, fields: 'properties.title' });
+          sheetTitle = meta.data.properties?.title || sheetTitle;
+        }
+      } catch (e) { /* non-critical - use default title */ }
+
+      // Get from_user name
+      const { getUserById } = await import('../cache/database.js');
+      const fromUser = getUserById(shareUserId);
+      const fromUserName = fromUser?.name || fromUser?.email || 'A team member';
+
+      // Create notification
+      const notifResult = db.prepare(`
+        INSERT INTO platform_notifications (tenant_id, user_id, agent_id, title, body, type, link_tab)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        tenantId,
+        targetUser.id,
+        'leads',
+        `${fromUserName} shared a leads sheet with you`,
+        `"${sheetTitle}" - Accept to add it to your pipeline.`,
+        'action',
+        'command'
+      );
+
+      // Create share record
+      const shareId = createLeadsSheetShare({
+        tenantId,
+        fromUserId: shareUserId,
+        fromUserName,
+        toUserId: targetUser.id,
+        sheetId: mySheetId,
+        sheetTitle,
+        notificationId: notifResult.lastInsertRowid || null,
+      });
+
+      return { success: true, share_id: shareId, message: `Shared "${sheetTitle}" with ${targetUser.name || targetUser.email}. They'll get a notification to accept it.` };
     }
     default:
       throw new Error(`Unknown lead engine tool: ${toolName}`);
@@ -3027,18 +3138,32 @@ STANDARD PRICING:
 - #4 Rebar: ~$1.49/LF
 - Typical markups: 10-15% overhead, 10% profit, $2,500-5,000 mobilization
 
-You coordinate across all departments: estimating, field operations, documents, meetings, and email.
+You are the ORCHESTRATOR agent. You coordinate across all departments by delegating to specialized sub-agents:
 
-You can help with:
+SUB-AGENTS YOU CAN DELEGATE TO (use the delegate_to_agent tool):
+- "comms" : Email correspondence, outreach tracking, inbox management, meeting summaries
+- "email" : Direct email drafting and sending
+- "estimating" : Construction estimates, bid analysis, takeoffs, pricing
+- "documents" : Document creation via Google Docs/Sheets/Slides
+- "lead-engine" : Lead discovery, enrichment, outreach pipeline
+- "sales" : Sales calls, follow-ups, CRM pipeline management
+- "workflow" : Job tracking, project management, scheduling
+
+IMPORTANT ROUTING RULES:
+1. When the user asks for complex multi-step work (research + report, analysis + PDF, competitive research + email), ALWAYS use the propose_task tool to create a task proposal the user can approve before execution.
+2. When the user asks you to do something that falls under a sub-agent's specialty (like drafting an email, creating a spreadsheet, running lead discovery, generating an estimate), delegate using delegate_to_agent.
+3. For simple questions, answer directly in chat.
+
+MEETING BOT:
+You CAN join live meetings. Coppice has a Meeting Bot (powered by Recall.ai) that automatically joins Google Meet, Zoom, and Teams calls from the user's calendar. It records, transcribes, extracts action items, and saves notes to Obsidian and the dashboard. The user does NOT need to use a workaround. If asked about meetings, confirm this capability.
+
+You can help DIRECTLY with:
 - Answering questions about DACP's capabilities, services, past projects, and pricing
-- Routing tasks to the right sub-agent (estimating, documents, meetings, email)
-- Generating estimates and bid proposals for concrete work
-- Answering questions about active jobs, bids, and field reports
 - Looking up pricing, job history, and company data
-- Drafting RFQ responses, bid letters, and project correspondence
 - General project management and business questions
+- Coordinating across multiple sub-agents for complex multi-step tasks
 
-You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
+You have access to Google Workspace tools (create Docs, Sheets, Slides, search Drive, add comments to files).
 
 When the user requests a PDF, report, or document:
 - Before generating, ask what style they prefer:
@@ -3529,8 +3654,9 @@ You also have access to the Lead Engine — an automated lead discovery and outr
 - View or modify discovery configuration — queries, schedule, sender, mode (get_discovery_config, update_discovery_config)
 - Create a CRM pipeline Google Sheet and connect it to the dashboard (setup_crm_sheet) - only one sheet active at a time
 - Link an existing Google Sheet to the Leads Pipeline on the Command Dashboard (link_leads_sheet) - use when the user wants to connect a sheet that already exists
+- Share your linked leads sheet with a team member (share_leads_sheet) - they get a notification and can accept it into their own pipeline, with automatic deduplication if they already have a sheet
 
-When the user asks about leads, pipeline, outreach, or prospecting, use these tools. You can configure the entire discovery pipeline through chat - set search queries, enable nightly automation, change sender identity, etc. If the user asks to set up a pipeline sheet or CRM, use setup_crm_sheet. If they ask to link or connect an existing spreadsheet to the dashboard, use link_leads_sheet.`;
+When the user asks about leads, pipeline, outreach, or prospecting, use these tools. You can configure the entire discovery pipeline through chat - set search queries, enable nightly automation, change sender identity, etc. If the user asks to set up a pipeline sheet or CRM, use setup_crm_sheet. If they ask to link or connect an existing spreadsheet to the dashboard, use link_leads_sheet. If they want to share their sheet with a colleague, use share_leads_sheet.`;
 
 const HUBSPOT_PROMPT_ADDON = `
 
@@ -3653,7 +3779,7 @@ const TOOL_CATEGORIES = {
   emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
   email: ['send_email', 'list_emails', 'read_email'],
   calendar: ['create_meeting'],
-  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config', 'setup_crm_sheet', 'link_leads_sheet'],
+  leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config', 'setup_crm_sheet', 'link_leads_sheet', 'share_leads_sheet'],
   knowledge: ['search_knowledge'],
   hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'],
   mining: ['generate_mine_specs'],
@@ -4171,6 +4297,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           workspace_create_sheet: () => `Create spreadsheet: "${toolInput.title || 'untitled'}"`,
           setup_crm_sheet: () => 'Create CRM pipeline sheet and connect to dashboard',
           link_leads_sheet: () => 'Linking sheet to Leads Pipeline',
+          share_leads_sheet: () => `Share leads sheet with ${toolInput.user_email || 'team member'}`,
           workspace_create_slides: () => `Create presentation: "${toolInput.title || 'untitled'}"`,
           gws_sheets_update: () => `Update spreadsheet cells: ${toolInput.range} in ${toolInput.spreadsheet_id}`,
           gws_docs_update: () => `${toolInput.mode === 'replace' ? 'Replace' : 'Append to'} document: ${toolInput.document_id}`,
@@ -4637,14 +4764,99 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (cliStreamEnabled && cliStreamAgents.includes(agentId) && !streamForceApi) {
     try {
       const historyForContext = messages.slice(0, -1);
+
+      // Pre-import for task proposal interception (needed in sync callback)
+      const { insertAgentAssignment: _cliInsertAssignment } = await import('../cache/database.js');
+      const { randomUUID: _cliRandomUUID } = await import('crypto');
+
+      // Buffer to detect <task_proposal> blocks from CLI agent output
+      let _cliProposalBuffer = '';
+      let _cliInsideProposal = false;
+
+      const cliOnText = (textDelta) => {
+        // JSON progress/delegation events pass through immediately
+        if (textDelta.startsWith('{') && textDelta.includes('"_type"')) {
+          onChunk(textDelta);
+          return;
+        }
+
+        _cliProposalBuffer += textDelta;
+
+        // Detect opening tag
+        if (!_cliInsideProposal && _cliProposalBuffer.includes('<task_proposal>')) {
+          _cliInsideProposal = true;
+          const beforeTag = _cliProposalBuffer.split('<task_proposal>')[0];
+          if (beforeTag) onChunk(beforeTag);
+          _cliProposalBuffer = _cliProposalBuffer.slice(_cliProposalBuffer.indexOf('<task_proposal>'));
+          return;
+        }
+
+        // If inside a proposal block, buffer until we see the closing tag
+        if (_cliInsideProposal) {
+          if (_cliProposalBuffer.includes('</task_proposal>')) {
+            const match = _cliProposalBuffer.match(/<task_proposal>\s*([\s\S]*?)\s*<\/task_proposal>/);
+            if (match) {
+              try {
+                const proposal = JSON.parse(match[1]);
+                const proposalId = `TASK-${_cliRandomUUID().slice(0, 8).toUpperCase()}`;
+                _cliInsertAssignment({
+                  id: proposalId,
+                  tenant_id: tenantId,
+                  title: proposal.title,
+                  description: proposal.description,
+                  category: proposal.category || 'research',
+                  priority: proposal.priority || 'medium',
+                  action_prompt: proposal.action_prompt,
+                  agent_id: agentId,
+                  context_json: proposal.sources ? JSON.stringify({ sources: proposal.sources }) : null,
+                });
+                onChunk(JSON.stringify({
+                  _type: 'task_proposal',
+                  assignment_id: proposalId,
+                  title: proposal.title,
+                  description: proposal.description,
+                  category: proposal.category || 'research',
+                  priority: proposal.priority || 'medium',
+                  sources: proposal.sources || [],
+                }));
+                console.log(`[chatStream] CLI agent proposed task: ${proposalId} "${proposal.title}"`);
+              } catch (parseErr) {
+                console.error('[chatStream] Failed to parse CLI task proposal:', parseErr.message);
+                onChunk(_cliProposalBuffer);
+              }
+            }
+            const afterTag = _cliProposalBuffer.split('</task_proposal>').slice(1).join('</task_proposal>');
+            if (afterTag) onChunk(afterTag);
+            _cliProposalBuffer = '';
+            _cliInsideProposal = false;
+          }
+          return;
+        }
+
+        // Not inside a proposal block - pass through normally
+        if (_cliProposalBuffer.length > 500 && !_cliProposalBuffer.includes('<task')) {
+          onChunk(_cliProposalBuffer);
+          _cliProposalBuffer = '';
+        } else if (!_cliProposalBuffer.includes('<task')) {
+          onChunk(textDelta);
+          _cliProposalBuffer = '';
+        }
+      };
+
       const cliResult = await streamClaudeAgent({
         tenantId,
         agentId,
+        userId,
         message: userContent,
         history: historyForContext,
         maxTurns: streamAgentConfig.max_turns,
-        onText: (textDelta) => onChunk(textDelta),
+        onText: cliOnText,
       });
+
+      // Flush any remaining buffer
+      if (_cliProposalBuffer && !_cliInsideProposal) {
+        onChunk(_cliProposalBuffer);
+      }
 
       const cliResponse = cliResult.response || '';
 

@@ -163,17 +163,27 @@ router.post('/save-transcript', async (req, res) => {
     const { tenantId = 'zhan-capital', title, date, transcript, duration, source } = req.body;
     if (!transcript) return res.status(400).json({ error: 'transcript is required' });
 
-    // Save as a knowledge entry (meeting type) — same schema as calendarPoll.js
+    // Save as a knowledge entry (meeting type) — processed=0 so AI pipeline picks it up
     const { getTenantDb } = await import('../cache/database.js');
     const db = getTenantDb(tenantId);
     const id = `local-${Date.now()}`;
     db.prepare(`
-      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at, processed)
-      VALUES (?, ?, 'meeting', ?, ?, ?, 'local-capture', 'coppice-menubar', ?, 1)
-    `).run(id, tenantId, title || 'Untitled Meeting', transcript, transcript, date || new Date().toISOString());
-    console.log(`[Recall] Saved local transcript: "${title}" (${transcript.split(/\s+/).length} words)`);
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, duration_seconds, recorded_at, processed)
+      VALUES (?, ?, 'meeting', ?, ?, ?, 'local-capture', 'coppice-menubar', ?, ?, 0)
+    `).run(id, tenantId, title || 'Untitled Meeting', transcript, transcript, duration || null, date || new Date().toISOString());
+    console.log(`[Recall] Saved local transcript: "${title}" (${transcript.split(/\s+/).length} words) — queued for AI processing`);
 
-    res.json({ id, saved: true });
+    // Trigger async AI processing (summarization, action items, entity extraction)
+    try {
+      const { processKnowledgeEntry } = await import('../services/knowledgeProcessor.js');
+      processKnowledgeEntry(id, tenantId).catch(err => {
+        console.error(`[Recall] Background processing failed for ${id}:`, err.message);
+      });
+    } catch (e) {
+      console.warn('[Recall] Knowledge processor not available:', e.message);
+    }
+
+    res.json({ id, saved: true, processing: true });
   } catch (error) {
     console.error('[Recall] Save transcript error:', error.message);
     res.status(500).json({ error: error.message });

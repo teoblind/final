@@ -4153,6 +4153,23 @@ function initDacpTablesSchema(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_notif_tenant_user ON platform_notifications(tenant_id, user_id, read, created_at)'); } catch (e) {}
 
+  // Leads sheet shares (per-user leads sheet sharing + consolidation)
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS leads_sheet_shares (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      from_user_id TEXT NOT NULL,
+      from_user_name TEXT,
+      to_user_id TEXT NOT NULL,
+      sheet_id TEXT NOT NULL,
+      sheet_title TEXT,
+      status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'declined')),
+      notification_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_leads_shares_to_user ON leads_sheet_shares(tenant_id, to_user_id, status)'); } catch (e) {}
+
   // Indices
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_pricing_tenant ON dacp_pricing(tenant_id)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bids_tenant ON dacp_bid_requests(tenant_id, status)'); } catch (e) {}
@@ -5630,6 +5647,29 @@ export function upsertKeyVaultEntry(entry) {
 
 export function deleteKeyVaultEntry(id, tenantId) {
   return db.prepare('DELETE FROM key_vault WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+}
+
+// ─── Leads Sheet Shares CRUD ────────────────────────────────────────────────
+
+export function createLeadsSheetShare(share) {
+  const id = share.id || `lss_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO leads_sheet_shares (id, tenant_id, from_user_id, from_user_name, to_user_id, sheet_id, sheet_title, status, notification_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, share.tenantId, share.fromUserId, share.fromUserName || null, share.toUserId, share.sheetId, share.sheetTitle || null, share.status || 'pending', share.notificationId || null);
+  return id;
+}
+
+export function getLeadsSheetShares(tenantId, userId) {
+  return db.prepare('SELECT * FROM leads_sheet_shares WHERE tenant_id = ? AND to_user_id = ? ORDER BY created_at DESC').all(tenantId, userId);
+}
+
+export function updateLeadsShareStatus(id, tenantId, status) {
+  return db.prepare('UPDATE leads_sheet_shares SET status = ? WHERE id = ? AND tenant_id = ?').run(status, id, tenantId);
+}
+
+export function getLeadsShareById(id, tenantId) {
+  return db.prepare('SELECT * FROM leads_sheet_shares WHERE id = ? AND tenant_id = ?').get(id, tenantId);
 }
 
 // ─── Opus Rate Limiting ─────────────────────────────────────────────────────

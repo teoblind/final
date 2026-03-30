@@ -35,27 +35,35 @@ const currentlyProcessing = new Set();
 // Maximum number of retry attempts before giving up permanently.
 const MAX_RETRIES = 3;
 
-// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
-// (tokens may be issued by either client depending on how the account was authed)
-const CLIENT_PAIRS = [
-  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
-  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
-].filter(p => p.id && p.secret);
+// OAuth app credentials — lazy evaluation to avoid ESM ordering bug
+// (admin.js statically imports this module before dotenv.config() runs)
+let _clientPairs = null;
+function getClientPairs() {
+  if (!_clientPairs) {
+    _clientPairs = [
+      { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+      { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+    ].filter(p => p.id && p.secret);
+  }
+  return _clientPairs;
+}
 
-// Default for non-gmail-poll usage
-const CLIENT_ID = CLIENT_PAIRS[0]?.id;
-const CLIENT_SECRET = CLIENT_PAIRS[0]?.secret;
+// Default for non-gmail-poll usage (lazy)
+function getClientId() { return getClientPairs()[0]?.id; }
+function getClientSecret() { return getClientPairs()[0]?.secret; }
 
 function makeGmailClient(refreshToken) {
-  if (!refreshToken || CLIENT_PAIRS.length === 0) return null;
-  const client = new google.auth.OAuth2(CLIENT_PAIRS[0].id, CLIENT_PAIRS[0].secret, 'http://localhost:8099');
+  const pairs = getClientPairs();
+  if (!refreshToken || pairs.length === 0) return null;
+  const client = new google.auth.OAuth2(pairs[0].id, pairs[0].secret, 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return google.gmail({ version: 'v1', auth: client });
 }
 
 function makeGmailClientFallback(refreshToken) {
-  if (!refreshToken || CLIENT_PAIRS.length < 2) return null;
-  const client = new google.auth.OAuth2(CLIENT_PAIRS[1].id, CLIENT_PAIRS[1].secret, 'http://localhost:8099');
+  const pairs = getClientPairs();
+  if (!refreshToken || pairs.length < 2) return null;
+  const client = new google.auth.OAuth2(pairs[1].id, pairs[1].secret, 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return google.gmail({ version: 'v1', auth: client });
 }
@@ -1427,7 +1435,7 @@ export async function checkAllTokenHealth() {
   for (const entry of entries) {
     const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString(), isEnvVar: !!entry.isEnvVar };
     let healthy = false;
-    for (const pair of CLIENT_PAIRS) {
+    for (const pair of getClientPairs()) {
       try {
         const client = new google.auth.OAuth2(pair.id, pair.secret, 'http://localhost:8099');
         client.setCredentials({ refresh_token: entry.refreshToken });

@@ -12,7 +12,7 @@
 import express from 'express';
 import { google } from 'googleapis';
 import { authenticate } from '../middleware/auth.js';
-import { getTenantEmailConfig, getTenantDb, insertActivity, getAllTenants } from '../cache/database.js';
+import { getTenantEmailConfig, getTenantDb, insertActivity, getAllTenants, getKeyVaultValue } from '../cache/database.js';
 import { createBot, removeBot } from '../services/recallService.js';
 import {
   createMeetingRoom,
@@ -87,13 +87,36 @@ router.get('/room/:meetingId/live', (req, res) => {
 // All other routes require standard JWT auth
 router.use(authenticate);
 
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+function getClientPairs() {
+  return [
+    { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+    { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+  ].filter(p => p.id && p.secret);
+}
 const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3002';
 
+async function makeCalendarClientAsync(refreshToken) {
+  const pairs = getClientPairs();
+  if (!pairs.length || !refreshToken) return null;
+  for (const pair of pairs) {
+    try {
+      const auth = new google.auth.OAuth2(pair.id, pair.secret);
+      auth.setCredentials({ refresh_token: refreshToken });
+      await auth.getAccessToken();
+      return google.calendar({ version: 'v3', auth });
+    } catch (err) {
+      if (err.message?.includes('invalid_grant') || err.message?.includes('unauthorized_client')) continue;
+      throw err;
+    }
+  }
+  return null;
+}
+
 function makeCalendarClient(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
-  const auth = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
+  const pairs = getClientPairs();
+  if (!pairs.length || !refreshToken) return null;
+  const pair = pairs[0];
+  const auth = new google.auth.OAuth2(pair.id, pair.secret);
   auth.setCredentials({ refresh_token: refreshToken });
   return google.calendar({ version: 'v3', auth });
 }
@@ -112,13 +135,16 @@ const AGENT_PROMPTS = {
 router.get('/', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || 'default';
+    // Try calendar-specific token first (key vault), then fall back to email config
+    const calToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
     const emailConfig = getTenantEmailConfig(tenantId);
+    const refreshToken = calToken || emailConfig?.gmailRefreshToken;
 
-    if (!emailConfig?.gmailRefreshToken) {
+    if (!refreshToken) {
       return res.json({ meetings: [], note: 'No email connected' });
     }
 
-    const cal = makeCalendarClient(emailConfig.gmailRefreshToken);
+    const cal = await makeCalendarClientAsync(refreshToken);
     if (!cal) {
       return res.json({ meetings: [], note: 'Calendar client unavailable' });
     }

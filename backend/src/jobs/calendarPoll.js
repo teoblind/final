@@ -38,16 +38,20 @@ import { processMeetingComplete } from '../services/meetingProcessor.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
-// (tokens may be issued by either client depending on how the account was authed)
-const CLIENT_PAIRS = [
-  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
-  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
-].filter(p => p.id && p.secret);
+// OAuth app credentials — lazy evaluation to avoid ESM ordering bug
+// (office.js statically imports this module before dotenv.config() runs)
+let _clientPairs = null;
+function getClientPairs() {
+  if (!_clientPairs) {
+    _clientPairs = [
+      { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+      { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+    ].filter(p => p.id && p.secret);
+  }
+  return _clientPairs;
+}
 
-const CLIENT_ID = CLIENT_PAIRS[0]?.id;
-const CLIENT_SECRET = CLIENT_PAIRS[0]?.secret;
-const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+function getFallbackRefreshToken() { return process.env.GMAIL_REFRESH_TOKEN; }
 
 const JOIN_BEFORE_MIN = 2;       // join meetings starting within N minutes
 const LOOKBACK_MIN = 30;         // also catch meetings that started up to 30 min ago
@@ -74,15 +78,17 @@ let pollTimer = null;
 // ─── OAuth Helpers ───────────────────────────────────────────────────────────
 
 function makeOAuth2(refreshToken) {
-  if (!refreshToken || CLIENT_PAIRS.length === 0) return null;
-  const client = new google.auth.OAuth2(CLIENT_PAIRS[0].id, CLIENT_PAIRS[0].secret);
+  const pairs = getClientPairs();
+  if (!refreshToken || pairs.length === 0) return null;
+  const client = new google.auth.OAuth2(pairs[0].id, pairs[0].secret);
   client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
 
 function makeOAuth2Fallback(refreshToken) {
-  if (!refreshToken || CLIENT_PAIRS.length < 2) return null;
-  const client = new google.auth.OAuth2(CLIENT_PAIRS[1].id, CLIENT_PAIRS[1].secret);
+  const pairs = getClientPairs();
+  if (!refreshToken || pairs.length < 2) return null;
+  const client = new google.auth.OAuth2(pairs[1].id, pairs[1].secret);
   client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
@@ -175,7 +181,7 @@ function getTenantCalendars() {
   }
 
   // Fallback: default agent account from env vars
-  if (FALLBACK_REFRESH_TOKEN) {
+  if (getFallbackRefreshToken()) {
     const hasDefault = calendars.some(c =>
       c.agentEmail === 'agent@zhan.coppice.ai'
     );
@@ -183,18 +189,18 @@ function getTenantCalendars() {
       const defLabel = 'agent@zhan.coppice.ai (default)';
       const useFallback = useFallbackClient.has(defLabel);
       const cal = useFallback
-        ? (makeCalendarClientFallback(FALLBACK_REFRESH_TOKEN) || makeCalendarClient(FALLBACK_REFRESH_TOKEN))
-        : makeCalendarClient(FALLBACK_REFRESH_TOKEN);
+        ? (makeCalendarClientFallback(getFallbackRefreshToken()) || makeCalendarClient(getFallbackRefreshToken()))
+        : makeCalendarClient(getFallbackRefreshToken());
       const gmail = useFallback
-        ? (makeGmailClientFallback(FALLBACK_REFRESH_TOKEN) || makeGmailClient(FALLBACK_REFRESH_TOKEN))
-        : makeGmailClient(FALLBACK_REFRESH_TOKEN);
+        ? (makeGmailClientFallback(getFallbackRefreshToken()) || makeGmailClient(getFallbackRefreshToken()))
+        : makeGmailClient(getFallbackRefreshToken());
       if (cal || gmail) {
         calendars.push({
           tenantId: 'zhan-capital',
           calendarClient: cal,
           gmailClient: gmail,
           agentEmail: 'agent@zhan.coppice.ai',
-          refreshToken: FALLBACK_REFRESH_TOKEN,
+          refreshToken: getFallbackRefreshToken(),
           label: defLabel,
         });
       }
@@ -756,7 +762,7 @@ async function poll() {
         err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
         err.message?.includes('Token has been expired or revoked');
 
-      if (isAuthError && cal.refreshToken && CLIENT_PAIRS.length >= 2) {
+      if (isAuthError && cal.refreshToken && getClientPairs().length >= 2) {
         // Try fallback OAuth client (token may have been issued by a different client)
         try {
           console.log(`[CalendarPoll] [${cal.agentEmail}] Primary client failed, trying fallback client...`);

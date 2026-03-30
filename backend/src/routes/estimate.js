@@ -38,6 +38,10 @@ import {
   getAgentAssignment,
   updateAgentAssignment,
   getUsersByTenant,
+  createLeadsSheetShare,
+  getLeadsSheetShares,
+  updateLeadsShareStatus,
+  getLeadsShareById,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -860,71 +864,115 @@ router.get('/stats', (req, res) => {
 
 // ─── Leads Sheet Linking ──────────────────────────────────────────────────────
 
-const LEADS_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
-const LEADS_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+function getLeadsClientPairs() {
+  const pairs = [
+    { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+    { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  ].filter(p => p.id && p.secret);
+  return pairs;
+}
 
-function getLeadsAuth(tenantId) {
+function getLeadsAuth(tenantId, clientIndex = 0) {
   const token = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
   const config = !token ? getTenantEmailConfig(tenantId) : null;
-  const refreshToken = token || config?.gmail_refresh_token;
-  if (!LEADS_CLIENT_ID || !LEADS_CLIENT_SECRET || !refreshToken) return null;
-  const client = new google.auth.OAuth2(LEADS_CLIENT_ID, LEADS_CLIENT_SECRET, 'http://localhost:8099');
+  const refreshToken = token || config?.gmailRefreshToken;
+  const pairs = getLeadsClientPairs();
+  const pair = pairs[clientIndex];
+  if (!pair || !refreshToken) return null;
+  const client = new google.auth.OAuth2(pair.id, pair.secret, 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
 
-/** GET /leads-sheet — Get linked leads sheet info + preview rows */
+async function readLeadsSheet(auth, sheetId, tabName, page = 1, pageSize = 10) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  let sheetTitle = 'Leads Sheet';
+  const tabs = [];
+  try {
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title,sheets.properties' });
+    sheetTitle = meta.data.properties?.title || sheetTitle;
+    for (const s of (meta.data.sheets || [])) {
+      tabs.push(s.properties?.title);
+    }
+  } catch {}
+
+  // Use requested tab or first tab
+  const activeTab = tabName && tabs.includes(tabName) ? tabName : tabs[0] || 'Sheet1';
+  const range = `'${activeTab}'!A1:Z1000`;
+
+  const result = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+  const allRows = result.data.values || [];
+  const headers = allRows[0] || [];
+  const dataRows = allRows.slice(1).filter(r => r.some(c => c?.trim()));
+  const totalRows = dataRows.length;
+  const totalPages = Math.ceil(totalRows / pageSize) || 1;
+  const safePage = Math.max(1, Math.min(page, totalPages));
+  const start = (safePage - 1) * pageSize;
+  const pageRows = dataRows.slice(start, start + pageSize);
+  return { sheetTitle, headers, dataRows: pageRows, totalRows, tabs, activeTab, page: safePage, totalPages };
+}
+
+/** GET /leads-sheet — Get linked leads sheet info + preview rows (per-user, falls back to tenant-level) */
 router.get('/leads-sheet', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
-    const sheetId = getKeyVaultValue(tenantId, 'dacp-leads', 'sheet_id');
-    if (!sheetId || sheetId === '__unlinked__') return res.json({ configured: false });
+    const userId = req.user?.id;
+    // Per-user sheet first, then fall back to tenant-level (legacy)
+    let sheetId = userId ? getKeyVaultValue(tenantId, 'dacp-leads', `sheet_id:${userId}`) : null;
+    if (!sheetId || sheetId === '__unlinked__') {
+      sheetId = getKeyVaultValue(tenantId, 'dacp-leads', 'sheet_id');
+    }
+    if (!sheetId || sheetId === '__unlinked__') {
+      // Include pending shares count even when no sheet is configured
+      const pendingShares = userId ? getLeadsSheetShares(tenantId, userId).filter(s => s.status === 'pending') : [];
+      return res.json({ configured: false, pendingSharesCount: pendingShares.length });
+    }
 
-    const auth = getLeadsAuth(tenantId);
-    if (!auth) return res.json({ configured: true, sheetId, sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`, error: 'No OAuth token', rows: [] });
+    // Count pending shares for the bell/badge
+    const pendingShares = userId ? getLeadsSheetShares(tenantId, userId).filter(s => s.status === 'pending') : [];
 
-    const sheets = google.sheets({ version: 'v4', auth });
+    const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    const tabName = req.query.tab || null;
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
 
-    // Get sheet metadata for title
-    let sheetTitle = 'Leads Sheet';
-    try {
-      const meta = await sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: 'properties.title' });
-      sheetTitle = meta.data.properties?.title || sheetTitle;
-    } catch {}
+    // Try primary OAuth client, then fallback
+    for (let ci = 0; ci < 2; ci++) {
+      const auth = getLeadsAuth(tenantId, ci);
+      if (!auth) continue;
+      try {
+        const { sheetTitle, headers, dataRows, totalRows, tabs, activeTab, page: safePage, totalPages } = await readLeadsSheet(auth, sheetId, tabName, page, pageSize);
+        return res.json({
+          configured: true, sheetId, sheetTitle, sheetUrl, headers, tabs, activeTab,
+          totalRows, page: safePage, totalPages,
+          pendingSharesCount: pendingShares.length,
+          preview: dataRows.map(row => {
+            const obj = {};
+            headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+            return obj;
+          }),
+        });
+      } catch (err) {
+        if (ci === 0 && (err.code === 401 || err.code === 403 || err.message?.includes('invalid_grant') || err.message?.includes('unauthorized_client'))) {
+          console.log('[leads-sheet] Primary client failed, trying fallback...');
+          continue;
+        }
+        throw err;
+      }
+    }
 
-    // Read first sheet's header + data rows
-    const result = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: 'A1:Z200',
-    });
-    const allRows = result.data.values || [];
-    const headers = allRows[0] || [];
-    const dataRows = allRows.slice(1).filter(r => r.some(c => c?.trim()));
-
-    // Return summary: total rows, headers, last 10 rows preview
-    res.json({
-      configured: true,
-      sheetId,
-      sheetTitle,
-      sheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`,
-      headers,
-      totalRows: dataRows.length,
-      preview: dataRows.slice(0, 10).map(row => {
-        const obj = {};
-        headers.forEach((h, i) => { obj[h] = row[i] || ''; });
-        return obj;
-      }),
-    });
+    return res.json({ configured: true, sheetId, sheetUrl, error: 'No OAuth token', rows: [] });
   } catch (error) {
     console.error('Leads sheet read error:', error.message);
     res.status(500).json({ error: 'Failed to read leads sheet' });
   }
 });
 
-/** POST /leads-sheet/link — Link a Google Sheet by URL or ID */
+/** POST /leads-sheet/link — Link a Google Sheet by URL or ID (per-user) */
 router.post('/leads-sheet/link', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const userId = req.user?.id;
     const { sheetUrl } = req.body;
     if (!sheetUrl) return res.status(400).json({ error: 'sheetUrl required' });
 
@@ -945,11 +993,12 @@ router.post('/leads-sheet/link', async (req, res) => {
       return res.status(400).json({ error: `Cannot access sheet: ${err.message}. Make sure it's shared with the agent.` });
     }
 
-    // Store in key vault
+    // Store in key vault - user-scoped key
+    const keyName = userId ? `sheet_id:${userId}` : 'sheet_id';
     upsertKeyVaultEntry({
       tenantId,
       service: 'dacp-leads',
-      keyName: 'sheet_id',
+      keyName,
       keyValue: sheetId,
       addedBy: req.user?.email || 'user',
     });
@@ -961,15 +1010,17 @@ router.post('/leads-sheet/link', async (req, res) => {
   }
 });
 
-/** DELETE /leads-sheet/unlink — Remove the linked sheet */
+/** DELETE /leads-sheet/unlink — Remove the linked sheet (per-user) */
 router.delete('/leads-sheet/unlink', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
-    // Overwrite with empty to effectively unlink
+    const userId = req.user?.id;
+    // Overwrite with empty to effectively unlink - user-scoped key
+    const keyName = userId ? `sheet_id:${userId}` : 'sheet_id';
     upsertKeyVaultEntry({
       tenantId,
       service: 'dacp-leads',
-      keyName: 'sheet_id',
+      keyName,
       keyValue: '__unlinked__',
       addedBy: req.user?.email || 'user',
     });
@@ -999,6 +1050,195 @@ router.get('/leads-sheet/search', async (req, res) => {
   } catch (error) {
     console.error('Search Drive error:', error.message);
     res.json({ files: [] });
+  }
+});
+
+/** GET /leads-sheet/team — Get team members for share picker */
+router.get('/leads-sheet/team', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const users = getUsersByTenant(tenantId).filter(u => u.id !== req.user.id && u.status === 'active');
+    res.json({ users: users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })) });
+  } catch (error) {
+    console.error('Get team error:', error.message);
+    res.status(500).json({ error: 'Failed to get team members' });
+  }
+});
+
+/** POST /leads-sheet/share — Share leads sheet with team members */
+router.post('/leads-sheet/share', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const userId = req.user?.id;
+    const { targetUserIds, sheetId, sheetTitle } = req.body;
+
+    if (!targetUserIds || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
+      return res.status(400).json({ error: 'targetUserIds array required' });
+    }
+    if (!sheetId) return res.status(400).json({ error: 'sheetId required' });
+
+    const fromUserName = req.user?.name || req.user?.email || 'A team member';
+    const results = [];
+
+    for (const targetUserId of targetUserIds) {
+      // Create platform notification
+      const { default: dbProxy } = await import('../cache/database.js');
+      const notifResult = dbProxy.prepare(`
+        INSERT INTO platform_notifications (tenant_id, user_id, agent_id, title, body, type, link_tab)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        tenantId,
+        targetUserId,
+        'leads',
+        `${fromUserName} shared a leads sheet with you`,
+        `"${sheetTitle || 'Leads Sheet'}" - Accept to add it to your pipeline.`,
+        'action',
+        'command'
+      );
+
+      // Create share record
+      const shareId = createLeadsSheetShare({
+        tenantId,
+        fromUserId: userId,
+        fromUserName,
+        toUserId: targetUserId,
+        sheetId,
+        sheetTitle: sheetTitle || 'Leads Sheet',
+        notificationId: notifResult.lastInsertRowid || null,
+      });
+
+      results.push({ targetUserId, shareId });
+    }
+
+    res.json({ success: true, shares: results });
+  } catch (error) {
+    console.error('Share leads sheet error:', error.message);
+    res.status(500).json({ error: 'Failed to share sheet' });
+  }
+});
+
+/** GET /leads-sheet/shares — Get pending share invitations for current user */
+router.get('/leads-sheet/shares', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const userId = req.user?.id;
+    const shares = getLeadsSheetShares(tenantId, userId).filter(s => s.status === 'pending');
+    res.json({ shares });
+  } catch (error) {
+    console.error('Get shares error:', error.message);
+    res.status(500).json({ error: 'Failed to get shares' });
+  }
+});
+
+/** POST /leads-sheet/shares/:id/accept — Accept a share invitation */
+router.post('/leads-sheet/shares/:id/accept', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const userId = req.user?.id;
+    const share = getLeadsShareById(req.params.id, tenantId);
+    if (!share) return res.status(404).json({ error: 'Share not found' });
+    if (share.to_user_id !== userId) return res.status(403).json({ error: 'Not authorized' });
+    if (share.status !== 'pending') return res.status(400).json({ error: `Share already ${share.status}` });
+
+    // Check if user already has a sheet linked
+    const existingSheetId = getKeyVaultValue(tenantId, 'dacp-leads', `sheet_id:${userId}`);
+    const hasExisting = existingSheetId && existingSheetId !== '__unlinked__';
+
+    if (!hasExisting) {
+      // No existing sheet - just set the shared sheet as theirs
+      upsertKeyVaultEntry({
+        tenantId,
+        service: 'dacp-leads',
+        keyName: `sheet_id:${userId}`,
+        keyValue: share.sheet_id,
+        addedBy: req.user?.email || 'user',
+      });
+      updateLeadsShareStatus(share.id, tenantId, 'accepted');
+      return res.json({ success: true, action: 'linked', sheetId: share.sheet_id, message: `Linked "${share.sheet_title || 'Leads Sheet'}" to your pipeline.` });
+    }
+
+    // User has existing sheet - consolidate: read both, append unique rows from source to target
+    let consolidated = false;
+    for (let ci = 0; ci < 2; ci++) {
+      const auth = getLeadsAuth(tenantId, ci);
+      if (!auth) continue;
+      try {
+        // Read source sheet (the shared one)
+        const sourceData = await readLeadsSheet(auth, share.sheet_id, null, 1, 10000);
+        // Read target sheet (user's existing)
+        const targetData = await readLeadsSheet(auth, existingSheetId, null, 1, 10000);
+
+        // Build a set of existing rows for deduplication (join all cells as key)
+        const existingKeys = new Set();
+        // Re-read full data from target to get all rows (readLeadsSheet paginates, use large pageSize)
+        const allTargetRows = targetData.dataRows || [];
+        for (const row of allTargetRows) {
+          existingKeys.add(row.join('|||'));
+        }
+
+        // Find unique rows in source not in target
+        const newRows = [];
+        for (const row of (sourceData.dataRows || [])) {
+          const key = row.join('|||');
+          if (!existingKeys.has(key)) {
+            newRows.push(row);
+          }
+        }
+
+        if (newRows.length > 0) {
+          // Append to target sheet
+          const sheets = google.sheets({ version: 'v4', auth });
+          const activeTab = targetData.activeTab || 'Sheet1';
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: existingSheetId,
+            range: `'${activeTab}'!A1`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: newRows },
+          });
+        }
+
+        consolidated = true;
+        updateLeadsShareStatus(share.id, tenantId, 'accepted');
+        return res.json({
+          success: true,
+          action: 'consolidated',
+          sheetId: existingSheetId,
+          rowsAdded: newRows.length,
+          message: `Merged ${newRows.length} new row(s) from "${share.sheet_title || 'shared sheet'}" into your existing pipeline.`,
+        });
+      } catch (err) {
+        if (ci === 0 && (err.code === 401 || err.code === 403 || err.message?.includes('invalid_grant') || err.message?.includes('unauthorized_client'))) {
+          console.log('[leads-sheet/accept] Primary client failed, trying fallback...');
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!consolidated) {
+      return res.status(500).json({ error: 'No OAuth token available to read sheets for consolidation' });
+    }
+  } catch (error) {
+    console.error('Accept share error:', error.message);
+    res.status(500).json({ error: 'Failed to accept share' });
+  }
+});
+
+/** POST /leads-sheet/shares/:id/decline — Decline a share invitation */
+router.post('/leads-sheet/shares/:id/decline', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const userId = req.user?.id;
+    const share = getLeadsShareById(req.params.id, tenantId);
+    if (!share) return res.status(404).json({ error: 'Share not found' });
+    if (share.to_user_id !== userId) return res.status(403).json({ error: 'Not authorized' });
+    if (share.status !== 'pending') return res.status(400).json({ error: `Share already ${share.status}` });
+
+    updateLeadsShareStatus(share.id, tenantId, 'declined');
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Decline share error:', error.message);
+    res.status(500).json({ error: 'Failed to decline share' });
   }
 });
 
@@ -1068,16 +1308,18 @@ router.post('/assignments/:id/confirm', async (req, res) => {
       }
     }
 
-    // Mark as confirmed — the assignment executor polls for 'confirmed' status and picks it up
+    // Mark as confirmed and claim for this user — the assignment executor polls for 'confirmed' status and picks it up
+    const userId = req.user?.id || null;
     updateAgentAssignment(tenantId, id, {
       status: 'confirmed',
       confirmed_at: new Date().toISOString(),
+      user_id: userId,
       job_id: null,
       result_summary: null,
       full_response: null,
       output_artifacts_json: null,
     });
-    console.log(`[Assignments] Confirmed: ${assignment.title} — executor will pick up`);
+    console.log(`[Assignments] Confirmed by ${userId}: ${assignment.title} — executor will pick up`);
 
     res.json({ success: true, status: 'confirmed' });
   } catch (error) {

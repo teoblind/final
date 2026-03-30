@@ -40,6 +40,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [meetingRange, setMeetingRange] = useState('week');
   const [invitedMeetings, setInvitedMeetings] = useState(new Set());
   const [invitingId, setInvitingId] = useState(null);
+  const [meetingDetail, setMeetingDetail] = useState(null); // knowledge entry detail popup
+  const [meetingDetailLoading, setMeetingDetailLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [approvals, setApprovals] = useState([]);
   const [processingApproval, setProcessingApproval] = useState(null);
@@ -56,14 +58,23 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [rewriting, setRewriting] = useState(false);
   // Leads sheet state
-  const [leadsSheet, setLeadsSheet] = useState(null); // { configured, sheetId, sheetTitle, sheetUrl, headers, totalRows, preview }
+  const [leadsSheet, setLeadsSheet] = useState(null); // { configured, sheetId, sheetTitle, sheetUrl, headers, totalRows, preview, tabs, activeTab, page, totalPages }
   const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [leadsActiveTab, setLeadsActiveTab] = useState(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkInput, setLinkInput] = useState('');
   const [linkError, setLinkError] = useState('');
   const [linking, setLinking] = useState(false);
   const [driveResults, setDriveResults] = useState([]);
   const [driveSearching, setDriveSearching] = useState(false);
+  // Leads sharing state
+  const [leadsShares, setLeadsShares] = useState([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTeam, setShareTeam] = useState([]);
+  const [leadsShareSelected, setLeadsShareSelected] = useState([]);
+  const [leadsShareLoading, setLeadsShareLoading] = useState(false);
+  const [acceptingShare, setAcceptingShare] = useState(null);
   // HubSpot state
   const [hubspotConnected, setHubspotConnected] = useState(false);
   const [showHubspotModal, setShowHubspotModal] = useState(false);
@@ -118,16 +129,29 @@ export default function DacpCommandDashboard({ onNavigate }) {
     return senders;
   })();
 
-  const fetchLeadsSheet = useCallback(() => {
+  const fetchLeadsSheet = useCallback((tab, page) => {
     setLeadsLoading(true);
-    fetch(`${API_BASE}/v1/estimates/leads-sheet`, { headers: getAuthHeaders() })
+    const params = new URLSearchParams();
+    if (tab) params.set('tab', tab);
+    if (page) params.set('page', page);
+    params.set('pageSize', '10');
+    fetch(`${API_BASE}/v1/estimates/leads-sheet?${params}`, { headers: getAuthHeaders() })
       .then(r => r.json())
       .then(data => {
         if (data.configured && data.sheetId !== '__unlinked__') {
           setLeadsSheet(data);
-          setLeadsTab('sheet'); // auto-switch to sheet tab when configured
+          setLeadsTab('sheet');
+          if (data.activeTab) setLeadsActiveTab(data.activeTab);
+          if (data.page) setLeadsPage(data.page);
         } else {
           setLeadsSheet({ configured: false });
+        }
+        // Fetch pending shares
+        if (data.pendingSharesCount > 0) {
+          fetch(`${API_BASE}/v1/estimates/leads-sheet/shares`, { headers: getAuthHeaders() })
+            .then(r => r.json()).then(d => setLeadsShares(d.shares || [])).catch(() => {});
+        } else {
+          setLeadsShares([]);
         }
       })
       .catch(() => setLeadsSheet({ configured: false }))
@@ -156,6 +180,52 @@ export default function DacpCommandDashboard({ onNavigate }) {
     try {
       await fetch(`${API_BASE}/v1/estimates/leads-sheet/unlink`, { method: 'DELETE', headers: getAuthHeaders() });
       setLeadsSheet({ configured: false });
+    } catch {}
+  }, []);
+
+  const handleOpenShareModal = useCallback(async () => {
+    setShowShareModal(true);
+    setLeadsShareSelected([]);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/leads-sheet/team`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      setShareTeam(data.users || []);
+    } catch { setShareTeam([]); }
+  }, []);
+
+  const handleShareSheet = useCallback(async () => {
+    if (!leadsShareSelected.length || !leadsSheet?.sheetId) return;
+    setLeadsShareLoading(true);
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ targetUserIds: leadsShareSelected, sheetId: leadsSheet.sheetId, sheetTitle: leadsSheet.sheetTitle }),
+      });
+      setShowShareModal(false);
+      setLeadsShareSelected([]);
+    } catch {}
+    finally { setLeadsShareLoading(false); }
+  }, [leadsShareSelected, leadsSheet]);
+
+  const handleAcceptShare = useCallback(async (shareId) => {
+    setAcceptingShare(shareId);
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/shares/${shareId}/accept`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      setLeadsShares(prev => prev.filter(s => s.id !== shareId));
+      fetchLeadsSheet();
+    } catch {}
+    finally { setAcceptingShare(null); }
+  }, [fetchLeadsSheet]);
+
+  const handleDeclineShare = useCallback(async (shareId) => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/shares/${shareId}/decline`, {
+        method: 'POST', headers: getAuthHeaders(),
+      });
+      setLeadsShares(prev => prev.filter(s => s.id !== shareId));
     } catch {}
   }, []);
 
@@ -488,6 +558,32 @@ export default function DacpCommandDashboard({ onNavigate }) {
     const d = new Date(b.due_date);
     return d >= now && d <= endOfWeek;
   });
+
+  const handleOpenMeetingDetail = async (meeting) => {
+    setMeetingDetailLoading(true);
+    try {
+      // Search knowledge entries for a meeting matching this title
+      const q = encodeURIComponent(meeting.title);
+      const res = await fetch(`${API_BASE}/v1/knowledge/search?q=${q}&type=meeting`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        const entries = data.results || data.entries || data || [];
+        if (entries.length > 0) {
+          // Fetch full detail
+          const detailRes = await fetch(`${API_BASE}/v1/knowledge/entries/${entries[0].id}`, { headers: getAuthHeaders() });
+          if (detailRes.ok) {
+            const detail = await detailRes.json();
+            setMeetingDetail({ ...detail, calendarEvent: meeting });
+            setMeetingDetailLoading(false);
+            return;
+          }
+        }
+      }
+      // No transcript found - show stub
+      setMeetingDetail({ calendarEvent: meeting, noTranscript: true });
+    } catch { setMeetingDetail(null); }
+    finally { setMeetingDetailLoading(false); }
+  };
 
   const handleInviteCoppice = async (meeting) => {
     setInvitingId(meeting.id);
@@ -1078,7 +1174,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
               const hasMeetLink = !!m.meetLink;
               const isPast = new Date(m.end || m.start) < new Date();
               return (
-                <div key={m.id} className="flex items-center gap-4 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] transition-colors">
+                <div key={m.id} onClick={() => isPast && handleOpenMeetingDetail(m)} className={`flex items-center gap-4 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] transition-colors ${isPast ? 'cursor-pointer' : ''}`}>
                   {/* Time */}
                   <div className="w-[72px] shrink-0">
                     <div className="text-[11px] font-heading font-semibold text-[#1e3a5f]">{formatMeetingDay(m.start)}</div>
@@ -1466,6 +1562,11 @@ export default function DacpCommandDashboard({ onNavigate }) {
             {/* Tab-specific action buttons */}
             {leadsTab === 'sheet' && leadsSheet?.configured && (
               <>
+                <button onClick={handleOpenShareModal}
+                  className="flex items-center gap-1 text-[10px] text-terminal-muted hover:text-[#1e3a5f] px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#eef3f8]"
+                  title="Share with team">
+                  <Share2 size={10} /> Share
+                </button>
                 <button onClick={() => setShowLinkModal(true)}
                   className="text-[10px] text-terminal-muted hover:text-terminal-text px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#f5f4f0]">
                   Change
@@ -1503,34 +1604,88 @@ export default function DacpCommandDashboard({ onNavigate }) {
           </div>
         </div>
 
+        {/* Pending share invitations */}
+        {leadsShares.length > 0 && (
+          <div className="px-3 py-2 space-y-1.5">
+            {leadsShares.map(share => (
+              <div key={share.id} className="flex items-center justify-between px-3 py-2 bg-[#eef3f8] border border-[#c8d8e8] rounded-lg">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Share2 size={12} className="text-[#1e3a5f] shrink-0" />
+                  <span className="text-[11px] text-[#1e3a5f] truncate">
+                    <strong>{share.from_user_name || 'A teammate'}</strong> shared "{share.sheet_title}" - Add to your pipeline?
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <button onClick={() => handleAcceptShare(share.id)} disabled={acceptingShare === share.id}
+                    className="px-2.5 py-1 text-[10px] font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50">
+                    {acceptingShare === share.id ? '...' : 'Accept'}
+                  </button>
+                  <button onClick={() => handleDeclineShare(share.id)}
+                    className="px-2.5 py-1 text-[10px] font-semibold text-[#6b6b65] border border-[#e0ddd8] rounded-md hover:bg-[#f5f4f0]">
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Sheet content */}
         {leadsTab === 'sheet' && (
           leadsLoading ? (
             <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading...</div>
           ) : leadsSheet?.configured && leadsSheet.preview?.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
-                <thead>
-                  <tr className="bg-[#fafaf8]">
-                    {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
-                      <th key={i} className="px-3 py-2 text-left text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {leadsSheet.preview.slice(0, 8).map((row, i) => (
-                    <tr key={i} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#fafaf8]">
-                      {(leadsSheet.headers || []).slice(0, 6).map((h, j) => (
-                        <td key={j} className="px-3 py-1.5 text-terminal-text truncate max-w-[180px]">{row[h] || ''}</td>
+            <div>
+              {/* Sheet tabs */}
+              {leadsSheet.tabs?.length > 1 && (
+                <div className="px-3 pt-2 pb-1 flex items-center gap-1 border-b border-[#f0eeea] overflow-x-auto">
+                  {leadsSheet.tabs.map((tab) => (
+                    <button key={tab} onClick={() => { setLeadsPage(1); fetchLeadsSheet(tab, 1); }}
+                      className={`px-2.5 py-1 text-[10px] font-heading font-semibold rounded-t whitespace-nowrap transition-colors ${
+                        tab === leadsSheet.activeTab
+                          ? 'bg-[#1e3a5f] text-white'
+                          : 'text-[#6b6b65] hover:bg-[#f5f4f0]'
+                      }`}>
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-[#fafaf8]">
+                      {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
+                        <th key={i} className="px-3 py-2 text-left text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {leadsSheet.totalRows > 8 && (
-                <div className="px-3 py-2 text-[11px] font-mono text-terminal-muted text-center border-t border-[#f0eeea]">
-                  + {leadsSheet.totalRows - 8} more rows
-                  <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-[#1e3a5f] hover:underline">Open in Sheets</a>
+                  </thead>
+                  <tbody>
+                    {leadsSheet.preview.map((row, i) => (
+                      <tr key={i} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#fafaf8]">
+                        {(leadsSheet.headers || []).slice(0, 6).map((h, j) => (
+                          <td key={j} className="px-3 py-1.5 text-terminal-text truncate max-w-[180px]">{row[h] || ''}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              {leadsSheet.totalPages > 1 && (
+                <div className="px-3 py-2 flex items-center justify-between border-t border-[#f0eeea]">
+                  <span className="text-[10px] text-terminal-muted">{leadsSheet.totalRows} rows</span>
+                  <div className="flex items-center gap-2">
+                    <button disabled={leadsSheet.page <= 1} onClick={() => { const p = leadsSheet.page - 1; setLeadsPage(p); fetchLeadsSheet(leadsSheet.activeTab, p); }}
+                      className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">
+                      Prev
+                    </button>
+                    <span className="text-[10px] text-terminal-muted">{leadsSheet.page} / {leadsSheet.totalPages}</span>
+                    <button disabled={leadsSheet.page >= leadsSheet.totalPages} onClick={() => { const p = leadsSheet.page + 1; setLeadsPage(p); fetchLeadsSheet(leadsSheet.activeTab, p); }}
+                      className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">
+                      Next
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -2012,7 +2167,164 @@ export default function DacpCommandDashboard({ onNavigate }) {
       </div>
     )}
 
-    {/* Share Modal */}
+    {/* Meeting Detail Modal */}
+    {meetingDetail && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setMeetingDetail(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-[#e8e6e1] bg-[#faf9f7]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#f0edf7] flex items-center justify-center">
+                  <Mic size={16} className="text-[#7c3aed]" />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-bold text-[#111110] font-heading">{meetingDetail.title || meetingDetail.calendarEvent?.title || 'Meeting'}</h3>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    {(meetingDetail.recorded_at || meetingDetail.calendarEvent?.start) && (
+                      <span className="text-[11px] text-[#9a9a92]">{new Date(meetingDetail.recorded_at || meetingDetail.calendarEvent?.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    )}
+                    {meetingDetail.duration_seconds && (
+                      <span className="text-[11px] text-[#9a9a92]">{Math.round(meetingDetail.duration_seconds / 60)} min</span>
+                    )}
+                    {meetingDetail.source && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0edf7] text-[#7c3aed] font-semibold">{meetingDetail.source === 'local-capture' ? 'Desktop App' : meetingDetail.source === 'meeting-room' ? 'Live Meeting' : meetingDetail.source}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setMeetingDetail(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto">
+            {meetingDetail.noTranscript ? (
+              <div className="px-6 py-12 text-center">
+                <Mic size={32} className="mx-auto mb-3 text-[#d4d4cf]" />
+                <p className="text-[14px] font-semibold text-[#333] mb-1">No transcript available</p>
+                <p className="text-[12px] text-[#9a9a92]">Invite Coppice to future meetings or use the desktop app to record and transcribe automatically.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#f0eeea]">
+                {/* AI Summary */}
+                {meetingDetail.summary && (
+                  <div className="px-6 py-4">
+                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">Summary</h4>
+                    <div className="text-[13px] text-[#333] leading-[1.7] whitespace-pre-wrap">{meetingDetail.summary}</div>
+                  </div>
+                )}
+
+                {/* Action Items */}
+                {meetingDetail.action_items?.length > 0 && (
+                  <div className="px-6 py-4">
+                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">Action Items</h4>
+                    <div className="space-y-1.5">
+                      {meetingDetail.action_items.map((item, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center shrink-0 ${item.status === 'done' ? 'bg-[#1a6b3c] border-[#1a6b3c]' : 'border-[#d4d4cf]'}`}>
+                            {item.status === 'done' && <Check size={10} className="text-white" />}
+                          </div>
+                          <div>
+                            <span className="text-[12px] text-[#333]">{item.title || item.description}</span>
+                            {item.assignee && <span className="text-[10px] text-[#9a9a92] ml-2">@{item.assignee}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Entities */}
+                {meetingDetail.entities?.length > 0 && (
+                  <div className="px-6 py-4">
+                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">People & Companies</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {meetingDetail.entities.map((e, i) => (
+                        <span key={i} className="px-2 py-1 rounded-lg bg-[#f5f4f0] text-[11px] text-[#444] font-medium">{e.name}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Transcript */}
+                {meetingDetail.transcript && (
+                  <div className="px-6 py-4">
+                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">Transcript</h4>
+                    <div className="bg-[#f9f9f7] rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                      <pre className="text-[12px] text-[#444] leading-[1.8] whitespace-pre-wrap font-mono">{meetingDetail.transcript}</pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Drive link */}
+                {meetingDetail.drive_url && (
+                  <div className="px-6 py-3">
+                    <a href={meetingDetail.drive_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#1e3a5f] hover:underline">
+                      <ExternalLink size={12} /> Open full notes in Drive
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Leads Share Modal */}
+    {showShareModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowShareModal(false)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[500px] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e6e1] bg-[#faf9f7]">
+            <div className="flex items-center gap-2">
+              <Share2 size={16} className="text-[#1e3a5f]" />
+              <h3 className="text-[14px] font-bold text-[#111110] font-heading">Share leads sheet</h3>
+            </div>
+            <button onClick={() => setShowShareModal(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-5 py-3">
+            {shareTeam.length === 0 && (
+              <div className="text-center text-[12px] text-[#9a9a92] py-6">Loading team members...</div>
+            )}
+            {shareTeam.map(u => (
+              <label key={u.id} className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-[#f5f5f0] cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={leadsShareSelected.includes(u.id)}
+                  onChange={e => {
+                    if (e.target.checked) setLeadsShareSelected(prev => [...prev, u.id]);
+                    else setLeadsShareSelected(prev => prev.filter(id => id !== u.id));
+                  }}
+                  className="w-4 h-4 rounded border-[#d4d4cf] text-[#1e3a5f] focus:ring-[#1e3a5f]"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold text-[#111110] truncate">{u.name || u.email}</div>
+                  {u.name && <div className="text-[11px] text-[#9a9a92] truncate">{u.email}</div>}
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0f0ec] text-[#6b6b65] uppercase font-semibold">{u.role}</span>
+              </label>
+            ))}
+          </div>
+          <div className="px-5 py-3 border-t border-[#e8e6e1] bg-[#faf9f7] flex items-center justify-between">
+            <span className="text-[11px] text-[#9a9a92]">{leadsShareSelected.length} selected</span>
+            <button
+              onClick={handleShareSheet}
+              disabled={leadsShareSelected.length === 0 || leadsShareLoading}
+              className="px-4 py-2 text-[12px] font-semibold font-heading rounded-lg bg-[#1e3a5f] text-white hover:bg-[#2a4a6f] disabled:opacity-50 transition-colors"
+            >
+              {leadsShareLoading ? 'Sharing...' : 'Share'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Task Share Modal */}
     {shareModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShareModal(null)}>
         <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[500px] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>

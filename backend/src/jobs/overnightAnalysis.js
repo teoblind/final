@@ -245,11 +245,8 @@ async function runOvernightAnalysis() {
         const assignments = await generateAssignments(tenant.id, context);
         console.log(`[OvernightAnalysis] Generated ${assignments.length} assignments for ${tenant.id}`);
 
-        // Find primary active admin/owner to assign tasks to
-        const users = getUsersByTenant(tenant.id);
-        const defaultUser = users.find(u => u.status === 'active' && ['admin', 'owner'].includes(u.role));
-
-        // Store assignments
+        // Store assignments as shared (user_id = NULL) — visible to all users
+        // When a user confirms a task, they claim it (user_id gets set to theirs)
         for (const a of assignments) {
           insertAgentAssignment({
             id: `assign-${randomUUID().slice(0, 8)}`,
@@ -261,7 +258,7 @@ async function runOvernightAnalysis() {
             priority: a.priority || 'medium',
             action_prompt: a.action_prompt || null,
             context_json: JSON.stringify(context.stats),
-            user_id: defaultUser?.id || null,
+            user_id: null,
           });
         }
       });

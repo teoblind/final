@@ -281,13 +281,14 @@ router.get('/recent', async (req, res) => {
   try {
     const { tenantId } = resolveIds(req);
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const type = req.query.type || null;
     const entries = db.prepare(`
       SELECT id, type, title, summary, source, source_agent, duration_seconds, recorded_at, created_at, processed, drive_url
       FROM knowledge_entries
-      WHERE tenant_id = ?
+      WHERE tenant_id = ? ${type ? "AND type = ?" : ""}
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(tenantId, limit);
+    `).all(...(type ? [tenantId, type, limit] : [tenantId, limit]));
 
     res.json(entries);
   } catch (error) {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload } from 'lucide-react';
+import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic } from 'lucide-react';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../auth/AuthContext';
 
@@ -17,6 +17,7 @@ const FILE_ICONS = {
   pptx:   { letter: 'P', bg: '#fdf6e8', color: '#b8860b' },
   pdf:    { letter: 'F', bg: '#fdedf0', color: '#dc3545' },
   csv:    { letter: 'C', bg: '#edf7f0', color: '#1a6b3c' },
+  meeting:{ letter: 'M', bg: '#f0edf7', color: '#7c3aed' },
   other:  { letter: '?', bg: '#f5f4f0', color: '#666' },
 };
 
@@ -2135,6 +2136,35 @@ export default function FilesDashboard() {
     return () => { cancelled = true; };
   }, [isConstruction, isVenture]);
 
+  // Fetch meeting transcripts and inject as a "Meetings" folder
+  useEffect(() => {
+    async function fetchMeetings() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/knowledge/recent?type=meeting&limit=50`, { headers: authHeaders });
+        if (!res.ok) return;
+        const entries = await res.json();
+        if (entries.length > 0) {
+          const meetingFiles = entries.map(e => ({
+            name: e.title || 'Untitled Meeting',
+            type: 'meeting',
+            owner: e.source_agent || 'Meeting Bot',
+            modified: e.recorded_at || e.created_at || '',
+            agent: true,
+            url: e.drive_url || null,
+            knowledgeId: e.id,
+            summary: e.summary,
+            duration: e.duration_seconds,
+          }));
+          setFolders(prev => ({
+            Meetings: { path: '/Meetings/', files: meetingFiles },
+            ...prev,
+          }));
+        }
+      } catch {}
+    }
+    fetchMeetings();
+  }, []);
+
   const refreshFiles = async () => {
     setLoading(true);
     try {
@@ -2337,37 +2367,7 @@ export default function FilesDashboard() {
         </div>
       </div>
 
-      {/* Type filter tabs */}
-      {allFiles.length > 0 && (
-        <div className="flex items-center gap-1.5 mb-4">
-          {[
-            { key: 'all', label: 'All' },
-            { key: 'sheets', label: 'Sheets' },
-            { key: 'docs', label: 'Docs' },
-            { key: 'slides', label: 'Slides' },
-            { key: 'pdfs', label: 'PDFs' },
-          ].map(tab => {
-            const count = tab.key === 'all' ? allFiles.length : (() => {
-              const typeMap = { sheets: ['sheet', 'xlsx', 'csv'], docs: ['doc', 'docx'], slides: ['slides', 'pptx'], pdfs: ['pdf'] };
-              return allFiles.filter(f => (typeMap[tab.key] || []).includes(f.type)).length;
-            })();
-            if (tab.key !== 'all' && count === 0) return null;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setTypeFilter(tab.key)}
-                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
-                  typeFilter === tab.key
-                    ? 'bg-[#1e3a5f] text-white'
-                    : 'bg-[#f5f4f0] text-terminal-muted border border-terminal-border hover:bg-[#eeede8]'
-                }`}
-              >
-                {tab.label} <span className="ml-0.5 opacity-70">{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Type filter tabs removed — folders already organize by type */}
 
       {Object.keys(folders).length === 0 && !loading ? (
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-12 text-center">
@@ -2401,7 +2401,10 @@ export default function FilesDashboard() {
                       ? <ChevronDown size={12} className="shrink-0 opacity-40" />
                       : <ChevronRight size={12} className="shrink-0 opacity-40" />
                     }
-                    <FolderOpen size={14} className={`shrink-0 ${isSelected ? 'text-terminal-green' : 'opacity-50'}`} />
+                    {name === 'Meetings'
+                      ? <Mic size={14} className={`shrink-0 ${isSelected ? 'text-[#7c3aed]' : 'opacity-50'}`} />
+                      : <FolderOpen size={14} className={`shrink-0 ${isSelected ? 'text-terminal-green' : 'opacity-50'}`} />
+                    }
                     <span className="truncate">{name}</span>
                     <span className="ml-auto text-[10px] text-terminal-muted tabular-nums font-mono">
                       {folders[name].files.length}

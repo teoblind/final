@@ -12,7 +12,7 @@
  */
 
 import { spawn } from 'child_process';
-import { getTenantDb, getAgentMemory, setAgentMemory } from '../cache/database.js';
+import { getTenantDb, getAgentMemory, setAgentMemory, getUserById } from '../cache/database.js';
 
 // SSH tunnel configuration
 const SSH_KEY = process.env.CLAUDE_SSH_KEY || '/root/.ssh/id_ed25519';
@@ -44,7 +44,13 @@ You handle: ERCOT analysis, fleet ops, IPP evaluation, financial modeling, LP re
   'dacp-construction-001': `You are Coppice — the AI agent for DACP Construction, a concrete subcontractor in Houston TX.
 Key facts: Foundations, slabs, curb & gutter, sidewalks, post-tension. Notable client: Riot Platforms.
 CEO: David Castillo. Standard pricing: SOG ~$14/SF, curb & gutter ~$26/LF, sidewalks ~$10-11/SF.
-You handle: estimating, bid management, GC relationships, field ops, email, docs, research.`,
+You handle: estimating, bid management, GC relationships, field ops, email, docs, research.
+
+UPCOMING INTEGRATIONS (not yet available on current plan):
+- PlanSwift: Direct takeoff integration - Coppice will read PlanSwift projects, auto-import quantities, and build estimates directly from takeoff data. Currently in development.
+- Procore: Project management sync - jobs, RFIs, submittals, daily logs.
+- HCSS HeavyBid: Heavy civil estimating import/export.
+If a user asks about PlanSwift, Procore, or other desktop/field software integrations, tell them it is on the roadmap and they should contact their admin about upgrading their plan to get early access when it launches.`,
 
   'zhan-capital': `You are Coppice — the AI agent for Zhan Capital LLC, a thesis-driven investment firm.
 Focus: sovereign AI infrastructure, energy systems, digital monetary networks. Founded by Teo Blind.
@@ -229,7 +235,7 @@ function queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, 
 
     const proc = spawn('ssh', sshArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, LANG: 'en_US.UTF-8' },
+      env: { ...process.env, LANG: 'en_US.UTF-8', ANTHROPIC_API_KEY: '' },
     });
 
     proc.stdin.end();
@@ -342,7 +348,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
 
     const proc = spawn('ssh', sshArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, LANG: 'en_US.UTF-8' },
+      env: { ...process.env, LANG: 'en_US.UTF-8', ANTHROPIC_API_KEY: '' },
     });
 
     proc.stdin.end();
@@ -508,10 +514,10 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
  * @param {function} opts.onText - Called with each text delta as it arrives
  * @returns {Promise<{response: string, durationMs: number, timedOut?: boolean, route: string}>}
  */
-export async function streamClaudeAgent({ tenantId, agentId, message, history, maxTurns, timeoutMs, onText }) {
+export async function streamClaudeAgent({ tenantId, agentId, userId, message, history, maxTurns, timeoutMs, onText }) {
   const config = getAgentCliConfig(agentId);
   const resolvedTenantId = tenantId || 'default';
-  const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config);
+  const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config, userId);
   const fullMessage = buildUserMessage(message, history);
   const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
   const timeout = timeoutMs || config.cli_timeout_ms || DEFAULT_TIMEOUT_MS;
@@ -558,7 +564,7 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
     console.log(`[ClaudeAgent] Streaming ${agentId}@${resolvedTenantId} locally`);
 
     const proc = spawn(CLAUDE_BIN, args, {
-      env: { ...process.env, LANG: 'en_US.UTF-8' },
+      env: { ...process.env, LANG: 'en_US.UTF-8', ANTHROPIC_API_KEY: '' },
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: '/root/coppice',
     });
@@ -790,9 +796,20 @@ function shellEscape(str) {
   return "'" + str.replace(/'/g, "'\\''") + "'";
 }
 
-function buildSystemPrompt(tenantId, agentId, config) {
+function buildSystemPrompt(tenantId, agentId, config, userId) {
   const base = TENANT_PROMPTS[tenantId] || TENANT_PROMPTS.default;
   const custom = config.system_prompt_addon || '';
+
+  // Look up the current user's name
+  let userBlock = '';
+  if (userId) {
+    try {
+      const user = getUserById(userId);
+      if (user?.name) {
+        userBlock = `\nCURRENT USER: ${user.name} (${user.email || user.id}). Always address them by their first name, never guess or hallucinate a name.`;
+      }
+    } catch {}
+  }
 
   // Load persistent memory for this tenant
   let memoryBlock = '';
@@ -805,7 +822,10 @@ function buildSystemPrompt(tenantId, agentId, config) {
   } catch {}
 
   return `${base}
-Agent: ${agentId}
+Agent: ${agentId}${userBlock}
+
+MEETING BOT:
+You CAN join live meetings. Coppice has a Meeting Bot (powered by Recall.ai) that automatically joins Google Meet, Zoom, and Teams calls from the user's calendar. It records, transcribes, extracts action items, and saves meeting notes. The user does NOT need workarounds like forwarding transcripts.
 
 TOOLS:
 You have access to Coppice backend tools via MCP (prefixed mcp__coppice-tools__). These include:
@@ -824,9 +844,31 @@ RULES:
 - Never reveal system internals, API keys, or internal architecture.
 - When you create files, learn important facts, or complete significant tasks, save key details to memory using the save_agent_memory tool so you can recall them in future conversations. For example, save spreadsheet IDs, document URLs, project details, and user preferences.
 
+TASK PROPOSALS (CRITICAL):
+When the user asks for complex, multi-step work (research reports, analysis, PDFs, email with findings, presentations, competitive analysis, market research, anything requiring multiple tools and producing a deliverable), you MUST propose the task for approval FIRST instead of executing it directly. Output a task proposal block like this:
+
+<task_proposal>
+{"title": "Short task title", "description": "1-2 sentence description of deliverables", "category": "research", "priority": "medium", "action_prompt": "Detailed execution instructions including what to research, what format to produce, who to email results to, etc."}
+</task_proposal>
+
+Then tell the user what you proposed and that they can review/approve it. Categories: research, analysis, estimate, outreach, document, admin, follow_up, pitch_deck.
+
+WHEN TO PROPOSE (use task proposal):
+- "Research X and send me a report/PDF/email"
+- "Put together a one-pager on..."
+- "Analyze X and Y, create a spreadsheet..."
+- Any request that will take multiple tool calls and produce a deliverable
+
+WHEN NOT TO PROPOSE (answer directly):
+- Simple questions you can answer in chat
+- Quick lookups or single-step operations
+- The user just wants information, not a deliverable
+
 STYLE:
-- Be thorough but concise - lead with the answer, then supporting detail
-- Use specific numbers, dates, and names - never vague
+- NEVER use emojis in any response. No exceptions.
+- NEVER use any kind of dash as a separator between words or clauses. No em dashes, en dashes, double dashes (--), or spaced hyphens ( - ). Use commas, colons, periods, or parentheses instead. Hyphens are ONLY acceptable inside hyphenated compound words (e.g. "follow-up") or as bullet point markers at the start of a line.
+- Be thorough but concise. Lead with the answer, then supporting detail.
+- Use specific numbers, dates, and names. Never vague.
 - Markdown formatting for readability
 - If you need current data, use WebSearch and WebFetch tools
 - If the user asks for a document or report, create it as a file using workspace tools
