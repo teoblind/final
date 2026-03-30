@@ -567,6 +567,19 @@ const KNOWLEDGE_TOOLS = [
       required: ['query'],
     },
   },
+  {
+    name: 'save_agent_memory',
+    description: 'Save a key-value pair to persistent memory. Use this to remember important facts across conversations: spreadsheet IDs, document URLs, project status, user preferences, file locations. Memories are injected into your system prompt in future conversations.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: 'Short descriptive key (e.g. "gc_pipeline_sheet_id", "david_preferences", "active_bids")' },
+        value: { type: 'string', description: 'The value to remember' },
+        action: { type: 'string', enum: ['save', 'delete', 'list'], description: 'Action to perform. Default: save' },
+      },
+      required: ['key', 'value'],
+    },
+  },
 ];
 
 // ─── Context Panel Tools ────────────────────────────────────────────────────
@@ -3733,6 +3746,13 @@ async function routeToolCall(toolName, toolInput, tenantId) {
   if (TOOL_CATEGORIES.scheduler.includes(toolName)) return await callSchedulerTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.taskProposal.includes(toolName)) return await callTaskProposalTool(toolName, toolInput, tenantId);
   if (toolName === 'delegate_to_agent') return await callDelegationTool(toolInput, tenantId);
+  if (toolName === 'save_agent_memory') {
+    const { setAgentMemory: setMem, getAgentMemory: getMem, deleteAgentMemory: delMem } = await import('../cache/database.js');
+    if (toolInput.action === 'delete') { delMem(tenantId, toolInput.key); return { deleted: toolInput.key }; }
+    if (toolInput.action === 'list') { return getMem(tenantId); }
+    setMem(tenantId, toolInput.key, toolInput.value);
+    return { saved: toolInput.key, value: toolInput.value };
+  }
   return await callWorkspaceTool(toolName, toolInput, tenantId);
 }
 

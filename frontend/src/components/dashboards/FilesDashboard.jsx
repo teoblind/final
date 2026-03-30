@@ -1964,6 +1964,7 @@ export default function FilesDashboard() {
   const [toast, setToast] = useState(null);
   const [syncStatus, setSyncStatus] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [typeFilter, setTypeFilter] = useState('all');
   const fileInputRef = useRef(null);
 
   const showToast = (msg, type = 'info') => {
@@ -2219,21 +2220,32 @@ export default function FilesDashboard() {
     setSelectedFolder(name);
   };
 
-  const filteredFiles = useMemo(() => {
-    if (!search.trim()) {
-      return folders[selectedFolder]?.files || [];
-    }
-    const q = search.toLowerCase();
-    const results = [];
+  const allFiles = useMemo(() => {
+    const result = [];
     for (const [, folder] of Object.entries(folders)) {
-      for (const file of folder.files) {
-        if (file.name.toLowerCase().includes(q) || (file.owner && file.owner.toLowerCase().includes(q))) {
-          results.push(file);
-        }
-      }
+      for (const file of folder.files) result.push(file);
     }
-    return results;
-  }, [folders, selectedFolder, search]);
+    return result;
+  }, [folders]);
+
+  const filteredFiles = useMemo(() => {
+    let files;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      files = allFiles.filter(f => f.name.toLowerCase().includes(q) || (f.owner && f.owner.toLowerCase().includes(q)));
+    } else if (typeFilter !== 'all') {
+      files = allFiles;
+    } else {
+      files = folders[selectedFolder]?.files || [];
+    }
+    // Apply type filter
+    if (typeFilter !== 'all') {
+      const typeMap = { sheets: ['sheet', 'xlsx', 'csv'], docs: ['doc', 'docx'], slides: ['slides', 'pptx'], pdfs: ['pdf'] };
+      const allowed = typeMap[typeFilter] || [];
+      files = files.filter(f => allowed.includes(f.type));
+    }
+    return files;
+  }, [folders, selectedFolder, search, typeFilter, allFiles]);
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
@@ -2324,6 +2336,38 @@ export default function FilesDashboard() {
           />
         </div>
       </div>
+
+      {/* Type filter tabs */}
+      {allFiles.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-4">
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'sheets', label: 'Sheets' },
+            { key: 'docs', label: 'Docs' },
+            { key: 'slides', label: 'Slides' },
+            { key: 'pdfs', label: 'PDFs' },
+          ].map(tab => {
+            const count = tab.key === 'all' ? allFiles.length : (() => {
+              const typeMap = { sheets: ['sheet', 'xlsx', 'csv'], docs: ['doc', 'docx'], slides: ['slides', 'pptx'], pdfs: ['pdf'] };
+              return allFiles.filter(f => (typeMap[tab.key] || []).includes(f.type)).length;
+            })();
+            if (tab.key !== 'all' && count === 0) return null;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setTypeFilter(tab.key)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                  typeFilter === tab.key
+                    ? 'bg-[#1e3a5f] text-white'
+                    : 'bg-[#f5f4f0] text-terminal-muted border border-terminal-border hover:bg-[#eeede8]'
+                }`}
+              >
+                {tab.label} <span className="ml-0.5 opacity-70">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {Object.keys(folders).length === 0 && !loading ? (
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-12 text-center">

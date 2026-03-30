@@ -4249,6 +4249,19 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec("ALTER TABLE action_items ADD COLUMN completed_at TEXT"); } catch (e) { /* already exists */ }
   try { targetDb.exec("ALTER TABLE action_items ADD COLUMN completed_by TEXT"); } catch (e) { /* already exists */ }
 
+  // Agent memory — per-tenant persistent memory for CLI agent context
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS agent_memory (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_tenant_key ON agent_memory(tenant_id, key)'); } catch (e) {}
+
   // Agent insights table (for Command dashboard)
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_insights (
@@ -5522,6 +5535,30 @@ export function getPendingJobRequests(tenantId) {
     WHERE bj.tenant_id = ? AND jm.message_type = 'request' AND jm.response IS NULL
     ORDER BY jm.created_at DESC
   `).all(tenantId);
+}
+
+// Agent Memory CRUD — per-tenant persistent memory for CLI agent
+
+export function getAgentMemory(tenantId) {
+  return db.prepare('SELECT key, value, updated_at FROM agent_memory WHERE tenant_id = ? ORDER BY updated_at DESC').all(tenantId);
+}
+
+export function getAgentMemoryValue(tenantId, key) {
+  const row = db.prepare('SELECT value FROM agent_memory WHERE tenant_id = ? AND key = ?').get(tenantId, key);
+  return row?.value || null;
+}
+
+export function setAgentMemory(tenantId, key, value) {
+  const id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  db.prepare(`
+    INSERT INTO agent_memory (id, tenant_id, key, value)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(tenant_id, key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+  `).run(id, tenantId, key, value);
+}
+
+export function deleteAgentMemory(tenantId, key) {
+  db.prepare('DELETE FROM agent_memory WHERE tenant_id = ? AND key = ?').run(tenantId, key);
 }
 
 // Key Vault CRUD — values encrypted at rest with AES-256-GCM

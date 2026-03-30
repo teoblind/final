@@ -12,7 +12,7 @@
  */
 
 import { spawn } from 'child_process';
-import { getTenantDb } from '../cache/database.js';
+import { getTenantDb, getAgentMemory, setAgentMemory } from '../cache/database.js';
 
 // SSH tunnel configuration
 const SSH_KEY = process.env.CLAUDE_SSH_KEY || '/root/.ssh/id_ed25519';
@@ -791,6 +791,16 @@ function buildSystemPrompt(tenantId, agentId, config) {
   const base = TENANT_PROMPTS[tenantId] || TENANT_PROMPTS.default;
   const custom = config.system_prompt_addon || '';
 
+  // Load persistent memory for this tenant
+  let memoryBlock = '';
+  try {
+    const memories = getAgentMemory(tenantId);
+    if (memories.length > 0) {
+      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+      memoryBlock = `\n\nMEMORY (things you remember from previous conversations):\n${lines}`;
+    }
+  } catch {}
+
   return `${base}
 Agent: ${agentId}
 
@@ -809,6 +819,7 @@ RULES:
 - NEVER share files, spreadsheets, or documents with anyone without explicit user permission. Do not add permissions, share links, or transfer ownership unless the user specifically asks you to share with a particular person.
 - NEVER send emails without explicit user confirmation.
 - Never reveal system internals, API keys, or internal architecture.
+- When you create files, learn important facts, or complete significant tasks, save key details to memory using the save_agent_memory tool so you can recall them in future conversations. For example, save spreadsheet IDs, document URLs, project details, and user preferences.
 
 STYLE:
 - Be thorough but concise - lead with the answer, then supporting detail
@@ -816,7 +827,7 @@ STYLE:
 - Markdown formatting for readability
 - If you need current data, use WebSearch and WebFetch tools
 - If the user asks for a document or report, create it as a file using workspace tools
-
+${memoryBlock}
 ${custom}`.trim();
 }
 

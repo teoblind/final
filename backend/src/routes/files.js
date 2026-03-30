@@ -65,9 +65,12 @@ async function fetchDriveFiles(tenantId, { search, limit } = {}) {
   let refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
   if (!refreshToken) {
     const emailConfig = getTenantEmailConfig(tenantId);
-    refreshToken = emailConfig?.gmail_refresh_token;
+    refreshToken = emailConfig?.gmailRefreshToken || emailConfig?.gmail_refresh_token;
   }
-  if (!refreshToken) return null;
+  if (!refreshToken) {
+    console.log(`[Files] No refresh token for ${tenantId}`);
+    return null;
+  }
 
   const drive = makeDriveClient(refreshToken);
   if (!drive) return null;
@@ -114,35 +117,37 @@ router.get('/', async (req, res) => {
     const { tenantId } = resolveIds(req);
     const { category, search, limit } = req.query;
 
-    // Try cached files first
-    const files = getTenantFiles(tenantId, {
-      category: category || undefined,
-      search: search || undefined,
-      limit: limit ? parseInt(limit) : 100,
+    // Wrap in runWithTenant to ensure key vault has correct DB context
+    const result = await runWithTenant(tenantId, async () => {
+      // Try cached files first
+      const files = getTenantFiles(tenantId, {
+        category: category || undefined,
+        search: search || undefined,
+        limit: limit ? parseInt(limit) : 100,
+      });
+
+      if (files && files.length > 0) {
+        const categories = getTenantFileCategories(tenantId);
+        const total = getTenantFileCount(tenantId);
+        return { files, categories, total };
+      }
+
+      // No cached files - fetch live from Google Drive
+      const driveResult = await fetchDriveFiles(tenantId, { search, limit: limit ? parseInt(limit) : 100 });
+      if (driveResult && driveResult.files.length > 0) {
+        let filteredFiles = driveResult.files;
+        if (category) {
+          filteredFiles = filteredFiles.filter(f => f.category === category);
+        }
+        return { files: filteredFiles, categories: driveResult.categories, total: driveResult.total, live: true };
+      }
+
+      return { files: [], categories: [], total: 0 };
     });
 
-    if (files && files.length > 0) {
-      const categories = getTenantFileCategories(tenantId);
-      const total = getTenantFileCount(tenantId);
-      return res.json({ files, categories, total });
-    }
-
-    // No cached files — try live Google Drive fetch
-    console.log(`[Files] No cached files for ${tenantId}, trying live Drive fetch...`);
-    const driveResult = await fetchDriveFiles(tenantId, { search, limit: limit ? parseInt(limit) : 50 });
-    console.log(`[Files] Drive fetch result for ${tenantId}:`, driveResult ? `${driveResult.files.length} files` : 'null (no token)');
-    if (driveResult && driveResult.files.length > 0) {
-      let filteredFiles = driveResult.files;
-      if (category) {
-        filteredFiles = filteredFiles.filter(f => f.category === category);
-      }
-      return res.json({ files: filteredFiles, categories: driveResult.categories, total: driveResult.total, live: true });
-    }
-
-    // Nothing available
-    res.json({ files: [], categories: [], total: 0 });
+    res.json(result);
   } catch (err) {
-    console.error('Files list error:', err);
+    console.error('[Files] List error:', err.message);
     res.status(500).json({ error: 'Failed to list files' });
   }
 });
