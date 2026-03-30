@@ -222,7 +222,16 @@ function formatContent(text) {
         // Markdown link: [text](url)
         const mdLink = part.match(/^\[(.+?)\]\((https?:\/\/[^\s)]+)\)$/);
         if (mdLink) {
-          return <a key={j} href={mdLink[2]} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline font-medium"><ExternalLink size={11} className="inline shrink-0" />{mdLink[1]}</a>;
+          const url = mdLink[2];
+          const isGWS = url.includes('docs.google.com') || url.includes('drive.google.com');
+          if (isGWS) {
+            const isSheet = url.includes('/spreadsheets');
+            const isDoc = url.includes('/document');
+            const isSlides = url.includes('/presentation');
+            const color = isSheet ? '#1a6b3c' : isDoc ? '#3b82f6' : isSlides ? '#f59e0b' : '#1e3a5f';
+            return <a key={j} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 my-1 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity shadow-sm" style={{ backgroundColor: color }}><ExternalLink size={14} />{mdLink[1]}</a>;
+          }
+          return <a key={j} href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[#1e3a5f] hover:underline font-medium"><ExternalLink size={11} className="inline shrink-0" />{mdLink[1]}</a>;
         }
         // Bare URL
         if (/^https?:\/\//.test(part)) {
