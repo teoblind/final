@@ -1,22 +1,14 @@
 /**
  * Claude Agent Service — Routes complex agent queries through Claude Code CLI
  *
- * Architecture: VPS → SSH tunnel (port 2222) → Mac → claude-coppice.sh → claude -p
+ * Architecture (primary): VPS runs `claude -p` locally with OAuth credentials
+ * stored at /root/.claude/.credentials.json (Claude Max subscription).
+ * MCP bridge runs on same machine — no SSH needed.
  *
- * The VPS is blocked by Cloudflare from reaching claude.ai directly.
- * Instead, we SSH through the reverse tunnel to the user's Mac, which has
- * a Claude Max subscription ($200/mo flat rate) authenticated via OAuth.
+ * Architecture (legacy fallback): VPS → SSH tunnel (port 2222) → Mac → claude -p
+ * Set CLAUDE_USE_TUNNEL=true to use the SSH tunnel path.
  *
- * The Mac runs a wrapper script (~/claude-coppice.sh) that:
- *   1. Sets correct PATH for node/claude binaries
- *   2. Unsets ANTHROPIC_API_KEY so OAuth/Max auth is used
- *   3. Runs `claude -p` with all passed arguments
- *
- * Fallback: If the SSH tunnel is down, falls back to local `claude` binary
- * (which requires ANTHROPIC_API_KEY or VPS-local auth).
- *
- * Tunnel: autossh reverse tunnel (Mac → VPS port 2222 → Mac port 22)
- * launchd service: com.zhan.reverse-tunnel
+ * Default: CLAUDE_USE_TUNNEL=false (local execution, ~10-20s faster)
  */
 
 import { spawn } from 'child_process';
@@ -548,7 +540,9 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
 
     const args = [
       '-p', fullMessage,
-      '--output-format', 'text',
+      '--output-format', 'stream-json',
+      '--verbose',
+      '--include-partial-messages',
       '--max-turns', String(turns),
       '--system-prompt', systemPrompt,
       '--allowedTools', ...ALLOWED_TOOLS,
@@ -558,7 +552,7 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
       args.push('--model', config.cli_model);
     }
 
-    console.log(`[ClaudeAgent] Streaming ${agentId}@${resolvedTenantId} locally (fallback)`);
+    console.log(`[ClaudeAgent] Streaming ${agentId}@${resolvedTenantId} locally`);
 
     const proc = spawn(CLAUDE_BIN, args, {
       env: { ...process.env, LANG: 'en_US.UTF-8' },
@@ -568,10 +562,68 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
 
     proc.stdin.end();
 
+    let buffer = '';
+    let streamedViaDeltas = false;
+    let hasEmittedText = false;
+    let turnCount = 0;
+    let currentTools = [];
+
+    function emitProgress(tools, label) {
+      onText(JSON.stringify({ _type: 'progress', iteration: turnCount, maxTurns: turns, tools: tools || [label || 'Thinking...'] }));
+    }
+
+    emitProgress(null, 'Thinking...');
+
     proc.stdout.on('data', (chunk) => {
-      const text = chunk.toString();
-      fullResponse += text;
-      onText(text);
+      buffer += chunk.toString();
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+
+          if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
+            const block = event.event.content_block;
+            if (block?.type === 'tool_use') {
+              const toolName = block.name || 'tool';
+              currentTools.push(toolName);
+              emitProgress(currentTools);
+            } else if (block?.type === 'text') {
+              if (hasEmittedText) {
+                turnCount++;
+                currentTools = [];
+                fullResponse += '\n\n';
+                onText('\n\n');
+              }
+            }
+          }
+
+          if (event.type === 'stream_event' && event.event?.type === 'content_block_delta') {
+            const delta = event.event.delta;
+            if (delta?.type === 'text_delta' && delta.text) {
+              fullResponse += delta.text;
+              onText(delta.text);
+              streamedViaDeltas = true;
+              hasEmittedText = true;
+            }
+          }
+
+          if (event.type === 'result' && event.result) {
+            const resultText = typeof event.result === 'string' ? event.result : '';
+            if (resultText && !streamedViaDeltas) {
+              fullResponse = resultText;
+              onText(resultText);
+            } else if (resultText) {
+              fullResponse = resultText;
+            }
+          }
+        } catch {
+          // Not valid JSON - skip
+        }
+      }
     });
 
     proc.stderr.on('data', (chunk) => { stderr += chunk; });
@@ -595,6 +647,30 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
       settled = true;
       clearTimeout(timer);
       const durationMs = Date.now() - start;
+
+      // Process remaining buffer
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          if (event.type === 'stream_event' && event.event?.type === 'content_block_delta') {
+            const delta = event.event.delta;
+            if (delta?.type === 'text_delta' && delta.text) {
+              fullResponse += delta.text;
+              onText(delta.text);
+              streamedViaDeltas = true;
+            }
+          }
+          if (event.type === 'result' && event.result) {
+            const resultText = typeof event.result === 'string' ? event.result : '';
+            if (resultText && !streamedViaDeltas) {
+              fullResponse = resultText;
+              onText(resultText);
+            } else if (resultText) {
+              fullResponse = resultText;
+            }
+          }
+        } catch {}
+      }
 
       if (code !== 0 && !fullResponse.trim()) {
         reject(new Error(`Claude agent stream exited with code ${code}: ${stderr.slice(0, 200)}`));
