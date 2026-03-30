@@ -77,15 +77,15 @@
   .hero {
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
     padding: 120px 40px 80px; position: relative; overflow: hidden;
-    background: linear-gradient(135deg, var(--purple-deep) 0%, var(--purple-mid) 50%, #5c3d94 100%);
+    background: var(--bg);
   }
   .hero-bg { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
   .grid-plane {
     position: absolute; bottom: -10%; left: -10%; right: -10%;
     height: 60%; transform: perspective(800px) rotateX(55deg);
     background-image:
-      linear-gradient(rgba(167,139,250,0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(167,139,250,0.1) 1px, transparent 1px);
+      linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
     background-size: 60px 60px;
     animation: gridFloat 20s ease-in-out infinite;
   }
@@ -97,9 +97,9 @@
     position: absolute; border-radius: 50%;
     filter: blur(60px); opacity: 0.2; animation: orbFloat 15s ease-in-out infinite;
   }
-  .orb-1 { width: 500px; height: 500px; background: #a78bfa; top: 10%; right: -5%; animation-delay: 0s; }
-  .orb-2 { width: 400px; height: 400px; background: #7c3aed; bottom: 10%; left: -5%; animation-delay: -5s; }
-  .orb-3 { width: 300px; height: 300px; background: #c4b5fd; top: 30%; left: 20%; animation-delay: -10s; }
+  .orb-1 { width: 500px; height: 500px; background: #c4b5fd; top: 10%; right: -5%; animation-delay: 0s; opacity: 0.08; }
+  .orb-2 { width: 400px; height: 400px; background: #a78bfa; bottom: 10%; left: -5%; animation-delay: -5s; opacity: 0.06; }
+  .orb-3 { width: 300px; height: 300px; background: #e8e6e1; top: 30%; left: 20%; animation-delay: -10s; opacity: 0.15; }
   @keyframes orbFloat {
     0%, 100% { transform: translate(0, 0) scale(1); }
     33% { transform: translate(30px, -20px) scale(1.05); }
@@ -108,20 +108,20 @@
   .hero-content { position: relative; z-index: 2; max-width: 900px; text-align: center; }
   .hero-badge {
     display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px;
-    border-radius: 99px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85); margin-bottom: 28px;
-    animation: fadeUp 0.8s ease both; backdrop-filter: blur(10px);
+    border-radius: 99px; background: var(--accent-bg); border: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 28px;
+    animation: fadeUp 0.8s ease both;
   }
   .hero-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: #a78bfa; animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .hero-h1 {
     font-family: var(--serif); font-size: clamp(42px, 6vw, 72px); font-weight: 400;
-    line-height: 1.1; color: #ffffff; margin-bottom: 20px;
+    line-height: 1.1; color: var(--text-0); margin-bottom: 20px;
     letter-spacing: -0.02em; animation: fadeUp 0.8s 0.1s ease both;
   }
   .hero-h1 em { font-style: italic; color: var(--purple); }
   .hero-sub {
-    font-size: 18px; color: rgba(255,255,255,0.7); line-height: 1.7; max-width: 600px;
+    font-size: 18px; color: var(--text-2); line-height: 1.7; max-width: 600px;
     margin: 0 auto 36px; animation: fadeUp 0.8s 0.2s ease both;
   }
   .hero-actions {
@@ -129,18 +129,18 @@
     animation: fadeUp 0.8s 0.3s ease both;
   }
   .btn-primary {
-    padding: 14px 32px; border-radius: 12px; background: #a78bfa; color: #1a1025;
+    padding: 14px 32px; border-radius: 12px; background: var(--accent); color: #ffffff;
     font-family: var(--sans); font-size: 15px; font-weight: 600; border: none;
     cursor: pointer; transition: all 0.2s; text-decoration: none;
-    box-shadow: 0 4px 16px rgba(167,139,250,0.3);
+    box-shadow: 0 4px 16px rgba(74,45,122,0.2);
   }
-  .btn-primary:hover { background: #c4b5fd; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(167,139,250,0.4); }
+  .btn-primary:hover { background: var(--accent-light); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(74,45,122,0.3); }
   .btn-secondary {
-    padding: 14px 32px; border-radius: 12px; background: rgba(255,255,255,0.1); color: #ffffff;
+    padding: 14px 32px; border-radius: 12px; background: transparent; color: var(--text-1);
     font-family: var(--sans); font-size: 15px; font-weight: 600;
-    border: 1.5px solid rgba(255,255,255,0.2); cursor: pointer; transition: all 0.2s; text-decoration: none;
+    border: 1.5px solid var(--border); cursor: pointer; transition: all 0.2s; text-decoration: none;
   }
-  .btn-secondary:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+  .btn-secondary:hover { background: var(--surface); border-color: var(--text-4); }
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
@@ -474,6 +474,7 @@
     <span class="nav-brand">Coppice</span>
   </div>
   <div class="nav-links">
+    <a href="/" class="nav-link">Coppice Home</a>
     <a href="/construction" class="nav-link">Construction</a>
     <a href="/energy" class="nav-link">Energy</a>
     <a href="/email-agent" class="nav-link active">Email Agent</a>
@@ -497,6 +498,7 @@
     </button>
   </div>
   <div class="mobile-menu-links">
+    <a href="/">Coppice Home</a>
     <a href="/construction">Construction</a>
     <a href="/energy">Energy</a>
     <a href="/email-agent">Email Agent</a>
