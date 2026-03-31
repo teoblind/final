@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2 } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -558,7 +558,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto font-mono ${catColors[data.category] || catColors.admin}`}>
           {data.category?.replace('_', ' ')}
         </span>
-        {expanded ? <ChevronUp size={13} className="text-[#9a9a92]" /> : <ChevronDown size={13} className="text-[#9a9a92]" />}
+        <span className="text-[10px] text-[#9a9a92]">{expanded ? '\u25B2' : '\u25BC'}</span>
       </div>
       {/* Title + description (always visible) */}
       <div className="px-4 py-2.5 cursor-pointer" onClick={handleExpand}>
