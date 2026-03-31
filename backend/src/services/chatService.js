@@ -676,7 +676,13 @@ HOW TO USE IT WELL:
 - Write a clear, specific action_prompt with detailed execution instructions
 - Include entity names, file references, data sources, and who to email results to
 - Set the right category: research, analysis, estimate, outreach, document, admin, follow_up, or pitch_deck
-- After proposing, tell the user what you proposed and that they can review/approve it`;
+- After proposing, tell the user what you proposed and that they can review/approve it
+
+LEADS INTEGRATION — ALWAYS ASK:
+When proposing research, analysis, or outreach tasks that produce lists of companies, contacts, or market data:
+- Ask the user if they want the results added to their existing leads spreadsheet (as a new tab or merged into existing leads)
+- Example: "Would you also like me to add these findings to your leads sheet as a new tab, or merge any new contacts directly into your existing leads?"
+- This ensures research compounds into actionable pipeline data, not just one-off reports`;
 
 // ─── Agent Delegation Tools ──────────────────────────────────────────────────
 

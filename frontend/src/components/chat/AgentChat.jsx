@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2 } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2, BookOpen, Database } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -463,6 +463,9 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   const [status, setStatus] = useState('proposed'); // proposed | running | completed | dismissed
   const [result, setResult] = useState(null);
   const [artifacts, setArtifacts] = useState([]);
+  const [expanded, setExpanded] = useState(false);
+  const [contextSources, setContextSources] = useState(null);
+  const [loadingContext, setLoadingContext] = useState(false);
 
   const catColors = {
     follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -474,7 +477,31 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
     document: 'bg-rose-50 text-rose-600 border-rose-200',
   };
 
-  const handleRun = async () => {
+  const typeIcons = { email: MailIcon, meeting: Users, attachment: FileText, document: FileText, drive_file: FolderOpen };
+
+  const handleExpand = async () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && contextSources === null && data.assignment_id) {
+      setLoadingContext(true);
+      try {
+        const token = getAuthToken();
+        const r = await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/context`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setContextSources(d.entries || d.sources || []);
+        } else {
+          setContextSources([]);
+        }
+      } catch { setContextSources([]); }
+      setLoadingContext(false);
+    }
+  };
+
+  const handleRun = async (e) => {
+    e.stopPropagation();
     setStatus('running');
     try {
       const res = await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/confirm`, {
@@ -482,7 +509,6 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         headers: { 'Content-Type': 'application/json', ...(() => { try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return { Authorization: `Bearer ${s.tokens.accessToken}` }; } catch {} const l = localStorage.getItem('auth_token'); return l ? { Authorization: `Bearer ${l}` } : {}; })() },
       });
       if (!res.ok) throw new Error('Failed to start task');
-      // Poll for completion
       const poll = setInterval(async () => {
         try {
           const r = await fetch(`${API_BASE}/v1/estimates/assignments?status=all`, {
@@ -502,7 +528,6 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
           }
         } catch {}
       }, 5000);
-      // Stop polling after 10 minutes
       setTimeout(() => clearInterval(poll), 600000);
     } catch (err) {
       setStatus('proposed');
@@ -510,7 +535,8 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
     }
   };
 
-  const handleDismiss = async () => {
+  const handleDismiss = async (e) => {
+    e.stopPropagation();
     setStatus('dismissed');
     try {
       await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/dismiss`, {
@@ -523,20 +549,23 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   if (status === 'dismissed') return null;
 
   return (
-    <div className="mt-3 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
-      <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center gap-2">
+    <div className="mt-1.5 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
+      {/* Clickable header */}
+      <div className="px-4 py-2.5 border-b border-[#f0eeea] flex items-center gap-2 cursor-pointer hover:bg-[#faf9f7] transition-colors" onClick={handleExpand}>
         <ClipboardList size={14} className="text-[#1e3a5f]" />
         <span className="text-[12px] font-bold text-[#1e3a5f] font-heading">Proposed Task</span>
         {data.priority === 'high' && <span className="text-[9px] font-bold text-red-500 ml-1 font-mono">HIGH</span>}
         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto font-mono ${catColors[data.category] || catColors.admin}`}>
           {data.category?.replace('_', ' ')}
         </span>
+        {expanded ? <ChevronUp size={13} className="text-[#9a9a92]" /> : <ChevronDown size={13} className="text-[#9a9a92]" />}
       </div>
-      <div className="px-4 py-3">
-        <div className="text-[13px] font-medium text-terminal-text mb-1">{data.title}</div>
+      {/* Title + description (always visible) */}
+      <div className="px-4 py-2.5 cursor-pointer" onClick={handleExpand}>
+        <div className="text-[13px] font-medium text-terminal-text mb-0.5">{data.title}</div>
         <div className="text-[11px] text-[#6b6b65] leading-relaxed">{data.description}</div>
         {data.sources?.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {data.sources.map((s, i) => (
               <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-[#f5f4f0] border border-[#e8e6e1] text-[#6b6b65]">
                 {s.name || s.type}
@@ -564,7 +593,46 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
           <div className="mt-2 text-[11px] text-red-500">{result}</div>
         )}
       </div>
-      <div className="px-4 py-2.5 border-t border-[#f0eeea] flex items-center gap-2">
+      {/* Expanded context sources panel */}
+      {expanded && (
+        <div className="px-4 py-2.5 border-t border-[#f0eeea] bg-[#faf9f7]">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Database size={11} className="text-[#6b6b65]" />
+            <span className="text-[10px] font-semibold text-[#6b6b65] uppercase tracking-wide">Context Sources</span>
+          </div>
+          {loadingContext && (
+            <div className="flex items-center gap-1.5 py-2 text-[10px] text-[#9a9a92]">
+              <RotateCcw size={10} className="animate-spin" /> Loading...
+            </div>
+          )}
+          {contextSources !== null && contextSources.length === 0 && !loadingContext && (
+            <div className="text-[10px] text-[#9a9a92] py-1">No historical documents attached yet. Context will be gathered when the task runs.</div>
+          )}
+          {contextSources !== null && contextSources.length > 0 && (
+            <div className="space-y-1.5">
+              {contextSources.map((src, i) => {
+                const Icon = typeIcons[src.type] || BookOpen;
+                return (
+                  <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded-lg bg-white border border-[#e8e6e1]">
+                    <Icon size={12} className="text-[#6b6b65] shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-terminal-text truncate">{src.title || 'Untitled'}</div>
+                      {src.summary && <div className="text-[10px] text-[#9a9a92] leading-snug line-clamp-2">{src.summary}</div>}
+                      <div className="text-[9px] text-[#c5c5bc] mt-0.5">
+                        {src.type && <span className="capitalize">{src.type.replace('_', ' ')}</span>}
+                        {src.source && <span> - {src.source}</span>}
+                        {src.recorded_at && <span> - {new Date(src.recorded_at).toLocaleDateString()}</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {/* Action buttons */}
+      <div className="px-4 py-2 border-t border-[#f0eeea] flex items-center gap-2">
         {status === 'proposed' && (
           <>
             <button onClick={handleRun}
@@ -575,6 +643,9 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
               className="p-1.5 text-[#9a9a92] hover:text-red-500 rounded" title="Dismiss">
               <X size={13} />
             </button>
+            <span className="ml-auto text-[9px] text-[#c5c5bc] cursor-pointer hover:text-[#6b6b65]" onClick={handleExpand}>
+              {expanded ? 'Hide details' : 'View context'}
+            </span>
           </>
         )}
         {status === 'running' && (
@@ -1392,7 +1463,16 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
         )}
 
         {/* Bubble - only render if there's text content */}
-        {msg.content && !editing && (
+        {msg.content && !editing && (() => {
+          // When a task proposal card exists, strip redundant description text after the tool tag
+          let displayContent = msg.content;
+          if (msg.taskProposal && !isUser) {
+            // Strip everything after </propose_task> or </task_proposal> — the card shows that info
+            displayContent = displayContent.replace(/<\/propose_task>[\s\S]*$/, '</propose_task>');
+            displayContent = displayContent.replace(/<\/task_proposal>[\s\S]*$/, '</task_proposal>');
+          }
+          if (!displayContent.trim()) return null;
+          return (
           <div className="group/bubble relative">
             <div
               className={`px-4 py-3 text-[13px] leading-[1.6] ${
@@ -1404,7 +1484,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
               }`}
               style={isUser ? { backgroundColor: accent } : undefined}
             >
-              {formatContent(msg.content)}
+              {formatContent(displayContent)}
             </div>
             {/* Copy / Edit buttons - appear on hover */}
             <div className={`flex items-center gap-0.5 mt-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity ${isUser ? 'justify-end' : ''}`}>
@@ -1418,7 +1498,8 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Edit mode */}
         {editing && (
