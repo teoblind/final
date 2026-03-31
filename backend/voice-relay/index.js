@@ -1,5 +1,18 @@
-import { WebSocketServer } from "ws";
-import { RealtimeClient } from "@openai/realtime-api-beta";
+/**
+ * Coppice Voice Relay v2 — Pure WebSocket proxy between voice-agent.html and OpenAI Realtime API
+ *
+ * Previous version used @openai/realtime-api-beta SDK which:
+ *   1. Dropped ALL non-audio events from the page (session.update, input_audio_buffer.commit,
+ *      response.create, conversation.item.delete, etc.) — killing the page's manual VAD + wake word logic
+ *   2. Configured its own server_vad session (threshold 0.5), overriding the page's manual mode
+ *   3. Sent an unsolicited greeting before the page was ready
+ *
+ * This version is a transparent bidirectional proxy. The page (voice-agent.html) controls
+ * the entire session: instructions, turn detection, when to commit audio, when to respond.
+ * The relay just forwards messages and logs them for debugging.
+ */
+
+import { WebSocketServer, WebSocket } from "ws";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -11,112 +24,158 @@ if (!OPENAI_API_KEY) {
 }
 
 const PORT = parseInt(process.env.PORT || '3003', 10);
+const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview';
+
 const wss = new WebSocketServer({ port: PORT });
 
-const INSTRUCTIONS = `You are Coppice, an AI assistant participating in this meeting.
-Be professional, concise, and helpful. Keep responses brief — this is a real-time conversation, not a lecture.
-Listen carefully and respond naturally when addressed. If someone greets you, greet them back warmly but briefly.
-Never say you were "cut off" or had technical issues unless specifically asked.`;
+wss.on("connection", (clientWs, req) => {
+  console.log(`[VoiceRelay] Client connected from ${req.socket.remoteAddress}`);
 
-wss.on("connection", async (ws, req) => {
-  console.log(`[VoiceRelay] New client connected from ${req.socket.remoteAddress}`);
-
-  const client = new RealtimeClient({ apiKey: OPENAI_API_KEY });
-
-  // Track audio counts for debugging
   let audioInCount = 0;
   let audioOutCount = 0;
+  let openaiWs = null;
+  let clientClosed = false;
+  let openaiClosed = false;
+  // Queue messages that arrive before OpenAI connection is ready
+  const pendingMessages = [];
 
-  // Relay: OpenAI → Browser
-  client.realtime.on("server.*", (event) => {
-    if (event.type === 'response.audio.delta') {
-      audioOutCount++;
-    } else {
-      console.log(`[VoiceRelay] OpenAI → Client: ${event.type}`);
-      if (event.type === 'response.done') {
-        // Dump full response (minus large audio data)
-        const dump = JSON.stringify(event, (k, v) => k === 'audio' || k === 'delta' ? '[audio]' : v);
-        console.log(`[VoiceRelay] RESPONSE.DONE: ${dump.slice(0, 2000)}`);
-        audioOutCount = 0;
-      }
-      if (event.type === 'session.updated') {
-        console.log(`[VoiceRelay] Session modalities: ${JSON.stringify(event.session?.modalities)}`);
-      }
-      if (event.type === 'conversation.item.input_audio_transcription.completed') {
-        console.log(`[VoiceRelay] Heard: "${event.transcript}"`);
-      }
-      if (event.type === 'response.audio_transcript.done') {
-        console.log(`[VoiceRelay] Said: "${event.transcript}"`);
-      }
-    }
-    ws.send(JSON.stringify(event));
-  });
-  client.realtime.on("close", () => {
-    console.log('[VoiceRelay] OpenAI connection closed');
-    ws.close();
-  });
+  // Connect to OpenAI Realtime API via raw WebSocket
+  try {
+    openaiWs = new WebSocket(OPENAI_REALTIME_URL, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'OpenAI-Beta': 'realtime=v1',
+      },
+    });
+  } catch (e) {
+    console.error(`[VoiceRelay] Failed to create OpenAI WebSocket: ${e.message}`);
+    clientWs.close();
+    return;
+  }
 
-  // Relay: Browser → OpenAI (only audio input, skip everything else)
-  ws.on("message", (data) => {
-    if (!client.isConnected()) return;
+  // ── OpenAI → Client (forward everything) ──
+  openaiWs.on('message', (data) => {
+    if (clientClosed) return;
     try {
-      const event = JSON.parse(data);
+      // Forward raw message to client
+      clientWs.send(data);
+
+      // Log non-audio events for debugging
+      const str = data.toString();
+      if (str.length < 5000) {
+        try {
+          const event = JSON.parse(str);
+          if (event.type === 'response.audio.delta') {
+            audioOutCount++;
+          } else {
+            console.log(`[VoiceRelay] OpenAI -> Client: ${event.type}`);
+            if (event.type === 'session.created') {
+              console.log('[VoiceRelay] Session created');
+            }
+            if (event.type === 'session.updated') {
+              console.log(`[VoiceRelay] Session config: modalities=${JSON.stringify(event.session?.modalities)}, turn_detection=${JSON.stringify(event.session?.turn_detection)}`);
+            }
+            if (event.type === 'conversation.item.input_audio_transcription.completed') {
+              console.log(`[VoiceRelay] Heard: "${event.transcript}"`);
+            }
+            if (event.type === 'response.audio_transcript.done') {
+              console.log(`[VoiceRelay] Said: "${event.transcript}"`);
+            }
+            if (event.type === 'response.done') {
+              console.log(`[VoiceRelay] Response complete (${audioOutCount} audio chunks sent)`);
+              audioOutCount = 0;
+            }
+            if (event.type === 'input_audio_buffer.speech_started') {
+              console.log('[VoiceRelay] VAD: speech started');
+            }
+            if (event.type === 'input_audio_buffer.speech_stopped') {
+              console.log('[VoiceRelay] VAD: speech stopped');
+            }
+            if (event.type === 'input_audio_buffer.committed') {
+              console.log(`[VoiceRelay] Audio buffer committed: item=${event.item_id}`);
+            }
+            if (event.type === 'error') {
+              console.error(`[VoiceRelay] OpenAI error:`, str.slice(0, 1000));
+            }
+          }
+        } catch {} // Not JSON, forward anyway
+      }
+    } catch (e) {
+      console.error(`[VoiceRelay] Error forwarding to client: ${e.message}`);
+    }
+  });
+
+  openaiWs.on('open', () => {
+    console.log('[VoiceRelay] Connected to OpenAI Realtime API');
+    // Flush any messages queued during connection
+    if (pendingMessages.length > 0) {
+      console.log(`[VoiceRelay] Flushing ${pendingMessages.length} queued messages`);
+      for (const msg of pendingMessages) {
+        openaiWs.send(msg);
+      }
+      pendingMessages.length = 0;
+    }
+  });
+
+  openaiWs.on('close', (code, reason) => {
+    openaiClosed = true;
+    console.log(`[VoiceRelay] OpenAI closed: ${code} ${reason}`);
+    if (!clientClosed) clientWs.close();
+  });
+
+  openaiWs.on('error', (err) => {
+    console.error(`[VoiceRelay] OpenAI WS error: ${err.message}`);
+  });
+
+  // ── Client → OpenAI (forward EVERYTHING) ──
+  clientWs.on("message", (data) => {
+    if (openaiClosed) return;
+    try {
+      const str = data.toString();
+      const event = JSON.parse(str);
+
+      // Log non-audio events
       if (event.type === 'input_audio_buffer.append') {
-        // Forward audio directly to OpenAI
         audioInCount++;
-        client.realtime.send(event.type, event);
+        // Check amplitude of first few audio chunks for debugging
+        if (audioInCount <= 3 && event.audio) {
+          try {
+            const raw = Buffer.from(event.audio, 'base64');
+            const view = new Int16Array(raw.buffer, raw.byteOffset, raw.length / 2);
+            let maxAmp = 0;
+            for (let i = 0; i < Math.min(view.length, 200); i++) {
+              maxAmp = Math.max(maxAmp, Math.abs(view[i]));
+            }
+            console.log(`[VoiceRelay] Audio in #${audioInCount}: ${view.length} samples, maxAmp=${maxAmp}`);
+          } catch {}
+        }
       } else {
-        // Skip all other client events — relay handles session/greeting
-        console.log(`[VoiceRelay] Ignoring client event: ${event.type}`);
+        console.log(`[VoiceRelay] Client -> OpenAI: ${event.type}`);
+      }
+
+      // Forward to OpenAI (queue if not ready yet)
+      if (openaiWs.readyState === WebSocket.OPEN) {
+        openaiWs.send(str);
+      } else if (openaiWs.readyState === WebSocket.CONNECTING) {
+        pendingMessages.push(str);
       }
     } catch (e) {
       console.error(`[VoiceRelay] Parse error: ${e.message}`);
     }
   });
 
-  ws.on("close", () => {
-    console.log(`[VoiceRelay] Client disconnected (audio in: ${audioInCount})`);
-    client.disconnect();
+  clientWs.on("close", () => {
+    clientClosed = true;
+    console.log(`[VoiceRelay] Client disconnected (audio in: ${audioInCount}, audio out: ${audioOutCount})`);
+    if (!openaiClosed && openaiWs.readyState === WebSocket.OPEN) {
+      openaiWs.close();
+    }
   });
 
-  // Connect to OpenAI Realtime API (bypass SDK's hardcoded model)
-  try {
-    console.log('[VoiceRelay] Connecting to OpenAI Realtime API...');
-    await client.realtime.connect({ model: 'gpt-4o-realtime-preview' });
-    console.log('[VoiceRelay] Connected to OpenAI!');
-
-    // Wait for session to be ready
-    await client.waitForSessionCreated();
-    console.log('[VoiceRelay] Session created');
-
-    // Configure session via SDK
-    client.updateSession({
-      modalities: ['text', 'audio'],
-      instructions: INSTRUCTIONS,
-      voice: 'alloy',
-      input_audio_format: 'pcm16',
-      output_audio_format: 'pcm16',
-      input_audio_transcription: { model: 'whisper-1' },
-      turn_detection: {
-        type: 'server_vad',
-        threshold: 0.5,
-        prefix_padding_ms: 300,
-        silence_duration_ms: 500,
-      },
-    });
-    console.log('[VoiceRelay] Session configured');
-
-    // Send greeting via SDK method
-    client.sendUserMessageContent([{
-      type: 'input_text',
-      text: 'Hello! You just joined a meeting. Please introduce yourself briefly.',
-    }]);
-    console.log('[VoiceRelay] Greeting sent via SDK');
-
-  } catch (e) {
-    console.error(`[VoiceRelay] Failed: ${e.message}`);
-    ws.close();
-  }
+  clientWs.on("error", (err) => {
+    console.error(`[VoiceRelay] Client WS error: ${err.message}`);
+  });
 });
 
-console.log(`[VoiceRelay] WebSocket server listening on port ${PORT}`);
+console.log(`[VoiceRelay] v2 — pure proxy, port ${PORT}`);
+console.log(`[VoiceRelay] OpenAI endpoint: ${OPENAI_REALTIME_URL}`);

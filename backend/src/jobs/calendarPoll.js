@@ -28,6 +28,7 @@ import {
 } from '../cache/database.js';
 import {
   createBot,
+  createVoiceBot,
   getBotStatus,
   getTranscript,
   getLocalBot,
@@ -425,7 +426,20 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
 
   try {
     const botName = deriveBotName(tenantId, agentEmail);
-    const bot = await createBot(link, { botName, tenantId, enableVoice: true });
+
+    // Use output_media voice bot (OpenAI Realtime API via voice-agent.html page).
+    // This handles real-time voice conversation with wake-word gating.
+    // Falls back to standard bot if voice bot creation fails.
+    let bot;
+    let isVoiceBot = false;
+    try {
+      bot = await createVoiceBot(link, { botName, tenantId });
+      isVoiceBot = true;
+      console.log(`[CalendarPoll] Voice bot ${bot.id} created (output_media + OpenAI Realtime)`);
+    } catch (e) {
+      console.warn(`[CalendarPoll] Voice bot failed, falling back to standard bot: ${e.message}`);
+      bot = await createBot(link, { botName, tenantId, enableVoice: true });
+    }
 
     activeBots.set(eventKey, {
       botId: bot.id,
@@ -434,13 +448,16 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
       link,
       attendees,
       agentEmail,
+      isVoiceBot,
       startTime: new Date().toISOString(),
     });
 
-    // Start both loops — voice (wake-word-gated audio) + chat (text chat responses).
-    // Voice loop bugs fixed: no more infinite active window, no "copper" false positive,
-    // no auto-start from transcript events. Bot stays silent until "Coppice" is said.
-    startVoiceLoop(bot.id, tenantId);
+    // For standard bots: start webhook-based voice loop (ElevenLabs TTS + Recall output_audio).
+    // For voice bots: voice-agent.html handles voice via OpenAI Realtime, so skip the voice loop.
+    // Chat loop still runs for both (text chat responses in meeting sidebar).
+    if (!isVoiceBot) {
+      startVoiceLoop(bot.id, tenantId);
+    }
     startChatLoop(bot.id);
 
     // Log activity to tenant's feed

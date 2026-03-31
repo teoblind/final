@@ -166,6 +166,10 @@ class StreamProcessor extends AudioWorkletProcessor {
     this.write = { buffer: new Float32Array(this.bufferLength), trackId: null };
     this.writeOffset = 0;
     this.trackSampleOffsets = {};
+    this.silenceFrames = 0;
+    // At 24kHz with 128-sample frames, 375 frames = ~2 seconds of silence.
+    // After 2s of no new audio data, we consider the response truly complete.
+    this.maxSilenceFrames = 375;
     this.port.onmessage = (event) => {
       if (!event.data) return;
       const payload = event.data;
@@ -210,6 +214,7 @@ class StreamProcessor extends AudioWorkletProcessor {
       return false;
     } else if (this.outputBuffers.length) {
       this.hasStarted = true;
+      this.silenceFrames = 0; // Reset silence counter when we have real audio
       const { buffer, trackId } = this.outputBuffers.shift();
       for (let i = 0; i < outputChannelData.length; i++) {
         outputChannelData[i] = buffer[i] || 0;
@@ -220,8 +225,18 @@ class StreamProcessor extends AudioWorkletProcessor {
       }
       return true;
     } else if (this.hasStarted) {
-      this.port.postMessage({ event: 'stop' });
-      return false;
+      // Output silence while waiting for more audio chunks.
+      // Audio arrives in bursts with gaps, so we stay alive during brief gaps.
+      // After ~2 seconds of continuous silence, signal completion and stop.
+      this.silenceFrames++;
+      for (let i = 0; i < outputChannelData.length; i++) {
+        outputChannelData[i] = 0;
+      }
+      if (this.silenceFrames >= this.maxSilenceFrames) {
+        this.port.postMessage({ event: 'stop' });
+        return false;
+      }
+      return true;
     } else {
       return true;
     }
@@ -359,13 +374,30 @@ class WavStreamPlayer {
     this.interruptedTrackIds = {};
   }
 
-  async connect() {
-    this.context = new AudioContext({ sampleRate: this.sampleRate });
-    console.log('[AUDIO-DEBUG] AudioContext created, state:', this.context.state);
+  async connect(sharedContext) {
+    // Use a shared AudioContext if provided (avoids dual-context issues in headless Chrome)
+    this.context = sharedContext || new AudioContext({ sampleRate: this.sampleRate });
+    console.log('[AUDIO-DEBUG] AudioContext state:', this.context.state, sharedContext ? '(shared)' : '(new)');
     if (this.context.state === 'suspended') {
       console.log('[AUDIO-DEBUG] AudioContext suspended, calling resume()...');
       await this.context.resume();
       console.log('[AUDIO-DEBUG] AudioContext after resume():', this.context.state);
+    }
+    // Force AudioContext activation in headless Chrome via silent oscillator trick.
+    // In headless Chromium, resume() alone may not activate the audio pipeline.
+    // Creating and immediately stopping an OscillatorNode forces Chrome to
+    // initialize the audio output path even without a user gesture.
+    try {
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      gain.gain.value = 0; // silent
+      osc.connect(gain);
+      gain.connect(this.context.destination);
+      osc.start();
+      osc.stop(this.context.currentTime + 0.01);
+      console.log('[AUDIO-DEBUG] Silent oscillator trick applied');
+    } catch (e) {
+      console.warn('[AUDIO-DEBUG] Oscillator trick failed:', e.message);
     }
     // Monitor state changes
     this.context.onstatechange = () => {
@@ -549,8 +581,14 @@ async function getInstructions() {
     return;
   }
 
+  // Share the recorder's AudioContext with the player.
+  // Headless Chrome (Recall.ai output_media) can misbehave with multiple AudioContexts:
+  // tab audio capture may only route from one context, causing playback to be inaudible.
+  const sharedContext = wavRecorder._context;
+  console.log('[Coppice] Sharing AudioContext between recorder and player, state:', sharedContext?.state);
+
   try {
-    await wavStreamPlayer.connect();
+    await wavStreamPlayer.connect(sharedContext);
   } catch (e) {
     console.error('[Coppice] Audio output failed:', e);
     return;
@@ -591,9 +629,9 @@ async function getInstructions() {
   function checkWakeWord(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
+    // Note: "copper" removed — construction meetings say it constantly (false positives)
     return lower.includes('coppice') || lower.includes('copice')
-        || lower.includes('copis') || lower.includes('cop ice')
-        || lower.includes('copper') || lower.includes('hey copper');
+        || lower.includes('copis') || lower.includes('cop ice');
   }
 
   function commitBuffer() {

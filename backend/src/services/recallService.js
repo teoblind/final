@@ -217,6 +217,9 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
   else if (isTeams) variant.microsoft_teams = 'web_4_core';
   else variant.google_meet = 'web_4_core';
 
+  // Build the transcription webhook so post-meeting processing still works
+  const webhookUrl = `${APP_BASE_URL}/api/v1/recall/transcript-event`;
+
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
@@ -225,6 +228,16 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
         kind: 'webpage',
         config: { url: pageUrl },
       },
+    },
+    recording_config: {
+      transcript: {
+        provider: { meeting_captions: {} },
+      },
+      realtime_endpoints: [{
+        type: 'webhook',
+        url: webhookUrl,
+        events: ['transcript.data'],
+      }],
     },
     variant,
     automatic_leave: {
@@ -240,6 +253,7 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     id: bot.id,
     meetingUrl,
     botName,
+    tenantId,
     status: 'joining',
     isVoiceAgent: true,
     createdAt: new Date().toISOString(),
