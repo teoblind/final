@@ -3884,10 +3884,10 @@ export default function AgentChat({ agentId = 'estimating' }) {
               {sending ? (
                 <button
                   onClick={handleStop}
-                  className="w-11 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors shrink-0"
+                  className="w-8 h-8 rounded-lg border border-[#d0cec8] bg-white hover:bg-red-50 text-[#9a9a92] hover:text-red-500 flex items-center justify-center transition-colors shrink-0"
                   title="Stop generating (Esc)"
                 >
-                  <Square size={16} fill="white" />
+                  <Square size={12} fill="currentColor" />
                 </button>
               ) : (
                 <button
