@@ -643,9 +643,11 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
               className="p-1.5 text-[#9a9a92] hover:text-red-500 rounded" title="Dismiss">
               <X size={13} />
             </button>
-            <span className="ml-auto text-[9px] text-[#c5c5bc] cursor-pointer hover:text-[#6b6b65]" onClick={handleExpand}>
-              {expanded ? 'Hide details' : 'View context'}
-            </span>
+            <button onClick={(e) => { e.stopPropagation(); handleExpand(); }}
+              className="ml-auto flex items-center gap-1 text-[10px] text-[#6b6b65] hover:text-[#1e3a5f] cursor-pointer font-medium">
+              <Database size={10} />
+              {expanded ? 'Hide context' : 'View context'}
+            </button>
           </>
         )}
         {status === 'running' && (
@@ -1464,12 +1466,15 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
 
         {/* Bubble - only render if there's text content */}
         {msg.content && !editing && (() => {
-          // When a task proposal card exists, strip redundant description text after the tool tag
+          // When a task proposal card exists, trim the text to just the intro before the tool call
+          // taskProposalOffset records where in the content stream the propose_task tool was called
           let displayContent = msg.content;
+          if (msg.taskProposal && !isUser && typeof msg.taskProposalOffset === 'number') {
+            displayContent = displayContent.slice(0, msg.taskProposalOffset).trimEnd();
+          }
+          // Also strip any remaining propose_task/task_proposal tags
           if (msg.taskProposal && !isUser) {
-            // Strip everything after </propose_task> or </task_proposal> — the card shows that info
-            displayContent = displayContent.replace(/<\/propose_task>[\s\S]*$/, '</propose_task>');
-            displayContent = displayContent.replace(/<\/task_proposal>[\s\S]*$/, '</task_proposal>');
+            displayContent = displayContent.replace(/<propose_task>[\s\S]*?(<\/propose_task>)?/g, '').replace(/<task_proposal>[\s\S]*?(<\/task_proposal>)?/g, '').trimEnd();
           }
           if (!displayContent.trim()) return null;
           return (
@@ -3545,9 +3550,9 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   }));
                 }
               } else if (event.type === 'task_proposal') {
-                // Add task proposal card to the current agent message
+                // Add task proposal card + record content offset so we can trim redundant text after the card
                 setMessages(prev => prev.map(m =>
-                  m.id === agentMsgId ? { ...m, taskProposal: { assignment_id: event.assignment_id, title: event.title, description: event.description, category: event.category, priority: event.priority, sources: event.sources } } : m
+                  m.id === agentMsgId ? { ...m, taskProposal: { assignment_id: event.assignment_id, title: event.title, description: event.description, category: event.category, priority: event.priority, sources: event.sources }, taskProposalOffset: (m.content || '').length } : m
                 ));
               } else if (event.type === 'delegation') {
                 // Add/update delegation card on the current agent message
