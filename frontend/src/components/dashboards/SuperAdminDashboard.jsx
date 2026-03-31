@@ -135,6 +135,7 @@ export default function SuperAdminDashboard() {
 // ─── Dashboard Page ─────────────────────────────────────────────────────────
 
 function DashboardPage() {
+  const { tokens } = useAuth();
   const [tenants, setTenants] = useState([]);
   const [users, setUsers] = useState([]);
   const [usage, setUsage] = useState(null);
@@ -193,7 +194,7 @@ function DashboardPage() {
     fetchAll();
   }, []);
 
-  // Listen for re-auth popup success
+  // Listen for re-auth popup success + reset on window focus (popup closed without completing)
   useEffect(() => {
     const handler = (event) => {
       if (event.data?.type === 'email-reauth-success') {
@@ -201,8 +202,13 @@ function DashboardPage() {
         api.post('/v1/admin/email/health/refresh').then(res => setEmailHealth(res.data)).catch(() => {});
       }
     };
+    const focusHandler = () => setReauthingTenant(null);
     window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
+    window.addEventListener('focus', focusHandler);
+    return () => {
+      window.removeEventListener('message', handler);
+      window.removeEventListener('focus', focusHandler);
+    };
   }, []);
 
   const handleDeleteUser = async (userId) => {
@@ -356,10 +362,7 @@ function DashboardPage() {
                     <button
                       onClick={async () => {
                         setReauthingTenant(t.tenantId);
-                        // Ensure fresh token by hitting a lightweight endpoint first
-                        try { await api.get('/v1/auth/me'); } catch {}
-                        const session = JSON.parse(sessionStorage.getItem('coppice_session') || '{}');
-                        const jwt = session?.tokens?.accessToken || localStorage.getItem('accessToken') || localStorage.getItem('token');
+                        const jwt = tokens?.accessToken;
                         window.open(
                           `/api/v1/admin/email/reauth/start?tenantId=${encodeURIComponent(t.tenantId)}&token=${encodeURIComponent(jwt)}`,
                           'reauth',
@@ -843,10 +846,10 @@ function Section({ title, children }) {
 }
 
 function TenantCard({ tenant, userCount, cost, requests, fmtCost }) {
-  const isDACP = (tenant.id || '').includes('dacp');
-  const color = isDACP ? '#1e3a5f' : '#1a6b3c';
-  const letter = isDACP ? 'D' : 'S';
-  const slug = isDACP ? 'dacp.coppice.ai' : 'sangha.coppice.ai';
+  const colors = { 'dacp-construction-001': '#1e3a5f', 'zhan-capital': '#111110', default: '#1a6b3c' };
+  const color = colors[tenant.id] || '#6b6b65';
+  const letter = (tenant.name || tenant.id || '?')[0].toUpperCase();
+  const slug = `${tenant.slug || tenant.id}.coppice.ai`;
 
   return (
     <div className="bg-white border border-[#e8e6e1] rounded-2xl p-5 hover:border-[#1e3a5f] hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-all cursor-pointer">

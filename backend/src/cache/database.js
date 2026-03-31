@@ -21,7 +21,8 @@ const tenantStore = new AsyncLocalStorage();
 // 'default' tenant maps to 'sangha' directory
 function tenantDirName(tenantId) {
   if (tenantId === 'default') return 'sangha';
-  return tenantId;
+  // Sanitize tenantId to prevent path traversal
+  return tenantId.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 // System DB — stores tenants table for routing, always available
@@ -2745,7 +2746,8 @@ export function getUserById(id) {
 }
 
 export function getUsersByTenant(tenantId) {
-  return db.prepare('SELECT id, email, name, tenant_id, role, status, mfa_enabled, last_login, created_at FROM users WHERE tenant_id = ? ORDER BY created_at').all(tenantId);
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT id, email, name, tenant_id, role, status, mfa_enabled, last_login, created_at FROM users WHERE tenant_id = ? ORDER BY created_at').all(tenantId);
 }
 
 export function createUser(user) {
@@ -5151,9 +5153,10 @@ export function getUsageByDay(tenantId, startDate, endDate) {
 }
 
 export function getUsageAllTenants(startDate, endDate) {
+  const tenants = getAllTenants();
+  const results = [];
   const sql = `
     SELECT
-      tenant_id,
       json_extract(metadata_json, '$.model') as model,
       COUNT(*) as requests,
       SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
@@ -5161,12 +5164,23 @@ export function getUsageAllTenants(startDate, endDate) {
     FROM chat_messages
     WHERE role = 'assistant' AND metadata_json IS NOT NULL
       AND created_at >= ? AND created_at <= ?
-    GROUP BY tenant_id, model
+    GROUP BY model
   `;
-  return db.prepare(sql).all(startDate, endDate);
+  for (const tenant of tenants) {
+    try {
+      const tdb = getTenantDb(tenant.id);
+      const rows = tdb.prepare(sql).all(startDate, endDate);
+      for (const row of rows) {
+        results.push({ ...row, tenant_id: tenant.id });
+      }
+    } catch {}
+  }
+  return results;
 }
 
 export function getUsageByDayAllTenants(startDate, endDate) {
+  const tenants = getAllTenants();
+  const dayMap = {};
   const sql = `
     SELECT
       date(created_at) as day,
@@ -5179,7 +5193,21 @@ export function getUsageByDayAllTenants(startDate, endDate) {
     GROUP BY date(created_at)
     ORDER BY day
   `;
-  return db.prepare(sql).all(startDate, endDate);
+  for (const tenant of tenants) {
+    try {
+      const tdb = getTenantDb(tenant.id);
+      const rows = tdb.prepare(sql).all(startDate, endDate);
+      for (const row of rows) {
+        if (!dayMap[row.day]) {
+          dayMap[row.day] = { day: row.day, requests: 0, input_tokens: 0, output_tokens: 0 };
+        }
+        dayMap[row.day].requests += row.requests || 0;
+        dayMap[row.day].input_tokens += row.input_tokens || 0;
+        dayMap[row.day].output_tokens += row.output_tokens || 0;
+      }
+    } catch {}
+  }
+  return Object.values(dayMap).sort((a, b) => a.day.localeCompare(b.day));
 }
 
 // ─── Tenant Files ─────────────────────────────────────────────────────────
@@ -5330,7 +5358,7 @@ export function upsertDriveFtsEntry(driveFileId, tenantId, name, contentText) {
   }
 }
 
-export function searchDriveContents(tenantId, query, limit = 3) {
+export function searchDriveContents(tenantId, query, limit = 10) {
   // Sanitize query for FTS5
   const safeQuery = query.replace(/[^\w\s]/g, ' ').trim().split(/\s+/).filter(w => w.length > 2).join(' ');
   if (!safeQuery) return [];
@@ -5338,7 +5366,8 @@ export function searchDriveContents(tenantId, query, limit = 3) {
   try {
     return db.prepare(`
       SELECT df.name, df.drive_url, df.category,
-             snippet(drive_fts, 3, '>>>', '<<<', '...', 40) as snippet
+             snippet(drive_fts, 3, '>>>', '<<<', '...', 100) as snippet,
+             SUBSTR(df.content_text, 1, 3000) as content_excerpt
       FROM drive_fts fts
       JOIN drive_synced_files df ON df.id = fts.drive_file_id
       WHERE drive_fts MATCH ?

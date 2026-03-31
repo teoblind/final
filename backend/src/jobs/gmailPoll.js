@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment, getAgentMemory } from '../cache/database.js';
 import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
@@ -215,6 +215,51 @@ async function extractAttachmentText(attachments) {
   return allText;
 }
 
+/**
+ * Persist extracted attachment text to knowledge_entries for future retrieval.
+ * Parses each attachment (PDF, DOCX, XLSX, CSV, TXT) and saves up to 50KB of
+ * text per attachment. Fire-and-forget — errors are caught and logged.
+ */
+async function saveAttachmentKnowledge(attachments, { tenantId, senderEmail, subject, threadId, messageId }) {
+  if (!attachments || attachments.length === 0) return;
+  const { parseFile } = await import('../services/fileParserService.js');
+  const fs = await import('fs');
+  const path = await import('path');
+  const os = await import('os');
+
+  const parseable = /\.(pdf|docx|xlsx|csv|txt|md|json)$/i;
+
+  for (const att of attachments) {
+    if (!parseable.test(att.filename)) continue;
+    const tmpPath = path.join(os.tmpdir(), `coppice_kn_${Date.now()}_${att.filename}`);
+    try {
+      fs.writeFileSync(tmpPath, att.buffer);
+      const result = await parseFile(tmpPath, att.mimeType, att.filename);
+      if (!result?.text) continue;
+
+      const tdb = getTenantDb(tenantId);
+      const knId = `KN-attach-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const attachContent = JSON.stringify({
+        filename: att.filename,
+        mimeType: att.mimeType,
+        text: result.text.slice(0, 50000),
+        fromEmail: senderEmail,
+        subject,
+        threadId,
+        messageId,
+      });
+      tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+        VALUES (?, ?, 'document', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+        .run(knId, tenantId, `Attachment: ${att.filename} (from ${senderEmail})`, attachContent, `email-attachment:${senderEmail}`);
+      console.log(`[GmailPoll] Saved attachment knowledge: ${att.filename} (${result.text.length} chars) → ${knId}`);
+    } catch (err) {
+      console.warn(`[GmailPoll] Attachment knowledge save failed (${att.filename}):`, err.message);
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch {}
+    }
+  }
+}
+
 function isAutoReplyEnabled(tenantId) {
   try {
     const tenant = getTenant(tenantId || 'default');
@@ -243,6 +288,25 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
       agentId: 'email-guard',
     });
     markEmailProcessed({ messageId, threadId, pipeline: 'unknown-sender', tenantId: resolvedTenant });
+
+    // Save to knowledge base
+    try {
+      const tdb = getTenantDb(resolvedTenant);
+      const knId = `KN-unknown-sender-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+        VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+        .run(knId, resolvedTenant, `${subject} (from ${from})`, JSON.stringify({
+          from,
+          fromName,
+          subject,
+          body: (body || '').slice(0, 10000),
+          threadId,
+          messageId,
+        }), `unknown-sender:${from}`);
+    } catch (err) {
+      console.warn(`[GmailPoll] Knowledge save failed for unknown-sender:`, err.message);
+    }
+
     return;
   }
 
@@ -259,6 +323,25 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
       agentId: 'coppice',
     });
     markEmailProcessed({ messageId, threadId, pipeline: 'general', tenantId: resolvedTenant });
+
+    // Save to knowledge base
+    try {
+      const tdb = getTenantDb(resolvedTenant);
+      const knId = `KN-general-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+        VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+        .run(knId, resolvedTenant, `${subject} (from ${from})`, JSON.stringify({
+          from,
+          fromName,
+          subject,
+          body: (body || '').slice(0, 10000),
+          threadId,
+          messageId,
+        }), `general:${from}`);
+    } catch (err) {
+      console.warn(`[GmailPoll] Knowledge save failed for general:`, err.message);
+    }
+
     return;
   }
 
@@ -287,6 +370,16 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     console.warn(`[GmailPoll] Contact knowledge lookup failed (non-fatal): ${err.message}`);
   }
 
+  // Load tenant memories for email context
+  let memoryContext = '';
+  try {
+    const memories = getAgentMemory(resolvedTenant);
+    if (memories.length > 0) {
+      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+      memoryContext = `\n\nAGENT MEMORY (from previous work — use this context when composing replies):\n${lines}`;
+    }
+  } catch {}
+
   // ─── Direct-address gate ─────────────────────────────────────────────────
   // Only auto-reply if the agent is directly addressed by name OR the email
   // is sent TO the agent's address (not just CC/BCC). If the sender is talking
@@ -310,6 +403,25 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
       agentId: 'coppice',
     });
     markEmailProcessed({ messageId, threadId, pipeline: 'not-addressed-observe', tenantId: resolvedTenant });
+
+    // Save to knowledge base
+    try {
+      const tdb = getTenantDb(resolvedTenant);
+      const knId = `KN-not-addressed-observe-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+        VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+        .run(knId, resolvedTenant, `${subject} (from ${from})`, JSON.stringify({
+          from,
+          fromName,
+          subject,
+          body: (body || '').slice(0, 10000),
+          threadId,
+          messageId,
+        }), `not-addressed-observe:${from}`);
+    } catch (err) {
+      console.warn(`[GmailPoll] Knowledge save failed for not-addressed-observe:`, err.message);
+    }
+
     return;
   }
 
@@ -357,8 +469,8 @@ You are responding to an email. Your text response will be sent as the email rep
 - Do NOT use the send_email tool — the system handles sending. Just write the reply text.
 - If you use tools to gather data or generate files, summarize what you did in your reply.`;
   const prompt = hasThreadContext
-    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}\n\nRespond to their latest message. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`
-    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}\n\nRespond to this email. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`;
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}${memoryContext}\n\nRespond to their latest message. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}${memoryContext}\n\nRespond to this email. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`;
 
   let agentResponse;
   let allToolResults = [];
@@ -536,7 +648,35 @@ You are responding to an email. Your text response will be sent as the email rep
     }
   } catch {}
 
+  // Extract feedback from trusted/owner emails
+  try {
+    const { extractEmailFeedback, hasFeedbackSignals } = await import('../services/memoryExtractor.js');
+    if (hasFeedbackSignals(body)) {
+      extractEmailFeedback(resolvedTenant, from, subject, body).catch(err => {
+        console.warn(`[GmailPoll] Feedback extraction failed: ${err.message}`);
+      });
+    }
+  } catch {}
+
   markEmailProcessed({ messageId, threadId, pipeline: 'general-auto-reply', tenantId: resolvedTenant });
+
+  // Save to knowledge base
+  try {
+    const tdb = getTenantDb(resolvedTenant);
+    const knId = `KN-general-auto-reply-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+    tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+      VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+      .run(knId, resolvedTenant, `${subject} (from ${from})`, JSON.stringify({
+        from,
+        fromName,
+        subject,
+        body: (body || '').slice(0, 10000),
+        threadId,
+        messageId,
+      }), `general-auto-reply:${from}`);
+  } catch (err) {
+    console.warn(`[GmailPoll] Knowledge save failed for general-auto-reply:`, err.message);
+  }
 }
 
 async function pollSingleInbox(gmail, tenantId, label) {
@@ -801,9 +941,33 @@ If you are missing critical context (like meeting notes or recordings mentioned 
             agentId: 'coppice',
           });
 
-          // Owner emails are NOT stored as knowledge entries — they're internal/test
-          // traffic that would pollute the knowledge graph with non-business data.
-          // The activity_log entry above is sufficient for audit trail.
+          // Save to knowledge base
+          try {
+            const tdb = getTenantDb(ownerTenant);
+            const knId = `KN-owner-observe-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+            tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+              VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+              .run(knId, ownerTenant, `${subject} (from ${senderEmail})`, JSON.stringify({
+                from: senderEmail,
+                fromName: senderName,
+                subject,
+                body: (body || '').slice(0, 10000),
+                threadId: msgThreadId,
+                messageId: msg.id,
+              }), `owner-observe:${senderEmail}`);
+          } catch (err) {
+            console.warn(`[GmailPoll] Knowledge save failed for owner-observe:`, err.message);
+          }
+
+          // Extract feedback from owner emails
+          try {
+            const { extractEmailFeedback, hasFeedbackSignals } = await import('../services/memoryExtractor.js');
+            if (hasFeedbackSignals(body || snippet)) {
+              extractEmailFeedback(ownerTenant, senderEmail, subject, body || snippet).catch(err => {
+                console.warn(`[GmailPoll] Feedback extraction failed: ${err.message}`);
+              });
+            }
+          } catch {}
 
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'owner-observe', tenantId: ownerTenant });
@@ -916,6 +1080,25 @@ If you are missing critical context (like meeting notes or recordings mentioned 
             console.log(`[GmailPoll] [${label}] Follow-up CC-only from ${senderEmail} — observing, not replying ("${subject}")`);
             try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
             markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up-cc-observe', tenantId: followupTenant });
+
+            // Save to knowledge base
+            try {
+              const tdb = getTenantDb(followupTenant);
+              const knId = `KN-follow-up-cc-observe-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+              tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+                VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+                .run(knId, followupTenant, `${subject} (from ${senderEmail})`, JSON.stringify({
+                  from: senderEmail,
+                  fromName: senderName,
+                  subject,
+                  body: (body || '').slice(0, 10000),
+                  threadId: msgThreadId,
+                  messageId: msg.id,
+                }), `follow-up-cc-observe:${senderEmail}`);
+            } catch (err) {
+              console.warn(`[GmailPoll] Knowledge save failed for follow-up-cc-observe:`, err.message);
+            }
+
             newReplies++;
             continue;
           }
@@ -1103,6 +1286,26 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         }
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'award' : 'award-pending', tenantId: awardTenant });
+
+        // Save to knowledge base
+        try {
+          const tdb = getTenantDb(awardTenant);
+          const pipelineName = autoRespondAllowed ? 'award' : 'award-pending';
+          const knId = `KN-${pipelineName}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+          tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+            VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+            .run(knId, awardTenant, `${subject} (from ${senderEmail || from})`, JSON.stringify({
+              from: senderEmail || from,
+              fromName: senderName,
+              subject,
+              body: (body || '').slice(0, 10000),
+              threadId: msgThreadId,
+              messageId: msg.id,
+            }), `${pipelineName}:${senderEmail || from}`);
+        } catch (err) {
+          console.warn(`[GmailPoll] Knowledge save failed for award:`, err.message);
+        }
+
         repliedThreads.add(msgThreadId);
         newReplies++;
         continue;
@@ -1150,6 +1353,26 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: autoRespondAllowed ? 'rfq' : 'rfq-pending', tenantId: rfqTenant });
+
+        // Save to knowledge base
+        try {
+          const tdb = getTenantDb(rfqTenant);
+          const pipelineName = autoRespondAllowed ? 'rfq' : 'rfq-pending';
+          const knId = `KN-${pipelineName}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+          tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+            VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
+            .run(knId, rfqTenant, `${subject} (from ${senderEmail || from})`, JSON.stringify({
+              from: senderEmail || from,
+              fromName: senderName,
+              subject,
+              body: (body || '').slice(0, 10000),
+              threadId: msgThreadId,
+              messageId: msg.id,
+            }), `${pipelineName}:${senderEmail || from}`);
+        } catch (err) {
+          console.warn(`[GmailPoll] Knowledge save failed for rfq:`, err.message);
+        }
+
         repliedThreads.add(msgThreadId);
         newReplies++;
         continue;
@@ -1161,6 +1384,8 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         if (autoRespondAllowed) {
           try {
             const attachments = await extractAttachments(gmail, msg.id, fullData.payload);
+            // Persist attachment text to knowledge base for future retrieval
+            saveAttachmentKnowledge(attachments, { tenantId: ippTenant, senderEmail, subject, threadId: msgThreadId, messageId: msg.id }).catch(() => {});
             const rfcMessageIdIpp = allHeaders.find(h => h.name.toLowerCase() === 'message-id')?.value || msg.id;
             const result = await processIppEmail({
               messageId: rfcMessageIdIpp,
@@ -1212,7 +1437,11 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         let contactAttText = '';
         try {
           const contactAtts = await extractAttachments(gmail, msg.id, fullData.payload);
-          if (contactAtts.length > 0) contactAttText = await extractAttachmentText(contactAtts);
+          if (contactAtts.length > 0) {
+            contactAttText = await extractAttachmentText(contactAtts);
+            // Persist attachment text to knowledge base for future retrieval
+            saveAttachmentKnowledge(contactAtts, { tenantId: contactTenant, senderEmail, subject, threadId: msgThreadId, messageId: msg.id }).catch(() => {});
+          }
         } catch {}
 
         try {
@@ -1255,6 +1484,8 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         const inboundAttachments = await extractAttachments(gmail, msg.id, fullData.payload);
         if (inboundAttachments.length > 0) {
           attachmentText = await extractAttachmentText(inboundAttachments);
+          // Persist attachment text to knowledge base for future retrieval
+          saveAttachmentKnowledge(inboundAttachments, { tenantId: resolvedTenant, senderEmail, subject, threadId: msgThreadId, messageId: msg.id }).catch(() => {});
           if (attachmentText) {
             console.log(`[GmailPoll] [${label}] Extracted text from ${inboundAttachments.length} attachment(s)`);
           }
@@ -1474,16 +1705,11 @@ export async function checkAllTokenHealth() {
       result.error = 'Token exchange failed with all OAuth clients';
     }
 
-    // Token expiry countdown (7-day limit in Google Testing mode)
-    if (entry.tokenLastAuthedAt) {
-      result.tokenLastAuthedAt = entry.tokenLastAuthedAt;
-      const daysSince = (Date.now() - new Date(entry.tokenLastAuthedAt).getTime()) / (1000 * 60 * 60 * 24);
-      result.expiresInDays = Math.max(0, Math.round((7 - daysSince) * 10) / 10);
-      result.expiryWarning = result.expiresInDays <= 2 ? 'critical' : result.expiresInDays <= 4 ? 'warning' : null;
-    } else {
-      result.expiresInDays = null;
-      result.expiryWarning = null;
-    }
+    // Production OAuth app - refresh tokens don't expire on a timer
+    // Show last auth date for reference but no fake countdown
+    result.tokenLastAuthedAt = entry.tokenLastAuthedAt || null;
+    result.expiresInDays = null;
+    result.expiryWarning = null;
 
     tokenHealth.set(entry.label, result);
     results.push(result);

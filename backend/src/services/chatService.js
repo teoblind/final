@@ -7,8 +7,9 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { google } from 'googleapis';
-import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun, getAgentMemory } from '../cache/database.js';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -2472,7 +2473,7 @@ async function callTaskProposalTool(toolName, toolInput, tenantId) {
     category,
     priority,
     action_prompt,
-    agent_id: _toolContext.agentId || 'coppice',
+    agent_id: getToolContext().agentId || 'coppice',
     context_json: sources ? JSON.stringify({ sources }) : null,
   });
 
@@ -2496,12 +2497,18 @@ function buildKnowledgeContext(tenantId, userMessage) {
 
   try {
     // Search knowledge base for relevant entries
-    const relevant = searchKnowledge(tenantId, userMessage, { limit: 5 });
+    const relevant = searchKnowledge(tenantId, userMessage, { limit: 15 });
     if (relevant.length > 0) {
       let kb = 'RELEVANT KNOWLEDGE BASE ENTRIES:\n\n';
-      for (const entry of relevant) {
+      for (let i = 0; i < relevant.length; i++) {
+        const entry = relevant[i];
         kb += `[${(entry.type || '').toUpperCase()}] ${entry.title} (${entry.recorded_at || entry.created_at})\n`;
         if (entry.summary) kb += `${entry.summary}\n`;
+        // Include full content for the top 5 most relevant entries (up to 5000 chars each)
+        if (i < 5 && entry.content) {
+          const contentStr = typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content);
+          kb += `Content: ${contentStr.substring(0, 5000)}\n`;
+        }
         if (entry.linked_entities) kb += `Related: ${entry.linked_entities}\n`;
         kb += '\n';
       }
@@ -2509,7 +2516,7 @@ function buildKnowledgeContext(tenantId, userMessage) {
     }
 
     // Get open action items
-    const actions = getOpenActionItems(tenantId, 10);
+    const actions = getOpenActionItems(tenantId, 20);
     if (actions.length > 0) {
       let ai = 'OPEN ACTION ITEMS:\n';
       for (const item of actions) {
@@ -2523,12 +2530,17 @@ function buildKnowledgeContext(tenantId, userMessage) {
 
     // Search synced Drive files for relevant content (RAG)
     try {
-      const driveResults = searchDriveContents(tenantId, userMessage, 3);
+      const driveResults = searchDriveContents(tenantId, userMessage, 10);
       if (driveResults.length > 0) {
         let dc = 'RELEVANT DRIVE FILE EXCERPTS:\n\n';
         for (const r of driveResults) {
           dc += `[FILE: ${r.name}] ${r.category || ''}\n`;
-          dc += `${r.snippet}\n\n`;
+          // Use full content excerpt (up to 3000 chars) if available, otherwise fall back to snippet
+          if (r.content_excerpt && r.content_excerpt.trim()) {
+            dc += `${r.content_excerpt}\n\n`;
+          } else {
+            dc += `${r.snippet}\n\n`;
+          }
         }
         contextBlocks.push(dc);
       }
@@ -2594,9 +2606,9 @@ async function createGoogleFileDirectly(toolName, toolInput, tenantId) {
 
   // Resolve user email for ownership transfer (so file lives in user's Drive, not agent's)
   let userEmail = null;
-  if (_toolContext.userId) {
+  if (getToolContext().userId) {
     try {
-      const user = getUserById(_toolContext.userId);
+      const user = getUserById(getToolContext().userId);
       if (user?.email) userEmail = user.email;
     } catch {}
   }
@@ -2722,8 +2734,8 @@ const DELEGATABLE_AGENTS = new Set(['comms', 'email', 'estimating', 'documents',
 
 async function callDelegationTool(toolInput, tenantId) {
   const { target_agent, task_description, thread_title } = toolInput;
-  const userId = _toolContext.userId;
-  const onChunk = _toolContext.onChunk;
+  const userId = getToolContext().userId;
+  const onChunk = getToolContext().onChunk;
 
   if (!DELEGATABLE_AGENTS.has(target_agent)) {
     return { error: `Cannot delegate to "${target_agent}". Valid targets: ${[...DELEGATABLE_AGENTS].join(', ')}` };
@@ -2938,7 +2950,7 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
 
       // Store in key vault — both 'crm' (legacy) and 'dacp-leads' (dashboard reads this)
       // Use per-user key when userId is available
-      const crmUserId = _toolContext?.userId || 'system';
+      const crmUserId = getToolContext()?.userId || 'system';
       kvSet({ tenantId, service: 'crm', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
       kvSet({ tenantId, service: 'dacp-leads', keyName: `sheet_id:${crmUserId}`, keyValue: newSheetId, addedBy: 'agent' });
 
@@ -2987,7 +2999,7 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
       if (!verified) return { error: 'Google auth failed with all OAuth clients. Re-auth may be needed.' };
 
       // Store in key vault - per-user key
-      const linkUserId = _toolContext?.userId || 'system';
+      const linkUserId = getToolContext()?.userId || 'system';
       kvSet({ tenantId, service: 'dacp-leads', keyName: `sheet_id:${linkUserId}`, keyValue: sheetId, addedBy: 'agent' });
 
       return { success: true, sheet_id: sheetId, sheet_title: sheetTitle, sheet_url: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`, message: `Linked "${sheetTitle}" to the Leads Pipeline on the Command Dashboard.` };
@@ -2995,7 +3007,7 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
     case 'share_leads_sheet': {
       const { getKeyVaultValue: kvGet, getUsersByTenant: getUsers, createLeadsSheetShare, getUserByEmailAndTenant } = await import('../cache/database.js');
 
-      const shareUserId = _toolContext?.userId || 'system';
+      const shareUserId = getToolContext()?.userId || 'system';
       // Get current user's sheet
       let mySheetId = kvGet(tenantId, 'dacp-leads', `sheet_id:${shareUserId}`);
       if (!mySheetId || mySheetId === '__unlinked__') {
@@ -3842,11 +3854,17 @@ async function executeToolWithRetry(toolName, toolInput, tenantId) {
   return { toolResult, toolIsError };
 }
 
-// _toolContext is set per-request to provide threadId, userId, tenantId, onContextUpdate, onChunk for context + delegation tools
-let _toolContext = { threadId: null, onContextUpdate: null, agentId: null, userId: null, tenantId: null, onChunk: null };
+// Per-request tool context via AsyncLocalStorage — prevents cross-tenant data leaks
+// when concurrent chat requests share this module. Each async context gets its own
+// { threadId, onContextUpdate, agentId, userId, tenantId, onChunk }.
+const toolContextStorage = new AsyncLocalStorage();
+
+function getToolContext() {
+  return toolContextStorage.getStore() || { threadId: null, onContextUpdate: null, agentId: null, userId: null, tenantId: null, onChunk: null };
+}
 
 function setToolContext(threadId, onContextUpdate, agentId, userId = null, tenantId = null, onChunk = null) {
-  _toolContext = { threadId, onContextUpdate, agentId, userId, tenantId, onChunk };
+  toolContextStorage.enterWith({ threadId, onContextUpdate, agentId, userId, tenantId, onChunk });
 }
 
 async function routeToolCall(toolName, toolInput, tenantId) {
@@ -3855,7 +3873,7 @@ async function routeToolCall(toolName, toolInput, tenantId) {
     const { mcpManager } = await import('./mcpClientService.js');
     return await mcpManager.callTool(tenantId, toolName, toolInput);
   }
-  if (TOOL_CATEGORIES.context.includes(toolName)) return await callContextTool(toolName, toolInput, tenantId, _toolContext.threadId, _toolContext.onContextUpdate);
+  if (TOOL_CATEGORIES.context.includes(toolName)) return await callContextTool(toolName, toolInput, tenantId, getToolContext().threadId, getToolContext().onContextUpdate);
   if (toolName === 'execute_code') return await callCodeTool(toolInput, tenantId);
   if (TOOL_CATEGORIES.gws.includes(toolName)) return await callGwsTool(toolName, toolInput, tenantId);
   if (TOOL_CATEGORIES.emailSecurity.includes(toolName)) return await callEmailSecurityTool(toolName, toolInput, tenantId);
@@ -4145,6 +4163,15 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   const delegationAddon = (DELEGATION_AGENTS.includes(agentId) && !options.skipDelegation) ? DELEGATION_PROMPT_ADDON : '';
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + delegationAddon + knowledgeContext + siblingContext;
+
+  // Load persistent agent memories
+  try {
+    const memories = getAgentMemory(tenantId);
+    if (memories.length > 0) {
+      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+      systemPrompt += `\n\nMEMORY (persistent facts from previous sessions — do not re-save these):\n${lines}`;
+    }
+  } catch {}
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -4700,6 +4727,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const delegationAddonStream = DELEGATION_AGENTS.includes(agentId) ? DELEGATION_PROMPT_ADDON : '';
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + delegationAddonStream + knowledgeContext + siblingContext;
+
+  // Load persistent agent memories
+  try {
+    const memories = getAgentMemory(tenantId);
+    if (memories.length > 0) {
+      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+      systemPrompt += `\n\nMEMORY (persistent facts from previous sessions — do not re-save these):\n${lines}`;
+    }
+  } catch {}
 
   // ─── Build tools list (must match chat()) ───────────────────────────────
   const tools = [...WORKSPACE_TOOLS];

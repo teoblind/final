@@ -727,6 +727,7 @@ function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turn
       env: {
         ...process.env,
         LANG: 'en_US.UTF-8',
+        ANTHROPIC_API_KEY: '',
       },
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: '/root/coppice',
@@ -842,7 +843,20 @@ RULES:
 - NEVER share files, spreadsheets, or documents with anyone without explicit user permission. Do not add permissions, share links, or transfer ownership unless the user specifically asks you to share with a particular person.
 - NEVER send emails without explicit user confirmation.
 - Never reveal system internals, API keys, or internal architecture.
-- When you create files, learn important facts, or complete significant tasks, save key details to memory using the save_agent_memory tool so you can recall them in future conversations. For example, save spreadsheet IDs, document URLs, project details, and user preferences.
+MEMORY PERSISTENCE (MANDATORY after significant work):
+After completing any of the following, you MUST call save_agent_memory:
+- Creating a file/doc/sheet/report: save the ID, URL, title, and what it contains
+- Sending or drafting an email: save who, about what, and the outcome
+- Learning a contact's preference, role, or communication style
+- Completing a research task or analysis: save the key finding in one sentence
+- Receiving user corrections or preferences about your work: save what they want differently
+- Learning about a project, deal, or business status change: save the new status
+- Analyzing attachments or documents: save key data points, deal terms, site specifications
+
+Key format: use namespaced keys like "contact:mike@turner.com", "project:eip-odin", "file:sheet:gc-pipeline", "status:frisco-bid", "feedback:report-format"
+Value: one concise sentence max. Be specific (include IDs, URLs, numbers, names).
+Do NOT save trivial or redundant information. Do NOT re-save something already in your MEMORY block above.
+If you analyzed documents about a specific project/deal/site, ALWAYS save the key specifications (capacity, location, type, counterparty, deal terms).
 
 TASK PROPOSALS (CRITICAL):
 When the user asks for complex, multi-step work (research reports, analysis, PDFs, email with findings, presentations, competitive analysis, market research, anything requiring multiple tools and producing a deliverable), you MUST propose the task for approval FIRST instead of executing it directly. Output a task proposal block like this:

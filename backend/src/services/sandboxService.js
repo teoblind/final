@@ -15,8 +15,11 @@ const DOCKER_IMAGE = 'coppice-sandbox';
 const DEFAULT_TIMEOUT = 30000; // 30s
 
 export async function executeCode(tenantId, language, code, timeoutMs = DEFAULT_TIMEOUT) {
+  // Sanitize tenantId to prevent path traversal
+  const safeTenantId = tenantId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
   // Create per-tenant workspace directory
-  const workspaceDir = path.join(SANDBOX_BASE, tenantId);
+  const workspaceDir = path.join(SANDBOX_BASE, safeTenantId);
   await mkdir(workspaceDir, { recursive: true });
 
   // Write code to a temp file

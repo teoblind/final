@@ -512,8 +512,8 @@ export function searchKnowledge(tenantId, query, { type, entity, limit = 20 } = 
   const params = [tenantId];
 
   if (query) {
-    sql += ` AND (ke.title LIKE ? OR ke.summary LIKE ? OR ke.transcript LIKE ?)`;
-    params.push(`%${query}%`, `%${query}%`, `%${query}%`);
+    sql += ` AND (ke.title LIKE ? OR ke.summary LIKE ? OR ke.transcript LIKE ? OR ke.content LIKE ?)`;
+    params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
   }
   if (type) {
     sql += ` AND ke.type = ?`;

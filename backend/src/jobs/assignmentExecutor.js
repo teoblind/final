@@ -645,5 +645,13 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     console.warn(`[AssignmentExecutor] Notification failed: ${notifErr.message}`);
   }
 
+  // Extract and save memories from completed task
+  try {
+    const { extractTaskMemories } = await import('../services/memoryExtractor.js');
+    extractTaskMemories(tenantId, assignment.title || assignment.task_type, assignment.category || 'general', cleanResponse).catch(err => {
+      console.warn(`[AssignmentExecutor] Memory extraction failed: ${err.message}`);
+    });
+  } catch {}
+
   console.log(`[AssignmentExecutor] Assignment ${assignment.id} completed`);
 }

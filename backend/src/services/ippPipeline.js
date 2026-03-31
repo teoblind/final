@@ -21,8 +21,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync, existsSync, readFileSync } from 'fs';
-import { insertActivity } from '../cache/database.js';
+import { insertActivity, getTenantDb } from '../cache/database.js';
 import { sendEmailWithAttachments, textToHtml } from './emailService.js';
+import { processKnowledgeEntry } from './knowledgeProcessor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1032,6 +1033,30 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
         detailJson: JSON.stringify({ from, fromName, subject, dataParsed: rigidData }),
         sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
       });
+
+      // Save to knowledge base for future retrieval
+      try {
+        const tdb = getTenantDb(tenantId);
+        const knId = `KN-ipp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const attachmentTexts = (attachments || []).filter(a => a.content).map(a => ({ filename: a.filename, text: (a.content || '').slice(0, 5000) }));
+        const content = JSON.stringify({
+          from, fromName, subject,
+          body: (body || '').slice(0, 10000),
+          attachmentNames: (attachments || []).map(a => a.filename || a.name).filter(Boolean),
+          attachmentTexts: attachmentTexts.length ? attachmentTexts : undefined,
+          threadId, messageId,
+          status: 'need-data',
+        });
+        tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+          VALUES (?, ?, 'email-observation', ?, ?, ?, 'ipp-pipeline', datetime('now'))`)
+          .run(knId, tenantId, `IPP: ${subject} (from ${fromName || from})`, content, `ipp:${from}`);
+        processKnowledgeEntry(knId, tenantId).catch(err => {
+          console.warn(`[IPP Pipeline] Knowledge processing failed: ${err.message}`);
+        });
+      } catch (err) {
+        console.warn('[IPP Pipeline] Knowledge save failed:', err.message);
+      }
+
       return { status: 'need-data', messageId };
     }
 
@@ -1046,6 +1071,30 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       detailJson: JSON.stringify({ from, fromName, subject, claudeExtracted: claudeData }),
       sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
     });
+
+    // Save to knowledge base for future retrieval
+    try {
+      const tdb = getTenantDb(tenantId);
+      const knId = `KN-ipp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const attachmentTexts = (attachments || []).filter(a => a.content).map(a => ({ filename: a.filename, text: (a.content || '').slice(0, 5000) }));
+      const content = JSON.stringify({
+        from, fromName, subject,
+        body: (body || '').slice(0, 10000),
+        attachmentNames: (attachments || []).map(a => a.filename || a.name).filter(Boolean),
+        attachmentTexts: attachmentTexts.length ? attachmentTexts : undefined,
+        threadId, messageId,
+        status: 'claude-analyzed',
+        claudeExtracted: claudeData,
+      });
+      tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+        VALUES (?, ?, 'email-observation', ?, ?, ?, 'ipp-pipeline', datetime('now'))`)
+        .run(knId, tenantId, `IPP: ${subject} (from ${fromName || from})`, content, `ipp:${from}`);
+      processKnowledgeEntry(knId, tenantId).catch(err => {
+        console.warn(`[IPP Pipeline] Knowledge processing failed: ${err.message}`);
+      });
+    } catch (err) {
+      console.warn('[IPP Pipeline] Knowledge save failed:', err.message);
+    }
 
     // Generate reply using Claude for a tailored response
     let replyBody;
@@ -1141,6 +1190,30 @@ CONFIDENTIALITY (critical):
     detailJson: JSON.stringify({ from, fromName, subject, data }),
     sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
   });
+
+  // Save to knowledge base for future retrieval
+  try {
+    const tdb = getTenantDb(tenantId);
+    const knId = `KN-ipp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const attachmentTexts = (attachments || []).filter(a => a.content).map(a => ({ filename: a.filename, text: (a.content || '').slice(0, 5000) }));
+    const content = JSON.stringify({
+      from, fromName, subject,
+      body: (body || '').slice(0, 10000),
+      attachmentNames: (attachments || []).map(a => a.filename || a.name).filter(Boolean),
+      attachmentTexts: attachmentTexts.length ? attachmentTexts : undefined,
+      threadId, messageId,
+      status: 'rigid-parsed',
+      parsedData: data,
+    });
+    tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+      VALUES (?, ?, 'email-observation', ?, ?, ?, 'ipp-pipeline', datetime('now'))`)
+      .run(knId, tenantId, `IPP: ${subject} (from ${fromName || from})`, content, `ipp:${from}`);
+    processKnowledgeEntry(knId, tenantId).catch(err => {
+      console.warn(`[IPP Pipeline] Knowledge processing failed: ${err.message}`);
+    });
+  } catch (err) {
+    console.warn('[IPP Pipeline] Knowledge save failed:', err.message);
+  }
 
   // Run pricing analysis for all 3 scenarios
   const baseAnalysis = runPricingAnalysis(data, 'Base');

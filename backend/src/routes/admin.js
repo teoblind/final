@@ -48,8 +48,11 @@ const router = express.Router();
 
 // ─── Re-Auth Routes (unauthenticated - OAuth redirects have no JWT header) ──
 
-const REAUTH_OAUTH_BASE = process.env.OAUTH_BASE_URL || 'https://coppice.ai';
-const REAUTH_REDIRECT_URI = `${REAUTH_OAUTH_BASE}/api/v1/admin/email/reauth/callback`;
+function getReauthRedirectUri(req) {
+  const host = req.headers['x-forwarded-host'] || req.get('host');
+  const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
+  return `${proto}://${host}/api/v1/admin/email/reauth/callback`;
+}
 const REAUTH_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -97,7 +100,8 @@ router.get('/email/reauth/start', (req, res) => {
 
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
-    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, REAUTH_REDIRECT_URI);
+    const redirectUri = getReauthRedirectUri(req);
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
@@ -137,7 +141,8 @@ router.get('/email/reauth/callback', async (req, res) => {
 
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
-    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, REAUTH_REDIRECT_URI);
+    const redirectUri = getReauthRedirectUri(req);
+    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
     const { tokens } = await oauth2Client.getToken(code);
 
     if (!tokens.refresh_token) {
