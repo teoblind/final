@@ -699,6 +699,7 @@ Available agents to delegate to:
 - "lead-engine" — Lead discovery, enrichment, outreach pipeline
 - "sales" — Sales calls, follow-ups, CRM pipeline management
 - "workflow" — Job tracking, project management, scheduling
+- "pitch-deck" — Presentation/deck creation with AI-generated slides and background images
 
 WHEN TO DELEGATE:
 - User asks Hivemind for something that clearly belongs to a sub-agent's specialty
@@ -712,7 +713,7 @@ WHEN NOT TO DELEGATE:
     input_schema: {
       type: 'object',
       properties: {
-        target_agent: { type: 'string', description: 'Agent ID to delegate to (comms, email, estimating, documents, lead-engine, sales, workflow)' },
+        target_agent: { type: 'string', description: 'Agent ID to delegate to (comms, email, estimating, documents, lead-engine, sales, workflow, pitch-deck)' },
         task_description: { type: 'string', description: 'Clear instruction for the sub-agent. Include all relevant context from the current conversation.' },
         thread_title: { type: 'string', description: 'Short title for the delegated thread (shown in the sub-agent chat sidebar)' },
       },
@@ -2740,7 +2741,7 @@ async function searchDriveDirectly(toolInput, tenantId) {
 
 // ─── Agent Delegation Tool Caller ────────────────────────────────────────────
 
-const DELEGATABLE_AGENTS = new Set(['comms', 'email', 'estimating', 'documents', 'lead-engine', 'sales', 'workflow', 'curtailment', 'pools']);
+const DELEGATABLE_AGENTS = new Set(['comms', 'email', 'estimating', 'documents', 'lead-engine', 'sales', 'workflow', 'curtailment', 'pools', 'pitch-deck']);
 
 async function callDelegationTool(toolInput, tenantId) {
   const { target_agent, task_description, thread_title } = toolInput;
@@ -3170,6 +3171,7 @@ SUB-AGENTS YOU CAN DELEGATE TO (use the delegate_to_agent tool):
 - "lead-engine" : Lead discovery, enrichment, outreach pipeline
 - "sales" : Sales calls, follow-ups, CRM pipeline management
 - "workflow" : Job tracking, project management, scheduling
+- "pitch-deck" : Presentations and pitch decks with AI-generated slides, background images, and professional layouts
 
 IMPORTANT ROUTING RULES:
 1. When the user asks for complex multi-step work (research + report, analysis + PDF, competitive research + email), ALWAYS use the propose_task tool to create a task proposal the user can approve before execution.
@@ -3193,8 +3195,8 @@ When the user requests a PDF, report, or document:
   Option 2: Formatted — branded cover page with background image, styled headings, professional layout
 
 When the user requests a presentation or pitch deck:
-- Ask if they want AI-generated background images for each slide (adds ~60 seconds per slide)
-- Ask about tone: formal/corporate, casual/startup, or data-heavy
+- ALWAYS delegate to the "pitch-deck" agent using delegate_to_agent. The pitch-deck agent has a full 6-stage AI pipeline: content planning, CSS styling, AI background image generation, HTML assembly, PNG rendering, and upload to Google Slides or PDF. It will ask the user about slide count, tone, and AI backgrounds, then present a content plan for approval before building.
+- Do NOT use workspace_create_slides for decks. That tool only creates basic text slides. The pitch-deck agent produces investor-grade, editorial-quality presentations.
 
 Keep responses concise and professional. Use construction industry terminology naturally. When referencing numbers, be specific with quantities, units, and pricing.`,
 
@@ -3315,8 +3317,8 @@ When the user requests a PDF, report, or document:
   Option 2: Formatted — branded cover page with background image, styled headings, professional layout
 
 When the user requests a presentation or pitch deck:
-- Ask if they want AI-generated background images for each slide (adds ~60 seconds per slide)
-- Ask about tone: formal/corporate, casual/startup, or data-heavy
+- ALWAYS delegate to the "pitch-deck" agent using delegate_to_agent. The pitch-deck agent has a full 6-stage AI pipeline: content planning, CSS styling, AI background image generation, HTML assembly, PNG rendering, and upload to Google Slides or PDF. It will ask the user about slide count, tone, and AI backgrounds, then present a content plan for approval before building.
+- Do NOT use workspace_create_slides for decks. That tool only creates basic text slides. The pitch-deck agent produces investor-grade, editorial-quality presentations.
 
 Use Bitcoin mining and energy market terminology naturally. Be precise with numbers — hashrate in PH/s, energy in MW, prices in $/MWh. When referencing meeting data, cite specific dates, numbers, and names.
 

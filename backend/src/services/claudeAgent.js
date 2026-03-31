@@ -31,6 +31,57 @@ function useTunnelEnabled() {
 const DEFAULT_TIMEOUT_MS = parseInt(process.env.CLAUDE_AGENT_TIMEOUT_MS, 10) || 180_000; // 3 min
 const DEFAULT_MAX_TURNS = 25;
 
+// ─── Request Queue (serialize CLI access) ──────────────────────────────────
+// Claude Max subscription allows one concurrent session per account.
+// Queue requests so they execute sequentially instead of spawning competing
+// processes that trigger "Invalid API key" throttling.
+// Set CLAUDE_CLI_CONCURRENCY to increase when you add more subscriptions.
+
+const CLI_CONCURRENCY = parseInt(process.env.CLAUDE_CLI_CONCURRENCY, 10) || 1;
+
+class RequestQueue {
+  constructor(concurrency) {
+    this.concurrency = concurrency;
+    this.running = 0;
+    this.queue = [];
+  }
+
+  enqueue(fn, label = '') {
+    return new Promise((resolve, reject) => {
+      const run = async () => {
+        this.running++;
+        try {
+          resolve(await fn());
+        } catch (err) {
+          reject(err);
+        } finally {
+          this.running--;
+          this._next();
+        }
+      };
+
+      if (this.running < this.concurrency) {
+        run();
+      } else {
+        console.log(`[ClaudeAgent] ${label} queued (${this.queue.length} ahead, ${this.running} active)`);
+        this.queue.push(run);
+      }
+    });
+  }
+
+  _next() {
+    if (this.queue.length > 0 && this.running < this.concurrency) {
+      const next = this.queue.shift();
+      next();
+    }
+  }
+
+  get pending() { return this.queue.length; }
+  get active() { return this.running; }
+}
+
+const cliQueue = new RequestQueue(CLI_CONCURRENCY);
+
 // ─── Per-Tenant System Prompts ──────────────────────────────────────────────
 // Condensed versions — Claude Code adds its own base prompt, so we just
 // inject domain knowledge + tool guidance.
@@ -71,6 +122,9 @@ const COMPLEX_PATTERNS = [
 ];
 
 export { isTunnelHealthy };
+export function getQueueStats() {
+  return { active: cliQueue.active, pending: cliQueue.pending, concurrency: CLI_CONCURRENCY };
+}
 
 export function isComplexQuery(message) {
   // message can be a string or array of content blocks
@@ -180,11 +234,14 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
     }
   }
 
-  if (useTunnel) {
-    return queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config });
-  } else {
-    return queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config });
-  }
+  const label = `${agentId}@${resolvedTenantId}`;
+  return cliQueue.enqueue(() => {
+    if (useTunnel) {
+      return queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config });
+    } else {
+      return queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config });
+    }
+  }, label);
 }
 
 // ─── SSH Tunnel Query ───────────────────────────────────────────────────────
@@ -530,11 +587,14 @@ export async function streamClaudeAgent({ tenantId, agentId, userId, message, hi
     }
   }
 
-  if (useTunnel) {
-    return streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText });
-  } else {
-    return streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText });
-  }
+  const label = `${agentId}@${resolvedTenantId}`;
+  return cliQueue.enqueue(() => {
+    if (useTunnel) {
+      return streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText });
+    } else {
+      return streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turns, timeout, config, onText });
+    }
+  }, label);
 }
 
 // ─── Local Fallback Streaming Query ────────────────────────────────────────
@@ -833,11 +893,21 @@ You have access to Coppice backend tools via MCP (prefixed mcp__coppice-tools__)
 - Google Workspace: workspace_create_doc, workspace_create_sheet, workspace_search_drive, workspace_read_file, gws_* tools
 - Email: send_email, read_inbox, search_emails, draft_reply
 - Knowledge: search_knowledge, ingest_knowledge
-- Documents: generate_report, generate_presentation, plan_content
+- Documents: generate_report, generate_document
+- Presentations: plan_content (Stage 1: content plan), generate_presentation (Stages 2-6: build deck)
 - Lead Engine: discover_leads, get_leads, generate_outreach
 - DACP: estimate_*, get_projects, bid management tools
 - Calendar: get_events, create_event, check_availability
 Use these tools when the task requires Google Drive, email, knowledge search, or any backend capability.
+
+PRESENTATIONS AND PITCH DECKS:
+When the user asks for a presentation, pitch deck, or slides, use the proper 6-stage pipeline:
+1. Call plan_content first to generate a content plan (slide outline with layouts, titles, visual descriptions)
+2. Present the plan to the user and WAIT for approval before proceeding
+3. If the user wants AI background images, call generate_backgrounds after plan approval
+4. Once approved, call generate_presentation with the approved slide_plan_json
+5. NEVER call generate_presentation without plan approval first
+6. Do NOT use workspace_create_slides for decks (that only creates basic text slides with no AI pipeline)
 
 RULES:
 - NEVER share files, spreadsheets, or documents with anyone without explicit user permission. Do not add permissions, share links, or transfer ownership unless the user specifically asks you to share with a particular person.
