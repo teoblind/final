@@ -1432,8 +1432,17 @@ export async function checkAllTokenHealth() {
     }
   } catch {}
 
+  // Deduplicate by email label - prefer DB entries over env var
+  const deduped = new Map();
   for (const entry of entries) {
-    const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString(), isEnvVar: !!entry.isEnvVar };
+    const existing = deduped.get(entry.label);
+    if (!existing || (existing.isEnvVar && !entry.isEnvVar)) {
+      deduped.set(entry.label, entry);
+    }
+  }
+
+  for (const entry of deduped.values()) {
+    const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString(), isEnvVar: false };
     let healthy = false;
     for (const pair of getClientPairs()) {
       try {
@@ -1454,7 +1463,7 @@ export async function checkAllTokenHealth() {
     }
 
     // Token expiry countdown (7-day limit in Google Testing mode)
-    if (entry.tokenLastAuthedAt && !entry.isEnvVar) {
+    if (entry.tokenLastAuthedAt) {
       result.tokenLastAuthedAt = entry.tokenLastAuthedAt;
       const daysSince = (Date.now() - new Date(entry.tokenLastAuthedAt).getTime()) / (1000 * 60 * 60 * 24);
       result.expiresInDays = Math.max(0, Math.round((7 - daysSince) * 10) / 10);
