@@ -463,6 +463,9 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   const [status, setStatus] = useState('proposed'); // proposed | running | completed | dismissed
   const [result, setResult] = useState(null);
   const [artifacts, setArtifacts] = useState([]);
+  const [expanded, setExpanded] = useState(false);
+  const [contextSources, setContextSources] = useState(null);
+  const [loadingContext, setLoadingContext] = useState(false);
 
   const catColors = {
     follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -472,6 +475,27 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
     research: 'bg-amber-50 text-amber-600 border-amber-200',
     analysis: 'bg-indigo-50 text-indigo-600 border-indigo-200',
     document: 'bg-rose-50 text-rose-600 border-rose-200',
+  };
+
+  const handleExpand = async () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && contextSources === null && data.assignment_id) {
+      setLoadingContext(true);
+      try {
+        const token = getAuthToken();
+        const r = await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/context`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setContextSources(d.entries || d.sources || []);
+        } else {
+          setContextSources([]);
+        }
+      } catch (_e) { setContextSources([]); }
+      setLoadingContext(false);
+    }
   };
 
   const handleRun = async () => {
@@ -523,20 +547,23 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   if (status === 'dismissed') return null;
 
   return (
-    <div className="mt-3 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
-      <div className="px-4 py-3 border-b border-[#f0eeea] flex items-center gap-2">
+    <div className="mt-1.5 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
+      {/* Clickable header */}
+      <div className="px-4 py-2.5 border-b border-[#f0eeea] flex items-center gap-2 cursor-pointer hover:bg-[#faf9f7] transition-colors" onClick={handleExpand}>
         <ClipboardList size={14} className="text-[#1e3a5f]" />
         <span className="text-[12px] font-bold text-[#1e3a5f] font-heading">Proposed Task</span>
         {data.priority === 'high' && <span className="text-[9px] font-bold text-red-500 ml-1 font-mono">HIGH</span>}
         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto font-mono ${catColors[data.category] || catColors.admin}`}>
           {data.category?.replace('_', ' ')}
         </span>
+        <span className="text-[10px] text-[#9a9a92]">{expanded ? '\u25B2' : '\u25BC'}</span>
       </div>
-      <div className="px-4 py-3">
-        <div className="text-[13px] font-medium text-terminal-text mb-1">{data.title}</div>
+      {/* Title + description always visible */}
+      <div className="px-4 py-2.5 cursor-pointer" onClick={handleExpand}>
+        <div className="text-[13px] font-medium text-terminal-text mb-0.5">{data.title}</div>
         <div className="text-[11px] text-[#6b6b65] leading-relaxed">{data.description}</div>
         {data.sources?.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          <div className="mt-1.5 flex flex-wrap gap-1">
             {data.sources.map((s, i) => (
               <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-[#f5f4f0] border border-[#e8e6e1] text-[#6b6b65]">
                 {s.name || s.type}
@@ -552,7 +579,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         {status === 'completed' && artifacts.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {artifacts.map((art, i) => (
-              <a key={i} href={art.url} target="_blank" rel="noopener noreferrer"
+              <a key={i} href={art.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-blue-50 text-[#1e3a5f] border-[#d0cec8]">
                 {art.type === 'sheet' ? <FileSpreadsheet size={10} /> : art.type === 'email' ? <MailIcon size={10} /> : <ExternalLink size={10} />}
                 {art.title || art.type}
@@ -564,16 +591,57 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
           <div className="mt-2 text-[11px] text-red-500">{result}</div>
         )}
       </div>
-      <div className="px-4 py-2.5 border-t border-[#f0eeea] flex items-center gap-2">
+      {/* Expanded context sources */}
+      {expanded && (
+        <div className="px-4 py-2.5 border-t border-[#f0eeea] bg-[#faf9f7]">
+          <div className="flex items-center gap-1.5 mb-2">
+            <FolderOpen size={11} className="text-[#6b6b65]" />
+            <span className="text-[10px] font-semibold text-[#6b6b65] uppercase tracking-wide">Context Sources</span>
+          </div>
+          {loadingContext && (
+            <div className="flex items-center gap-1.5 py-2 text-[10px] text-[#9a9a92]">
+              <RotateCcw size={10} className="animate-spin" /> Loading...
+            </div>
+          )}
+          {contextSources !== null && contextSources.length === 0 && !loadingContext && (
+            <div className="text-[10px] text-[#9a9a92] py-1">No context sources attached. Context will be gathered when the task runs.</div>
+          )}
+          {contextSources !== null && contextSources.length > 0 && (
+            <div className="space-y-1.5">
+              {contextSources.map((src, i) => (
+                <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded-lg bg-white border border-[#e8e6e1]">
+                  <FileText size={12} className="text-[#6b6b65] shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium text-terminal-text truncate">{src.title || 'Untitled'}</div>
+                    {src.summary && <div className="text-[10px] text-[#9a9a92] leading-snug line-clamp-2">{src.summary}</div>}
+                    <div className="text-[9px] text-[#c5c5bc] mt-0.5">
+                      {src.type && <span className="capitalize">{src.type.replace('_', ' ')}</span>}
+                      {src.source && <span> - {src.source}</span>}
+                      {src.recorded_at && <span> - {new Date(src.recorded_at).toLocaleDateString()}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {/* Action buttons */}
+      <div className="px-4 py-2 border-t border-[#f0eeea] flex items-center gap-2">
         {status === 'proposed' && (
           <>
-            <button onClick={handleRun}
+            <button onClick={(e) => { e.stopPropagation(); handleRun(); }}
               className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] font-heading">
               <Check size={11} /> Run
             </button>
-            <button onClick={handleDismiss}
+            <button onClick={(e) => { e.stopPropagation(); handleDismiss(); }}
               className="p-1.5 text-[#9a9a92] hover:text-red-500 rounded" title="Dismiss">
               <X size={13} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); handleExpand(); }}
+              className="ml-auto flex items-center gap-1 text-[10px] text-[#6b6b65] hover:text-[#1e3a5f] cursor-pointer font-medium">
+              <FolderOpen size={10} />
+              {expanded ? 'Hide context' : 'View context'}
             </button>
           </>
         )}
