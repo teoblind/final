@@ -1432,14 +1432,18 @@ export async function checkAllTokenHealth() {
     }
   } catch {}
 
-  // Deduplicate by email label - prefer DB entries over env var
+  // Deduplicate by email address - prefer DB entries over env var
   const deduped = new Map();
   for (const entry of entries) {
-    const existing = deduped.get(entry.label);
+    const email = entry.label.replace(/\s*\(.*\)$/, '');
+    entry.label = email; // normalize label to just the email
+    const existing = deduped.get(email);
     if (!existing || (existing.isEnvVar && !entry.isEnvVar)) {
-      deduped.set(entry.label, entry);
+      deduped.set(email, entry);
     }
   }
+  // Clear stale poll-generated entries from cache
+  tokenHealth.clear();
 
   for (const entry of deduped.values()) {
     const result = { label: entry.label, tenantId: entry.tenantId, lastChecked: new Date().toISOString(), isEnvVar: false };
