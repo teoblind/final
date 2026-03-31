@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2, BookOpen, Database } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -477,7 +477,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
     document: 'bg-rose-50 text-rose-600 border-rose-200',
   };
 
-  const typeIcons = { email: MailIcon, meeting: Users, attachment: FileText, document: FileText, drive_file: FolderOpen };
+  const typeIcons = { email: MailIcon, meeting: Users, attachment: FileText, document: FileText, drive_file: FolderOpen, default: FileText };
 
   const handleExpand = async () => {
     const next = !expanded;
@@ -495,7 +495,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         } else {
           setContextSources([]);
         }
-      } catch { setContextSources([]); }
+      } catch (_e) { setContextSources([]); }
       setLoadingContext(false);
     }
   };
@@ -597,7 +597,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
       {expanded && (
         <div className="px-4 py-2.5 border-t border-[#f0eeea] bg-[#faf9f7]">
           <div className="flex items-center gap-1.5 mb-2">
-            <Database size={11} className="text-[#6b6b65]" />
+            <FolderOpen size={11} className="text-[#6b6b65]" />
             <span className="text-[10px] font-semibold text-[#6b6b65] uppercase tracking-wide">Context Sources</span>
           </div>
           {loadingContext && (
@@ -611,7 +611,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
           {contextSources !== null && contextSources.length > 0 && (
             <div className="space-y-1.5">
               {contextSources.map((src, i) => {
-                const Icon = typeIcons[src.type] || BookOpen;
+                const Icon = typeIcons[src.type] || FileText;
                 return (
                   <div key={i} className="flex items-start gap-2 px-2 py-1.5 rounded-lg bg-white border border-[#e8e6e1]">
                     <Icon size={12} className="text-[#6b6b65] shrink-0 mt-0.5" />
@@ -645,7 +645,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
             </button>
             <button onClick={(e) => { e.stopPropagation(); handleExpand(); }}
               className="ml-auto flex items-center gap-1 text-[10px] text-[#6b6b65] hover:text-[#1e3a5f] cursor-pointer font-medium">
-              <Database size={10} />
+              <FolderOpen size={10} />
               {expanded ? 'Hide context' : 'View context'}
             </button>
           </>
