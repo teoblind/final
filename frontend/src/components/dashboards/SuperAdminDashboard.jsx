@@ -144,6 +144,9 @@ function DashboardPage() {
   const [actionMenu, setActionMenu] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [resetResult, setResetResult] = useState(null);
+  const [emailHealth, setEmailHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [reauthingTenant, setReauthingTenant] = useState(null);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -175,6 +178,12 @@ function DashboardPage() {
           const logsRes = await api.get('/v1/admin/usage/recent-logs');
           setRecentLogs(logsRes.data?.logs || []);
         } catch { /* skip */ }
+
+        // Fetch email health
+        try {
+          const healthRes = await api.get('/v1/admin/email/health');
+          setEmailHealth(healthRes.data);
+        } catch { /* skip */ }
       } catch (err) {
         console.error('Failed to load admin data:', err);
       } finally {
@@ -182,6 +191,18 @@ function DashboardPage() {
       }
     };
     fetchAll();
+  }, []);
+
+  // Listen for re-auth popup success
+  useEffect(() => {
+    const handler = (event) => {
+      if (event.data?.type === 'email-reauth-success') {
+        setReauthingTenant(null);
+        api.post('/v1/admin/email/health/refresh').then(res => setEmailHealth(res.data)).catch(() => {});
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   const handleDeleteUser = async (userId) => {
@@ -276,6 +297,87 @@ function DashboardPage() {
           })}
         </div>
       </Section>
+
+      {/* Email Integration Health */}
+      {emailHealth && emailHealth.tokens?.length > 0 && (
+        <Section title="Email Integration Health">
+          <div className="flex items-center justify-end mb-3 -mt-2">
+            <button
+              onClick={async () => {
+                setHealthLoading(true);
+                try {
+                  const res = await api.post('/v1/admin/email/health/refresh');
+                  setEmailHealth(res.data);
+                } catch {}
+                setHealthLoading(false);
+              }}
+              disabled={healthLoading}
+              className="text-[10px] font-semibold px-2.5 py-1 rounded-md bg-[#f0eeea] text-[#6b6b65] hover:text-[#111110] transition-colors disabled:opacity-50"
+            >
+              {healthLoading ? 'Checking...' : 'Refresh'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {emailHealth.tokens.map((t) => {
+              const borderClass = t.status !== 'healthy'
+                ? 'border-[#f5c2c7] bg-[#fef2f2]'
+                : t.expiryWarning === 'critical'
+                  ? 'border-[#f5c2c7] bg-[#fef6f0]'
+                  : t.expiryWarning === 'warning'
+                    ? 'border-[#f0d9a0] bg-[#fffef5]'
+                    : 'border-[#d1e7dd] bg-[#f8fdf9]';
+              return (
+                <div key={t.label} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${borderClass}`}>
+                  <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                    t.status === 'healthy' ? 'bg-[#1a6b3c]' : 'bg-[#c0392b] animate-pulse'
+                  }`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-semibold text-[#111110] truncate">{t.label}</p>
+                    <p className={`text-[10px] ${t.status === 'healthy' ? 'text-[#1a6b3c]' : 'text-[#c0392b]'}`}>
+                      {t.status === 'healthy' ? 'Token valid' : 'Token dead - needs re-auth'}
+                    </p>
+                    {t.status === 'healthy' && t.expiresInDays != null && (
+                      <p className={`text-[9px] mt-0.5 ${
+                        t.expiryWarning === 'critical' ? 'text-[#c0392b] font-semibold'
+                          : t.expiryWarning === 'warning' ? 'text-[#d4a017]'
+                          : 'text-[#6b6b65]'
+                      }`}>
+                        Expires in ~{t.expiresInDays}d
+                      </p>
+                    )}
+                    {t.isEnvVar && (
+                      <p className="text-[9px] text-[#6b6b65] mt-0.5">Env var - manual re-auth</p>
+                    )}
+                    {t.error && t.status !== 'healthy' && (
+                      <p className="text-[9px] text-[#6b6b65] truncate mt-0.5">{t.error}</p>
+                    )}
+                  </div>
+                  {!t.isEnvVar && (
+                    <button
+                      onClick={() => {
+                        setReauthingTenant(t.tenantId);
+                        const jwt = localStorage.getItem('accessToken') || localStorage.getItem('token');
+                        window.open(
+                          `/api/v1/admin/email/reauth/start?tenantId=${encodeURIComponent(t.tenantId)}&token=${encodeURIComponent(jwt)}`,
+                          'reauth',
+                          'width=600,height=700'
+                        );
+                      }}
+                      className={`text-[9px] font-semibold px-2 py-1 rounded-md flex-shrink-0 transition-colors ${
+                        t.status !== 'healthy' || t.expiryWarning === 'critical'
+                          ? 'bg-[#c0392b] text-white hover:bg-[#a93226]'
+                          : 'bg-[#f0eeea] text-[#6b6b65] hover:text-[#111110]'
+                      }`}
+                    >
+                      {reauthingTenant === t.tenantId ? 'Waiting...' : 'Re-Auth'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Section>
+      )}
 
       {/* API Spend */}
       <Section title={`API Spend - ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`}>
