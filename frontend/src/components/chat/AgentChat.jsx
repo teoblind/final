@@ -2822,6 +2822,14 @@ export default function AgentChat({ agentId = 'estimating' }) {
     return () => window.removeEventListener('keydown', handler);
   }, [isMultiInstance, handleNewInstance, closeInstance, switchInstance, activeInstanceId, instances]);
 
+  // Stop generation (must be declared before the useEffect that references it)
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
   // Global Escape key to stop generation
   useEffect(() => {
     const handler = (e) => {
@@ -3559,13 +3567,6 @@ export default function AgentChat({ agentId = 'estimating' }) {
       abortControllerRef.current = null;
     }
   };
-
-  const handleStop = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  }, []);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Escape' && sending) {
