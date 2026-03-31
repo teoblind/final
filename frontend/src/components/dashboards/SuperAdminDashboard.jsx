@@ -358,7 +358,8 @@ function DashboardPage() {
                         setReauthingTenant(t.tenantId);
                         // Ensure fresh token by hitting a lightweight endpoint first
                         try { await api.get('/v1/auth/me'); } catch {}
-                        const jwt = localStorage.getItem('accessToken') || localStorage.getItem('token');
+                        const session = JSON.parse(sessionStorage.getItem('coppice_session') || '{}');
+                        const jwt = session?.tokens?.accessToken || localStorage.getItem('accessToken') || localStorage.getItem('token');
                         window.open(
                           `/api/v1/admin/email/reauth/start?tenantId=${encodeURIComponent(t.tenantId)}&token=${encodeURIComponent(jwt)}`,
                           'reauth',

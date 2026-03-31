@@ -220,7 +220,8 @@ export default function AdminConsoleDashboard() {
                     <button
                       onClick={() => {
                         setReauthingTenant(t.tenantId);
-                        const jwt = localStorage.getItem('accessToken') || localStorage.getItem('token');
+                        const session = JSON.parse(sessionStorage.getItem('coppice_session') || '{}');
+                        const jwt = session?.tokens?.accessToken || localStorage.getItem('accessToken') || localStorage.getItem('token');
                         window.open(
                           `/api/v1/admin/email/reauth/start?tenantId=${encodeURIComponent(t.tenantId)}&token=${encodeURIComponent(jwt)}`,
                           'reauth',
