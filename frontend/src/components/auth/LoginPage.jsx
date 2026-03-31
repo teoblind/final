@@ -246,10 +246,6 @@ export default function LoginPage({ onLogin }) {
           {/* Footer */}
           <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#3a3a38' }}>
             <a href="https://coppice.ai" style={{ color: '#6b6b65', textDecoration: 'none' }}>coppice.ai</a>
-            {' · '}
-            <a href="https://dacp.coppice.ai" style={{ color: '#6b6b65', textDecoration: 'none' }}>DACP</a>
-            {' · '}
-            <a href="https://sangha.coppice.ai" style={{ color: '#6b6b65', textDecoration: 'none' }}>Sangha</a>
           </div>
         </div>
 
