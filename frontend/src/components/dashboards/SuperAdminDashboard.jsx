@@ -354,8 +354,10 @@ function DashboardPage() {
                   </div>
                   {!t.isEnvVar && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         setReauthingTenant(t.tenantId);
+                        // Ensure fresh token by hitting a lightweight endpoint first
+                        try { await api.get('/v1/auth/me'); } catch {}
                         const jwt = localStorage.getItem('accessToken') || localStorage.getItem('token');
                         window.open(
                           `/api/v1/admin/email/reauth/start?tenantId=${encodeURIComponent(t.tenantId)}&token=${encodeURIComponent(jwt)}`,
