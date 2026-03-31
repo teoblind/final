@@ -275,25 +275,16 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   const verdict = classification?.verdict || 'unknown';
   const accessTier = getAccessTier(verdict, classification?.trustLevel);
 
-  // Block auto-reply for unknown senders — only log
+  // Unknown senders: don't auto-reply, but draft a response and create a
+  // proposed task so the tenant can review, approve, or dismiss.
   if (!canAutoRespond(verdict)) {
-    console.log(`[GmailPoll] Unknown sender ${from} (verdict: ${verdict}), logging only — no auto-reply`);
-    insertActivity({
-      tenantId: resolvedTenant,
-      type: 'in',
-      title: `Email from unverified sender: ${fromName || from}`,
-      subtitle: `${subject} (not auto-replied — sender not in trusted list)`,
-      detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, emailGuard: classification }),
-      sourceType: 'email',
-      sourceId: messageId,
-      agentId: 'email-guard',
-    });
-    markEmailProcessed({ messageId, threadId, pipeline: 'unknown-sender', tenantId: resolvedTenant });
+    console.log(`[GmailPoll] Unknown sender ${from} (verdict: ${verdict}) — drafting reply for approval`);
 
     // Save to knowledge base
+    let knId;
     try {
       const tdb = getTenantDb(resolvedTenant);
-      const knId = `KN-unknown-sender-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      knId = `KN-unknown-sender-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
       tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
         VALUES (?, ?, 'email-observation', ?, ?, ?, 'gmail-poll', datetime('now'))`)
         .run(knId, resolvedTenant, `${subject} (from ${from})`, JSON.stringify({
@@ -308,6 +299,77 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
       console.warn(`[GmailPoll] Knowledge save failed for unknown-sender:`, err.message);
     }
 
+    // Draft a reply using external-tier guardrails (no internal data)
+    let draftReply = '';
+    try {
+      const draftResult = await tunnelOrChat({
+        tenantId: resolvedTenant,
+        agentId: { 'default': 'sangha', 'zhan-capital': 'zhan' }[resolvedTenant] || 'hivemind',
+        userId: 'system-auto-reply',
+        prompt: `You received an email from an UNKNOWN sender: ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 3000)}\n\nDraft a brief, professional reply. This sender is NOT verified - keep the response generic and do NOT share any internal business information. Reply with ONLY the email body text.
+
+EXTERNAL COMMUNICATION GUARDRAILS (highest priority):
+- Do NOT reference any internal data, client names, deal values, or business details
+- Keep it brief and professional - acknowledge their email and offer to connect them with the right person
+- If it looks like spam or irrelevant, draft a polite decline
+- If it looks like a legitimate business inquiry, draft a helpful but guarded response`,
+        chatOptions: { accessTier: 'external' },
+        maxTurns: 3,
+        timeoutMs: 60_000,
+        label: `Unknown Sender Draft: ${subject?.slice(0, 30)}`,
+      });
+      draftReply = draftResult.response || '';
+    } catch (err) {
+      console.warn(`[GmailPoll] Draft for unknown sender failed (non-fatal): ${err.message}`);
+      draftReply = `Hey ${(fromName || from).split(' ')[0]},\n\nThanks for reaching out. Let me loop in the right person on our team to follow up with you.\n\nBest,`;
+    }
+
+    // Create a proposed assignment for the tenant to review
+    const assignmentId = `assign-unknown-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    try {
+      insertAgentAssignment({
+        id: assignmentId,
+        tenant_id: resolvedTenant,
+        agent_id: 'email',
+        title: `Review email from unknown sender: ${fromName || from}`,
+        description: `An email arrived from an unverified sender. Review the email and draft reply below. You can approve to send the reply, edit it, or dismiss if it's spam.\n\n---\n**From:** ${fromName || ''} <${from}>\n**Subject:** ${subject}\n\n${body.slice(0, 2000)}${body.length > 2000 ? '\n\n[truncated]' : ''}\n\n---\n**Draft Reply:**\n\n${draftReply}`,
+        category: 'email-review',
+        priority: 'high',
+        action_prompt: `Send the following reply to ${from} (Subject: Re: ${subject}):\n\n${draftReply}\n\nIf the user approves, send this reply using send_email. If they edit the draft, use their version instead. Thread ID: ${threadId}, In-Reply-To: ${messageId}`,
+        context_json: JSON.stringify({
+          from,
+          fromName,
+          subject,
+          body: body.slice(0, 5000),
+          threadId,
+          messageId,
+          draftReply,
+          classification,
+        }),
+      });
+      // Set source fields
+      updateAgentAssignment(resolvedTenant, assignmentId, {
+        source_type: 'unknown-sender-review',
+        source_thread_id: threadId,
+        knowledge_entry_ids_json: knId ? JSON.stringify([knId]) : null,
+      });
+      console.log(`[GmailPoll] Created review task ${assignmentId} for unknown sender ${from}`);
+    } catch (err) {
+      console.warn(`[GmailPoll] Failed to create review task for unknown sender: ${err.message}`);
+    }
+
+    insertActivity({
+      tenantId: resolvedTenant,
+      type: 'in',
+      title: `Email from unknown sender: ${fromName || from}`,
+      subtitle: `${subject} — draft reply pending your review`,
+      detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, emailGuard: classification, assignmentId, draftReply: draftReply.slice(0, 500) }),
+      sourceType: 'email',
+      sourceId: messageId,
+      agentId: 'email-guard',
+    });
+
+    markEmailProcessed({ messageId, threadId, pipeline: 'unknown-sender-review', tenantId: resolvedTenant });
     return;
   }
 
