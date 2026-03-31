@@ -90,7 +90,7 @@ function getInboxes() {
         const tdb = getTenantDb(tenant.id);
         const rows = tdb.prepare('SELECT * FROM tenant_email_config').all();
         for (const row of rows) {
-          const label = `${row.sender_email} (${row.tenant_id})`;
+          const label = row.sender_email;
           const gmail = useFallbackClient.has(label) ? makeGmailClientFallback(row.gmail_refresh_token) || makeGmailClient(row.gmail_refresh_token) : makeGmailClient(row.gmail_refresh_token);
           if (gmail) {
             inboxes.push({ tenantId: row.tenant_id, label, gmail, refreshToken: row.gmail_refresh_token });
@@ -104,7 +104,15 @@ function getInboxes() {
     // getAllTenants may fail during startup
   }
 
-  return inboxes;
+  // Deduplicate by email label - prefer DB entries over env var
+  const seen = new Map();
+  for (const inbox of inboxes) {
+    const existing = seen.get(inbox.label);
+    if (!existing) {
+      seen.set(inbox.label, inbox);
+    }
+  }
+  return Array.from(seen.values());
 }
 
 function matchContactToTenant(email) {
