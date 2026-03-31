@@ -596,12 +596,9 @@ async function getInstructions() {
 
   const ws = new WebSocket(wssUrl);
 
-  // ── Wake word state machine ──
-  // PASSIVE: listening for "coppice" — all non-wake-word speech is ignored & deleted
-  // ACTIVE:  in conversation — all speech triggers a response (45s timeout)
-  let botState = 'passive';
-  let activeTimeout = null;
-  const ACTIVE_DURATION = 45000;
+  // ── Wake word gating ──
+  // Bot only responds when "Coppice" is in the utterance. No active window.
+  // Each question needs its own "hey Coppice" — prevents runaway responses.
 
   // Manual VAD — we control when audio is committed (no auto-responses)
   let speechDetected = false;
@@ -615,16 +612,6 @@ async function getInstructions() {
   // Response tracking
   let isResponding = false;
   let micChunkCount = 0;
-
-  function activateBot() {
-    botState = 'active';
-    console.log('[Coppice] *** ACTIVATED — responding to all speech for 45s ***');
-    if (activeTimeout) clearTimeout(activeTimeout);
-    activeTimeout = setTimeout(() => {
-      console.log('[Coppice] Auto-deactivating — timeout');
-      botState = 'passive';
-    }, ACTIVE_DURATION);
-  }
 
   function checkWakeWord(text) {
     if (!text) return false;
@@ -700,7 +687,7 @@ async function getInstructions() {
       }
 
       if (micChunkCount <= 3 || micChunkCount % 300 === 0) {
-        console.log(`[Coppice] Mic #${micChunkCount}: amp=${maxVal} state=${botState}`);
+        console.log(`[Coppice] Mic #${micChunkCount}: amp=${maxVal}`);
       }
 
       // Interrupt bot if someone talks over it
@@ -747,21 +734,17 @@ async function getInstructions() {
           break;
         }
 
-        console.log(`[Coppice] Heard: "${text}" [${botState}]`);
+        console.log(`[Coppice] Heard: "${text}"`);
         const hasWakeWord = checkWakeWord(text);
 
         if (hasWakeWord) {
+          // Wake word detected — respond to this utterance, then go back to passive
           console.log('[Coppice] *** WAKE WORD — creating response ***');
-          activateBot();
           ws.send(JSON.stringify({ type: 'response.create' }));
-        } else if (botState === 'active') {
-          // Active conversation — respond to everything
-          console.log('[Coppice] Active — responding');
-          activateBot(); // reset timeout
-          ws.send(JSON.stringify({ type: 'response.create' }));
+          // Stay passive — each question needs its own "hey Coppice"
         } else {
-          // Passive — ignore & clean up
-          console.log('[Coppice] Passive — ignoring');
+          // No wake word — ignore & clean up regardless of state
+          console.log('[Coppice] No wake word — ignoring');
           if (msg.item_id) {
             ws.send(JSON.stringify({ type: 'conversation.item.delete', item_id: msg.item_id }));
           }
