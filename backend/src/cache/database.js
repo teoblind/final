@@ -4280,6 +4280,12 @@ function initDacpTablesSchema(targetDb) {
     )
   `);
   try { targetDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_memory_tenant_key ON agent_memory(tenant_id, key)'); } catch (e) {}
+  // Add visibility column for two-tier info access (default 'internal' - only 'public' entries visible to external emails)
+  try { targetDb.exec("ALTER TABLE agent_memory ADD COLUMN visibility TEXT DEFAULT 'internal'"); } catch (e) {}
+
+  // Add visibility column to knowledge_entries for two-tier info access
+  try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN visibility TEXT DEFAULT 'internal'"); } catch (e) {}
+  try { targetDb.exec("CREATE INDEX IF NOT EXISTS idx_knowledge_visibility ON knowledge_entries(tenant_id, visibility)"); } catch (e) {}
 
   // Agent insights table (for Command dashboard)
   targetDb.exec(`

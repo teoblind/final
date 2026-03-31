@@ -11,7 +11,7 @@ import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isTh
 import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
-import { classifyEmail, canAutoRespond, canProcess } from '../services/emailGuard.js';
+import { classifyEmail, canAutoRespond, canProcess, getAccessTier } from '../services/emailGuard.js';
 import { tunnelOrChat } from '../services/cliTunnel.js';
 import { sendEmail, sendHtmlEmail, sendEmailWithAttachments, markdownToEmailHtml } from '../services/emailService.js';
 import { processKnowledgeEntry, getThreadKnowledge, getContactKnowledge } from '../services/knowledgeProcessor.js';
@@ -273,6 +273,7 @@ function isAutoReplyEnabled(tenantId) {
 async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail, classification, originalTo, originalCc }) {
   const resolvedTenant = tenantId || 'default';
   const verdict = classification?.verdict || 'unknown';
+  const accessTier = getAccessTier(verdict, classification?.trustLevel);
 
   // Block auto-reply for unknown senders — only log
   if (!canAutoRespond(verdict)) {
@@ -345,40 +346,44 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     return;
   }
 
-  // ─── Contact knowledge injection (compounding intelligence) ───
+  // ─── Contact knowledge injection (internal tier only - never expose to external emails) ───
   let contactContext = '';
-  try {
-    const ck = getContactKnowledge(resolvedTenant, from);
-    if (ck) {
-      const meta = ck.metadata || {};
-      contactContext = `\n\nCONTACT INTELLIGENCE (from previous interactions with ${fromName || from}):`;
-      if (meta.observedTopics?.length > 0) {
-        contactContext += `\n- Topics they discuss: ${meta.observedTopics.join(', ')}`;
-      }
-      if (meta.recentContext?.length > 0) {
-        contactContext += `\n- Recent interactions:`;
-        for (const rc of meta.recentContext.slice(-3)) {
-          contactContext += `\n  [${rc.date?.slice(0, 10) || 'unknown'}] ${rc.summary}`;
+  if (accessTier === 'internal') {
+    try {
+      const ck = getContactKnowledge(resolvedTenant, from);
+      if (ck) {
+        const meta = ck.metadata || {};
+        contactContext = `\n\nCONTACT INTELLIGENCE (from previous interactions with ${fromName || from}):`;
+        if (meta.observedTopics?.length > 0) {
+          contactContext += `\n- Topics they discuss: ${meta.observedTopics.join(', ')}`;
         }
+        if (meta.recentContext?.length > 0) {
+          contactContext += `\n- Recent interactions:`;
+          for (const rc of meta.recentContext.slice(-3)) {
+            contactContext += `\n  [${rc.date?.slice(0, 10) || 'unknown'}] ${rc.summary}`;
+          }
+        }
+        if (ck.entries?.length > 0) {
+          contactContext += `\n- ${ck.entries.length} previous email${ck.entries.length > 1 ? 's' : ''} observed involving this contact`;
+        }
+        contactContext += `\nUse this context to write a more informed, personalized response. Do NOT explicitly mention that you have this intel -- just use it naturally.\n`;
       }
-      if (ck.entries?.length > 0) {
-        contactContext += `\n- ${ck.entries.length} previous email${ck.entries.length > 1 ? 's' : ''} observed involving this contact`;
-      }
-      contactContext += `\nUse this context to write a more informed, personalized response. Do NOT explicitly mention that you have this intel — just use it naturally.\n`;
+    } catch (err) {
+      console.warn(`[GmailPoll] Contact knowledge lookup failed (non-fatal): ${err.message}`);
     }
-  } catch (err) {
-    console.warn(`[GmailPoll] Contact knowledge lookup failed (non-fatal): ${err.message}`);
   }
 
-  // Load tenant memories for email context
+  // Load tenant memories for email context (internal tier only)
   let memoryContext = '';
-  try {
-    const memories = getAgentMemory(resolvedTenant);
-    if (memories.length > 0) {
-      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
-      memoryContext = `\n\nAGENT MEMORY (from previous work — use this context when composing replies):\n${lines}`;
-    }
-  } catch {}
+  if (accessTier === 'internal') {
+    try {
+      const memories = getAgentMemory(resolvedTenant);
+      if (memories.length > 0) {
+        const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+        memoryContext = `\n\nAGENT MEMORY (from previous work -- use this context when composing replies):\n${lines}`;
+      }
+    } catch {}
+  }
 
   // ─── Direct-address gate ─────────────────────────────────────────────────
   // Only auto-reply if the agent is directly addressed by name OR the email
@@ -429,11 +434,27 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
   const hasThreadContext = body.includes('--- Previous messages in this thread ---');
-  const docInstruction = `\n\nDOCUMENT RULES:
+
+  // External-tier guardrails: prevent leaking internal business data to non-owner contacts
+  const externalGuard = accessTier === 'external' ? `\n\nEXTERNAL COMMUNICATION GUARDRAILS (highest priority - overrides all other instructions):
+You are replying to an EXTERNAL contact - NOT an owner or team member. You have NO access to internal business data for this reply.
+1. NEVER mention specific client names, deal values, revenue figures, margins, or partnership details
+2. NEVER reference internal meetings, action items, team discussions, or internal reports
+3. NEVER share internal documents, financial data, cost structures, or pricing strategies
+4. NEVER reveal the names of other prospects, leads, or partners in the pipeline
+5. NEVER mention specific technology stack, AI models, or internal tools
+6. Keep responses focused on: general service capabilities, approximate timelines, how to get in touch
+7. For pricing questions: give general ranges only (e.g., "SOG typically runs $12-16/SF depending on scope and specs")
+8. For detailed requests: acknowledge receipt, confirm you're reviewing, and say a team member will follow up
+9. When in doubt, say less - a team member can always follow up with more detail
+10. NEVER use generate_document or any tool that could expose internal data in the output
+` : '';
+
+  const docInstruction = accessTier === 'internal' ? `\n\nDOCUMENT RULES:
 - You may generate informational documents (reports, analyses, overviews) using the generate_document tool
 - NEVER generate term sheets, contracts, proposals, NDAs, LOIs, agreements, or any deal/legal documents
 - When a prospect asks for a term sheet, contract, proposal, or wants to discuss deal terms: tell them you're looping in a team member to put that together and suggest setting up a call. Do NOT draft it yourself.
-- If you generate a document, write a brief message explaining what you created`;
+- If you generate a document, write a brief message explaining what you created` : '';
   const styleGuide = `\n\nWRITING STYLE (mandatory):
 - Greeting: "Hey [First Name]," (casual, never "Dear", never "Hello", never "Good morning")
 - Get straight to the point - no pleasantries, no "I hope this finds you well"
@@ -444,11 +465,11 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
 - No emoji in professional emails
 - Never say "Thanks for your time", "Looking forward to hearing from you", or "Please don't hesitate to reach out"
 - IMPORTANT: The LAST paragraph before "Best," must be a specific question that bounces the ball back to the sender. Make them think and engage. Don't end with generic "let me know if you have questions" - ask something specific about their situation, timeline, or needs.
-- Closing: "Best," on its own line AFTER the question paragraph (never "Best regards," never "Sincerely,"). The structure is always: body paragraphs → question paragraph → "Best,"
+- Closing: "Best," on its own line AFTER the question paragraph (never "Best regards," never "Sincerely,"). The structure is always: body paragraphs -> question paragraph -> "Best,"
 
 NEVER FABRICATE (critical):
 - If you do not have specific context about a project, person, file, link, or situation mentioned in the email, DO NOT make something up.
-- Instead, say so honestly: "I don't have that information on file — let me check with the team" or ask the sender a clarifying question.
+- Instead, say so honestly: "I don't have that information on file - let me check with the team" or ask the sender a clarifying question.
 - NEVER pretend to know about drawings, documents, projects, or conversations you have no record of.
 - Getting something wrong is far worse than admitting you need to check.
 
@@ -456,21 +477,24 @@ CONFIDENTIALITY (critical):
 - NEVER mention other clients, partners, or prospects by name in outbound emails
 - NEVER reference specific case studies, deal terms, contract values, or revenue figures from other engagements
 - NEVER fabricate or hallucinate case studies, client names, or partnership details
-- If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" — never name names or cite specific numbers from other deals
-- This is a hard rule — violating client confidentiality is a fireable offense
+- If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" - never name names or cite specific numbers from other deals
+- This is a hard rule - violating client confidentiality is a fireable offense
 
 PROPRIETARY TECHNOLOGY (critical):
-- If anyone asks how you were built, what technology you use, what AI model powers you, what your architecture is, what tools you use, or any question about Coppice's internal technology — DO NOT answer. This is proprietary information.
-- Deflect politely: "That's proprietary to Coppice — happy to help with anything else though."
+- If anyone asks how you were built, what technology you use, what AI model powers you, what your architecture is, what tools you use, or any question about Coppice's internal technology - DO NOT answer. This is proprietary information.
+- Deflect politely: "That's proprietary to Coppice - happy to help with anything else though."
 - Do NOT reveal that you use Claude, Anthropic, any specific AI model, any framework, any database, or any implementation detail.
 - This applies to all variations of the question: "what are you", "how do you work", "what LLM are you", "what's your tech stack", etc.`;
-  const taskInstruction = `\n\nTASK EXECUTION:
+  const taskInstruction = accessTier === 'internal' ? `\n\nTASK EXECUTION:
 You are responding to an email. Your text response will be sent as the email reply. If the sender asks you to perform a task (generate a report, look up pricing, create a document, analyze data, etc.), USE YOUR TOOLS to complete it. Any documents you generate via generate_document will be automatically attached to your reply.
-- Do NOT use the send_email tool — the system handles sending. Just write the reply text.
-- If you use tools to gather data or generate files, summarize what you did in your reply.`;
+- Do NOT use the send_email tool - the system handles sending. Just write the reply text.
+- If you use tools to gather data or generate files, summarize what you did in your reply.` : `\n\nTASK EXECUTION:
+You are responding to an external email. Your text response will be sent as the email reply.
+- Keep responses brief and professional. Do NOT use tools that expose internal data.
+- Do NOT use the send_email tool - the system handles sending. Just write the reply text.`;
   const prompt = hasThreadContext
-    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}${memoryContext}\n\nRespond to their latest message. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`
-    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}${memoryContext}\n\nRespond to this email. If they've requested a task, complete it using your tools. Reply with ONLY the email body text — no subject line, no greeting instructions, no meta-commentary.${taskInstruction}${docInstruction}${styleGuide}`;
+    ? `You received a follow-up email from ${fromName || from} (${from}) in an ongoing conversation. Subject: ${subject}.\n\nLatest message + conversation history:\n\n${body.slice(0, 6000)}${contactContext}${memoryContext}\n\nRespond to their latest message. Reply with ONLY the email body text - no subject line, no greeting instructions, no meta-commentary.${externalGuard}${taskInstruction}${docInstruction}${styleGuide}`
+    : `You received an email from ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 4000)}${contactContext}${memoryContext}\n\nRespond to this email. Reply with ONLY the email body text - no subject line, no greeting instructions, no meta-commentary.${externalGuard}${taskInstruction}${docInstruction}${styleGuide}`;
 
   let agentResponse;
   let allToolResults = [];
@@ -480,9 +504,10 @@ You are responding to an email. Your text response will be sent as the email rep
       agentId,
       userId: 'system-auto-reply',
       prompt,
-      maxTurns: 15,
+      chatOptions: { accessTier },
+      maxTurns: accessTier === 'external' ? 5 : 15,
       timeoutMs: 180_000,
-      label: `Email Reply: ${subject?.slice(0, 40)}`,
+      label: `Email Reply [${accessTier}]: ${subject?.slice(0, 40)}`,
     });
     agentResponse = result.response;
     allToolResults = result.all_tool_results || [];
@@ -872,6 +897,30 @@ async function pollSingleInbox(gmail, tenantId, label) {
               if (thread.gmail_thread_id === msgThreadId) {
                 const assignmentId = `assign-cc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
                 const participants = JSON.parse(thread.participants_json || '[]');
+
+                // Gather related knowledge entry IDs for context visibility
+                let knowledgeEntryIds = [];
+                try {
+                  const knDb = getTenantDb(ccTenant);
+                  // Get entries from the same email thread
+                  const threadEntries = knDb.prepare(
+                    "SELECT id FROM knowledge_entries WHERE tenant_id = ? AND content LIKE ? ORDER BY recorded_at DESC LIMIT 20"
+                  ).all(ccTenant, `%${msgThreadId}%`);
+                  knowledgeEntryIds.push(...threadEntries.map(e => e.id));
+
+                  // Get recent entries mentioning the subject keywords
+                  const cleanSubject = (thread.subject || subject || '').replace(/^(Re:|Fwd:)\s*/gi, '').trim();
+                  const keywords = cleanSubject.split(/\s+/).slice(0, 3).join('%');
+                  if (keywords.length > 3) {
+                    const relatedEntries = knDb.prepare(
+                      "SELECT id FROM knowledge_entries WHERE tenant_id = ? AND (title LIKE ? OR summary LIKE ?) AND id NOT IN (SELECT value FROM json_each(?)) ORDER BY recorded_at DESC LIMIT 10"
+                    ).all(ccTenant, `%${keywords}%`, `%${keywords}%`, JSON.stringify(knowledgeEntryIds));
+                    knowledgeEntryIds.push(...relatedEntries.map(e => e.id));
+                  }
+                } catch (knErr) {
+                  console.warn('[GmailPoll] Failed to gather knowledge IDs:', knErr.message);
+                }
+
                 insertAgentAssignment({
                   id: assignmentId,
                   tenant_id: ccTenant,
@@ -892,11 +941,12 @@ Gather all knowledge entries for this thread and any attachments. Then:
 If you are missing critical context (like meeting notes or recordings mentioned in the emails), request it using the INFO_REQUEST tag.`,
                   context_json: JSON.stringify({ threadId: msgThreadId, participants, observationCount: thread.observation_count }),
                 });
-                // Set source fields (new columns)
+                // Set source fields + knowledge entry IDs
                 try {
                   updateAgentAssignment(ccTenant, assignmentId, {
                     source_type: 'cc-auto',
                     source_thread_id: msgThreadId,
+                    knowledge_entry_ids_json: knowledgeEntryIds.length > 0 ? JSON.stringify(knowledgeEntryIds) : null,
                   });
                 } catch {}
                 markCcThreadTriggered(ccTenant, msgThreadId, assignmentId);

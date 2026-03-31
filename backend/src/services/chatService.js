@@ -2492,12 +2492,13 @@ async function callTaskProposalTool(toolName, toolInput, tenantId) {
 
 // ─── Knowledge Context Builder ──────────────────────────────────────────────
 
-function buildKnowledgeContext(tenantId, userMessage) {
+function buildKnowledgeContext(tenantId, userMessage, { accessTier = 'internal' } = {}) {
   const contextBlocks = [];
 
   try {
     // Search knowledge base for relevant entries
-    const relevant = searchKnowledge(tenantId, userMessage, { limit: 15 });
+    // External tier: only 'public' visibility entries are returned
+    const relevant = searchKnowledge(tenantId, userMessage, { limit: 15, accessTier });
     if (relevant.length > 0) {
       let kb = 'RELEVANT KNOWLEDGE BASE ENTRIES:\n\n';
       for (let i = 0; i < relevant.length; i++) {
@@ -2515,36 +2516,39 @@ function buildKnowledgeContext(tenantId, userMessage) {
       contextBlocks.push(kb);
     }
 
-    // Get open action items
-    const actions = getOpenActionItems(tenantId, 20);
-    if (actions.length > 0) {
-      let ai = 'OPEN ACTION ITEMS:\n';
-      for (const item of actions) {
-        ai += `- ${item.title}`;
-        if (item.assignee) ai += ` (${item.assignee})`;
-        if (item.due_date) ai += ` — due ${item.due_date}`;
-        ai += '\n';
-      }
-      contextBlocks.push(ai);
-    }
-
-    // Search synced Drive files for relevant content (RAG)
-    try {
-      const driveResults = searchDriveContents(tenantId, userMessage, 10);
-      if (driveResults.length > 0) {
-        let dc = 'RELEVANT DRIVE FILE EXCERPTS:\n\n';
-        for (const r of driveResults) {
-          dc += `[FILE: ${r.name}] ${r.category || ''}\n`;
-          // Use full content excerpt (up to 3000 chars) if available, otherwise fall back to snippet
-          if (r.content_excerpt && r.content_excerpt.trim()) {
-            dc += `${r.content_excerpt}\n\n`;
-          } else {
-            dc += `${r.snippet}\n\n`;
-          }
+    // Action items and Drive files are internal-only - never expose to external emails
+    if (accessTier !== 'external') {
+      // Get open action items
+      const actions = getOpenActionItems(tenantId, 20);
+      if (actions.length > 0) {
+        let ai = 'OPEN ACTION ITEMS:\n';
+        for (const item of actions) {
+          ai += `- ${item.title}`;
+          if (item.assignee) ai += ` (${item.assignee})`;
+          if (item.due_date) ai += ` -- due ${item.due_date}`;
+          ai += '\n';
         }
-        contextBlocks.push(dc);
+        contextBlocks.push(ai);
       }
-    } catch (e) { /* Drive search not available yet */ }
+
+      // Search synced Drive files for relevant content (RAG)
+      try {
+        const driveResults = searchDriveContents(tenantId, userMessage, 10);
+        if (driveResults.length > 0) {
+          let dc = 'RELEVANT DRIVE FILE EXCERPTS:\n\n';
+          for (const r of driveResults) {
+            dc += `[FILE: ${r.name}] ${r.category || ''}\n`;
+            // Use full content excerpt (up to 3000 chars) if available, otherwise fall back to snippet
+            if (r.content_excerpt && r.content_excerpt.trim()) {
+              dc += `${r.content_excerpt}\n\n`;
+            } else {
+              dc += `${r.snippet}\n\n`;
+            }
+          }
+          contextBlocks.push(dc);
+        }
+      } catch (e) { /* Drive search not available yet */ }
+    }
   } catch (err) {
     // Non-fatal — proceed without knowledge context
   }
@@ -4085,7 +4089,8 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 
   // 4. Get system prompt for this agent, enriched with knowledge context
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
-  const knowledgeContext = buildKnowledgeContext(tenantId, displayContent);
+  const accessTier = options.accessTier || 'internal';
+  const knowledgeContext = buildKnowledgeContext(tenantId, displayContent, { accessTier });
   // Add lead engine prompt for agents that have access
   const leAgents = ['sangha', 'hivemind', 'email', 'lead-engine', 'zhan'];
   const leadEngineAddon = leAgents.includes(agentId) ? LEAD_ENGINE_PROMPT_ADDON : '';
@@ -4164,14 +4169,16 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + delegationAddon + knowledgeContext + siblingContext;
 
-  // Load persistent agent memories
-  try {
-    const memories = getAgentMemory(tenantId);
-    if (memories.length > 0) {
-      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
-      systemPrompt += `\n\nMEMORY (persistent facts from previous sessions — do not re-save these):\n${lines}`;
-    }
-  } catch {}
+  // Load persistent agent memories (internal tier only - never expose to external email replies)
+  if (accessTier !== 'external') {
+    try {
+      const memories = getAgentMemory(tenantId);
+      if (memories.length > 0) {
+        const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+        systemPrompt += `\n\nMEMORY (persistent facts from previous sessions -- do not re-save these):\n${lines}`;
+      }
+    } catch {}
+  }
 
   // Build tools list — include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
@@ -4673,7 +4680,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
   // Build system prompt — must match chat() so agents have full context when streaming
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
-  const knowledgeContext = buildKnowledgeContext(tenantId, displayContent);
+  const accessTierStream = options.accessTier || 'internal';
+  const knowledgeContext = buildKnowledgeContext(tenantId, displayContent, { accessTier: accessTierStream });
 
   const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists — no decorative formatting.`;
 
@@ -4728,14 +4736,16 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + delegationAddonStream + knowledgeContext + siblingContext;
 
-  // Load persistent agent memories
-  try {
-    const memories = getAgentMemory(tenantId);
-    if (memories.length > 0) {
-      const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
-      systemPrompt += `\n\nMEMORY (persistent facts from previous sessions — do not re-save these):\n${lines}`;
-    }
-  } catch {}
+  // Load persistent agent memories (internal tier only - never expose to external email replies)
+  if (accessTierStream !== 'external') {
+    try {
+      const memories = getAgentMemory(tenantId);
+      if (memories.length > 0) {
+        const lines = memories.map(m => `- ${m.key}: ${m.value}`).join('\n');
+        systemPrompt += `\n\nMEMORY (persistent facts from previous sessions -- do not re-save these):\n${lines}`;
+      }
+    } catch {}
+  }
 
   // ─── Build tools list (must match chat()) ───────────────────────────────
   const tools = [...WORKSPACE_TOOLS];

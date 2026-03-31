@@ -69,7 +69,7 @@ export async function tunnelOrChat({ tenantId, agentId, userId, prompt, threadId
   } catch (err) {
     console.warn(`[CLITunnel] ${label} tunnel failed, falling back to chat(): ${err.message}`);
     const { chat } = await import('./chatService.js');
-    const result = await chat(tenantId, agentId, userId, prompt, threadId, chatOptions);
+    const result = await chat(tenantId, agentId, userId, prompt, threadId, { ...chatOptions, accessTier: chatOptions.accessTier });
     return { response: result.response || '', route: 'api' };
   }
 }

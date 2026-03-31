@@ -475,16 +475,27 @@ function detectSpam({ senderEmail, senderName, subject, body, headers }) {
 
 /**
  * Whether a verdict allows automatic email responses (auto-reply, RFQ response, etc.)
- * Allows trusted, known, AND unknown senders — a business agent should respond to
- * first-time senders (new GCs, prospects, etc.). Only spam/spoofed/blocked are silenced.
+ * Only trusted and known senders get auto-replies. Unknown senders are observed only
+ * to prevent leaking business intelligence to random emailers.
  */
 export function canAutoRespond(verdict) {
+  return verdict === 'trusted' || verdict === 'known';
+}
+
+/**
+ * Whether a verdict allows pipeline processing (logging activity, routing to RFQ/IPP).
+ * Unknown senders can still trigger pipeline detection (RFQ/award) but won't get auto-replies.
+ */
+export function canProcess(verdict) {
   return verdict === 'trusted' || verdict === 'known' || verdict === 'unknown';
 }
 
 /**
- * Whether a verdict allows pipeline processing (logging activity, routing to RFQ/IPP)
+ * Determine information access tier for email replies.
+ * - 'internal': full knowledge base, memories, Drive files, action items (owner/team only)
+ * - 'external': no internal data injected, guarded prompt only (everyone else)
  */
-export function canProcess(verdict) {
-  return verdict === 'trusted' || verdict === 'known' || verdict === 'unknown';
+export function getAccessTier(verdict, trustLevel) {
+  if (trustLevel === 'owner') return 'internal';
+  return 'external';
 }

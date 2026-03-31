@@ -501,7 +501,7 @@ This is a copilot task — produce the deliverable for human review before any e
 
 // ─── Knowledge Search (used by chat context injection) ──────────────────────
 
-export function searchKnowledge(tenantId, query, { type, entity, limit = 20 } = {}) {
+export function searchKnowledge(tenantId, query, { type, entity, limit = 20, accessTier = 'internal' } = {}) {
   let sql = `
     SELECT ke.*, GROUP_CONCAT(DISTINCT ent.name) as linked_entities
     FROM knowledge_entries ke
@@ -510,6 +510,11 @@ export function searchKnowledge(tenantId, query, { type, entity, limit = 20 } = 
     WHERE ke.tenant_id = ?
   `;
   const params = [tenantId];
+
+  // External tier: only show entries explicitly marked as public-safe
+  if (accessTier === 'external') {
+    sql += ` AND ke.visibility = 'public'`;
+  }
 
   if (query) {
     sql += ` AND (ke.title LIKE ? OR ke.summary LIKE ? OR ke.transcript LIKE ? OR ke.content LIKE ?)`;

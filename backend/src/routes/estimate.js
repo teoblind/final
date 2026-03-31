@@ -1473,6 +1473,46 @@ router.post('/assignments/:id/unshare', (req, res) => {
   }
 });
 
+/** GET /assignments/:id/context — Return knowledge entries attached to this assignment */
+router.get('/assignments/:id/context', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const assignment = getAgentAssignment(tenantId, req.params.id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const { getTenantDb } = await import('../cache/database.js');
+    const tdb = getTenantDb(tenantId);
+    let entries = [];
+
+    // Load referenced knowledge entries
+    if (assignment.knowledge_entry_ids_json) {
+      try {
+        const ids = JSON.parse(assignment.knowledge_entry_ids_json);
+        if (ids.length > 0) {
+          const placeholders = ids.map(() => '?').join(',');
+          entries = tdb.prepare(`SELECT id, type, title, summary, source, source_agent, recorded_at, substr(content, 1, 500) as content_preview FROM knowledge_entries WHERE id IN (${placeholders}) AND tenant_id = ?`).all(...ids, tenantId);
+        }
+      } catch {}
+    }
+
+    // Also load thread entries if source_thread_id exists
+    if (assignment.source_thread_id) {
+      const existingIds = entries.map(e => e.id);
+      const threadEntries = tdb.prepare(
+        "SELECT id, type, title, summary, source, source_agent, recorded_at, substr(content, 1, 500) as content_preview FROM knowledge_entries WHERE tenant_id = ? AND content LIKE ? ORDER BY recorded_at DESC LIMIT 10"
+      ).all(tenantId, `%${assignment.source_thread_id}%`);
+      for (const te of threadEntries) {
+        if (!existingIds.includes(te.id)) entries.push(te);
+      }
+    }
+
+    res.json({ entries });
+  } catch (err) {
+    console.error('Get assignment context error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 /** POST /assignments/:id/approve-email — Approve and send a drafted email from task execution */
 router.post('/assignments/:id/approve-email', async (req, res) => {
   try {

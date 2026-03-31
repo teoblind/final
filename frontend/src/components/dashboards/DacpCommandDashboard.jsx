@@ -113,6 +113,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [attachSearch, setAttachSearch] = useState('');
   const [attachTypeFilter, setAttachTypeFilter] = useState('all');
   const [attachLoading, setAttachLoading] = useState(false);
+  // Context sources for task detail
+  const [contextEntries, setContextEntries] = useState([]);
+  const [contextLoading, setContextLoading] = useState(false);
 
   // Dynamic senders: Coppice (default) + currently logged-in user
   const SENDERS = (() => {
@@ -518,6 +521,17 @@ export default function DacpCommandDashboard({ onNavigate }) {
     const poll = setInterval(refreshDashboard, 10_000);
     return () => clearInterval(poll);
   }, [meetingRange, fetchLeadsSheet, fetchAssignments]);
+
+  // Fetch context sources when task detail opens
+  useEffect(() => {
+    if (!taskDetail?.id) { setContextEntries([]); return; }
+    setContextLoading(true);
+    fetch(`${API_BASE}/v1/estimates/assignments/${taskDetail.id}/context`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setContextEntries(d.entries || []))
+      .catch(() => setContextEntries([]))
+      .finally(() => setContextLoading(false));
+  }, [taskDetail?.id]);
 
   const handleApprove = async (id) => {
     setProcessingApproval(id);
@@ -2035,6 +2049,50 @@ export default function DacpCommandDashboard({ onNavigate }) {
                         <span>{s.name || s.type || JSON.stringify(s)}</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+              {/* Context Sources (knowledge entries) */}
+              {contextLoading && (
+                <div className="flex items-center gap-2 text-[11px] text-[#9a9a92]">
+                  <RotateCcw size={12} className="animate-spin" /> Loading context sources...
+                </div>
+              )}
+              {!contextLoading && contextEntries.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-2">Context Sources</div>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {contextEntries.map(entry => {
+                      const typeColors = {
+                        email: 'bg-amber-50 text-amber-700',
+                        document: 'bg-blue-50 text-blue-700',
+                        'meeting-transcript': 'bg-purple-50 text-purple-700',
+                        note: 'bg-green-50 text-green-700',
+                      };
+                      const typeIcons = { email: Mail, document: FileText, 'meeting-transcript': Mic, note: ClipboardList };
+                      const TypeIcon = typeIcons[entry.type] || FileText;
+                      return (
+                        <div key={entry.id} className="bg-[#f9f8f5] border border-[#e8e6e1] rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TypeIcon size={12} className="text-[#6b6b65] shrink-0" />
+                            <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${typeColors[entry.type] || 'bg-[#e8e6e1] text-[#6b6b65]'}`}>{entry.type?.replace('-', ' ')}</span>
+                            <span className="text-[11px] font-semibold text-[#111110] truncate flex-1">{entry.title}</span>
+                          </div>
+                          {entry.summary && (
+                            <div className="text-[10px] text-[#6b6b65] line-clamp-2 mt-1">{entry.summary}</div>
+                          )}
+                          {!entry.summary && entry.content_preview && (
+                            <div className="text-[10px] text-[#6b6b65] line-clamp-2 mt-1">{entry.content_preview.slice(0, 200)}</div>
+                          )}
+                          <div className="text-[9px] text-[#9a9a92] mt-1.5 flex items-center gap-2">
+                            {entry.source && <span>{entry.source}</span>}
+                            {entry.source && entry.recorded_at && <span>-</span>}
+                            {entry.recorded_at && <span>{new Date(entry.recorded_at).toLocaleDateString()}</span>}
+                            {entry.source_agent && <span className="ml-auto opacity-60">via {entry.source_agent}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
