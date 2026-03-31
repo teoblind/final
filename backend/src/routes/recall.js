@@ -12,6 +12,7 @@
 import express from 'express';
 import {
   createBot,
+  createVoiceBot,
   removeBot,
   getBotStatus,
   getTranscript,
@@ -226,14 +227,20 @@ router.use(authenticate);
  */
 router.post('/join', async (req, res) => {
   try {
-    const { meetingUrl, botName, transcriptionProvider, joinMessage, enableVision } = req.body;
+    const { meetingUrl, botName, transcriptionProvider, joinMessage, enableVision, voice, tenantId } = req.body;
     if (!meetingUrl) {
       return res.status(400).json({ error: 'meetingUrl is required' });
     }
 
-    const bot = await createBot(meetingUrl, { botName, transcriptionProvider, joinMessage });
+    let bot;
+    if (voice) {
+      // Voice bot: output_media page with OpenAI Realtime API for live conversation
+      bot = await createVoiceBot(meetingUrl, { botName: botName || 'Coppice', tenantId: tenantId || 'default' });
+    } else {
+      bot = await createBot(meetingUrl, { botName, transcriptionProvider, joinMessage });
+    }
 
-    // Silent mode: transcribe only, respond via meeting chat (not voice)
+    // Chat loop for text-based meeting sidebar responses
     startChatLoop(bot.id);
 
     // Enable vision if requested and Gemini key is configured
