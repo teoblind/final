@@ -456,14 +456,11 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-left">
-    <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
-    <span class="nav-brand">Coppice</span>
+    <a href="/" style="display:flex;align-items:center;gap:6px;text-decoration:none;font-size:14px;font-weight:600;color:var(--text-1)">&larr; Coppice Home</a>
   </div>
   <div class="nav-links">
-    <a href="/" class="nav-link">← Coppice Home</a>
     <a href="#features" class="nav-link">Features</a>
     <a href="#how" class="nav-link">How It Works</a>
-    <a href="/pricing" class="nav-link">Pricing</a>
     <a href="/login" class="nav-link">Log In</a>
     <button class="nav-cta" onclick="openModal()">Request Demo</button>
   </div>
@@ -474,19 +471,14 @@
 
 <div class="mobile-menu" id="mobile-menu">
   <div class="mobile-menu-header">
-    <div class="nav-left">
-      <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
-      <span class="nav-brand">Coppice</span>
-    </div>
+    <a href="/" style="font-size:14px;font-weight:600;color:var(--text-1);text-decoration:none">&larr; Coppice Home</a>
     <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">
       <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
   <div class="mobile-menu-links">
-    <a href="/">Coppice Home</a>
     <a href="#features" onclick="document.getElementById('mobile-menu').classList.remove('open')">Features</a>
     <a href="#how" onclick="document.getElementById('mobile-menu').classList.remove('open')">How It Works</a>
-    <a href="/pricing" onclick="document.getElementById('mobile-menu').classList.remove('open')">Pricing</a>
     <a href="/login">Log In</a>
   </div>
   <div class="mobile-menu-cta">

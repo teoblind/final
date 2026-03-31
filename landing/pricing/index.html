@@ -76,7 +76,7 @@
   .pricing-section{max-width:1000px;margin:0 auto;padding:0 40px}
   .pricing-section.hidden{display:none}
 
-  .pricing-cards{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:60px}
+  .pricing-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:60px}
   .price-card{background:var(--surface);border:1.5px solid var(--border);border-radius:20px;padding:36px;transition:all .3s}
   .price-card.featured{border-color:var(--accent);box-shadow:0 12px 40px rgba(30,58,95,0.1);position:relative}
   .price-card.featured.energy-featured{border-color:var(--green);box-shadow:0 12px 40px rgba(26,107,60,0.1)}
@@ -201,15 +201,13 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-left">
-    <a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none">
-      <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
-      <span class="nav-brand">Coppice</span>
+    <a href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none;font-size:14px;font-weight:600;color:var(--text-1)">
+      &larr; Coppice Home
     </a>
   </div>
   <div class="nav-links">
     <a href="/construction" class="nav-link">Construction</a>
     <a href="/energy" class="nav-link">Energy</a>
-    <a href="/pricing" class="nav-link active">Pricing</a>
     <a href="/login" class="nav-link">Log In</a>
     <button class="nav-cta" onclick="openModal()">Request Demo</button>
   </div>
@@ -220,10 +218,9 @@
 
 <div class="mobile-menu" id="mobile-menu">
   <div class="mobile-menu-header">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <div class="nav-mark"><img src="/coppice-logo.png" alt="Coppice" style="width:32px;height:32px;border-radius:9px;object-fit:cover;"></div>
-      <span class="nav-brand">Coppice</span>
-    </div>
+    <a href="/" style="font-size:14px;font-weight:600;color:var(--text-1);text-decoration:none">
+      &larr; Coppice Home
+    </a>
     <button class="mobile-menu-close" onclick="document.getElementById('mobile-menu').classList.remove('open')">
       <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -231,7 +228,6 @@
   <div class="mobile-menu-links">
     <a href="/construction">Construction</a>
     <a href="/energy">Energy</a>
-    <a href="/pricing" onclick="document.getElementById('mobile-menu').classList.remove('open')">Pricing</a>
     <a href="/login">Log In</a>
   </div>
   <div class="mobile-menu-cta">
@@ -277,8 +273,8 @@
     </div>
     <div class="price-card featured">
       <div class="pc-name">Full Platform</div>
-      <div class="pc-price"><span class="pc-price-val">$2,500</span><span class="pc-price-period">/month</span></div>
-      <div class="pc-annual">$30,000/year</div>
+      <div class="pc-price"><span class="pc-price-val">$2,999</span><span class="pc-price-period">/month</span></div>
+      <div class="pc-annual">$35,988/year</div>
       <div class="pc-desc">All six agents. Unlimited seats. Full operational intelligence.</div>
       <ul class="pc-features">
         <li><span class="pc-check">&#10003;</span> Everything in Pilot</li>
@@ -292,6 +288,24 @@
         <li><span class="pc-check">&#10003;</span> Quarterly business review</li>
       </ul>
       <button class="pc-cta primary" onclick="openModal()">Request Demo</button>
+    </div>
+    <div class="price-card">
+      <div class="pc-name">Managed Operations</div>
+      <div class="pc-price"><span class="pc-price-val">Custom</span></div>
+      <div class="pc-annual">&nbsp;</div>
+      <div class="pc-desc">Discretionary consulting to integrate Coppice to its maximum capability across your business.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Everything in Full Platform</li>
+        <li><span class="pc-check">&#10003;</span> Dedicated integration engineer</li>
+        <li><span class="pc-check">&#10003;</span> Custom workflow automation</li>
+        <li><span class="pc-check">&#10003;</span> ERP / accounting integration</li>
+        <li><span class="pc-check">&#10003;</span> Agent-to-agent orchestration</li>
+        <li><span class="pc-check">&#10003;</span> Monthly strategy calls</li>
+        <li><span class="pc-check">&#10003;</span> White-glove onboarding</li>
+        <li><span class="pc-check">&#10003;</span> SLA-backed uptime</li>
+        <li><span class="pc-check">&#10003;</span> Dedicated Slack channel</li>
+      </ul>
+      <button class="pc-cta secondary" onclick="openModal()">Contact Us</button>
     </div>
   </div>
 </div>
@@ -334,6 +348,24 @@
         <li><span class="pc-check">&#10003;</span> Quarterly business review</li>
       </ul>
       <button class="pc-cta primary green" onclick="openModal()">Request Demo</button>
+    </div>
+    <div class="price-card">
+      <div class="pc-name">Managed Operations</div>
+      <div class="pc-price"><span class="pc-price-val">Custom</span></div>
+      <div class="pc-annual">&nbsp;</div>
+      <div class="pc-desc">Discretionary consulting to integrate Coppice to its maximum capability across your operations.</div>
+      <ul class="pc-features">
+        <li><span class="pc-check">&#10003;</span> Everything in Full Platform</li>
+        <li><span class="pc-check">&#10003;</span> Dedicated integration engineer</li>
+        <li><span class="pc-check">&#10003;</span> Custom data pipeline builds</li>
+        <li><span class="pc-check">&#10003;</span> SCADA / IoT integration</li>
+        <li><span class="pc-check">&#10003;</span> Agent-to-agent orchestration</li>
+        <li><span class="pc-check">&#10003;</span> Monthly strategy calls</li>
+        <li><span class="pc-check">&#10003;</span> White-glove onboarding</li>
+        <li><span class="pc-check">&#10003;</span> SLA-backed uptime</li>
+        <li><span class="pc-check">&#10003;</span> Dedicated Slack channel</li>
+      </ul>
+      <button class="pc-cta secondary" onclick="openModal()">Contact Us</button>
     </div>
   </div>
 </div>

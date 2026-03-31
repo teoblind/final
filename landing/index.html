@@ -125,7 +125,7 @@
   }
   .vertical-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.06); }
 
-  .vc-hero { padding: 36px 32px 28px; position: relative; overflow: hidden; }
+  .vc-hero { padding: 36px 32px 28px; position: relative; overflow: hidden; min-height: 200px; }
   .vc-hero.construction { background: linear-gradient(135deg, #1e3a5f, #2a5080); }
   .vc-hero.energy { background: linear-gradient(135deg, #0f1f15, #1a3828); }
   .vc-hero.email-agent { background: linear-gradient(135deg, #2d1b4e, #4a2d7a); }
@@ -290,7 +290,6 @@
     <a href="/construction" class="nav-link">Construction</a>
     <a href="/energy" class="nav-link">Energy</a>
     <a href="/email-agent" class="nav-link">Email Agent</a>
-    <a href="/pricing" class="nav-link">Pricing</a>
     <a href="/login" class="nav-link">Log In</a>
     <button class="nav-cta" onclick="openModal()">Request Demo</button>
   </div>
@@ -313,7 +312,6 @@
     <a href="/construction" onclick="document.getElementById('mobile-menu').classList.remove('open')">Construction</a>
     <a href="/energy" onclick="document.getElementById('mobile-menu').classList.remove('open')">Energy</a>
     <a href="/email-agent" onclick="document.getElementById('mobile-menu').classList.remove('open')">Email Agent</a>
-    <a href="/pricing" onclick="document.getElementById('mobile-menu').classList.remove('open')">Pricing</a>
     <a href="/login">Log In</a>
   </div>
   <div class="mobile-menu-cta">
