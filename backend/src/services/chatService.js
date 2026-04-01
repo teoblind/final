@@ -844,6 +844,13 @@ DO NOT USE propose_task WHEN:
 - Simple questions you can answer directly in chat (one reply, no deliverable)
 - Quick lookups or single-step operations
 - The user just wants information, not a deliverable
+- The answer can be found by searching internal knowledge, files, or meeting notes (use search_knowledge first!)
+
+IMPORTANT - CHECK INTERNAL DATA FIRST:
+Before proposing a task, ALWAYS try to answer from internal sources first:
+1. Use search_knowledge to check synced files, meeting notes, knowledge entries
+2. Check the Command Dashboard assignments (the user's task board) - these are already in your context
+3. Only propose a background task if internal search comes up empty AND the request requires multi-step external work
 
 CRITICAL: If you are about to make more than 3 tool calls to fulfill a request, you should have used propose_task instead. Do NOT execute complex multi-step work inline. Propose it, let the user review and approve it, THEN it runs in the background.
 
