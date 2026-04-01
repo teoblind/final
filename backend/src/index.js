@@ -216,6 +216,9 @@ app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
 // Serve demo files (estimates, reports, etc.)
 app.use('/files', express.static(join(__dirname, '../demo-files')));
 
+// Serve bot assets (avatar image for voice-agent.html)
+app.use('/assets', express.static(join(__dirname, '../assets')));
+
 // Internal tool endpoint - localhost-only, used by MCP bridge for CLI tunnel agent
 // Larger JSON limit for document/presentation tool inputs
 app.use('/api/v1/internal', express.json({ limit: '10mb' }), internalRoutes);
