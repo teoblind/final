@@ -48,12 +48,14 @@ const TENANT_SEARCH_CONFIG = {
       'site:linkedin.com "concrete" OR "masonry" OR "foundations" Dallas Fort Worth project',
     ],
   },
-  // Sangha Systems - Bitcoin mining & energy + renewables
+  // Sangha Systems - Bitcoin mining & energy + renewables (weekly)
   default: {
     name: 'Sangha Systems',
     region: 'Texas ERCOT',
     services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading', 'renewable energy partnerships'],
     color: '#1a6b3c', // green
+    frequency: 'weekly', // runs Monday mornings only
+    runDay: 1, // 0=Sun, 1=Mon
     searchQueries: [
       // Part 1: Mining Market Dynamics
       'bitcoin mining hashrate difficulty network news this week',
@@ -330,7 +332,7 @@ ${sectionInstructions}
 FORMATTING RULES:
 - Use clean, professional HTML with inline styles
 - Use ${brandColor} as the primary brand color for ALL headings, borders, accents, and section dividers. Do NOT use navy (#1e3a5f) unless that IS the brand color.
-- START with a branded header banner: full-width block with background color ${brandColor}, white text, "${config.name} Daily Intelligence" as the title, and today's date below it. Use padding and rounded top corners to match the card container.
+- START with a branded header banner: full-width block with background color ${brandColor}, white text, "${config.name} ${config.frequency === 'weekly' ? 'Weekly' : 'Daily'} Intelligence" as the title, and today's date below it. Use generous padding (at least 32px 40px) and rounded top corners to match the card container.
 ${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (Renewables) - a colored horizontal rule or banner' : ''}
 - Keep it scannable - short paragraphs, bullet points
 - Bold key names (companies, project names, dollar amounts, MW figures)
@@ -363,7 +365,7 @@ function buildEmailHtml(newsletterHtml, tenantName, date, brandColor = '#1e3a5f'
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:640px;margin:0 auto;padding:24px;">
+<div style="max-width:700px;margin:0 auto;padding:24px;">
   <div style="background:white;padding:0;border:1px solid #e8e6e1;border-radius:12px;overflow:hidden;font-size:14px;line-height:1.7;color:#2d2d2d;">
     ${newsletterHtml}
   </div>
@@ -385,7 +387,7 @@ async function deliverNewsletter(tenantId, html, recipients) {
     try {
       await sendHtmlEmail({
         to: email,
-        subject: `${config.name} Daily Intelligence - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+        subject: `${config.name} ${config.frequency === 'weekly' ? 'Weekly' : 'Daily'} Intelligence - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
         html: fullHtml,
         tenantId,
         skipSignature: true,
@@ -419,7 +421,9 @@ function storeNewsletter(tenantId, html, searchResults) {
     const db = getTenantDb(tenantId);
     const id = `newsletter-${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 6)}`;
     const plainText = stripHtmlToText(html);
-    const title = `Daily Intelligence - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    const config = getTenantConfig(tenantId);
+    const freq = config.frequency === 'weekly' ? 'Weekly' : 'Daily';
+    const title = `${freq} Intelligence - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     db.prepare(`
       INSERT OR REPLACE INTO knowledge_entries (id, tenant_id, type, title, summary, content, source, source_agent, processed, created_at)
       VALUES (?, ?, 'newsletter', ?, ?, ?, 'daily-newsletter', 'coppice-newsletter', 1, datetime('now'))
@@ -446,12 +450,21 @@ async function runDailyNewsletter() {
       await runWithTenant(tenant.id, async () => {
         console.log(`[Newsletter] Running for tenant: ${tenant.id}`);
 
-        // Only run for tenants with an explicit config (or the 'default' tenant which maps to Sangha)
+        // Only run for tenants with an explicit config
         if (!TENANT_SEARCH_CONFIG[tenant.id]) {
           console.log(`[Newsletter] Skipping ${tenant.id} - no specific newsletter config`);
           return;
         }
         const config = getTenantConfig(tenant.id);
+
+        // Weekly tenants only run on their configured day (default Monday)
+        if (config.frequency === 'weekly') {
+          const today = new Date().getDay(); // 0=Sun, 1=Mon, ...
+          if (today !== (config.runDay ?? 1)) {
+            console.log(`[Newsletter] Skipping ${tenant.id} - weekly newsletter, not run day (today=${today}, runDay=${config.runDay ?? 1})`);
+            return;
+          }
+        }
 
         // Get recipients (all tenant users with email)
         const users = getUsersByTenant(tenant.id);
