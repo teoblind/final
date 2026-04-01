@@ -155,7 +155,7 @@ router.use(authenticate);
 const VALID_AGENTS = new Set([
   'hivemind', 'estimating', 'documents', 'meetings', 'email',
   'sangha', 'zhan', 'curtailment', 'pools', 'lead-engine', 'sales', 'pitch-deck',
-  'workflow', 'comms',
+  'workflow', 'comms', 'pumping', 'marketing', 'compliance',
 ]);
 
 function resolveIds(req) {

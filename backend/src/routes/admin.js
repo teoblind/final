@@ -82,12 +82,18 @@ router.get('/email/reauth/start', (req, res) => {
       return res.status(401).send('Invalid or expired token');
     }
 
-    // Look up current sender email for login_hint
+    // Look up login_hint - prefer user's personal email over agent email
     let loginHint = null;
     try {
       const tdb = getTenantDb(tenantId);
-      const row = tdb.prepare('SELECT sender_email FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
-      if (row) loginHint = row.sender_email;
+      // Use the requesting user's email (personal account) if available, otherwise fall back to agent
+      const userRow = decoded?.userId ? tdb.prepare('SELECT email FROM users WHERE id = ?').get(decoded.userId) : null;
+      if (userRow?.email) {
+        loginHint = userRow.email;
+      } else {
+        const row = tdb.prepare('SELECT sender_email FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+        if (row) loginHint = row.sender_email;
+      }
     } catch {}
 
     const originHost = req.headers['x-forwarded-host'] || req.get('host');
@@ -172,6 +178,10 @@ router.get('/email/reauth/callback', async (req, res) => {
 
       // Also update ALL key vault services so calendar, docs, drive, sheets all work
       const { upsertKeyVaultEntry, setTenantContext } = await import('../cache/database.js');
+
+      // Detect if this is a personal account (different from the agent/sender email)
+      const isPersonalAccount = email && !email.includes('agent@') && !email.includes('coppice.ai');
+
       await new Promise((resolve) => {
         setTenantContext(tenantId, () => {
           for (const service of ['google-gmail', 'google-calendar', 'google-docs']) {
@@ -179,6 +189,15 @@ router.get('/email/reauth/callback', async (req, res) => {
             if (tokens.access_token) {
               upsertKeyVaultEntry({ tenantId, service, keyName: 'access_token', keyValue: tokens.access_token, addedBy: 'reauth' });
             }
+          }
+          // If this is a personal account, also store under 'google-calendar-user' so
+          // the meetings route can query the user's personal calendar (not the agent's)
+          if (isPersonalAccount) {
+            upsertKeyVaultEntry({ tenantId, service: 'google-calendar-user', keyName: 'refresh_token', keyValue: tokens.refresh_token, addedBy: `reauth:${email}` });
+            if (tokens.access_token) {
+              upsertKeyVaultEntry({ tenantId, service: 'google-calendar-user', keyName: 'access_token', keyValue: tokens.access_token, addedBy: `reauth:${email}` });
+            }
+            console.log(`[Re-Auth] Stored personal calendar token for ${email} under google-calendar-user`);
           }
           resolve();
         });

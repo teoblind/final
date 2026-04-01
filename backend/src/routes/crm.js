@@ -217,8 +217,9 @@ router.get('/calendar/events', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || 'default';
 
-    // Try calendar-specific token first, then fall back to docs token
-    let refreshToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
+    // Prefer user's personal calendar token (has actual meetings), then agent token, then docs
+    let refreshToken = getKeyVaultValue(tenantId, 'google-calendar-user', 'refresh_token');
+    if (!refreshToken) refreshToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
     if (!refreshToken) refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');
     if (!refreshToken) {
       return res.json({ events: [], configured: false });
