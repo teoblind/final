@@ -338,17 +338,35 @@ async function deliverNewsletter(tenantId, html, recipients) {
 
 // ── Storage (for dashboard display) ───────────────────────────────────────────
 
+function stripHtmlToText(html) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(p|div|h[1-6]|li|tr)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#?\w+;/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function storeNewsletter(tenantId, html, searchResults) {
   try {
     const db = getTenantDb(tenantId);
     const id = `newsletter-${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 6)}`;
+    const plainText = stripHtmlToText(html);
+    const title = `Daily Intelligence - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     db.prepare(`
-      INSERT OR REPLACE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, processed, created_at)
-      VALUES (?, ?, 'newsletter', ?, ?, 'daily-newsletter', 'coppice-newsletter', 1, datetime('now'))
+      INSERT OR REPLACE INTO knowledge_entries (id, tenant_id, type, title, summary, content, source, source_agent, processed, created_at)
+      VALUES (?, ?, 'newsletter', ?, ?, ?, 'daily-newsletter', 'coppice-newsletter', 1, datetime('now'))
     `).run(
       id,
       tenantId,
-      `Daily Intelligence - ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+      title,
+      plainText.substring(0, 8000),
       html,
     );
     console.log(`[Newsletter] Stored as ${id}`);

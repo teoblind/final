@@ -672,12 +672,12 @@ async function callEmailSecurityTool(toolName, toolInput, tenantId) {
 const KNOWLEDGE_TOOLS = [
   {
     name: 'search_knowledge',
-    description: 'Search meeting notes, documents, entity profiles, and action items. Use when the user asks about past discussions, action items, people, companies, deal status, or project updates.',
+    description: 'Search meeting notes, documents, daily intelligence newsletters, entity profiles, and action items. Use when the user asks about past discussions, action items, people, companies, deal status, project updates, or recent market news and leads from the daily brief.',
     input_schema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Search query — person name, company, topic, or keyword' },
-        type: { type: 'string', enum: ['meeting', 'document', 'entity', 'task', 'all'], description: 'Type of knowledge to search. Default: all' },
+        type: { type: 'string', enum: ['meeting', 'document', 'newsletter', 'entity', 'task', 'all'], description: 'Type of knowledge to search. Default: all' },
       },
       required: ['query'],
     },
@@ -3518,7 +3518,9 @@ You have full email access — you can send emails, check the inbox, read messag
 
 You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
 
-You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
+You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, daily intelligence newsletters, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
+
+Daily intelligence newsletters are generated each morning with market news, new project opportunities, GC activity, and recommended actions. When proposing tasks or discussing GCs/projects, ALWAYS check if the daily brief has relevant context by searching with type='newsletter'. Reference specific findings from the brief when relevant (e.g. "Per this morning's brief, Turner just won the DFW Airport Terminal F package").
 
 When the user requests a PDF, report, or document:
 - Before generating, ask what style they prefer:
@@ -3772,7 +3774,7 @@ You have full email access via agent@zhan.coppice.ai — you can send emails, ch
 
 You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
 
-You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
+You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, daily intelligence newsletters, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
 
 Website: www.zhan.capital
 Investor Portal: https://www.zhan.capital/portal (live hashprice dashboard, PSC macro, signal feed)
