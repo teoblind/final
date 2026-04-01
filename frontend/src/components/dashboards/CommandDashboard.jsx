@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users } from 'lucide-react';
+import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users, ClipboardList, FileSpreadsheet, Link2, Search, Unlink } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
@@ -348,9 +348,6 @@ export default function CommandDashboard({ onNavigate }) {
   const [approvals, setApprovals] = useState([]);
   const [insights, setInsights] = useState([]);
   const [toast, setToast] = useState(null);
-  const [hubspotPipeline, setHubspotPipeline] = useState(null);
-  const [crmData, setCrmData] = useState(null);
-  const [crmLoading, setCrmLoading] = useState(false);
   const [actionItems, setActionItems] = useState([]);
   const [activities, setActivities] = useState([]);
   const [expandedId, setExpandedId] = useState(null);
@@ -365,8 +362,149 @@ export default function CommandDashboard({ onNavigate }) {
   const [sharedAssignments, setSharedAssignments] = useState({});
   const [infoRequests, setInfoRequests] = useState({});
   const [assignmentExpanded, setAssignmentExpanded] = useState(null);
+  // Task tabs + pagination
+  const [taskTab, setTaskTab] = useState('suggested');
+  const [assignmentsPage, setAssignmentsPage] = useState(0);
+  // Leads pipeline state
+  const [leadsSheet, setLeadsSheet] = useState(null);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [leadsActiveTab, setLeadsActiveTab] = useState(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkInput, setLinkInput] = useState('');
+  const [linkError, setLinkError] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [driveResults, setDriveResults] = useState([]);
+  const [driveSearching, setDriveSearching] = useState(false);
+  const [driveQuery, setDriveQuery] = useState('');
+  const [leadsShares, setLeadsShares] = useState([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareTeam, setShareTeam] = useState([]);
+  const [leadsShareSelected, setLeadsShareSelected] = useState([]);
+  const [leadsShareLoading, setLeadsShareLoading] = useState(false);
+  const [acceptingShare, setAcceptingShare] = useState(null);
+  // HubSpot state
+  const [hubspotConnected, setHubspotConnected] = useState(false);
+  const [showHubspotModal, setShowHubspotModal] = useState(false);
+  const [hubspotKey, setHubspotKey] = useState('');
+  const [hubspotConnecting, setHubspotConnecting] = useState(false);
+  const [hubspotError, setHubspotError] = useState('');
+  const [hubspotPipeline, setHubspotPipeline] = useState(null);
+  const [hubspotLoading, setHubspotLoading] = useState(false);
+  const [leadsTab, setLeadsTab] = useState('sheet');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+
+  // ─── Leads Pipeline Handlers ──────────────────────────────────────────────
+  const fetchLeadsSheet = useCallback((tab, page) => {
+    setLeadsLoading(true);
+    const params = new URLSearchParams();
+    if (tab) params.set('tab', tab);
+    if (page) params.set('page', page);
+    params.set('pageSize', '10');
+    fetch(`${API_BASE}/v1/estimates/leads-sheet?${params}`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(data => {
+        if (data.configured && data.sheetId !== '__unlinked__') {
+          setLeadsSheet(data);
+          setLeadsTab('sheet');
+          if (data.activeTab) setLeadsActiveTab(data.activeTab);
+          if (data.page) setLeadsPage(data.page);
+        } else {
+          setLeadsSheet({ configured: false });
+        }
+        if (data.pendingSharesCount > 0) {
+          fetch(`${API_BASE}/v1/estimates/leads-sheet/shares`, { headers: getAuthHeaders() })
+            .then(r => r.json()).then(d => setLeadsShares(d.shares || [])).catch(() => {});
+        } else {
+          setLeadsShares([]);
+        }
+      })
+      .catch(() => setLeadsSheet({ configured: false }))
+      .finally(() => setLeadsLoading(false));
+  }, []);
+
+  const handleLinkSheet = useCallback(async (url) => {
+    setLinking(true);
+    setLinkError('');
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/leads-sheet/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sheetUrl: url }),
+      });
+      const data = await res.json();
+      if (data.error) { setLinkError(data.error); return; }
+      setShowLinkModal(false);
+      setLinkInput('');
+      fetchLeadsSheet();
+    } catch (err) { setLinkError(err.message); }
+    finally { setLinking(false); }
+  }, [fetchLeadsSheet]);
+
+  const handleUnlinkSheet = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/unlink`, { method: 'DELETE', headers: getAuthHeaders() });
+      setLeadsSheet({ configured: false });
+    } catch {}
+  }, []);
+
+  const handleOpenShareModal = useCallback(async () => {
+    setShowShareModal(true);
+    setLeadsShareSelected([]);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/leads-sheet/team`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      setShareTeam(data.users || []);
+    } catch { setShareTeam([]); }
+  }, []);
+
+  const handleShareSheet = useCallback(async () => {
+    if (!leadsShareSelected.length || !leadsSheet?.sheetId) return;
+    setLeadsShareLoading(true);
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ targetUserIds: leadsShareSelected, sheetId: leadsSheet.sheetId, sheetTitle: leadsSheet.sheetTitle }),
+      });
+      setShowShareModal(false);
+      setLeadsShareSelected([]);
+    } catch {}
+    finally { setLeadsShareLoading(false); }
+  }, [leadsShareSelected, leadsSheet]);
+
+  const handleAcceptShare = useCallback(async (shareId) => {
+    setAcceptingShare(shareId);
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/shares/${shareId}/accept`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      });
+      setLeadsShares(prev => prev.filter(s => s.id !== shareId));
+      fetchLeadsSheet();
+    } catch {}
+    finally { setAcceptingShare(null); }
+  }, [fetchLeadsSheet]);
+
+  const handleDeclineShare = useCallback(async (shareId) => {
+    try {
+      await fetch(`${API_BASE}/v1/estimates/leads-sheet/shares/${shareId}/decline`, {
+        method: 'POST', headers: getAuthHeaders(),
+      });
+      setLeadsShares(prev => prev.filter(s => s.id !== shareId));
+    } catch {}
+  }, []);
+
+  const searchDrive = useCallback(async (q) => {
+    if (!q.trim()) return;
+    setDriveSearching(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/estimates/leads-sheet/search?q=${encodeURIComponent(q)}`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      setDriveResults(data.files || []);
+    } catch { setDriveResults([]); }
+    finally { setDriveSearching(false); }
+  }, []);
 
   // Fetch lead stats from API
   useEffect(() => {
@@ -392,55 +530,20 @@ export default function CommandDashboard({ onNavigate }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch deal pipeline data (Google Sheets CRM or HubSpot)
+  // Fetch leads pipeline data (Sheet + HubSpot)
   useEffect(() => {
-    async function fetchPipeline() {
-      try {
-        // Try Google Sheets CRM first
-        const crmRes = await fetch(`${API_BASE}/v1/crm/pipeline`);
-        if (crmRes.ok) {
-          const data = await crmRes.json();
-          if (data.configured && data.by_stage) {
-            const formatValue = (v) => v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `$${(v / 1000).toFixed(0)}K` : v > 0 ? `$${v}` : '';
-            const rows = Object.entries(data.by_stage)
-              .filter(([, v]) => v.count > 0)
-              .map(([stage, v]) => ({ stage, count: v.count, value: formatValue(v.value) }));
-            setCrmData({ rows, source: data.source, sheetUrl: data.sheetUrl, total: data.total_deals });
-            return;
-          }
+    fetchLeadsSheet();
+    fetch(`${API_BASE}/v1/hubspot/status`, { headers: getAuthHeaders() })
+      .then(r => r.json()).then(d => {
+        setHubspotConnected(!!d.configured);
+        if (d.configured) {
+          setHubspotLoading(true);
+          fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() })
+            .then(r => r.json()).then(p => setHubspotPipeline(p)).catch(() => {})
+            .finally(() => setHubspotLoading(false));
         }
-      } catch {}
-
-      // Fallback to HubSpot
-      try {
-        const res = await fetch(`${API_BASE}/v1/hubspot/pipeline`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.configured && data.by_stage) {
-          const stageLabels = {
-            appointmentscheduled: 'Discovery',
-            qualifiedtobuy: 'Qualification',
-            presentationscheduled: 'Proposal',
-            decisionmakerboughtin: 'Negotiation',
-            contractsent: 'Contract Sent',
-            closedwon: 'Closed Won',
-            closedlost: 'Closed Lost',
-          };
-          const rows = Object.entries(data.by_stage)
-            .filter(([k]) => k !== 'closedlost')
-            .map(([k, v]) => ({
-              stage: stageLabels[k] || k,
-              count: v.count,
-              value: v.value >= 1000000 ? `$${(v.value / 1000000).toFixed(1)}M` : v.value >= 1000 ? `$${(v.value / 1000).toFixed(0)}K` : `$${v.value}`,
-            }));
-          if (rows.length > 0) setHubspotPipeline(rows);
-        }
-      } catch {}
-    }
-    fetchPipeline();
-    const interval = setInterval(fetchPipeline, 60000);
-    return () => clearInterval(interval);
-  }, []);
+      }).catch(() => {});
+  }, [fetchLeadsSheet]);
 
   // Fetch real approvals and insights from API
   useEffect(() => {
@@ -933,238 +1036,259 @@ export default function CommandDashboard({ onNavigate }) {
         </div>
       </div>
 
-      {/* Agent Assignments */}
-      {assignments.filter(a => !['dismissed'].includes(a.status)).length > 0 && (
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Agent Tasks</span>
-              <span className="text-[10px] font-mono font-bold text-white bg-[var(--t-ui-accent)] px-1.5 py-[1px] rounded-full tabular-nums">
-                {assignments.filter(a => ['proposed', 'in_progress'].includes(a.status)).length}
-              </span>
+      {/* Agent Assignments - tabbed */}
+      <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+        <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+          <div className="flex items-center gap-2">
+            <ClipboardList size={14} className="text-[var(--t-ui-accent)]" />
+            <div className="flex items-center gap-0.5 bg-[#f5f4f0] rounded-lg p-0.5">
+              {[
+                { id: 'suggested', label: 'Suggested', count: assignments.filter(a => a.status === 'proposed').length },
+                { id: 'active', label: 'Active', count: assignments.filter(a => a.status === 'in_progress' || a.status === 'confirmed').length },
+                { id: 'completed', label: 'Completed', count: assignments.filter(a => a.status === 'completed').length },
+              ].map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => { setTaskTab(t.id); setAssignmentsPage(0); }}
+                  className={`text-[11px] font-heading font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                    taskTab === t.id
+                      ? 'bg-white text-[var(--t-ui-accent)] shadow-sm'
+                      : 'text-[#9a9a92] hover:text-[#6b6b65]'
+                  }`}
+                >
+                  {t.label}{t.count > 0 ? ` (${t.count})` : ''}
+                </button>
+              ))}
             </div>
-            <span className="text-[11px] text-terminal-muted">Overnight analysis</span>
           </div>
-          <div>
-            {assignments.filter(a => !['dismissed'].includes(a.status)).map((a) => (
-              <div key={a.id} className="border-b border-[#f0eeea] last:border-b-0">
-                <div className="flex items-start gap-3 px-[18px] py-3 hover:bg-[#f5f4f0] transition-colors">
-                  <span
-                    className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-                    style={{ background: 'var(--t-ui-accent-bg)', color: 'var(--t-ui-accent)' }}
-                  >
-                    {(a.agent_id || 'A').charAt(0).toUpperCase()}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div
-                      className="text-[13px] font-medium text-terminal-text leading-[1.4] cursor-pointer"
-                      onClick={() => setAssignmentExpanded(assignmentExpanded === a.id ? null : a.id)}
-                    >
-                      {a.title}
-                    </div>
-                    {a.category && (
-                      <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0] mr-1.5">
-                        {a.category}
-                      </span>
-                    )}
-                    {a.priority && a.priority !== 'medium' && (
-                      <span className={`text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded ${
-                        a.priority === 'high' ? 'bg-[#fdedf0] text-terminal-red border border-red-200' : 'bg-[#f5f4f0] text-terminal-muted border border-[#e5e5e0]'
-                      }`}>
-                        {a.priority}
-                      </span>
-                    )}
-                    {assignmentExpanded === a.id && a.description && (
-                      <div className="text-[11px] text-terminal-muted mt-1.5 leading-[1.5]">{a.description}</div>
-                    )}
-                    {assignmentExpanded === a.id && a.status === 'proposed' && a.input_fields_json && (() => {
-                      try {
-                        const fields = JSON.parse(a.input_fields_json);
-                        if (!fields.length) return null;
-                        const existingValues = a.input_values_json ? JSON.parse(a.input_values_json) : {};
-                        return (
-                          <TaskInputForm
-                            inputFields={fields}
-                            inputValues={existingValues}
-                            onSubmit={(values) => handleSubmitInputs(a.id, values)}
-                            disabled={processingAssignment === a.id}
-                          />
-                        );
-                      } catch { return null; }
-                    })()}
-                    {assignmentExpanded === a.id && a.status === 'completed' && a.result_summary && !a.result_summary.startsWith('Failed') && (
-                      <div className="text-[11px] text-[var(--t-ui-accent)] mt-1.5 leading-[1.5] bg-[var(--t-ui-accent-bg)] rounded-lg p-2.5 border border-[var(--t-ui-accent-border)]">
-                        {a.result_summary.slice(0, 500)}{a.result_summary.length > 500 ? '...' : ''}
+        </div>
+        {(() => {
+          const TASKS_PER_PAGE = 5;
+          const statusFilter = taskTab === 'suggested' ? ['proposed']
+            : taskTab === 'active' ? ['confirmed', 'in_progress']
+            : ['completed'];
+          const visible = assignments.filter(a => statusFilter.includes(a.status));
+          const totalPages = Math.max(1, Math.ceil(visible.length / TASKS_PER_PAGE));
+          const safePage = Math.min(assignmentsPage, totalPages - 1);
+          const paged = visible.slice(safePage * TASKS_PER_PAGE, (safePage + 1) * TASKS_PER_PAGE);
+          const emptyMessages = {
+            suggested: { title: 'No pending tasks', sub: 'Coppice generates new tasks every morning at 3 AM based on your pipeline.' },
+            active: { title: 'No active tasks', sub: 'Run a suggested task to see it here while it executes.' },
+            completed: { title: 'No completed tasks yet', sub: 'Completed tasks and their results will appear here.' },
+          };
+          if (visible.length === 0) return (
+            <div className="px-[18px] py-5 text-center">
+              <div className="text-[12px] text-[#9a9a92] mb-1">{emptyMessages[taskTab].title}</div>
+              <div className="text-[11px] text-terminal-muted">{emptyMessages[taskTab].sub}</div>
+            </div>
+          );
+          const catColors = {
+            follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
+            estimate: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+            outreach: 'bg-purple-50 text-purple-600 border-purple-200',
+            admin: 'bg-gray-50 text-gray-600 border-gray-200',
+            research: 'bg-amber-50 text-amber-600 border-amber-200',
+            analysis: 'bg-indigo-50 text-indigo-600 border-indigo-200',
+            document: 'bg-rose-50 text-rose-600 border-rose-200',
+          };
+          return (
+            <div>
+              {paged.map(a => (
+                <div key={a.id} className="border-b border-[#f0eeea] last:border-b-0">
+                  <div className="flex items-start gap-3 px-[18px] py-3 hover:bg-[#f5f4f0] transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className="cursor-pointer hover:bg-[#f5f4f0] -mx-1 px-1 rounded transition-colors"
+                        onClick={() => setAssignmentExpanded(assignmentExpanded === a.id ? null : a.id)}
+                      >
+                        <div className="flex items-center gap-2 mb-0.5">
+                          {a.priority === 'high' && <span className="text-[10px] font-bold text-red-500">HIGH</span>}
+                          <span className="text-[13px] font-medium text-terminal-text">{a.title}</span>
+                          {a.category && (
+                            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border font-semibold uppercase ${catColors[a.category] || catColors.admin}`}>
+                              {a.category?.replace('_', ' ')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#6b6b65] leading-relaxed">{a.description}</div>
                       </div>
-                    )}
-                    {assignmentExpanded === a.id && a.status === 'completed' && (() => {
-                      try {
-                        const artifacts = JSON.parse(a.output_artifacts_json || '[]');
-                        if (!artifacts.length) return null;
+                      {assignmentExpanded === a.id && a.status === 'proposed' && a.input_fields_json && (() => {
+                        try {
+                          const fields = JSON.parse(a.input_fields_json);
+                          if (!fields.length) return null;
+                          const existingValues = a.input_values_json ? JSON.parse(a.input_values_json) : {};
+                          return (
+                            <TaskInputForm
+                              inputFields={fields}
+                              inputValues={existingValues}
+                              onSubmit={(values) => handleSubmitInputs(a.id, values)}
+                              disabled={processingAssignment === a.id}
+                            />
+                          );
+                        } catch { return null; }
+                      })()}
+                      {assignmentExpanded === a.id && a.status === 'completed' && a.result_summary && (
+                        <div className={`text-[11px] px-2 py-1.5 rounded leading-relaxed mt-1.5 ${
+                          /^(Failed|Error|Execution failed)/i.test(a.result_summary)
+                            ? 'text-red-600 bg-red-50'
+                            : 'text-emerald-600 bg-emerald-50'
+                        }`}>
+                          {a.result_summary.slice(0, 500)}{a.result_summary.length > 500 ? '...' : ''}
+                        </div>
+                      )}
+                      {assignmentExpanded === a.id && a.status === 'completed' && (() => {
+                        try {
+                          const artifacts = JSON.parse(a.output_artifacts_json || '[]');
+                          if (!artifacts.length) return null;
+                          return (
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {artifacts.map((art, i) => {
+                                const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
+                                const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
+                                  : art.type === 'pdf' ? <FileText size={10} />
+                                  : art.type === 'docx' ? <Download size={10} />
+                                  : <ExternalLink size={10} />;
+                                return (
+                                  <a key={i} href={href} target={art.type === 'gdoc' ? '_blank' : '_self'} rel="noopener noreferrer"
+                                    className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                                      art.type === 'gdoc' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                                      : art.type === 'pdf' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
+                                      : art.type === 'docx' ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                                      : 'bg-white hover:bg-blue-50 text-[var(--t-ui-accent)] border-[var(--t-border)]'
+                                    }`}
+                                  >
+                                    {icon} {art.label || art.title || art.type}
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          );
+                        } catch { return null; }
+                      })()}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      {a.status === 'proposed' && (() => {
+                        let inputsReady = true;
+                        try {
+                          const fields = JSON.parse(a.input_fields_json || '[]');
+                          const vals = a.input_values_json ? JSON.parse(a.input_values_json) : {};
+                          if (fields.length > 0) {
+                            inputsReady = fields.filter(f => f.required).every(f => vals[f.name] && String(vals[f.name]).trim() !== '');
+                          }
+                        } catch {}
                         return (
-                          <div className="flex flex-wrap gap-1.5 mt-1.5">
-                            {artifacts.map((art, i) => {
-                              const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
-                              const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
-                                : art.type === 'pdf' ? <FileText size={10} />
-                                : art.type === 'docx' ? <Download size={10} />
-                                : <ExternalLink size={10} />;
-                              const openPreview = async (e) => {
-                                if (art.type === 'gdoc') return;
-                                e.preventDefault();
-                                try {
-                                  setDocPreview({ type: art.type, url: null, title: a.title, filename: art.filename, assignment: a, loading: true });
-                                  const resp = await fetch(href, { headers: getAuthHeaders() });
-                                  if (!resp.ok) throw new Error('Failed to load');
-                                  const blob = await resp.blob();
-                                  const blobUrl = URL.createObjectURL(blob);
-                                  setDocPreview(prev => prev ? { ...prev, url: blobUrl, loading: false } : null);
-                                } catch {
-                                  setDocPreview(prev => prev ? { ...prev, url: null, loading: false, error: true } : null);
-                                }
-                              };
-                              return (
-                                <a key={i} href={href} target={art.type === 'gdoc' ? '_blank' : '_self'} rel="noopener noreferrer"
-                                  onClick={openPreview}
-                                  className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
-                                    art.type === 'gdoc' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
-                                    : art.type === 'pdf' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
-                                    : art.type === 'docx' ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
-                                    : 'bg-white hover:bg-blue-50 text-[var(--t-ui-accent)] border-[var(--t-border)]'
-                                  }`}
-                                >
-                                  {icon} {art.label || art.title || art.type}
-                                </a>
-                              );
-                            })}
-                          </div>
-                        );
-                      } catch { return null; }
-                    })()}
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                    {a.status === 'proposed' && (() => {
-                      let inputsReady = true;
-                      try {
-                        const fields = JSON.parse(a.input_fields_json || '[]');
-                        const vals = a.input_values_json ? JSON.parse(a.input_values_json) : {};
-                        if (fields.length > 0) {
-                          inputsReady = fields.filter(f => f.required).every(f => vals[f.name] && String(vals[f.name]).trim() !== '');
-                        }
-                      } catch {}
-                      return (
-                        <>
-                          <button
-                            onClick={() => handleConfirmAssignment(a.id)}
-                            disabled={processingAssignment === a.id || !inputsReady}
-                            title={!inputsReady ? 'Fill in required fields to confirm' : ''}
-                            className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
-                          >
-                            {processingAssignment === a.id ? 'Running...' : 'Run'}
-                          </button>
-                          <button
-                            onClick={() => handleDismissAssignment(a.id)}
-                            className="w-6 h-6 rounded-md flex items-center justify-center text-terminal-muted hover:text-terminal-red hover:bg-red-50 transition-colors"
-                          >
-                            <X size={13} />
-                          </button>
-                        </>
-                      );
-                    })()}
-                    {a.status === 'in_progress' && (
-                      <span className="flex items-center gap-1 text-[11px] text-[var(--t-ui-accent)] font-medium">
-                        {infoRequests[a.job_id]?.length > 0
-                          ? <><AlertCircle size={11} className="text-amber-600" /> Needs input</>
-                          : <><RotateCcw size={11} className="animate-spin" /> Working...</>
-                        }
-                      </span>
-                    )}
-                    {a.status === 'completed' && (
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {a.result_summary?.startsWith('Failed') ? (
                           <>
                             <button
                               onClick={() => handleConfirmAssignment(a.id)}
-                              disabled={processingAssignment === a.id}
-                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50"
+                              disabled={processingAssignment === a.id || !inputsReady}
+                              title={!inputsReady ? 'Fill in required fields to confirm' : ''}
+                              className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
                             >
-                              <RotateCcw size={10} /> Retry
+                              {processingAssignment === a.id ? 'Running...' : 'Run'}
                             </button>
-                            <span className="flex items-center gap-1 text-[11px] font-medium text-red-500">
-                              <XCircle size={11} /> Failed
-                            </span>
+                            <button
+                              onClick={() => handleDismissAssignment(a.id)}
+                              className="w-6 h-6 rounded-md flex items-center justify-center text-terminal-muted hover:text-terminal-red hover:bg-red-50 transition-colors"
+                            >
+                              <X size={13} />
+                            </button>
                           </>
-                        ) : (
-                          <>
-                            <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-                              <CheckCircle size={11} /> Done
-                            </span>
-                            {a.visibility === 'shared' && (
-                              <span className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
-                                <Users size={8} /> Shared
+                        );
+                      })()}
+                      {a.status === 'in_progress' && (
+                        <span className="flex items-center gap-1 text-[11px] text-[var(--t-ui-accent)] font-medium">
+                          {infoRequests[a.job_id]?.length > 0
+                            ? <><AlertCircle size={11} className="text-amber-600" /> Needs input</>
+                            : <><RotateCcw size={11} className="animate-spin" /> Working...</>
+                          }
+                        </span>
+                      )}
+                      {a.status === 'completed' && (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/^(Failed|Error|Execution failed)/i.test(a.result_summary || '') ? (
+                            <>
+                              <button
+                                onClick={() => handleConfirmAssignment(a.id)}
+                                disabled={processingAssignment === a.id}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50"
+                              >
+                                <RotateCcw size={10} /> Retry
+                              </button>
+                              <span className="flex items-center gap-1 text-[11px] font-medium text-red-500">
+                                <XCircle size={11} /> Failed
                               </span>
-                            )}
-                            <button
-                              onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
-                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text transition-colors"
-                              title="Chat about this report"
-                            >
-                              <MessageSquare size={10} /> Chat
-                            </button>
-                            <button
-                              onClick={() => handleShareInternal(a.id)}
-                              disabled={a.visibility === 'shared' || sharedAssignments[`internal-${a.id}`] === 'sharing'}
-                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text disabled:opacity-50 transition-colors"
-                              title="Share with team"
-                            >
-                              <Users size={10} />
-                              {a.visibility === 'shared' ? 'Shared' : sharedAssignments[`internal-${a.id}`] === 'sharing' ? '...' : 'Share'}
-                            </button>
-                            <button
-                              onClick={() => handleArchiveAssignment(a.id)}
-                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-amber-600 transition-colors"
-                              title="Archive this task"
-                            >
-                              <Archive size={10} /> Archive
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
+                                <CheckCircle size={11} /> Done
+                              </span>
+                              <button
+                                onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text transition-colors"
+                              >
+                                <MessageSquare size={10} /> Chat
+                              </button>
+                              <button
+                                onClick={() => handleShareInternal(a.id)}
+                                disabled={a.visibility === 'shared' || sharedAssignments[`internal-${a.id}`] === 'sharing'}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text disabled:opacity-50 transition-colors"
+                              >
+                                <Users size={10} /> {a.visibility === 'shared' ? 'Shared' : 'Share'}
+                              </button>
+                              <button
+                                onClick={() => handleArchiveAssignment(a.id)}
+                                className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-amber-600 transition-colors"
+                              >
+                                <Archive size={10} /> Archive
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {a.status === 'in_progress' && a.job_id && infoRequests[a.job_id]?.length > 0 && (
+                    <div className="border-t border-terminal-border">
+                      {infoRequests[a.job_id].map(req => (
+                        <InfoRequestCard
+                          key={req.id}
+                          jobId={a.job_id}
+                          request={req}
+                          onResolved={() => {
+                            setInfoRequests(prev => {
+                              const updated = { ...prev };
+                              updated[a.job_id] = (updated[a.job_id] || []).filter(r => r.id !== req.id);
+                              return updated;
+                            });
+                            fetchAssignments();
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {totalPages > 1 && (
+                <div className="px-[18px] py-2 flex items-center justify-between border-t border-[#f0eeea]">
+                  <span className="text-[10px] text-terminal-muted">{visible.length} tasks</span>
+                  <div className="flex items-center gap-2">
+                    <button disabled={safePage <= 0} onClick={() => setAssignmentsPage(p => p - 1)}
+                      className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">Prev</button>
+                    <span className="text-[10px] text-terminal-muted">{safePage + 1} / {totalPages}</span>
+                    <button disabled={safePage >= totalPages - 1} onClick={() => setAssignmentsPage(p => p + 1)}
+                      className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">Next</button>
                   </div>
                 </div>
-                {/* Info request cards for paused jobs */}
-                {a.status === 'in_progress' && a.job_id && infoRequests[a.job_id]?.length > 0 && (
-                  <div className="border-t border-terminal-border">
-                    {infoRequests[a.job_id].map(req => (
-                      <InfoRequestCard
-                        key={req.id}
-                        jobId={a.job_id}
-                        request={req}
-                        onResolved={() => {
-                          setInfoRequests(prev => {
-                            const updated = { ...prev };
-                            updated[a.job_id] = (updated[a.job_id] || []).filter(r => r.id !== req.id);
-                            return updated;
-                          });
-                          fetchAssignments();
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+              )}
+            </div>
+          );
+        })()}
+      </div>
 
-      {/* Row 2: Upcoming Meetings + Deal Pipeline */}
+      {/* Row 2: Upcoming Meetings + Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
-        {/* Upcoming Meetings */}
         <UpcomingMeetingsPanel />
-
-        {/* Keep Agent Insights hidden but functional */}
         {insights.length > 0 && <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
@@ -1173,129 +1297,248 @@ export default function CommandDashboard({ onNavigate }) {
             </div>
           </div>
           <div>
-            {insights.length === 0 ? (
-              <EmptyState icon="zap" title="No agent insights" subtitle="Recommendations and patterns from your agents will appear here." compact />
-            ) : insights.map((item) => {
-              const iconCfg = AGENT_ICON_COLORS[item.agent];
-              return (
-                <div key={item.id} className="px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
-                    <span className={`text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded ${INSIGHT_TYPE_STYLES[item.type]}`}>{item.type}</span>
-                    <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums ml-auto">{item.time}</span>
-                  </div>
-                  <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                  <div className="text-[11px] text-terminal-muted mt-0.5" dangerouslySetInnerHTML={{ __html: item.body }} />
-                  <div className="flex items-center gap-1.5 mt-2">
-                    {item.actions.map((action) => (
-                      <button
-                        key={action}
-                        onClick={() => handleInsightAction(item.id, action)}
-                        className={`px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold transition-opacity ${
-                          action === 'Dismiss' || action === 'Snooze'
-                            ? 'bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0]'
-                            : 'bg-[var(--t-ui-accent)] text-white hover:opacity-90'
-                        }`}
-                      >
-                        {action}
-                      </button>
-                    ))}
-                  </div>
+            {insights.map((item) => (
+              <div key={item.id} className="px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
+                  <span className={`text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded ${INSIGHT_TYPE_STYLES[item.type]}`}>{item.type}</span>
+                  <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums ml-auto">{item.time}</span>
                 </div>
-              );
-            })}
+                <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                <div className="text-[11px] text-terminal-muted mt-0.5" dangerouslySetInnerHTML={{ __html: item.body }} />
+                <div className="flex items-center gap-1.5 mt-2">
+                  {item.actions.map((action) => (
+                    <button key={action} onClick={() => handleInsightAction(item.id, action)}
+                      className={`px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold transition-opacity ${
+                        action === 'Dismiss' || action === 'Snooze'
+                          ? 'bg-terminal-panel text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0]'
+                          : 'bg-[var(--t-ui-accent)] text-white hover:opacity-90'
+                      }`}>{action}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>}
+      </div>
 
-        {/* Deal Pipeline */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Deal Pipeline</span>
-            {(crmData || hubspotPipeline) && (
-              <span className="text-[11px] text-terminal-muted flex items-center gap-1.5">
-                {crmData?.sheetUrl && (
-                  <a href={crmData.sheetUrl} target="_blank" rel="noopener noreferrer" className="hover:text-terminal-text transition-colors">
-                    Open Sheet ↗
-                  </a>
-                )}
-                {!crmData?.sheetUrl && (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--t-ui-accent)]" />
-                    Live
-                  </>
-                )}
-              </span>
-            )}
+      {/* Leads Pipeline (Sheet + HubSpot) */}
+      <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+        <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet size={14} className="text-[var(--t-ui-accent)]" />
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Leads Pipeline</span>
           </div>
-          <div>
-            {crmData?.rows?.length > 0 ? crmData.rows.map((row, i) => (
-              <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
-                <span className="text-[#6b6b65]">{row.stage}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-mono text-terminal-muted tabular-nums">{row.value}</span>
-                  <span className="font-mono font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
-                </div>
-              </div>
-            )) : hubspotPipeline ? hubspotPipeline.map((row, i) => (
-              <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
-                <span className="text-[#6b6b65]">{row.stage}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-[11px] font-mono text-terminal-muted tabular-nums">{row.value}</span>
-                  <span className="font-mono font-semibold text-terminal-text tabular-nums w-5 text-right">{row.count}</span>
-                </div>
-              </div>
-            )) : crmData?.rows?.length === 0 ? (
-              <div className="px-[18px] py-6 text-center">
-                <p className="text-[13px] text-terminal-muted mb-1">No deals yet</p>
-                {crmData?.sheetUrl && (
-                  <a href={crmData.sheetUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[var(--t-ui-accent)] hover:underline">
-                    Add deals in your pipeline sheet ↗
-                  </a>
+          <div className="flex items-center gap-2">
+            {leadsTab === 'hubspot' && hubspotConnected && (
+              <a href="https://app.hubspot.com" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-[#ff7a59] hover:underline">
+                <ExternalLink size={10} /> HubSpot
+              </a>
+            )}
+            {leadsTab === 'sheet' && leadsSheet?.configured && (
+              <a href={leadsSheet.sheetUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-[var(--t-ui-accent)] hover:underline">
+                <ExternalLink size={10} /> {leadsSheet.sheetTitle}
+              </a>
+            )}
+            {(leadsSheet?.configured || hubspotConnected) && (
+              <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden">
+                {leadsSheet?.configured && (
+                  <button onClick={() => setLeadsTab('sheet')}
+                    className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${leadsTab === 'sheet' ? 'bg-[var(--t-ui-accent)] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}>
+                    Sheet
+                  </button>
+                )}
+                {hubspotConnected && (
+                  <button onClick={() => setLeadsTab('hubspot')}
+                    className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${leadsTab === 'hubspot' ? 'bg-[#ff7a59] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}>
+                    HubSpot
+                  </button>
                 )}
               </div>
-            ) : (
-              <div className="px-[18px] py-6 text-center">
-                <p className="text-[13px] text-terminal-muted mb-3">Track your deals with a Google Sheet or HubSpot.</p>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    onClick={async () => {
-                      setCrmLoading(true);
-                      try {
-                        let token = null;
-                        try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); token = s?.tokens?.accessToken; } catch {}
-                        const doSetup = async (confirmReplace = false) => {
-                          const res = await fetch(`${API_BASE}/v1/crm/setup-sheet`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                            body: JSON.stringify(confirmReplace ? { confirm_replace: true } : {}),
-                          });
-                          return res.json();
-                        };
-                        let data = await doSetup();
-                        if (data.needs_confirmation) {
-                          const yes = window.confirm('A contact sheet is already connected to your dashboard. Replace it with a new one?');
-                          if (!yes) { setCrmLoading(false); return; }
-                          data = await doSetup(true);
-                        }
-                        if (data.success) {
-                          setCrmData({ rows: [], source: 'sheets', sheetUrl: data.sheetUrl, total: 0 });
-                          showToast('Pipeline sheet created');
-                        } else {
-                          showToast(data.error || 'Failed to create sheet');
-                        }
-                      } catch { showToast('Failed to create sheet'); }
-                      setCrmLoading(false);
-                    }}
-                    disabled={crmLoading}
-                    className="px-3 py-1.5 rounded-lg text-[11px] font-heading font-semibold bg-terminal-text text-white hover:opacity-90 transition-all disabled:opacity-50"
-                  >
-                    {crmLoading ? 'Creating...' : 'Connect Google Sheets'}
-                  </button>
-                </div>
-              </div>
+            )}
+            {leadsTab === 'sheet' && leadsSheet?.configured && (
+              <>
+                <button onClick={handleOpenShareModal}
+                  className="flex items-center gap-1 text-[10px] text-terminal-muted hover:text-[var(--t-ui-accent)] px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[var(--t-ui-accent-bg)]"
+                  title="Share with team">
+                  <Share2 size={10} /> Share
+                </button>
+                <button onClick={() => setShowLinkModal(true)}
+                  className="text-[10px] text-terminal-muted hover:text-terminal-text px-1.5 py-0.5 rounded border border-[#e8e6e2] hover:bg-[#f5f4f0]">
+                  Change
+                </button>
+                <button onClick={handleUnlinkSheet}
+                  className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
+                  title="Unlink sheet">
+                  <Unlink size={10} />
+                </button>
+              </>
+            )}
+            {leadsTab === 'hubspot' && hubspotConnected && (
+              <button onClick={async () => {
+                await fetch(`${API_BASE}/v1/hubspot/disconnect`, { method: 'POST', headers: getAuthHeaders() });
+                setHubspotConnected(false); setHubspotPipeline(null); setLeadsTab('sheet');
+              }}
+                className="text-[10px] text-terminal-muted hover:text-red-500 px-1 py-0.5 rounded border border-[#e8e6e2] hover:bg-red-50"
+                title="Disconnect HubSpot">
+                <Unlink size={10} />
+              </button>
+            )}
+            {!leadsSheet?.configured && (
+              <button onClick={() => { setShowLinkModal(true); searchDrive('leads'); }}
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[var(--t-ui-accent)] px-3 py-1 rounded-md border border-[var(--t-ui-accent-border)] bg-[var(--t-ui-accent-bg)] hover:opacity-80">
+                <Link2 size={11} /> Link Sheet
+              </button>
+            )}
+            {!hubspotConnected && (
+              <button onClick={() => { setShowHubspotModal(true); setHubspotError(''); setHubspotKey(''); }}
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#ff7a59] px-3 py-1 rounded-md border border-[#ffcabc] bg-[#fff5f2] hover:bg-[#ffe8e2]">
+                <Link2 size={11} /> Link HubSpot
+              </button>
             )}
           </div>
         </div>
+
+        {/* Pending share invitations */}
+        {leadsShares.length > 0 && (
+          <div className="px-3 py-2 space-y-1.5">
+            {leadsShares.map(share => (
+              <div key={share.id} className="flex items-center justify-between px-3 py-2 bg-[var(--t-ui-accent-bg)] border border-[var(--t-ui-accent-border)] rounded-lg">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Share2 size={12} className="text-[var(--t-ui-accent)] shrink-0" />
+                  <span className="text-[11px] text-[var(--t-ui-accent)] truncate">
+                    <strong>{share.from_user_name || 'A teammate'}</strong> shared "{share.sheet_title}" - Add to your pipeline?
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <button onClick={() => handleAcceptShare(share.id)} disabled={acceptingShare === share.id}
+                    className="px-2.5 py-1 text-[10px] font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50">
+                    {acceptingShare === share.id ? '...' : 'Accept'}
+                  </button>
+                  <button onClick={() => handleDeclineShare(share.id)}
+                    className="px-2.5 py-1 text-[10px] font-semibold text-[#6b6b65] border border-[#e0ddd8] rounded-md hover:bg-[#f5f4f0]">
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Sheet content */}
+        {leadsTab === 'sheet' && (
+          leadsLoading ? (
+            <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading...</div>
+          ) : leadsSheet?.configured && leadsSheet.preview?.length > 0 ? (
+            <div>
+              {leadsSheet.tabs?.length > 1 && (
+                <div className="px-3 pt-2 pb-1 flex items-center gap-1 border-b border-[#f0eeea] overflow-x-auto">
+                  {leadsSheet.tabs.map((tab) => (
+                    <button key={tab} onClick={() => { setLeadsPage(1); fetchLeadsSheet(tab, 1); }}
+                      className={`px-2.5 py-1 text-[10px] font-heading font-semibold rounded-t whitespace-nowrap transition-colors ${
+                        tab === leadsSheet.activeTab
+                          ? 'bg-[var(--t-ui-accent)] text-white'
+                          : 'text-[#6b6b65] hover:bg-[#f5f4f0]'
+                      }`}>
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-[#fafaf8]">
+                      {(leadsSheet.headers || []).slice(0, 6).map((h, i) => (
+                        <th key={i} className="px-3 py-2 text-left text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] border-b border-[#f0eeea]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leadsSheet.preview.map((row, i) => (
+                      <tr key={i} className="border-b border-[#f0eeea] last:border-b-0 hover:bg-[#fafaf8]">
+                        {(leadsSheet.headers || []).slice(0, 6).map((h, j) => (
+                          <td key={j} className="px-3 py-1.5 text-terminal-text truncate max-w-[180px]">{row[h] || ''}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {leadsSheet.totalPages > 1 && (
+                <div className="px-3 py-2 flex items-center justify-between border-t border-[#f0eeea]">
+                  <span className="text-[10px] text-terminal-muted">{leadsSheet.totalRows} rows</span>
+                  <div className="flex items-center gap-2">
+                    <button disabled={leadsSheet.page <= 1} onClick={() => { const p = leadsSheet.page - 1; setLeadsPage(p); fetchLeadsSheet(leadsSheet.activeTab, p); }}
+                      className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">
+                      Prev
+                    </button>
+                    <span className="text-[10px] text-terminal-muted">{leadsSheet.page} / {leadsSheet.totalPages}</span>
+                    <button disabled={leadsSheet.page >= leadsSheet.totalPages} onClick={() => { const p = leadsSheet.page + 1; setLeadsPage(p); fetchLeadsSheet(leadsSheet.activeTab, p); }}
+                      className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : !leadsSheet?.configured ? (
+            <div className="px-[18px] py-8 text-center">
+              <div className="text-[13px] text-[#9a9a92] mb-2">No leads sheet linked</div>
+              <div className="text-[11px] text-terminal-muted">Link a Google Sheet to track your leads and pipeline here.</div>
+            </div>
+          ) : (
+            <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Sheet linked but no data found</div>
+          )
+        )}
+
+        {/* HubSpot content */}
+        {leadsTab === 'hubspot' && (
+          hubspotLoading ? (
+            <div className="px-[18px] py-6 text-center text-[#9a9a92] text-[12px]">Loading HubSpot data...</div>
+          ) : !hubspotConnected ? (
+            <div className="px-[18px] py-8 text-center">
+              <div className="text-[13px] text-[#9a9a92] mb-2">HubSpot not connected</div>
+              <div className="text-[11px] text-terminal-muted">Connect your HubSpot account to see your CRM pipeline here.</div>
+            </div>
+          ) : hubspotPipeline && hubspotPipeline.total_deals > 0 ? (
+            <div className="px-[18px] py-4">
+              <div className="flex items-center gap-6 mb-4">
+                <div>
+                  <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px]">Total Deals</div>
+                  <div className="text-lg font-heading font-bold text-terminal-text">{hubspotPipeline.total_deals}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px]">Pipeline Value</div>
+                  <div className="text-lg font-heading font-bold text-terminal-text">${(hubspotPipeline.total_value || 0).toLocaleString()}</div>
+                </div>
+              </div>
+              {Object.keys(hubspotPipeline.by_stage || {}).length > 0 && (
+                <div className="space-y-2">
+                  {Object.entries(hubspotPipeline.by_stage).map(([stage, data]) => (
+                    <div key={stage} className="flex items-center justify-between py-1.5 border-b border-[#f0eeea] last:border-b-0">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-[#ff7a59]" />
+                        <span className="text-[12px] text-terminal-text capitalize">{stage.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-[11px] font-mono text-terminal-muted">{data.count} deal{data.count !== 1 ? 's' : ''}</span>
+                        <span className="text-[11px] font-mono text-terminal-text">${(data.value || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-[18px] py-8 text-center">
+              <div className="text-[13px] text-[#9a9a92] mb-2">No deals in pipeline</div>
+              <div className="text-[11px] text-terminal-muted">Deals from your HubSpot CRM will appear here.</div>
+            </div>
+          )
+        )}
       </div>
 
       {/* Row 3: Activity Feed (full width) */}
@@ -1564,6 +1807,135 @@ export default function CommandDashboard({ onNavigate }) {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 Open in Chat
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link Sheet Modal */}
+      {showLinkModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowLinkModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-[480px] max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[#e8e6e2] flex items-center justify-between">
+              <span className="text-sm font-heading font-bold text-terminal-text">Link Leads Sheet</span>
+              <button onClick={() => setShowLinkModal(false)} className="text-terminal-muted hover:text-terminal-text"><X size={16} /></button>
+            </div>
+            <div className="p-5">
+              <div className="mb-4">
+                <label className="text-[11px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Paste Sheet URL or ID</label>
+                <div className="flex gap-2">
+                  <input
+                    value={linkInput}
+                    onChange={e => setLinkInput(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                    className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-md focus:outline-none focus:border-[var(--t-ui-accent)]"
+                  />
+                  <button
+                    onClick={() => handleLinkSheet(linkInput)}
+                    disabled={!linkInput.trim() || linking}
+                    className="px-4 py-2 text-[12px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50"
+                  >
+                    {linking ? '...' : 'Link'}
+                  </button>
+                </div>
+                {linkError && <div className="text-[11px] text-red-500 mt-1">{linkError}</div>}
+              </div>
+              <div className="border-t border-[#e8e6e2] pt-4">
+                <label className="text-[11px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Or search Google Drive</label>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    value={driveQuery}
+                    onChange={e => setDriveQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && searchDrive(driveQuery)}
+                    placeholder="Search for spreadsheets..."
+                    className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-md focus:outline-none focus:border-[var(--t-ui-accent)]"
+                  />
+                  <button
+                    onClick={() => searchDrive(driveQuery)}
+                    disabled={driveSearching}
+                    className="px-3 py-2 text-[12px] border border-[#e8e6e2] rounded-md hover:bg-[#f5f4f0]"
+                  >
+                    <Search size={13} />
+                  </button>
+                </div>
+                {driveSearching && <div className="text-[11px] text-terminal-muted italic">Searching...</div>}
+                {driveResults.length > 0 && (
+                  <div className="border border-[#e8e6e2] rounded-md overflow-hidden">
+                    {driveResults.map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => handleLinkSheet(f.id)}
+                        disabled={linking}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] text-left"
+                      >
+                        <FileSpreadsheet size={14} className="text-green-600 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] text-terminal-text font-medium truncate">{f.name}</div>
+                          <div className="text-[10px] text-terminal-muted">{f.modifiedTime ? new Date(f.modifiedTime).toLocaleDateString() : ''}</div>
+                        </div>
+                        <Link2 size={12} className="text-[var(--t-ui-accent)] shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!driveSearching && driveResults.length === 0 && driveQuery && (
+                  <div className="text-[11px] text-terminal-muted text-center py-2">No spreadsheets found</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HubSpot Connect Modal */}
+      {showHubspotModal && (
+        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowHubspotModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-[#e8e6e2] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#ff7a59"><path d="M18.16 7.58V4.22a1.74 1.74 0 0 0 1-1.56V2.6A1.74 1.74 0 0 0 17.42.87h-.06a1.74 1.74 0 0 0-1.74 1.74v.06a1.74 1.74 0 0 0 1 1.56v3.32a5.32 5.32 0 0 0-2.38 1.22l-7.9-6.14a2.13 2.13 0 0 0 .06-.52 2.08 2.08 0 1 0-2.08 2.08 2.06 2.06 0 0 0 1.16-.36l7.76 6.04a5.35 5.35 0 0 0 .17 6.16l-2.34 2.34a1.63 1.63 0 0 0-.48-.08 1.68 1.68 0 1 0 1.68 1.68 1.63 1.63 0 0 0-.08-.48l2.3-2.3A5.36 5.36 0 1 0 18.16 7.58zM17.36 16a3.16 3.16 0 1 1 3.16-3.16A3.16 3.16 0 0 1 17.36 16z"/></svg>
+                <span className="text-sm font-heading font-bold text-terminal-text">Connect HubSpot</span>
+              </div>
+              <button onClick={() => setShowHubspotModal(false)} className="text-terminal-muted hover:text-terminal-text"><X size={16} /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-[12px] text-terminal-muted mb-4">
+                Enter your HubSpot private app access token to sync your CRM pipeline. You can create one in <a href="https://app.hubspot.com/private-apps" target="_blank" rel="noopener noreferrer" className="text-[#ff7a59] hover:underline">HubSpot Settings &gt; Private Apps</a>.
+              </p>
+              <label className="text-[11px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5 block">Access Token</label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={hubspotKey}
+                  onChange={e => setHubspotKey(e.target.value)}
+                  placeholder="pat-na1-..."
+                  className="flex-1 text-[12px] px-3 py-2 border border-[#e8e6e2] rounded-md focus:outline-none focus:border-[#ff7a59] font-mono"
+                />
+                <button
+                  onClick={async () => {
+                    setHubspotConnecting(true); setHubspotError('');
+                    try {
+                      const res = await fetch(`${API_BASE}/v1/hubspot/connect`, {
+                        method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ apiKey: hubspotKey }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) { setHubspotError(data.error || 'Failed to connect'); return; }
+                      setHubspotConnected(true);
+                      setLeadsTab('hubspot');
+                      setShowHubspotModal(false);
+                      fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() })
+                        .then(r => r.json()).then(p => setHubspotPipeline(p)).catch(() => {});
+                    } catch (e) { setHubspotError(e.message); }
+                    finally { setHubspotConnecting(false); }
+                  }}
+                  disabled={!hubspotKey.trim() || hubspotConnecting}
+                  className="px-4 py-2 text-[12px] font-heading font-semibold bg-[#ff7a59] text-white rounded-md hover:bg-[#e5694d] disabled:opacity-50"
+                >
+                  {hubspotConnecting ? '...' : 'Connect'}
+                </button>
+              </div>
+              {hubspotError && <div className="text-[11px] text-red-500 mt-2">{hubspotError}</div>}
             </div>
           </div>
         </div>

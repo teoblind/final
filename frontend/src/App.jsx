@@ -477,9 +477,7 @@ function AppContent() {
     agentItems.push({ id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 502 });
     agentItems.push({ id: 'curtailment-chat', label: 'Curtailment', icon: Zap, live: true });
     agentItems.push({ id: 'pools-chat', label: 'Pool Routing', icon: Activity });
-    agentItems.push({ id: 'pitch-deck-chat', label: 'Pitch Deck', icon: Presentation });
-    agentItems.push({ id: 'sales-chat', label: 'Sales Agent', icon: Phone });
-    agentItems.push({ id: 'meetings', label: 'Meetings', icon: Mic, live: true });
+    agentItems.push({ id: 'comms-chat', label: 'Comms', icon: Mail });
 
     if (!user || hasPermission('viewOperations')) {
       infraItems.push({ id: 'operations', label: 'Sites', icon: Hammer });
