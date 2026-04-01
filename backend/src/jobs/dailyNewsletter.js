@@ -30,6 +30,7 @@ const TENANT_SEARCH_CONFIG = {
     name: 'DACP Construction',
     region: 'Dallas-Fort Worth Texas',
     services: ['concrete', 'masonry', 'foundations', 'flatwork', 'structural concrete', 'site work', 'asphalt', 'paving'],
+    color: '#1e3a5f', // navy
     searchQueries: [
       'new commercial construction projects awarded {region} this week',
       'data center construction projects Texas general contractor awarded 2026',
@@ -52,6 +53,7 @@ const TENANT_SEARCH_CONFIG = {
     name: 'Sangha Systems',
     region: 'Texas ERCOT',
     services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading'],
+    color: '#1a6b3c', // green
     searchQueries: [
       'bitcoin mining hashrate difficulty network news this week',
       'ERCOT Texas electricity price wholesale market news',
@@ -245,7 +247,9 @@ IMPORTANT RULES FOR CONTACTS:
 - In RECOMMENDED ACTIONS, prefer suggesting outreach to verified contacts`;
   }
 
-  const prompt = `You are writing a daily intelligence newsletter for ${config.name}, a construction subcontractor specializing in ${config.services.join(', ')} in ${config.region}.
+  const brandColor = config.color || '#1e3a5f';
+
+  const prompt = `You are writing a daily intelligence newsletter for ${config.name}, specializing in ${config.services.join(', ')} in ${config.region}.
 
 WEB RESEARCH RESULTS (gathered this morning):
 ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
@@ -269,7 +273,7 @@ SECTIONS (include only sections with actual findings):
 
 FORMATTING RULES:
 - Use clean, professional HTML with inline styles
-- Use a navy (#1e3a5f) and white color scheme
+- Use ${brandColor} as the primary brand color (for headers, borders, accents) with white text on dark backgrounds
 - Keep it scannable - short paragraphs, bullet points
 - Bold key names (GCs, project names, dollar amounts)
 - Each opportunity should feel actionable, not just informational
@@ -295,14 +299,14 @@ Return ONLY the HTML content, no markdown wrapping.`;
 
 // ── Email Delivery ────────────────────────────────────────────────────────────
 
-function buildEmailHtml(newsletterHtml, tenantName, date) {
+function buildEmailHtml(newsletterHtml, tenantName, date, brandColor = '#1e3a5f') {
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:640px;margin:0 auto;padding:24px;">
   <!-- Header -->
-  <div style="background:#1e3a5f;color:white;padding:20px 24px;border-radius:12px 12px 0 0;">
+  <div style="background:${brandColor};color:white;padding:20px 24px;border-radius:12px 12px 0 0;">
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:0.7;margin-bottom:4px;">Coppice Daily Intelligence</div>
     <div style="font-size:20px;font-weight:600;">${tenantName} - Morning Briefing</div>
     <div style="font-size:12px;opacity:0.6;margin-top:4px;">${date}</div>
@@ -324,7 +328,7 @@ async function deliverNewsletter(tenantId, html, recipients) {
   const { sendHtmlEmail } = await import('../services/emailService.js');
   const config = getTenantConfig(tenantId);
   const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const fullHtml = buildEmailHtml(html, config.name, date);
+  const fullHtml = buildEmailHtml(html, config.name, date, config.color);
 
   for (const email of recipients) {
     try {
@@ -391,12 +395,12 @@ async function runDailyNewsletter() {
       await runWithTenant(tenant.id, async () => {
         console.log(`[Newsletter] Running for tenant: ${tenant.id}`);
 
-        // Check if tenant has newsletter-worthy data
-        const config = getTenantConfig(tenant.id);
-        if (config === TENANT_SEARCH_CONFIG.default && !config.searchQueries.length) {
-          console.log(`[Newsletter] Skipping ${tenant.id} - no search config`);
+        // Only run for tenants with an explicit config (or the 'default' tenant which maps to Sangha)
+        if (!TENANT_SEARCH_CONFIG[tenant.id]) {
+          console.log(`[Newsletter] Skipping ${tenant.id} - no specific newsletter config`);
           return;
         }
+        const config = getTenantConfig(tenant.id);
 
         // Get recipients (all tenant users with email)
         const users = getUsersByTenant(tenant.id);
