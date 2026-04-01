@@ -5142,6 +5142,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       // Buffer to detect <task_proposal> blocks from CLI agent output
       let _cliProposalBuffer = '';
       let _cliInsideProposal = false;
+      let lastTaskProposal = null;
 
       const cliOnText = (textDelta) => {
         // JSON progress/delegation events pass through immediately
@@ -5180,15 +5181,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
                   agent_id: agentId,
                   context_json: proposal.sources ? JSON.stringify({ sources: proposal.sources }) : null,
                 });
-                onChunk(JSON.stringify({
-                  _type: 'task_proposal',
+                lastTaskProposal = {
                   assignment_id: proposalId,
                   title: proposal.title,
                   description: proposal.description,
                   category: proposal.category || 'research',
                   priority: proposal.priority || 'medium',
                   sources: proposal.sources || [],
-                }));
+                };
+                onChunk(JSON.stringify({ _type: 'task_proposal', ...lastTaskProposal }));
                 console.log(`[chatStream] CLI agent proposed task: ${proposalId} "${proposal.title}"`);
               } catch (parseErr) {
                 console.error('[chatStream] Failed to parse CLI task proposal:', parseErr.message);
@@ -5228,14 +5229,21 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
         onChunk(_cliProposalBuffer);
       }
 
-      const cliResponse = cliResult.response || '';
+      let cliResponse = cliResult.response || '';
 
-      saveMessage(tenantId, agentId, userId, 'assistant', cliResponse, {
+      // Strip <task_proposal> tags from saved content (already intercepted for SSE)
+      if (cliResponse.includes('<task_proposal>')) {
+        cliResponse = cliResponse.replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '').trim();
+      }
+
+      const cliMeta = {
         model: 'claude-code-cli',
         duration_ms: cliResult.durationMs,
         timed_out: cliResult.timedOut || false,
         route: cliResult.route || 'cli-stream',
-      }, threadId);
+      };
+      if (lastTaskProposal) cliMeta.taskProposal = lastTaskProposal;
+      saveMessage(tenantId, agentId, userId, 'assistant', cliResponse, cliMeta, threadId);
 
       _recordRun({ output: cliResponse, model: 'claude-code-cli', route: cliResult.route || 'cli-stream', status: cliResult.timedOut ? 'timeout' : 'completed' });
       return { response: cliResponse };
@@ -5301,6 +5309,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     // ─── First streaming round ──────────────────────────────────────────────
     let { finalMessage, roundText } = await streamOneRound(messages);
     let fullText = roundText;
+    let lastTaskProposal = null;
     let totalInputTokens = finalMessage.usage?.input_tokens || 0;
     let totalOutputTokens = finalMessage.usage?.output_tokens || 0;
 
@@ -5376,12 +5385,12 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
           // Emit task proposal event
           if (toolName === 'propose_task' && toolResult?._task_proposal) {
-            onChunk(JSON.stringify({
-              _type: 'task_proposal',
+            lastTaskProposal = {
               assignment_id: toolResult.assignment_id, title: toolResult.title,
               description: toolResult.description, category: toolResult.category,
               priority: toolResult.priority, sources: toolResult.sources || [],
-            }));
+            };
+            onChunk(JSON.stringify({ _type: 'task_proposal', ...lastTaskProposal }));
           }
 
           return { toolUseId, toolName, toolInput, toolResult, toolIsError };
@@ -5487,13 +5496,15 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     }
 
     if (!skipPersist) {
-      saveMessage(tenantId, agentId, userId, 'assistant', fullText, {
+      const msgMeta = {
         model: finalMessage.model,
         input_tokens: totalInputTokens,
         output_tokens: totalOutputTokens,
         stop_reason: finalMessage.stop_reason,
         streamed: true,
-      }, threadId);
+      };
+      if (lastTaskProposal) msgMeta.taskProposal = lastTaskProposal;
+      saveMessage(tenantId, agentId, userId, 'assistant', fullText, msgMeta, threadId);
 
       // Save thread summary for cross-thread awareness
       if (threadId) {
