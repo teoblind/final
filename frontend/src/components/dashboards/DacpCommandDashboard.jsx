@@ -119,20 +119,14 @@ export default function DacpCommandDashboard({ onNavigate }) {
   // Team action items
   const [actionItems, setActionItems] = useState([]);
 
-  // Dynamic senders: Coppice (default) + currently logged-in user
-  const SENDERS = (() => {
-    const senders = [
-      { name: 'Coppice', label: 'Coppice (AI Agent)' },
-    ];
-    try {
-      const session = JSON.parse(sessionStorage.getItem('sangha_auth') || '{}');
-      const userName = session?.user?.name;
-      if (userName && userName !== 'Coppice') {
-        senders.push({ name: userName, label: userName });
-      }
-    } catch {}
-    return senders;
-  })();
+  // Available sender email accounts (fetched from backend)
+  const [sendersList, setSendersList] = useState([]);
+  useEffect(() => {
+    fetch(`${API_BASE}/v1/approvals/senders`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setSendersList(d.senders || []))
+      .catch(() => {});
+  }, []);
 
   const fetchLeadsSheet = useCallback((tab, page) => {
     setLeadsLoading(true);
@@ -455,9 +449,18 @@ export default function DacpCommandDashboard({ onNavigate }) {
     finally { setSavingEdit(false); }
   }, [editBody]);
 
-  const handleRewriteForSender = useCallback(async (approvalId, senderName, currentBody) => {
+  const handleRewriteForSender = useCallback(async (approvalId, senderEmail, currentBody) => {
     setRewriting(true);
+    const sender = sendersList.find(s => s.email === senderEmail);
+    const senderName = sender?.name || senderEmail.split('@')[0];
     try {
+      // Save sender to approval payload
+      await fetch(`${API_BASE}/v1/approvals/${approvalId}/update-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ senderEmail, senderName }),
+      });
+      // Rewrite body for new sender
       const res = await fetch(`${API_BASE}/v1/approvals/${approvalId}/rewrite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -468,9 +471,10 @@ export default function DacpCommandDashboard({ onNavigate }) {
         setEditBody(data.body);
         setEditingApproval(approvalId);
       }
+      fetchApprovals();
     } catch (err) { console.error('Rewrite failed:', err); }
     finally { setRewriting(false); }
-  }, []);
+  }, [sendersList]);
 
   const fetchApprovals = () => {
     fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
@@ -898,9 +902,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             )}
                             {/* Sender dropdown */}
                             <div className="flex items-center gap-2 mt-1.5">
-                              <span className="text-[11px] font-medium text-terminal-text">Sign as:</span>
+                              <span className="text-[11px] font-medium text-terminal-text">Send from:</span>
                               <select
-                                value={editSender || ''}
+                                value={editSender || payload.senderEmail || ''}
                                 onChange={(e) => {
                                   e.stopPropagation();
                                   setEditSender(e.target.value);
@@ -911,9 +915,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                 onClick={(e) => e.stopPropagation()}
                                 className="text-[11px] px-2 py-0.5 rounded border border-[#e8e6e2] bg-white text-terminal-text"
                               >
-                                <option value="">Select signer...</option>
-                                {SENDERS.map(s => (
-                                  <option key={s.name} value={s.name}>{s.label}</option>
+                                <option value="">Select sender...</option>
+                                {sendersList.map(s => (
+                                  <option key={s.email} value={s.email}>{s.name} ({s.email})</option>
                                 ))}
                               </select>
                               {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}

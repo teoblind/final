@@ -6425,6 +6425,16 @@ export function getTenantEmailConfig(tenantId) {
   };
 }
 
+export function getAllTenantEmailConfigs() {
+  const rows = db.prepare('SELECT * FROM tenant_email_config').all();
+  return rows.map(row => ({
+    tenantId: row.tenant_id,
+    senderEmail: row.sender_email,
+    senderName: row.sender_name,
+    gmailRefreshToken: row.gmail_refresh_token,
+  }));
+}
+
 export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailRefreshToken }) {
   db.prepare(`
     INSERT INTO tenant_email_config (tenant_id, sender_email, sender_name, gmail_refresh_token, updated_at)

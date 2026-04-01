@@ -11,7 +11,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import db from '../cache/database.js';
-import { insertActivity, setTenantContext } from '../cache/database.js';
+import { insertActivity, setTenantContext, getAllTenantEmailConfigs, getTenantEmailConfig } from '../cache/database.js';
 import { sendEstimateEmail, sendEmail, sendEmailWithAttachments } from '../services/emailService.js';
 
 const router = express.Router();
@@ -43,6 +43,31 @@ function resolveIds(req) {
   const userId = req.user.id; // auth middleware guarantees req.user exists
   return { tenantId, userId };
 }
+
+// ---------------------------------------------------------------------------
+// GET /senders - list available sender email accounts
+// ---------------------------------------------------------------------------
+router.get('/senders', (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const allConfigs = getAllTenantEmailConfigs();
+    // Current tenant's config first, then others
+    const current = getTenantEmailConfig(tenantId);
+    const senders = [];
+    if (current) {
+      senders.push({ email: current.senderEmail, name: current.senderName, current: true });
+    }
+    for (const c of allConfigs) {
+      if (c.senderEmail !== current?.senderEmail) {
+        senders.push({ email: c.senderEmail, name: c.senderName, current: false });
+      }
+    }
+    res.json({ senders });
+  } catch (error) {
+    console.error('Senders GET error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // GET / - list approval items
@@ -353,6 +378,8 @@ router.post('/:id/approve', async (req, res) => {
             threadId: payload.threadId,
             inReplyTo: payload.inReplyTo,
             references: payload.references,
+            senderEmail: payload.senderEmail,
+            senderName: payload.senderName,
           });
           // Update bid request status from 'draft' to 'estimated'
           if (payload.bidId && !payload.awardConfirmation) {
@@ -381,6 +408,8 @@ router.post('/:id/approve', async (req, res) => {
             threadId: payload.threadId,
             inReplyTo: payload.inReplyTo,
             references: payload.references,
+            senderEmail: payload.senderEmail,
+            senderName: payload.senderName,
           });
         }
         console.log(`Approval ${item.id}: email sent to ${recipient}`);
@@ -718,8 +747,8 @@ router.post('/:id/update-draft', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || 'default';
     const { id } = req.params;
-    const { body } = req.body;
-    if (!body) return res.status(400).json({ error: 'body is required' });
+    const { body, senderEmail, senderName } = req.body;
+    if (!body && !senderEmail) return res.status(400).json({ error: 'body or senderEmail is required' });
 
     const { getApprovalItem, updateApprovalPayload } = await import('../cache/database.js');
     const { markdownToEmailHtml } = await import('../services/emailService.js');
@@ -728,8 +757,12 @@ router.post('/:id/update-draft', async (req, res) => {
     if (item.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
 
     const payload = JSON.parse(item.payload_json || '{}');
-    payload.body = body;
-    payload.html = markdownToEmailHtml(body);
+    if (body) {
+      payload.body = body;
+      payload.html = markdownToEmailHtml(body);
+    }
+    if (senderEmail !== undefined) payload.senderEmail = senderEmail;
+    if (senderName !== undefined) payload.senderName = senderName;
 
     updateApprovalPayload(tenantId, parseInt(id), JSON.stringify(payload));
     res.json({ success: true });

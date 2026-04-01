@@ -10,7 +10,7 @@ import { readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { insertActivity, getTenantEmailConfig } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, getAllTenantEmailConfigs } from '../cache/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,7 +29,7 @@ const FALLBACK_SENDER = 'Coppice <agent@zhan.coppice.ai>';
  * Looks up tenant_email_config in DB; falls back to env var defaults.
  * Tries both OAuth clients since tokens may be issued by either one.
  */
-async function getGmailClient(tenantId) {
+async function getGmailClient(tenantId, senderEmail, senderName) {
   let refreshToken = FALLBACK_REFRESH_TOKEN;
   let sender = FALLBACK_SENDER;
 
@@ -43,6 +43,30 @@ async function getGmailClient(tenantId) {
     } catch (e) {
       // DB not initialized yet (startup) - use fallback
     }
+  }
+
+  // If a specific sender email was requested, try to find its refresh token
+  if (senderEmail) {
+    try {
+      // Check if this email matches a different tenant's config
+      const allConfigs = getAllTenantEmailConfigs();
+      const match = allConfigs.find(c => c.senderEmail === senderEmail);
+      if (match) {
+        refreshToken = match.gmailRefreshToken;
+        sender = `${senderName || match.senderName} <${match.senderEmail}>`;
+      } else {
+        // Just override the display name, keep the same sending account
+        sender = `${senderName || senderEmail.split('@')[0]} <${senderEmail}>`;
+      }
+    } catch {
+      // If lookup fails, just override display name on current account
+      sender = `${senderName || 'Coppice'} <${senderEmail}>`;
+    }
+  } else if (senderName) {
+    // Override just the display name
+    const emailMatch = sender.match(/<(.+)>/);
+    const email = emailMatch ? emailMatch[1] : '';
+    sender = `${senderName} <${email}>`;
   }
 
   // Try each OAuth client until one works with this refresh token
@@ -218,10 +242,10 @@ function encodeSubject(subject) {
  * ALWAYS converts body to HTML - plain text emails are never sent.
  * Callers can pass plain text or markdown in `body` - it gets auto-converted.
  */
-export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references }) {
+export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references, senderEmail, senderName }) {
   console.warn(`[emailService] sendEmail() called - auto-converting body to HTML for ${to}`);
   const html = markdownToEmailHtml(body || '');
-  return sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references });
+  return sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references, senderEmail, senderName });
 }
 
 /**
@@ -233,15 +257,15 @@ export async function sendEmail({ to, subject, body, cc, bcc, tenantId, threadId
  * @param {Array<{filename: string, path: string, contentType: string}>} opts.attachments
  * @param {string} [opts.tenantId] - Tenant ID for sender resolution
  */
-export async function sendEmailWithAttachments({ to, subject, body, html, cc, bcc, attachments = [], tenantId, threadId, inReplyTo, references }) {
+export async function sendEmailWithAttachments({ to, subject, body, html, cc, bcc, attachments = [], tenantId, threadId, inReplyTo, references, senderEmail, senderName }) {
   if (attachments.length === 0) {
     if (html) {
-      return sendHtmlEmail({ to, subject, html, tenantId, threadId, inReplyTo, references });
+      return sendHtmlEmail({ to, subject, html, tenantId, threadId, inReplyTo, references, senderEmail, senderName });
     }
-    return sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references });
+    return sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references, senderEmail, senderName });
   }
 
-  const { gmail, sender } = await getGmailClient(tenantId);
+  const { gmail, sender } = await getGmailClient(tenantId, senderEmail, senderName);
 
   const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -350,8 +374,8 @@ function wrapHtmlBody(html) {
 /**
  * Send an HTML email.
  */
-export async function sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references, skipSignature }) {
-  const { gmail, sender } = await getGmailClient(tenantId);
+export async function sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references, skipSignature, senderEmail, senderName }) {
+  const { gmail, sender } = await getGmailClient(tenantId, senderEmail, senderName);
 
   const wrappedHtml = wrapHtmlBody(html);
   const htmlWithSig = skipSignature ? wrappedHtml : wrappedHtml.replace('</body>', getSignature(tenantId, true) + '\n</body>');
