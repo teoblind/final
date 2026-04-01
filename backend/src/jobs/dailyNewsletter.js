@@ -18,6 +18,7 @@ import { randomUUID } from 'crypto';
 import {
   getAllTenants, runWithTenant, getUsersByTenant,
   getDacpBidRequests, getDacpJobs, getDacpStats, getTenantDb,
+  insertAgentAssignment,
 } from '../cache/database.js';
 import { apolloBulkMatch } from '../services/leadEngine.js';
 
@@ -442,6 +443,65 @@ function storeNewsletter(tenantId, html, searchResults) {
   }
 }
 
+// ── Task Generation from Newsletter ──────────────────────────────────────────
+
+async function generateTasksFromNewsletter(tenantId, newsletterHtml) {
+  try {
+    const { tunnelPrompt } = await import('../services/cliTunnel.js');
+    const config = getTenantConfig(tenantId);
+    const plainText = stripHtmlToText(newsletterHtml);
+
+    const prompt = `You just generated the following intelligence newsletter for ${config.name}:
+
+---
+${plainText.substring(0, 6000)}
+---
+
+Based on the newsletter findings, extract 3-5 specific, actionable tasks that the team should execute this week. For each task, return a JSON object with these fields:
+- title: Short task title (under 60 chars)
+- description: 1-2 sentence description of what to do
+- category: One of "outreach", "research", "analysis", "operations"
+- priority: "high", "medium", or "low"
+- action_prompt: Detailed instructions for an AI agent to execute this task (include specific company names, contacts, data points from the newsletter)
+
+Return ONLY a JSON array of task objects. No markdown, no explanation.`;
+
+    const response = await tunnelPrompt({
+      tenantId,
+      agentId: 'hivemind',
+      prompt,
+      maxTurns: 5,
+      timeoutMs: 120_000,
+      label: 'Newsletter Tasks',
+    });
+
+    // Parse the JSON array
+    const cleaned = response.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const tasks = JSON.parse(cleaned);
+
+    if (!Array.isArray(tasks)) return;
+
+    for (const task of tasks.slice(0, 5)) {
+      const id = `TASK-${randomUUID().slice(0, 8).toUpperCase()}`;
+      insertAgentAssignment({
+        id,
+        tenant_id: tenantId,
+        title: task.title,
+        description: task.description,
+        category: task.category || 'research',
+        priority: task.priority || 'medium',
+        action_prompt: task.action_prompt || task.description,
+        agent_id: 'hivemind',
+        context_json: JSON.stringify({ source: 'newsletter', date: new Date().toISOString().slice(0, 10) }),
+      });
+      console.log(`[Newsletter] Created task: ${id} "${task.title}"`);
+    }
+    console.log(`[Newsletter] Generated ${Math.min(tasks.length, 5)} tasks for ${tenantId}`);
+  } catch (err) {
+    console.warn(`[Newsletter] Task generation failed (non-fatal):`, err.message);
+  }
+}
+
 // ── Main Job ──────────────────────────────────────────────────────────────────
 
 async function runDailyNewsletter() {
@@ -514,6 +574,10 @@ async function runDailyNewsletter() {
 
         // Step 4: Store for dashboard
         storeNewsletter(tenant.id, newsletterHtml, searchResults);
+
+        // Step 4b: Generate actionable tasks from newsletter findings
+        console.log(`[Newsletter] Generating tasks for ${tenant.id}...`);
+        await generateTasksFromNewsletter(tenant.id, newsletterHtml);
 
         // Step 5: Email to all users
         console.log(`[Newsletter] Sending to ${recipients.length} recipients...`);
