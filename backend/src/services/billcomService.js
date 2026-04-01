@@ -1,41 +1,71 @@
 /**
  * Bill.com API Service
  *
- * Session-based auth (not OAuth) — uses username/password/org_id/dev_key.
- * Credentials stored in key_vault as 'billcom' service entries.
+ * Uses v3 sync token auth (no passwords). User generates a sync token
+ * in Bill.com Settings > Sync & Integrations > Tokens, then provides
+ * token_name + token_value + org_id. Sessions last 48 hours.
+ *
+ * Falls back to v2 username/password if legacy credentials exist.
  */
 
 import axios from 'axios';
 import { getKeyVaultValue } from '../cache/database.js';
 
-const BILLCOM_API_BASE = 'https://api.bill.com/api/v2';
-const BILLCOM_SANDBOX_BASE = 'https://api-sandbox.bill.com/api/v2';
+const BILLCOM_V3_BASE = 'https://gateway.bill.com/connect/v3';
+const BILLCOM_V3_SANDBOX = 'https://gateway.stage.bill.com/connect/v3';
+const BILLCOM_V2_BASE = 'https://api.bill.com/api/v2';
+const BILLCOM_V2_SANDBOX = 'https://api-sandbox.bill.com/api/v2';
 
-function getBaseUrl() {
-  return process.env.BILLCOM_ENVIRONMENT === 'production' ? BILLCOM_API_BASE : BILLCOM_SANDBOX_BASE;
+function getV3BaseUrl() {
+  return process.env.BILLCOM_ENVIRONMENT === 'production' ? BILLCOM_V3_BASE : BILLCOM_V3_SANDBOX;
 }
 
-let sessionCache = new Map(); // tenantId → { sessionId, expiresAt }
+function getV2BaseUrl() {
+  return process.env.BILLCOM_ENVIRONMENT === 'production' ? BILLCOM_V2_BASE : BILLCOM_V2_SANDBOX;
+}
+
+let sessionCache = new Map(); // tenantId -> { sessionId, expiresAt, version }
 
 /**
- * Login to Bill.com and get a session ID.
+ * Login to Bill.com using v3 sync token (preferred) or v2 username/password (legacy).
  */
 async function login(tenantId) {
   const cached = sessionCache.get(tenantId);
   if (cached && Date.now() < cached.expiresAt) {
-    return cached.sessionId;
+    return { sessionId: cached.sessionId, version: cached.version };
   }
 
+  // Try v3 sync token first
+  const tokenName = getKeyVaultValue(tenantId, 'billcom', 'token_name');
+  const tokenValue = getKeyVaultValue(tenantId, 'billcom', 'token_value');
+  const orgId = getKeyVaultValue(tenantId, 'billcom', 'org_id');
+  const devKey = process.env.BILLCOM_DEV_KEY || getKeyVaultValue(tenantId, 'billcom', 'dev_key');
+
+  if (tokenName && tokenValue && orgId) {
+    const resp = await axios.post(`${getV3BaseUrl()}/login`, {
+      username: tokenName,
+      password: tokenValue,
+      organizationId: orgId,
+      devKey: devKey || undefined,
+    }, { timeout: 15000 });
+
+    if (resp.data?.sessionId) {
+      // v3 sync token sessions last 48 hours of inactivity, cache for 24 hours
+      sessionCache.set(tenantId, { sessionId: resp.data.sessionId, expiresAt: Date.now() + 24 * 60 * 60 * 1000, version: 'v3' });
+      return { sessionId: resp.data.sessionId, version: 'v3' };
+    }
+    throw new Error(`Bill.com v3 login failed: ${JSON.stringify(resp.data)}`);
+  }
+
+  // Fallback to v2 username/password (legacy)
   const userName = getKeyVaultValue(tenantId, 'billcom', 'username');
   const password = getKeyVaultValue(tenantId, 'billcom', 'password');
-  const orgId = getKeyVaultValue(tenantId, 'billcom', 'org_id');
-  const devKey = getKeyVaultValue(tenantId, 'billcom', 'dev_key');
 
   if (!userName || !password || !orgId || !devKey) {
-    throw new Error('Bill.com credentials not configured');
+    throw new Error('Bill.com credentials not configured - generate a sync token in Bill.com Settings');
   }
 
-  const resp = await axios.post(`${getBaseUrl()}/Login.json`, {
+  const resp = await axios.post(`${getV2BaseUrl()}/Login.json`, {
     userName,
     password,
     orgId,
@@ -47,33 +77,54 @@ async function login(tenantId) {
   }
 
   const sessionId = resp.data.response_data.sessionId;
-  // Sessions last ~35 min, cache for 30 min
-  sessionCache.set(tenantId, { sessionId, expiresAt: Date.now() + 30 * 60 * 1000 });
-
-  return sessionId;
+  sessionCache.set(tenantId, { sessionId, expiresAt: Date.now() + 30 * 60 * 1000, version: 'v2' });
+  return { sessionId, version: 'v2' };
 }
 
 /**
  * Make an authenticated Bill.com API request.
+ * Routes to v3 or v2 endpoint based on session version.
  */
 async function billcomRequest(tenantId, endpoint, data = {}) {
-  const sessionId = await login(tenantId);
-  const devKey = getKeyVaultValue(tenantId, 'billcom', 'dev_key');
+  let { sessionId, version } = await login(tenantId);
+  const devKey = process.env.BILLCOM_DEV_KEY || getKeyVaultValue(tenantId, 'billcom', 'dev_key');
 
-  const resp = await axios.post(`${getBaseUrl()}/${endpoint}.json`, {
+  if (version === 'v3') {
+    // v3 uses different URL pattern and session header
+    const resp = await axios.post(`${getV3BaseUrl()}/${endpoint}`, data, {
+      headers: { sessionId, devKey: devKey || undefined },
+      timeout: 20000,
+    });
+    if (resp.data?.errorCode) {
+      // Session expired - clear cache and retry once
+      sessionCache.delete(tenantId);
+      const fresh = await login(tenantId);
+      const retry = await axios.post(`${getV3BaseUrl()}/${endpoint}`, data, {
+        headers: { sessionId: fresh.sessionId, devKey: devKey || undefined },
+        timeout: 20000,
+      });
+      if (retry.data?.errorCode) {
+        throw new Error(`Bill.com API error: ${retry.data.errorMessage || retry.data.errorCode}`);
+      }
+      return retry.data;
+    }
+    return resp.data;
+  }
+
+  // v2 path
+  const resp = await axios.post(`${getV2BaseUrl()}/${endpoint}.json`, {
     ...data,
     sessionId,
     devKey,
   }, { timeout: 20000 });
 
   if (resp.data.response_status !== 0) {
-    // Session expired — clear cache and retry once
     if (resp.data.response_message?.includes('session')) {
       sessionCache.delete(tenantId);
-      const newSessionId = await login(tenantId);
-      const retry = await axios.post(`${getBaseUrl()}/${endpoint}.json`, {
+      const fresh = await login(tenantId);
+      const retry = await axios.post(`${getV2BaseUrl()}/${endpoint}.json`, {
         ...data,
-        sessionId: newSessionId,
+        sessionId: fresh.sessionId,
         devKey,
       }, { timeout: 20000 });
       if (retry.data.response_status !== 0) {
@@ -157,9 +208,16 @@ export function normalizePayment(pmt, type = 'sent') {
 
 /**
  * Check if Bill.com is connected for a tenant.
+ * Checks v3 sync token first, then v2 legacy credentials.
  */
 export function isConnected(tenantId) {
-  const username = getKeyVaultValue(tenantId, 'billcom', 'username');
   const orgId = getKeyVaultValue(tenantId, 'billcom', 'org_id');
-  return !!(username && orgId);
+  if (!orgId) return false;
+  // v3 sync token
+  const tokenName = getKeyVaultValue(tenantId, 'billcom', 'token_name');
+  const tokenValue = getKeyVaultValue(tenantId, 'billcom', 'token_value');
+  if (tokenName && tokenValue) return true;
+  // v2 legacy
+  const username = getKeyVaultValue(tenantId, 'billcom', 'username');
+  return !!username;
 }
