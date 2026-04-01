@@ -17,7 +17,8 @@ const router = Router();
 const INTUIT_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
 const INTUIT_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 const INTUIT_REVOKE_URL = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
-const INTUIT_SCOPES = 'com.intuit.quickbooks.accounting com.intuit.quickbooks.payment';
+// Read-only accounting scope only — no payment initiation
+const INTUIT_SCOPES = 'com.intuit.quickbooks.accounting';
 
 function getRedirectUri(req) {
   const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
