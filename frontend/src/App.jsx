@@ -4,7 +4,7 @@ import {
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
   HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2,
-  ChevronsUpDown, Check, Building
+  ChevronsUpDown, Check, Building, Truck, Megaphone
 } from 'lucide-react';
 
 // Auth
@@ -90,6 +90,7 @@ const PoolRoutingDashboard = lazy(() => import('./components/dashboards/PoolRout
 const ReportingDashboard = lazy(() => import('./components/dashboards/ReportingDashboard'));
 const MeetingsDashboard = lazy(() => import('./components/dashboards/MeetingsDashboard'));
 const DacpCommandDashboard = lazy(() => import('./components/dashboards/DacpCommandDashboard'));
+const CeoDashboard = lazy(() => import('./components/dashboards/CeoDashboard'));
 const DacpEstimatingDashboard = lazy(() => import('./components/dashboards/DacpEstimatingDashboard'));
 const DacpPricingDashboard = lazy(() => import('./components/dashboards/DacpPricingDashboard'));
 const DacpJobsDashboard = lazy(() => import('./components/dashboards/DacpJobsDashboard'));
@@ -106,6 +107,7 @@ const PortfolioOverview = lazy(() => import('./components/dashboards/PortfolioOv
 const CompanyDetail = lazy(() => import('./components/dashboards/CompanyDetail'));
 const OfficeDashboard = lazy(() => import('./components/dashboards/OfficeDashboard'));
 const HelpChatWidget = lazy(() => import('./components/HelpChatWidget'));
+const SharedMeetingPage = lazy(() => import('./components/SharedMeetingPage'));
 
 // Non-lazy supporting components
 import NotificationBell from './components/NotificationBell';
@@ -440,12 +442,16 @@ function AppContent() {
   if (isConstruction) {
     platformItems = [
       { id: 'command', label: 'Command', icon: LayoutDashboard },
+      { id: 'ceo', label: 'CEO Dashboard', icon: BarChart3 },
       { id: 'office', label: 'Office', icon: Building },
       { id: 'files', label: 'Files', icon: FolderOpen },
     ];
     agentItems = [
       { id: 'hivemind-chat', label: 'DACP Agent', icon: Bot, hivemind: true },
       { id: 'workflow-chat', label: 'Workflow', icon: ClipboardList },
+      { id: 'pumping-chat', label: 'Pumping Ops', icon: Truck },
+      { id: 'marketing-chat', label: 'Marketing', icon: Megaphone },
+      { id: 'compliance-chat', label: 'Compliance', icon: Shield },
       { id: 'comms-chat', label: 'Comms', icon: Mail },
     ];
     infraItems = [
@@ -527,6 +533,7 @@ function AppContent() {
     'office': 'Office',
     'files': 'Files',
     'accounting': 'Accounting',
+    'ceo': 'CEO Dashboard',
     'portfolio': 'Portfolio Companies',
   };
 
@@ -679,6 +686,8 @@ function AppContent() {
     switch (activeTab) {
       case 'command':
         return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
+      case 'ceo':
+        return <CeoDashboard onNavigate={handleSetActiveTab} />;
       case 'agent-tasks':
         return <TaskTrackerDashboard />;
       case 'field-reports':
@@ -755,6 +764,9 @@ function AppContent() {
       case 'sales-chat':
       case 'workflow-chat':
       case 'comms-chat':
+      case 'pumping-chat':
+      case 'marketing-chat':
+      case 'compliance-chat':
         return <AgentChat agentId={activeTab.replace('-chat', '')} />;
       default:
         return <CommandDashboard onNavigate={handleSetActiveTab} />;
@@ -837,6 +849,18 @@ function AppContent() {
 }
 
 function App() {
+  // Public shared meeting page - bypass auth entirely
+  const pathMatch = window.location.pathname.match(/^\/m\/([a-zA-Z0-9_-]+)$/);
+  if (pathMatch) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <SharedMeetingPage token={pathMatch[1]} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <TenantProvider>

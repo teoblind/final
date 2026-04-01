@@ -136,6 +136,19 @@ export function getSystemDb() {
  */
 export { getTenantDb };
 
+/**
+ * Get all tenant DBs as { tenantId: db } object.
+ * Used for cross-tenant lookups (e.g. public share links).
+ */
+export function getAllTenantDbs() {
+  const tenants = systemDb.prepare('SELECT id FROM tenants').all();
+  const result = {};
+  for (const t of tenants) {
+    result[t.id] = getTenantDb(t.id);
+  }
+  return result;
+}
+
 // ─── SQL Reserved Word Sanitizer ─────────────────────────────────────────────
 // Prevents tenant names or slugs from corrupting sqlite_master if they ever
 // leak into DDL (e.g. CHECK constraints, DEFAULT values, index names).
@@ -4068,6 +4081,153 @@ function initDacpTablesSchema(targetDb) {
     )
   `);
 
+  // ─── Concrete Pumping Operations ────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_pumping_equipment (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('boom_pump', 'line_pump')),
+      model TEXT,
+      year INTEGER,
+      status TEXT DEFAULT 'available' CHECK(status IN ('available', 'in_use', 'maintenance', 'out_of_service')),
+      hourly_rate REAL,
+      daily_rate REAL,
+      last_service_date TEXT,
+      next_service_date TEXT,
+      notes TEXT
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_pumping_jobs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      equipment_id TEXT,
+      customer_name TEXT NOT NULL,
+      customer_email TEXT,
+      customer_phone TEXT,
+      job_date TEXT NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      location TEXT,
+      concrete_type TEXT,
+      estimated_yards INTEGER,
+      actual_yards INTEGER,
+      status TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show')),
+      invoice_amount REAL,
+      invoice_status TEXT DEFAULT 'pending' CHECK(invoice_status IN ('pending', 'sent', 'paid', 'overdue', 'void')),
+      invoice_sent_date TEXT,
+      payment_date TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_pumping_jobs_tenant ON dacp_pumping_jobs(tenant_id, job_date)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_pumping_jobs_status ON dacp_pumping_jobs(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_pumping_equip_tenant ON dacp_pumping_equipment(tenant_id)'); } catch (e) {}
+
+  // ─── Marketing / Business Development ───────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_marketing_leads (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      source TEXT CHECK(source IN ('web_scrape', 'linkedin', 'referral', 'cold_outreach', 'inbound', 'news_alert')),
+      company_name TEXT NOT NULL,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      project_name TEXT,
+      project_value REAL,
+      project_location TEXT,
+      gc_name TEXT,
+      status TEXT DEFAULT 'new' CHECK(status IN ('new', 'contacted', 'responded', 'qualified', 'proposal_sent', 'won', 'lost', 'stale')),
+      last_contact_date TEXT,
+      next_followup_date TEXT,
+      outreach_count INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_marketing_campaigns (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      type TEXT CHECK(type IN ('email_outreach', 'linkedin', 'event', 'referral_program', 'content')),
+      status TEXT DEFAULT 'active' CHECK(status IN ('draft', 'active', 'paused', 'completed')),
+      leads_generated INTEGER DEFAULT 0,
+      responses INTEGER DEFAULT 0,
+      meetings_booked INTEGER DEFAULT 0,
+      deals_won INTEGER DEFAULT 0,
+      total_pipeline_value REAL DEFAULT 0,
+      start_date TEXT,
+      end_date TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_marketing_leads_tenant ON dacp_marketing_leads(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_marketing_campaigns_tenant ON dacp_marketing_campaigns(tenant_id, status)'); } catch (e) {}
+
+  // ─── Compliance & Permits ───────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_compliance_items (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('license', 'permit', 'insurance', 'certification', 'osha', 'bonding', 'vehicle_reg')),
+      name TEXT NOT NULL,
+      issuing_authority TEXT,
+      number TEXT,
+      state TEXT,
+      status TEXT DEFAULT 'active' CHECK(status IN ('active', 'expiring_soon', 'expired', 'pending_renewal', 'suspended')),
+      issue_date TEXT,
+      expiry_date TEXT,
+      renewal_cost REAL,
+      responsible_person TEXT,
+      notes TEXT,
+      last_checked TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_compliance_incidents (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      type TEXT CHECK(type IN ('osha_violation', 'safety_incident', 'inspection_failure', 'audit_finding', 'insurance_claim', 'permit_violation')),
+      severity TEXT CHECK(severity IN ('low', 'medium', 'high', 'critical')),
+      description TEXT NOT NULL,
+      job_id TEXT,
+      reported_by TEXT,
+      reported_date TEXT,
+      resolution TEXT,
+      resolved_date TEXT,
+      cost REAL,
+      status TEXT DEFAULT 'open' CHECK(status IN ('open', 'investigating', 'resolved', 'escalated')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_compliance_items_tenant ON dacp_compliance_items(tenant_id, category)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_compliance_items_expiry ON dacp_compliance_items(tenant_id, expiry_date)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_compliance_incidents_tenant ON dacp_compliance_incidents(tenant_id, status)'); } catch (e) {}
+
+  // ─── CEO Dashboard Reports ─────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS ceo_department_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      department TEXT NOT NULL CHECK(department IN ('estimating', 'pumping', 'marketing', 'compliance', 'overall')),
+      period TEXT NOT NULL,
+      kpi_data_json TEXT,
+      red_flags_json TEXT,
+      summary TEXT,
+      generated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_ceo_reports_tenant ON ceo_department_reports(tenant_id, department, generated_at)'); } catch (e) {}
+
   // Chat messages
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -4286,6 +4446,13 @@ function initDacpTablesSchema(targetDb) {
   // Add visibility column to knowledge_entries for two-tier info access
   try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN visibility TEXT DEFAULT 'internal'"); } catch (e) {}
   try { targetDb.exec("CREATE INDEX IF NOT EXISTS idx_knowledge_visibility ON knowledge_entries(tenant_id, visibility)"); } catch (e) {}
+
+  // Meeting experience columns (Fireflies-like sharing, audio, diarized transcript)
+  try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN audio_url TEXT"); } catch (e) {}
+  try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN share_token TEXT"); } catch (e) {}
+  try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN share_enabled INTEGER DEFAULT 0"); } catch (e) {}
+  try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN transcript_json TEXT"); } catch (e) {}
+  try { targetDb.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_share_token ON knowledge_entries(share_token)"); } catch (e) {}
 
   // Agent insights table (for Command dashboard)
   targetDb.exec(`
@@ -4535,6 +4702,79 @@ function initDacpSeedData(targetDb, tenantId) {
       targetDb.prepare('UPDATE dacp_bid_requests SET status = ? WHERE id = ? AND tenant_id = ?').run('estimated', br.id, TENANT_ID);
     }
     console.log('DACP: Generated 5 demo estimates');
+  }
+
+  // ─── Seed pumping / marketing / compliance (separate check) ──────────
+  const TENANT_SEED_ID = 'dacp-construction-001';
+  const pumpingCount = targetDb.prepare('SELECT COUNT(*) as c FROM dacp_pumping_equipment WHERE tenant_id = ?').get(TENANT_SEED_ID);
+  if (pumpingCount.c === 0) {
+    const TENANT_ID = TENANT_SEED_ID;
+
+    // ─── Seed pumping equipment & jobs ───────────────────────────────────
+    const insertEquip = targetDb.prepare(`INSERT OR IGNORE INTO dacp_pumping_equipment (id, tenant_id, name, type, model, year, status, hourly_rate, daily_rate, last_service_date, next_service_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insertEquip.run('PE-001', TENANT_ID, 'Boom Pump #1', 'boom_pump', 'Putzmeister 47Z', 2021, 'available', 275, 2200, '2026-03-15', '2026-06-15', '47m reach, 5-section boom');
+    insertEquip.run('PE-002', TENANT_ID, 'Boom Pump #2', 'boom_pump', 'Schwing S43SX', 2019, 'available', 250, 2000, '2026-02-28', '2026-05-28', '43m reach, recently serviced');
+    insertEquip.run('PE-003', TENANT_ID, 'Line Pump #1', 'line_pump', 'Putzmeister TK50', 2022, 'available', 150, 1200, '2026-03-20', '2026-06-20', 'Trailer-mounted, 50 CY/hr');
+    insertEquip.run('PE-004', TENANT_ID, 'Line Pump #2', 'line_pump', 'Schwing SP305', 2020, 'maintenance', 140, 1100, '2026-01-10', '2026-04-10', 'Hydraulic seal replacement scheduled');
+    insertEquip.run('PE-005', TENANT_ID, 'Line Pump #3', 'line_pump', 'Reed C50HP', 2023, 'available', 160, 1300, '2026-03-10', '2026-06-10', 'High-pressure residential specialist');
+
+    const insertPumpJob = targetDb.prepare(`INSERT OR IGNORE INTO dacp_pumping_jobs (id, tenant_id, equipment_id, customer_name, customer_email, customer_phone, job_date, start_time, end_time, location, concrete_type, estimated_yards, actual_yards, status, invoice_amount, invoice_status, invoice_sent_date, payment_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insertPumpJob.run('PJ-001', TENANT_ID, 'PE-001', 'Martinez Concrete', 'jobs@martinezconcrete.com', '713-555-0122', '2026-03-28', '06:00', '14:00', '4500 Westheimer Rd, Houston', '4000 PSI', 180, 175, 'completed', 4400, 'sent', '2026-03-29', null, 'Commercial foundation pour');
+    insertPumpJob.run('PJ-002', TENANT_ID, 'PE-002', 'Allied Builders', 'dispatch@alliedbuilders.com', '713-555-0188', '2026-03-29', '07:00', '12:00', '12200 Hwy 290, Cypress', '3500 PSI', 120, 115, 'completed', 3200, 'paid', '2026-03-30', '2026-03-30', 'Retail slab pour');
+    insertPumpJob.run('PJ-003', TENANT_ID, 'PE-003', 'Garcia Foundations', 'oscar@garciafdn.com', '832-555-0145', '2026-03-30', '06:30', '11:00', '8800 Memorial Dr, Houston', '5000 PSI', 45, 42, 'completed', 1800, 'pending', null, null, 'Residential foundation');
+    insertPumpJob.run('PJ-004', TENANT_ID, 'PE-001', 'Renegade Construction', 'dispatch@renegadeconstruction.com', '281-555-0199', '2026-03-31', '06:00', null, '15000 JFK Blvd, Houston', '4500 PSI', 200, null, 'in_progress', null, 'pending', null, null, 'Data center foundation - Phase 2');
+    insertPumpJob.run('PJ-005', TENANT_ID, 'PE-005', 'HomeFirst Builders', 'scheduling@homefirst.com', '713-555-0234', '2026-04-01', '07:00', null, '2200 Kirby Dr, Houston', '3000 PSI', 35, null, 'scheduled', 1400, 'pending', null, null, 'Residential patio pour');
+    insertPumpJob.run('PJ-006', TENANT_ID, 'PE-002', 'Clark Construction', 'mike.clark@clarkcon.com', '281-555-0167', '2026-04-01', '06:00', null, '9000 Katy Fwy, Houston', '4000 PSI', 250, null, 'confirmed', null, 'pending', null, null, 'Office tower elevated deck');
+    insertPumpJob.run('PJ-007', TENANT_ID, 'PE-003', 'Sunset Homes', 'builds@sunsethomes.com', '832-555-0189', '2026-04-02', '08:00', null, '3400 Bellaire Blvd, Houston', '3500 PSI', 28, null, 'scheduled', 1100, 'pending', null, null, 'Residential driveway + sidewalk');
+    // Overdue invoices for red flag demo
+    insertPumpJob.run('PJ-008', TENANT_ID, 'PE-001', 'Apex Commercial', 'ap@apexcommercial.com', '713-555-0211', '2026-02-15', '06:00', '15:00', '6600 Richmond Ave, Houston', '4000 PSI', 300, 295, 'completed', 6800, 'overdue', '2026-02-20', null, 'Invoice 45+ days outstanding');
+    insertPumpJob.run('PJ-009', TENANT_ID, 'PE-002', 'BuildRight Inc', 'accounting@buildright.com', '281-555-0234', '2026-02-28', '07:00', '13:00', '11000 Louetta Rd, Spring', '3500 PSI', 150, 148, 'completed', 3600, 'overdue', '2026-03-01', null, 'Invoice 30+ days outstanding');
+
+    console.log('DACP: Seeded 5 pumping equipment, 9 pumping jobs');
+
+    // ─── Seed marketing leads & campaigns ────────────────────────────────
+    const insertMktLead = targetDb.prepare(`INSERT OR IGNORE INTO dacp_marketing_leads (id, tenant_id, source, company_name, contact_name, contact_email, contact_phone, project_name, project_value, project_location, gc_name, status, last_contact_date, next_followup_date, outreach_count, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insertMktLead.run('ML-001', TENANT_ID, 'news_alert', 'Texas Health Resources', 'James Wilson', 'jwilson@texashealth.org', '214-555-0122', 'THR Frisco Medical Campus', 85000000, 'Frisco, TX', 'Turner Construction', 'qualified', '2026-03-28', '2026-04-02', 3, 'Large medical campus - concrete subcontract est. $4-6M');
+    insertMktLead.run('ML-002', TENANT_ID, 'linkedin', 'Amazon Web Services', 'Sarah Chen', 'schen@aws.amazon.com', null, 'AWS HOU Data Center Phase 3', 120000000, 'Humble, TX', null, 'contacted', '2026-03-25', '2026-03-30', 2, 'Data center expansion - concrete foundations');
+    insertMktLead.run('ML-003', TENANT_ID, 'referral', 'ExxonMobil', null, null, null, 'Baytown Refinery Expansion', 45000000, 'Baytown, TX', 'Kiewit', 'new', null, null, 0, 'Referred by Tom - heavy civil concrete work');
+    insertMktLead.run('ML-004', TENANT_ID, 'cold_outreach', 'Hines Development', 'Mark Johnson', 'mjohnson@hines.com', '713-555-0188', 'Midtown Mixed-Use Tower', 200000000, 'Houston, TX', null, 'responded', '2026-03-27', '2026-04-01', 4, 'Interested in structural concrete bid');
+    insertMktLead.run('ML-005', TENANT_ID, 'news_alert', 'TXDOT', null, null, null, 'I-45 North Expansion - Segment 3', 340000000, 'Houston, TX', 'Webber LLC', 'new', null, null, 0, 'Highway expansion - curb/gutter/barriers');
+    insertMktLead.run('ML-006', TENANT_ID, 'web_scrape', 'Meta Platforms', 'David Kim', 'dkim@meta.com', null, 'Meta Temple Data Center', 800000000, 'Temple, TX', 'Holder Construction', 'proposal_sent', '2026-03-20', '2026-04-05', 5, 'Massive data center - concrete package $12-18M');
+    insertMktLead.run('ML-007', TENANT_ID, 'cold_outreach', 'Houston Methodist', 'Linda Park', 'lpark@houstonmethodist.org', '713-555-0199', 'Sugar Land Campus Expansion', 65000000, 'Sugar Land, TX', 'McCarthy Building', 'stale', '2026-02-10', null, 2, 'No response after 2 follow-ups - 45+ days');
+    insertMktLead.run('ML-008', TENANT_ID, 'inbound', 'Riot Platforms', 'Bill Stevens', 'bstevens@riotplatforms.com', '512-555-0234', 'Corsicana Phase 2 Expansion', 150000000, 'Corsicana, TX', null, 'qualified', '2026-03-29', '2026-04-03', 1, 'Existing relationship - Phase 1 complete');
+
+    const insertCampaign = targetDb.prepare(`INSERT OR IGNORE INTO dacp_marketing_campaigns (id, tenant_id, name, type, status, leads_generated, responses, meetings_booked, deals_won, total_pipeline_value, start_date, end_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insertCampaign.run('MC-001', TENANT_ID, 'TX Data Center Outreach', 'email_outreach', 'active', 12, 4, 2, 0, 320000000, '2026-03-01', null, 'Targeting data center GCs and developers in Texas');
+    insertCampaign.run('MC-002', TENANT_ID, 'Houston Medical Expansion', 'linkedin', 'active', 8, 2, 1, 0, 150000000, '2026-03-10', null, 'Medical facility concrete subcontracting');
+    insertCampaign.run('MC-003', TENANT_ID, 'TXDOT Highway Projects', 'cold_outreach', 'draft', 0, 0, 0, 0, 0, null, null, 'Heavy civil - highway concrete work');
+
+    console.log('DACP: Seeded 8 marketing leads, 3 campaigns');
+
+    // ─── Seed compliance items ───────────────────────────────────────────
+    const insertCompliance = targetDb.prepare(`INSERT OR IGNORE INTO dacp_compliance_items (id, tenant_id, category, name, issuing_authority, number, state, status, issue_date, expiry_date, renewal_cost, responsible_person, notes, last_checked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    // Licenses
+    insertCompliance.run('CL-001', TENANT_ID, 'license', 'Building Construction License', 'Louisiana State Licensing Board', 'BC-2021-4458', 'LA', 'active', '2025-07-01', '2026-07-01', 450, 'Danny Cruz', 'Annual renewal', '2026-03-15');
+    insertCompliance.run('CL-002', TENANT_ID, 'license', 'Highway/Street/Bridge License', 'Louisiana State Licensing Board', 'HSB-2021-4459', 'LA', 'active', '2025-07-01', '2026-07-01', 450, 'Danny Cruz', 'Annual renewal', '2026-03-15');
+    insertCompliance.run('CL-003', TENANT_ID, 'license', 'Heavy Construction License', 'Louisiana State Licensing Board', 'HC-2021-4460', 'LA', 'active', '2025-07-01', '2026-07-01', 450, 'Danny Cruz', 'Annual renewal', '2026-03-15');
+    insertCompliance.run('CL-004', TENANT_ID, 'license', 'Texas General Contractor Registration', 'Texas Dept of Licensing', 'TX-GC-88921', 'TX', 'expiring_soon', '2025-04-15', '2026-04-15', 800, 'Franchesca Cox', 'EXPIRES IN 15 DAYS - renewal submitted', '2026-03-31');
+    // Insurance
+    insertCompliance.run('CL-005', TENANT_ID, 'insurance', 'General Liability Insurance', 'Liberty Mutual', 'GLI-2026-00412', 'TX', 'active', '2026-01-01', '2027-01-01', 28000, 'Franchesca Cox', '$2M per occurrence, $4M aggregate', '2026-03-01');
+    insertCompliance.run('CL-006', TENANT_ID, 'insurance', 'Workers Compensation', 'Texas Mutual', 'WC-2026-18834', 'TX', 'active', '2026-01-01', '2027-01-01', 45000, 'Franchesca Cox', 'Experience mod 0.92', '2026-03-01');
+    insertCompliance.run('CL-007', TENANT_ID, 'insurance', 'Commercial Auto Policy', 'Progressive', 'CA-2025-77291', 'TX', 'expiring_soon', '2025-05-01', '2026-05-01', 12000, 'Franchesca Cox', 'Covers 8 vehicles + 5 pumps - renewal quote pending', '2026-03-20');
+    // Certifications
+    insertCompliance.run('CL-008', TENANT_ID, 'certification', 'DBE Certification', 'Texas Unified Certification', 'DBE-TX-2024-1187', 'TX', 'active', '2024-09-01', '2027-09-01', 0, 'Danny Cruz', 'Disadvantaged Business Enterprise - 3yr cycle', '2026-02-15');
+    insertCompliance.run('CL-009', TENANT_ID, 'certification', 'OSHA 30-Hour (Tom Mangan)', 'OSHA', 'OSHA30-TM-2024', 'TX', 'active', '2024-06-15', '2029-06-15', 250, 'Tom Mangan', '5-year validity', '2026-01-10');
+    insertCompliance.run('CL-010', TENANT_ID, 'certification', 'OSHA 10-Hour (Field Crew)', 'OSHA', null, 'TX', 'expired', '2023-03-01', '2026-03-01', 150, 'Mike Rodriguez', '3 crew members need renewal - OVERDUE', '2026-03-31');
+    // Bonding
+    insertCompliance.run('CL-011', TENANT_ID, 'bonding', 'Surety Bond - Performance', 'Travelers', 'SB-2026-44102', 'TX', 'active', '2026-01-15', '2027-01-15', 15000, 'Franchesca Cox', '$5M bonding capacity', '2026-03-01');
+    // Permits
+    insertCompliance.run('CL-012', TENANT_ID, 'permit', 'City of Houston Concrete Contractor Permit', 'City of Houston', 'HOU-CC-2025-3891', 'TX', 'active', '2025-10-01', '2026-10-01', 350, 'Javier Fernandez', 'Annual city permit', '2026-03-15');
+
+    const insertIncident = targetDb.prepare(`INSERT OR IGNORE INTO dacp_compliance_incidents (id, tenant_id, type, severity, description, job_id, reported_by, reported_date, resolution, resolved_date, cost, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    insertIncident.run('CI-001', TENANT_ID, 'safety_incident', 'medium', 'Worker twisted ankle stepping off formwork - missed 2 days', 'JOB-015', 'Mike Rodriguez', '2026-03-18', 'Worker returned to light duty, safety briefing conducted', '2026-03-22', 1200, 'resolved');
+    insertIncident.run('CI-002', TENANT_ID, 'osha_violation', 'high', 'Missing fall protection on elevated deck pour - warning issued', 'JOB-022', 'OSHA Inspector', '2026-03-25', null, null, null, 'open');
+
+    console.log('DACP: Seeded 12 compliance items, 2 incidents');
   }
 
   // ─── Lead Engine Seed Data ──────────────────────────────────────────────
@@ -4895,6 +5135,175 @@ export function updateDacpPlanAnalysis(tenantId, id, updates) {
 
 export function deleteDacpPlanAnalysis(tenantId, id) {
   return db.prepare('DELETE FROM dacp_plan_analyses WHERE tenant_id = ? AND id = ?').run(tenantId, id);
+}
+
+// ─── CEO Dashboard Queries ──────────────────────────────────────────────────
+
+export function getCeoDashboardStats(tenantId) {
+  const estimating = {
+    totalBids: db.prepare('SELECT COUNT(*) as c FROM dacp_bid_requests WHERE tenant_id = ?').get(tenantId)?.c || 0,
+    activeBids: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_requests WHERE tenant_id = ? AND status IN ('new', 'reviewing', 'estimated')").get(tenantId)?.c || 0,
+    totalPipelineValue: db.prepare('SELECT COALESCE(SUM(total_bid), 0) as v FROM dacp_estimates WHERE tenant_id = ?').get(tenantId)?.v || 0,
+    activeJobs: db.prepare("SELECT COUNT(*) as c FROM dacp_jobs WHERE tenant_id = ? AND status = 'active'").get(tenantId)?.c || 0,
+    completedJobs: db.prepare("SELECT COUNT(*) as c FROM dacp_jobs WHERE tenant_id = ? AND status = 'completed'").get(tenantId)?.c || 0,
+    totalJobValue: db.prepare("SELECT COALESCE(SUM(bid_amount), 0) as v FROM dacp_jobs WHERE tenant_id = ? AND status IN ('active', 'completed')").get(tenantId)?.v || 0,
+    avgMargin: db.prepare("SELECT COALESCE(AVG(margin_pct), 0) as v FROM dacp_jobs WHERE tenant_id = ? AND margin_pct IS NOT NULL").get(tenantId)?.v || 0,
+    pendingBids: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_requests WHERE tenant_id = ? AND status = 'new'").get(tenantId)?.c || 0,
+    overdueItems: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_requests WHERE tenant_id = ? AND due_date < date('now') AND status NOT IN ('passed', 'estimated', 'awarded')").get(tenantId)?.c || 0,
+  };
+
+  const pumping = {
+    totalEquipment: db.prepare('SELECT COUNT(*) as c FROM dacp_pumping_equipment WHERE tenant_id = ?').get(tenantId)?.c || 0,
+    availableEquipment: db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_equipment WHERE tenant_id = ? AND status = 'available'").get(tenantId)?.c || 0,
+    maintenanceEquipment: db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_equipment WHERE tenant_id = ? AND status = 'maintenance'").get(tenantId)?.c || 0,
+    scheduledJobs: db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_jobs WHERE tenant_id = ? AND status IN ('scheduled', 'confirmed')").get(tenantId)?.c || 0,
+    completedJobs30d: db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_jobs WHERE tenant_id = ? AND status = 'completed' AND job_date >= date('now', '-30 days')").get(tenantId)?.c || 0,
+    revenue30d: db.prepare("SELECT COALESCE(SUM(invoice_amount), 0) as v FROM dacp_pumping_jobs WHERE tenant_id = ? AND status = 'completed' AND job_date >= date('now', '-30 days')").get(tenantId)?.v || 0,
+    overdueInvoices: db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_jobs WHERE tenant_id = ? AND invoice_status = 'overdue'").get(tenantId)?.c || 0,
+    overdueAmount: db.prepare("SELECT COALESCE(SUM(invoice_amount), 0) as v FROM dacp_pumping_jobs WHERE tenant_id = ? AND invoice_status = 'overdue'").get(tenantId)?.v || 0,
+    pendingInvoices: db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_jobs WHERE tenant_id = ? AND status = 'completed' AND invoice_status = 'pending'").get(tenantId)?.c || 0,
+    utilizationRate: (() => {
+      const total = db.prepare('SELECT COUNT(*) as c FROM dacp_pumping_equipment WHERE tenant_id = ?').get(tenantId)?.c || 1;
+      const inUse = db.prepare("SELECT COUNT(*) as c FROM dacp_pumping_equipment WHERE tenant_id = ? AND status = 'in_use'").get(tenantId)?.c || 0;
+      return Math.round((inUse / total) * 100);
+    })(),
+  };
+
+  const marketing = {
+    totalLeads: db.prepare('SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ?').get(tenantId)?.c || 0,
+    newLeads: db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ? AND status = 'new'").get(tenantId)?.c || 0,
+    qualifiedLeads: db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ? AND status = 'qualified'").get(tenantId)?.c || 0,
+    proposalsSent: db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ? AND status = 'proposal_sent'").get(tenantId)?.c || 0,
+    totalPipelineValue: db.prepare("SELECT COALESCE(SUM(project_value), 0) as v FROM dacp_marketing_leads WHERE tenant_id = ? AND status IN ('qualified', 'proposal_sent', 'contacted', 'responded')").get(tenantId)?.v || 0,
+    staleLeads: db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ? AND status = 'stale'").get(tenantId)?.c || 0,
+    activeCampaigns: db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_campaigns WHERE tenant_id = ? AND status = 'active'").get(tenantId)?.c || 0,
+    responseRate: (() => {
+      const total = db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ? AND outreach_count > 0").get(tenantId)?.c || 1;
+      const responded = db.prepare("SELECT COUNT(*) as c FROM dacp_marketing_leads WHERE tenant_id = ? AND status IN ('responded', 'qualified', 'proposal_sent', 'won')").get(tenantId)?.c || 0;
+      return Math.round((responded / total) * 100);
+    })(),
+  };
+
+  const compliance = {
+    totalItems: db.prepare('SELECT COUNT(*) as c FROM dacp_compliance_items WHERE tenant_id = ?').get(tenantId)?.c || 0,
+    activeItems: db.prepare("SELECT COUNT(*) as c FROM dacp_compliance_items WHERE tenant_id = ? AND status = 'active'").get(tenantId)?.c || 0,
+    expiringSoon: db.prepare("SELECT COUNT(*) as c FROM dacp_compliance_items WHERE tenant_id = ? AND status = 'expiring_soon'").get(tenantId)?.c || 0,
+    expired: db.prepare("SELECT COUNT(*) as c FROM dacp_compliance_items WHERE tenant_id = ? AND status = 'expired'").get(tenantId)?.c || 0,
+    openIncidents: db.prepare("SELECT COUNT(*) as c FROM dacp_compliance_incidents WHERE tenant_id = ? AND status IN ('open', 'investigating')").get(tenantId)?.c || 0,
+    highSeverityOpen: db.prepare("SELECT COUNT(*) as c FROM dacp_compliance_incidents WHERE tenant_id = ? AND severity IN ('high', 'critical') AND status IN ('open', 'investigating')").get(tenantId)?.c || 0,
+    upcomingRenewals: db.prepare("SELECT * FROM dacp_compliance_items WHERE tenant_id = ? AND expiry_date <= date('now', '+60 days') AND status != 'expired' ORDER BY expiry_date ASC").all(tenantId),
+    expiredItems: db.prepare("SELECT * FROM dacp_compliance_items WHERE tenant_id = ? AND status = 'expired'").all(tenantId),
+  };
+
+  return { estimating, pumping, marketing, compliance };
+}
+
+export function getCeoRedFlags(tenantId) {
+  const flags = [];
+
+  // ESTIMATING red flags
+  const overdueBids = db.prepare("SELECT * FROM dacp_bid_requests WHERE tenant_id = ? AND due_date < date('now') AND status NOT IN ('passed', 'estimated', 'awarded', 'proposal_sent') LIMIT 5").all(tenantId);
+  for (const b of overdueBids) {
+    flags.push({ department: 'estimating', severity: 'high', title: 'Overdue bid response', detail: `${b.gc_name || 'Unknown GC'}: "${b.subject}" was due ${b.due_date}`, item_id: b.id });
+  }
+  const staleNewBids = db.prepare("SELECT * FROM dacp_bid_requests WHERE tenant_id = ? AND status = 'new' AND received_at < date('now', '-7 days') LIMIT 5").all(tenantId);
+  for (const b of staleNewBids) {
+    flags.push({ department: 'estimating', severity: 'medium', title: 'Unreviewed bid request (7+ days)', detail: `${b.gc_name}: "${b.subject}" received ${b.received_at}`, item_id: b.id });
+  }
+
+  // PUMPING red flags
+  const overdueInvoices = db.prepare("SELECT * FROM dacp_pumping_jobs WHERE tenant_id = ? AND invoice_status = 'overdue' LIMIT 5").all(tenantId);
+  for (const j of overdueInvoices) {
+    flags.push({ department: 'pumping', severity: 'high', title: 'Overdue invoice', detail: `${j.customer_name}: $${j.invoice_amount?.toLocaleString()} sent ${j.invoice_sent_date}`, item_id: j.id });
+  }
+  const uninvoiced = db.prepare("SELECT * FROM dacp_pumping_jobs WHERE tenant_id = ? AND status = 'completed' AND invoice_status = 'pending' LIMIT 5").all(tenantId);
+  for (const j of uninvoiced) {
+    flags.push({ department: 'pumping', severity: 'medium', title: 'Completed job not invoiced', detail: `${j.customer_name}: ${j.job_date} at ${j.location}`, item_id: j.id });
+  }
+  const maintenanceDue = db.prepare("SELECT * FROM dacp_pumping_equipment WHERE tenant_id = ? AND next_service_date <= date('now', '+14 days') LIMIT 5").all(tenantId);
+  for (const e of maintenanceDue) {
+    flags.push({ department: 'pumping', severity: e.next_service_date < new Date().toISOString().split('T')[0] ? 'high' : 'medium', title: 'Equipment maintenance due', detail: `${e.name} (${e.model}): service due ${e.next_service_date}`, item_id: e.id });
+  }
+
+  // MARKETING red flags
+  const staleLeads = db.prepare("SELECT * FROM dacp_marketing_leads WHERE tenant_id = ? AND status = 'stale' LIMIT 5").all(tenantId);
+  for (const l of staleLeads) {
+    flags.push({ department: 'marketing', severity: 'medium', title: 'Stale lead - no response', detail: `${l.company_name}: ${l.project_name || 'Unknown project'} ($${(l.project_value / 1000000).toFixed(1)}M)`, item_id: l.id });
+  }
+  const missedFollowups = db.prepare("SELECT * FROM dacp_marketing_leads WHERE tenant_id = ? AND next_followup_date < date('now') AND status NOT IN ('won', 'lost', 'stale') LIMIT 5").all(tenantId);
+  for (const l of missedFollowups) {
+    flags.push({ department: 'marketing', severity: 'medium', title: 'Missed follow-up date', detail: `${l.company_name}: follow-up was due ${l.next_followup_date}`, item_id: l.id });
+  }
+
+  // COMPLIANCE red flags
+  const expiredItems = db.prepare("SELECT * FROM dacp_compliance_items WHERE tenant_id = ? AND status = 'expired'").all(tenantId);
+  for (const c of expiredItems) {
+    flags.push({ department: 'compliance', severity: 'critical', title: 'Expired: ' + c.category, detail: `${c.name} expired ${c.expiry_date}. Responsible: ${c.responsible_person || 'Unassigned'}`, item_id: c.id });
+  }
+  const expiringSoon = db.prepare("SELECT * FROM dacp_compliance_items WHERE tenant_id = ? AND status = 'expiring_soon'").all(tenantId);
+  for (const c of expiringSoon) {
+    flags.push({ department: 'compliance', severity: 'high', title: 'Expiring soon: ' + c.category, detail: `${c.name} expires ${c.expiry_date}. Responsible: ${c.responsible_person || 'Unassigned'}`, item_id: c.id });
+  }
+  const openIncidents = db.prepare("SELECT * FROM dacp_compliance_incidents WHERE tenant_id = ? AND status IN ('open', 'investigating') AND severity IN ('high', 'critical')").all(tenantId);
+  for (const i of openIncidents) {
+    flags.push({ department: 'compliance', severity: i.severity, title: 'Open incident: ' + i.type.replace(/_/g, ' '), detail: i.description, item_id: i.id });
+  }
+
+  // Sort: critical > high > medium > low
+  const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+  flags.sort((a, b) => (severityOrder[a.severity] || 3) - (severityOrder[b.severity] || 3));
+
+  return flags;
+}
+
+export function getPumpingEquipment(tenantId) {
+  return db.prepare('SELECT * FROM dacp_pumping_equipment WHERE tenant_id = ? ORDER BY name').all(tenantId);
+}
+
+export function getPumpingJobs(tenantId, status, limit = 50) {
+  if (status) {
+    return db.prepare('SELECT * FROM dacp_pumping_jobs WHERE tenant_id = ? AND status = ? ORDER BY job_date DESC LIMIT ?').all(tenantId, status, limit);
+  }
+  return db.prepare('SELECT * FROM dacp_pumping_jobs WHERE tenant_id = ? ORDER BY job_date DESC LIMIT ?').all(tenantId, limit);
+}
+
+export function getMarketingLeads(tenantId, status, limit = 50) {
+  if (status) {
+    return db.prepare('SELECT * FROM dacp_marketing_leads WHERE tenant_id = ? AND status = ? ORDER BY created_at DESC LIMIT ?').all(tenantId, status, limit);
+  }
+  return db.prepare('SELECT * FROM dacp_marketing_leads WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?').all(tenantId, limit);
+}
+
+export function getMarketingCampaigns(tenantId) {
+  return db.prepare('SELECT * FROM dacp_marketing_campaigns WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function getComplianceItems(tenantId, category) {
+  if (category) {
+    return db.prepare('SELECT * FROM dacp_compliance_items WHERE tenant_id = ? AND category = ? ORDER BY expiry_date ASC').all(tenantId, category);
+  }
+  return db.prepare('SELECT * FROM dacp_compliance_items WHERE tenant_id = ? ORDER BY expiry_date ASC').all(tenantId);
+}
+
+export function getComplianceIncidents(tenantId, status) {
+  if (status) {
+    return db.prepare('SELECT * FROM dacp_compliance_incidents WHERE tenant_id = ? AND status = ? ORDER BY reported_date DESC').all(tenantId, status);
+  }
+  return db.prepare('SELECT * FROM dacp_compliance_incidents WHERE tenant_id = ? ORDER BY reported_date DESC').all(tenantId);
+}
+
+export function insertCeoDepartmentReport(tenantId, department, period, kpiData, redFlags, summary) {
+  return db.prepare(`
+    INSERT INTO ceo_department_reports (tenant_id, department, period, kpi_data_json, red_flags_json, summary)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tenantId, department, period, JSON.stringify(kpiData), JSON.stringify(redFlags), summary);
+}
+
+export function getCeoDepartmentReports(tenantId, department, limit = 10) {
+  if (department) {
+    return db.prepare('SELECT * FROM ceo_department_reports WHERE tenant_id = ? AND department = ? ORDER BY generated_at DESC LIMIT ?').all(tenantId, department, limit);
+  }
+  return db.prepare('SELECT * FROM ceo_department_reports WHERE tenant_id = ? ORDER BY generated_at DESC LIMIT ?').all(tenantId, limit);
 }
 
 // ─── Lead Engine CRUD Helpers ────────────────────────────────────────────────

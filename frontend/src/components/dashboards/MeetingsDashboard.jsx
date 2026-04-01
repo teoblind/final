@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../lib/hooks/useApi';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -156,6 +156,218 @@ function SummaryRenderer({ summary }) {
   );
 }
 
+// ─── Audio Player ─────────────────────────────────────────────────────────────
+
+const SPEAKER_COLORS = ['#1a6b3c', '#2563eb', '#7c3aed', '#b8860b', '#c0392b', '#0891b2'];
+const SPEAKER_BG = ['#edf7f0', '#eff6ff', '#f5f0ff', '#fdf6e8', '#fef2f2', '#ecfeff'];
+
+const AudioPlayer = React.forwardRef(function AudioPlayer({ audioUrl, onTimeUpdate }, ref) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1);
+
+  const toggle = () => {
+    if (!audioRef.current) return;
+    if (playing) audioRef.current.pause();
+    else audioRef.current.play();
+    setPlaying(!playing);
+  };
+
+  const seek = (e) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audioRef.current.currentTime = pct * duration;
+  };
+
+  const seekTo = useCallback((time) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = time;
+    if (!playing) { audioRef.current.play(); setPlaying(true); }
+  }, [playing]);
+
+  React.useImperativeHandle(ref, () => ({ seekTo }), [seekTo]);
+
+  const cycleSpeed = () => {
+    const speeds = [1, 1.5, 2];
+    const next = speeds[(speeds.indexOf(speed) + 1) % speeds.length];
+    setSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const fmt = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    if (onTimeUpdate) onTimeUpdate(currentTime);
+  }, [currentTime]);
+
+  return (
+    <div className="bg-[#f5f4f0] rounded-[10px] p-3 mb-4 border border-terminal-border">
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+        onEnded={() => setPlaying(false)}
+      />
+      <div className="flex items-center gap-3">
+        <button onClick={toggle} className="w-8 h-8 rounded-full bg-[#1a6b3c] text-white flex items-center justify-center hover:opacity-80 transition-opacity shrink-0">
+          {playing ? (
+            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><rect x="1" y="1" width="3" height="12" rx="1"/><rect x="8" y="1" width="3" height="12" rx="1"/></svg>
+          ) : (
+            <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><path d="M1 1.5v11l10-5.5z"/></svg>
+          )}
+        </button>
+        <div className="flex-1">
+          <div className="relative h-2 bg-[#e0ddd8] rounded-full cursor-pointer group" onClick={seek}>
+            <div className="absolute h-full bg-[#1a6b3c] rounded-full transition-all" style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }} />
+            <div className="absolute w-3 h-3 bg-[#1a6b3c] rounded-full -top-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: duration ? `calc(${(currentTime / duration) * 100}% - 6px)` : '0' }} />
+          </div>
+        </div>
+        <span className="text-[11px] font-mono text-[#6b6b65] tabular-nums w-20 text-right">{fmt(currentTime)} / {fmt(duration)}</span>
+        <button onClick={cycleSpeed} className="text-[11px] font-bold text-[#6b6b65] bg-[#e0ddd8] px-2 py-1 rounded-md hover:bg-[#d0cdc8] transition-colors">{speed}x</button>
+      </div>
+    </div>
+  );
+});
+
+// ─── Diarized Transcript Viewer ───────────────────────────────────────────────
+
+function DiarizedTranscript({ transcriptJson, currentTime, onSeek }) {
+  const containerRef = useRef(null);
+  let utterances = [];
+  try { utterances = typeof transcriptJson === 'string' ? JSON.parse(transcriptJson) : transcriptJson || []; } catch { utterances = []; }
+
+  if (!utterances.length) return null;
+
+  const speakers = [...new Set(utterances.map(u => u.speaker))].filter(s => s !== 'UNKNOWN');
+  const speakerIdx = {};
+  speakers.forEach((s, i) => { speakerIdx[s] = i; });
+
+  const fmt = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div ref={containerRef}>
+      <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading flex items-center justify-between">
+        <span>Transcript ({utterances.length} segments, {speakers.length} speakers)</span>
+        <div className="flex gap-2 normal-case tracking-normal">
+          {speakers.map((s, i) => (
+            <span key={s} className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md" style={{ background: SPEAKER_BG[i % SPEAKER_BG.length], color: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }}>
+              <span className="w-2 h-2 rounded-full" style={{ background: SPEAKER_COLORS[i % SPEAKER_COLORS.length] }} />
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="max-h-[500px] overflow-y-auto space-y-2">
+        {utterances.map((u, i) => {
+          const idx = speakerIdx[u.speaker] ?? speakers.length;
+          const color = SPEAKER_COLORS[idx % SPEAKER_COLORS.length];
+          const bg = SPEAKER_BG[idx % SPEAKER_BG.length];
+          const isActive = currentTime >= u.start && currentTime < (u.end || u.start + 10);
+          return (
+            <div
+              key={i}
+              className={`flex gap-3 py-2 px-2 rounded-lg transition-colors ${isActive ? 'bg-[#edf7f0]' : 'hover:bg-[#fafaf8]'}`}
+              style={isActive ? { borderLeft: `3px solid ${color}` } : { borderLeft: '3px solid transparent' }}
+            >
+              <button
+                onClick={() => onSeek?.(u.start)}
+                className="text-[11px] font-mono text-[#9a9a92] hover:text-[#1a6b3c] shrink-0 mt-0.5 cursor-pointer transition-colors"
+                title="Jump to this point"
+              >
+                {fmt(u.start)}
+              </button>
+              <div className="flex-1">
+                <span className="text-[11px] font-bold mr-2" style={{ color }}>{u.speaker}</span>
+                <span className="text-[13px] text-terminal-text leading-relaxed">{u.text}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Share Modal ──────────────────────────────────────────────────────────────
+
+function ShareModal({ entry, onClose }) {
+  const [shareUrl, setShareUrl] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [enabled, setEnabled] = useState(!!entry.share_enabled);
+
+  const generateLink = async () => {
+    setLoading(true);
+    try {
+      const res = await api.post(`/v1/knowledge/entries/${entry.id}/share`);
+      setShareUrl(res.data.share_url);
+      setEnabled(true);
+    } catch (err) {
+      console.error('Share failed:', err);
+    } finally { setLoading(false); }
+  };
+
+  const disableShare = async () => {
+    try {
+      await api.delete(`/v1/knowledge/entries/${entry.id}/share`);
+      setEnabled(false);
+      setShareUrl('');
+    } catch (err) { console.error('Disable share failed:', err); }
+  };
+
+  const copy = () => {
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  useEffect(() => {
+    if (entry.share_token && entry.share_enabled) {
+      setShareUrl(`${window.location.origin}/m/${entry.share_token}`);
+      setEnabled(true);
+    }
+  }, [entry]);
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-[420px] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-terminal-text">Share Meeting</h3>
+          <button onClick={onClose} className="text-terminal-muted hover:text-terminal-text text-lg">&times;</button>
+        </div>
+        <p className="text-[13px] text-terminal-muted mb-4">Anyone with the link can view the transcript, summary, and audio recording.</p>
+        {!enabled ? (
+          <button onClick={generateLink} disabled={loading} className="w-full py-2.5 bg-[#1a6b3c] text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50">
+            {loading ? 'Generating...' : 'Generate Share Link'}
+          </button>
+        ) : (
+          <>
+            <div className="flex gap-2 mb-3">
+              <input value={shareUrl} readOnly className="flex-1 px-3 py-2 border border-terminal-border rounded-lg text-[13px] bg-[#f5f4f0] text-terminal-text" />
+              <button onClick={copy} className="px-4 py-2 bg-[#1a6b3c] text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity shrink-0">
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <button onClick={disableShare} className="text-[12px] text-[#c0392b] hover:underline">Disable sharing</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Card({ title, meta, children }) {
   return (
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
@@ -179,7 +391,10 @@ export default function MeetingsDashboard() {
   const [entities, setEntities] = useState([]);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [audioTime, setAudioTime] = useState(0);
   const searchRef = React.useRef(null);
+  const audioPlayerRef = useRef(null);
 
   // ─── Fetch data ─────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -412,6 +627,13 @@ export default function MeetingsDashboard() {
               {selectedDetail.drive_url && (
                 <a href={selectedDetail.drive_url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-[#1a6b3c] hover:opacity-70">Open in Drive</a>
               )}
+              <button
+                onClick={() => setShowShareModal(true)}
+                className="text-[11px] font-semibold text-[#2563eb] hover:opacity-70 transition-opacity flex items-center gap-1"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 1a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.499 2.499 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5zm-8.5 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm11 5.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
+                Share
+              </button>
             </div>
           ) : null}
         >
@@ -492,8 +714,25 @@ export default function MeetingsDashboard() {
                   </div>
                 )}
 
-                {/* Transcript excerpt */}
-                {selectedDetail.transcript && (
+                {/* Audio Player */}
+                {selectedDetail.audio_url && (
+                  <AudioPlayer
+                    ref={audioPlayerRef}
+                    audioUrl={selectedDetail.audio_url}
+                    onTimeUpdate={setAudioTime}
+                  />
+                )}
+
+                {/* Diarized Transcript (if available) or plain transcript */}
+                {selectedDetail.transcript_json ? (
+                  <div className="mb-3.5">
+                    <DiarizedTranscript
+                      transcriptJson={selectedDetail.transcript_json}
+                      currentTime={audioTime}
+                      onSeek={(t) => audioPlayerRef.current?.seekTo(t)}
+                    />
+                  </div>
+                ) : selectedDetail.transcript ? (
                   <div>
                     <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">Transcript</div>
                     <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
@@ -502,10 +741,10 @@ export default function MeetingsDashboard() {
                         : selectedDetail.transcript}
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {/* Content (for non-transcript entries) */}
-                {!selectedDetail.transcript && selectedDetail.content && (
+                {!selectedDetail.transcript && !selectedDetail.transcript_json && selectedDetail.content && (
                   <div>
                     <div className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase mb-2 pb-1.5 border-b border-[#f0eeea] font-heading">Content</div>
                     <div className="text-[13px] text-terminal-text leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
@@ -541,6 +780,11 @@ export default function MeetingsDashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Share Modal */}
+      {showShareModal && selectedDetail && (
+        <ShareModal entry={selectedDetail} onClose={() => setShowShareModal(false)} />
+      )}
     </div>
   );
 }

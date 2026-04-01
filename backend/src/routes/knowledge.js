@@ -11,6 +11,11 @@
  */
 
 import express from 'express';
+import crypto from 'crypto';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import {
   processKnowledgeEntry,
   searchKnowledge,
@@ -18,9 +23,22 @@ import {
   getOpenActionItems,
 } from '../services/knowledgeProcessor.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
-import { insertActivity, getCurrentTenantId, getTenantDb, getAgentAssignment, getThread } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb, getAllTenantDbs, getAgentAssignment, getThread } from '../cache/database.js';
 import { getThreadMessages } from '../services/chatService.js';
 import { authenticate } from '../middleware/auth.js';
+
+const __filename_knowledge = fileURLToPath(import.meta.url);
+const __dirname_knowledge = dirname(__filename_knowledge);
+
+// Ensure audio directory exists
+const audioDir = join(__dirname_knowledge, '../../data/audio/meetings/');
+if (!existsSync(audioDir)) mkdirSync(audioDir, { recursive: true });
+
+// Multer for meeting audio uploads
+const audioUpload = multer({
+  dest: audioDir,
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
+});
 
 // Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
@@ -34,6 +52,80 @@ const db = new Proxy({}, {
 });
 
 const router = express.Router();
+
+// ─── Public routes (no auth) ─────────────────────────────────────────────────
+
+/**
+ * GET /shared/:token — Public share link for a meeting
+ * Returns meeting data if share_enabled = 1
+ */
+router.get('/shared/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Search across all tenant DBs for the shared entry
+    // We need to check all tenants since shared links are public
+    const tenantDbs = getAllTenantDbs();
+
+    let entry = null;
+    let actionItems = [];
+
+    for (const [tenantId, tdb] of Object.entries(tenantDbs)) {
+      try {
+        entry = tdb.prepare(`
+          SELECT id, title, summary, transcript, transcript_json, audio_url, duration_seconds, recorded_at
+          FROM knowledge_entries
+          WHERE share_token = ? AND share_enabled = 1
+        `).get(token);
+
+        if (entry) {
+          actionItems = tdb.prepare(`
+            SELECT id, description, assignee, due_date, status, priority
+            FROM action_items WHERE entry_id = ?
+            ORDER BY status ASC, due_date ASC
+          `).all(entry.id);
+          break;
+        }
+      } catch (e) { /* skip tenant if table doesn't exist */ }
+    }
+
+    if (!entry) {
+      return res.status(404).json({ error: 'Shared meeting not found or sharing disabled' });
+    }
+
+    // Parse transcript_json if stored as string
+    if (entry.transcript_json && typeof entry.transcript_json === 'string') {
+      try { entry.transcript_json = JSON.parse(entry.transcript_json); } catch (e) { /* leave as string */ }
+    }
+
+    res.json({ ...entry, action_items: actionItems });
+  } catch (error) {
+    console.error('Shared meeting error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /audio/:id — Serve meeting audio file (public)
+ */
+router.get('/audio/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const filePath = join(audioDir, `${id}.mp3`);
+
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ error: 'Audio file not found' });
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Audio serve error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Authenticated routes ────────────────────────────────────────────────────
 router.use(authenticate);
 
 function resolveIds(req) {
@@ -275,6 +367,81 @@ router.patch('/action-items/:id', async (req, res) => {
 });
 
 /**
+ * POST /entries/:id/share — Generate a public share link for a meeting
+ */
+router.post('/entries/:id/share', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+
+    const entry = db.prepare('SELECT id FROM knowledge_entries WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+    const shareToken = crypto.randomBytes(12).toString('hex');
+    db.prepare('UPDATE knowledge_entries SET share_token = ?, share_enabled = 1 WHERE id = ? AND tenant_id = ?')
+      .run(shareToken, id, tenantId);
+
+    const baseUrl = process.env.APP_BASE_URL || 'https://app.coppice.ai';
+    const shareUrl = `${baseUrl}/shared/meeting/${shareToken}`;
+
+    res.json({ share_url: shareUrl, share_token: shareToken });
+  } catch (error) {
+    console.error('Share link error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /entries/:id/share — Disable sharing for a meeting
+ */
+router.delete('/entries/:id/share', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+
+    const result = db.prepare('UPDATE knowledge_entries SET share_enabled = 0 WHERE id = ? AND tenant_id = ?')
+      .run(id, tenantId);
+
+    if (result.changes === 0) return res.status(404).json({ error: 'Entry not found' });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Disable share error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /entries/:id/audio — Upload audio file for a meeting
+ * Accepts multipart form with 'audio' field
+ */
+router.post('/entries/:id/audio', audioUpload.single('audio'), async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+
+    const entry = db.prepare('SELECT id FROM knowledge_entries WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
+
+    // Rename uploaded file to <id>.mp3
+    const { renameSync } = await import('fs');
+    const destPath = join(audioDir, `${id}.mp3`);
+    renameSync(req.file.path, destPath);
+
+    const audioUrl = `/api/v1/knowledge/audio/${id}`;
+    db.prepare('UPDATE knowledge_entries SET audio_url = ? WHERE id = ? AND tenant_id = ?')
+      .run(audioUrl, id, tenantId);
+
+    res.json({ audio_url: audioUrl });
+  } catch (error) {
+    console.error('Audio upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /recent — Get most recent knowledge entries
  */
 router.get('/recent', async (req, res) => {
@@ -283,7 +450,7 @@ router.get('/recent', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const type = req.query.type || null;
     const entries = db.prepare(`
-      SELECT id, type, title, summary, source, source_agent, duration_seconds, recorded_at, created_at, processed, drive_url
+      SELECT id, type, title, summary, source, source_agent, duration_seconds, recorded_at, created_at, processed, drive_url, audio_url, share_token, share_enabled
       FROM knowledge_entries
       WHERE tenant_id = ? ${type ? "AND type = ?" : ""}
       ORDER BY created_at DESC

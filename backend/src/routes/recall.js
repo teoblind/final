@@ -10,6 +10,10 @@
  */
 
 import express from 'express';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync, mkdirSync, renameSync } from 'fs';
 import {
   createBot,
   createVoiceBot,
@@ -28,6 +32,12 @@ import { handleTranscriptEvent, startVoiceLoop, stopVoiceLoop } from '../service
 import { getMeetingRoomByBot, addTranscript } from '../services/meetingRoomService.js';
 import { startVisionLoop, stopVisionLoop, getVisualContext, isVisionActive, processFrame } from '../services/geminiVisionService.js';
 import { authenticate } from '../middleware/auth.js';
+
+const __filename_recall = fileURLToPath(import.meta.url);
+const __dirname_recall = dirname(__filename_recall);
+const recallAudioDir = join(__dirname_recall, '../../data/audio/meetings/');
+if (!existsSync(recallAudioDir)) mkdirSync(recallAudioDir, { recursive: true });
+const recallAudioUpload = multer({ dest: recallAudioDir, limits: { fileSize: 200 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -161,7 +171,7 @@ router.post('/start-voice-loop', (req, res) => {
  */
 router.post('/save-transcript', async (req, res) => {
   try {
-    const { tenantId = 'zhan-capital', title, date, transcript, duration, source } = req.body;
+    const { tenantId = 'zhan-capital', title, date, transcript, duration, source, transcript_json, summary } = req.body;
     if (!transcript) return res.status(400).json({ error: 'transcript is required' });
 
     // Save as a knowledge entry (meeting type) — processed=0 so AI pipeline picks it up
@@ -169,9 +179,15 @@ router.post('/save-transcript', async (req, res) => {
     const db = getTenantDb(tenantId);
     const id = `local-${Date.now()}`;
     db.prepare(`
-      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, duration_seconds, recorded_at, processed)
-      VALUES (?, ?, 'meeting', ?, ?, ?, 'local-capture', 'coppice-menubar', ?, ?, 0)
-    `).run(id, tenantId, title || 'Untitled Meeting', transcript, transcript, duration || null, date || new Date().toISOString());
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, duration_seconds, recorded_at, processed, transcript_json)
+      VALUES (?, ?, 'meeting', ?, ?, ?, 'local-capture', 'coppice-menubar', ?, ?, 0, ?)
+    `).run(id, tenantId, title || 'Untitled Meeting', transcript, transcript, duration || null, date || new Date().toISOString(), transcript_json ? JSON.stringify(transcript_json) : null);
+
+    // Store summary if provided
+    if (summary) {
+      db.prepare('UPDATE knowledge_entries SET summary = ? WHERE id = ?').run(summary, id);
+    }
+
     console.log(`[Recall] Saved local transcript: "${title}" (${transcript.split(/\s+/).length} words) — queued for AI processing`);
 
     // Trigger async AI processing (summarization, action items, entity extraction)
@@ -187,6 +203,39 @@ router.post('/save-transcript', async (req, res) => {
     res.json({ id, saved: true, processing: true });
   } catch (error) {
     console.error('[Recall] Save transcript error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /upload-audio — Upload meeting audio file (no auth, called by menubar)
+ * Body: multipart form with 'audio' field + entryId + tenantId
+ */
+router.post('/upload-audio', recallAudioUpload.single('audio'), async (req, res) => {
+  try {
+    const { entryId, tenantId = 'zhan-capital' } = req.body;
+    if (!entryId || !req.file) {
+      return res.status(400).json({ error: 'entryId and audio file are required' });
+    }
+
+    const { getTenantDb } = await import('../cache/database.js');
+    const db = getTenantDb(tenantId);
+
+    const entry = db.prepare('SELECT id FROM knowledge_entries WHERE id = ?').get(entryId);
+    if (!entry) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+
+    const destPath = join(recallAudioDir, `${entryId}.mp3`);
+    renameSync(req.file.path, destPath);
+
+    const audioUrl = `/api/v1/knowledge/audio/${entryId}`;
+    db.prepare('UPDATE knowledge_entries SET audio_url = ? WHERE id = ?').run(audioUrl, entryId);
+
+    console.log(`[Recall] Audio uploaded for ${entryId}: ${(req.file.size / 1024 / 1024).toFixed(1)}MB`);
+    res.json({ audio_url: audioUrl });
+  } catch (error) {
+    console.error('[Recall] Upload audio error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
