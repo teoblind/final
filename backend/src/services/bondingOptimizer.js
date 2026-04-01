@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDacpBondProgram, upsertDacpBondProgram, checkBondRateFlag, insertActivity } from '../cache/database.js';
 
 // Industry benchmark bond rates by project size tier (2026 market)
-const MARKET_BENCHMARKS = {
+export const MARKET_BENCHMARKS = {
   // Project size tiers (cumulative)
   tiers: [
     { min: 0, max: 2500000, benchmarkPct: 1.5, label: '$0 - $2.5M' },
