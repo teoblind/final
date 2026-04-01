@@ -13,10 +13,22 @@
  */
 
 import jwt from 'jsonwebtoken';
+import { config } from 'dotenv';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+config({ path: join(__dirname, '..', '.env') });
 
 const BASE = 'http://localhost:3002/api/v1/estimates';
 const HOST = 'dacp.coppice.ai';
-const JWT_SECRET = process.env.JWT_SECRET || 'lhFaqUPe1IR5DYqdWdSwwHJCguwVlU4FquFFNMShgWCjCHFRYs8L+x6PRXwGMdsG';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET not found in .env');
+  process.exit(2);
+}
 
 // Generate a test token
 const token = jwt.sign(
