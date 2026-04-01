@@ -1978,7 +1978,7 @@ function NewsletterViewerModal({ newsletter, onClose }) {
         e.stopPropagation();
         // Extract the action text and create a chat prefill
         const actionText = text.replace(/^Start task in chat\s*/, '').replace(/^\d+\.\s*/, '').trim();
-        const prefill = `From today's daily brief - ${actionText}\n\nPlease draft an outreach message for this and propose it as a task.`;
+        const prefill = `From today's daily brief:\n\n${actionText}\n\nBefore doing anything, explain what you would do for this task - what email you'd draft, who you'd contact, what you'd research, etc. I'll confirm before you execute.`;
         localStorage.setItem('coppice_chat_prefill', prefill);
         window.location.hash = 'hivemind-chat';
         onClose();
