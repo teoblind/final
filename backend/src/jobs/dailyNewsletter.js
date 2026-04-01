@@ -48,21 +48,31 @@ const TENANT_SEARCH_CONFIG = {
       'site:linkedin.com "concrete" OR "masonry" OR "foundations" Dallas Fort Worth project',
     ],
   },
-  // Sangha Systems - Bitcoin mining & energy
+  // Sangha Systems - Bitcoin mining & energy + renewables
   default: {
     name: 'Sangha Systems',
     region: 'Texas ERCOT',
-    services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading'],
+    services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading', 'renewable energy partnerships'],
     color: '#1a6b3c', // green
     searchQueries: [
+      // Part 1: Mining Market Dynamics
       'bitcoin mining hashrate difficulty network news this week',
       'ERCOT Texas electricity price wholesale market news',
       'bitcoin mining profitability hashprice revenue 2026',
       'data center power AI compute energy demand news',
       'bitcoin mining company acquisition merger fund raise 2026',
-      'Texas renewable energy solar wind curtailment ERCOT',
       'behind-the-meter bitcoin mining power purchase agreement',
       'Luxor hashrate forward NDF mining derivatives market',
+      'bitcoin mining company distress bankruptcy shutdown 2026',
+      // Part 2: Renewables Market Dynamics
+      'Texas renewable energy solar wind curtailment ERCOT 2026',
+      'solar IPP independent power producer Texas acquisition partnership',
+      'wind farm developer Texas ERCOT new project construction',
+      'battery energy storage BESS Texas ERCOT deployment',
+      'renewable energy tax equity investment PPA corporate 2026',
+      'ERCOT wind curtailment negative pricing transmission constraint',
+      'behind-the-meter solar bitcoin mining colocation partnership',
+      'renewable energy developer IPP fundraise acquisition 2026',
     ],
     linkedinQueries: [],
   },
@@ -249,6 +259,62 @@ IMPORTANT RULES FOR CONTACTS:
 
   const brandColor = config.color || '#1e3a5f';
 
+  // Tenant-specific prompt sections
+  const isSangha = config.name === 'Sangha Systems';
+
+  const sectionInstructions = isSangha
+    ? `SECTIONS - The newsletter has TWO PARTS. Include both, with all subsections that have findings:
+
+--- PART 1: MINING MARKET DYNAMICS ---
+
+1. **NETWORK & HASHRATE UPDATE** - Bitcoin network hashrate, difficulty adjustments, hashprice trends, Luxor forward curves, NDF/derivatives market moves. Include specific numbers.
+
+2. **COMPETITOR ANALYSIS** - Mining companies in the news: expansions, acquisitions, fundraises, new site deployments. Identify distress signals (shutdowns, debt, selling rigs, stock drops) and growth signals (new capital raises, fleet upgrades, site acquisitions).
+
+3. **POWER & ERCOT MARKET** - ERCOT wholesale prices, demand/supply dynamics, congestion, natural gas trends. Include specific price levels and trends that affect mining profitability.
+
+4. **AI COMPUTE & DATA CENTER CONVERGENCE** - News about data centers, AI compute demand, mining-to-AI pivots, hybrid sites. Opportunities for Sangha to leverage existing infrastructure.
+
+--- PART 2: RENEWABLES MARKET DYNAMICS ---
+
+5. **POTENTIAL CUSTOMERS / IPP TARGETS** - Solar, wind, battery, and hydro Independent Power Producers (IPPs) with activity in Texas or ERCOT. For each, note:
+   - Company name, project type, and scale (MW)
+   - Recent news (fundraise, project announcement, acquisition, partnership)
+   - Why they could be a Sangha customer (behind-the-meter mining colocation, curtailment monetization, PPA opportunity)
+   Target companies like: Zelestra, Origis Energy, Stardust Solar, Arevon Energy, Scatec, NextEra, Enel, Invenergy, and any new entrants.
+
+6. **CURTAILMENT & NEGATIVE PRICING** - ERCOT wind/solar curtailment events, negative pricing windows, transmission constraints. These are direct opportunities for behind-the-meter mining to absorb excess generation.
+
+7. **RENEWABLES INVESTMENT SIGNALS** - Tax equity deals, corporate PPAs, energy storage deployments, new renewable capacity announcements. Both distress signals (project cancellations, developer financial trouble) and growth signals (new investment, policy tailwinds).
+
+8. **TOP RENEWABLES NEWS** - 2-3 most impactful renewable energy stories. For each include:
+   - What happened
+   - "Why it matters" for the energy market
+   - "Sangha opportunity" - specific angle for Sangha to capitalize
+
+--- RECOMMENDED ACTIONS ---
+
+9. **MINING ACTIONS** - 1-2 actions related to mining operations, hashrate market, or competitor moves.
+
+10. **RENEWABLES OUTREACH** - 2-3 specific outreach recommendations targeting renewable energy developers/IPPs. For each include:
+    - Who to contact (name, company, role)
+    - Why now (what triggered the outreach opportunity)
+    - Suggested approach (e.g., "Propose BTM mining colocation at their new 200MW solar farm to monetize curtailment")
+    - Draft one-liner message if a verified contact is available`
+    : `SECTIONS (include only sections with actual findings):
+
+1. **NEW PROJECT OPPORTUNITIES** - Projects where ${config.name} could bid. Include: project name, location, estimated value if known, GC(s) involved, why it's relevant. Flag if a GC is one they've worked with before.
+
+2. **GC ACTIVITY** - News about general contractors active in ${config.region}. New hires, project awards, expansions. Focus on GCs relevant to ${config.name}'s services.
+
+3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
+
+4. **LINKEDIN HIGHLIGHTS** - Interesting posts or announcements from construction industry professionals (if any LinkedIn results were found).
+
+5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.`;
+
+  const targetLength = isSangha ? '1200-1800 words' : '500-800 words';
+
   const prompt = `You are writing a daily intelligence newsletter for ${config.name}, specializing in ${config.services.join(', ')} in ${config.region}.
 
 WEB RESEARCH RESULTS (gathered this morning):
@@ -259,29 +325,21 @@ ${JSON.stringify(businessContext, null, 2)}${verificationBlock}
 
 Write a morning intelligence briefing newsletter. Structure it as clean HTML (no <html>/<body> tags, just the content).
 
-SECTIONS (include only sections with actual findings):
-
-1. **NEW PROJECT OPPORTUNITIES** - Projects where ${config.name} could bid. Include: project name, location, estimated value if known, GC(s) involved, why it's relevant. Flag if a GC is one they've worked with before.
-
-2. **GC ACTIVITY** - News about general contractors active in ${config.region}. New hires, project awards, expansions. Focus on GCs relevant to ${config.name}'s services.
-
-3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
-
-4. **LINKEDIN HIGHLIGHTS** - Interesting posts or announcements from construction industry professionals (if any LinkedIn results were found).
-
-5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
+${sectionInstructions}
 
 FORMATTING RULES:
 - Use clean, professional HTML with inline styles
 - Use ${brandColor} as the primary brand color for ALL headings, borders, accents, and section dividers. Do NOT use navy (#1e3a5f) unless that IS the brand color.
 - Do NOT include a top-level header/banner/title block - the email wrapper already has one. Jump straight into the content sections.
+${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (Renewables) - a colored horizontal rule or banner' : ''}
 - Keep it scannable - short paragraphs, bullet points
-- Bold key names (GCs, project names, dollar amounts)
+- Bold key names (companies, project names, dollar amounts, MW figures)
 - Each opportunity should feel actionable, not just informational
 - If no results for a section, omit it entirely
-- Target length: 500-800 words
+- Target length: ${targetLength}
 - Do NOT use em dashes, use regular hyphens
 - For verified contacts, add a small "VERIFIED" badge next to their name using the brand color
+${isSangha ? '- For IPP/developer targets, use a card-style layout with company name, type, and opportunity summary\n- For "Sangha opportunity" callouts, use a highlighted box with a left border in the brand color' : ''}
 
 Return ONLY the HTML content, no markdown wrapping.`;
 

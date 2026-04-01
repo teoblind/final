@@ -828,28 +828,267 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 <div className="text-[12px] text-[#9a9a92] mb-1">No pending approvals</div>
                 <div className="text-[11px] text-terminal-muted">Agent actions requiring your review will appear here.</div>
               </div>
-            ) : approvals.map((item) => (
-              <div key={item.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-                <span
-                  className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-                  style={{ background: item.icon?.bg || '#f5f4f0', color: item.icon?.color || '#6b6b65' }}
-                >
-                  {item.icon?.letter || 'A'}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                  <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
-                    <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
+            ) : approvals.map((item) => {
+              const payload = item.payload || (item.payload_json ? JSON.parse(item.payload_json) : {});
+              const isExpanded = expandedApproval === item.id;
+              const isProcessing = processingApproval === item.id;
+              return (
+                <div key={item.id} className="border-b border-[#f0eeea] last:border-b-0">
+                  <div
+                    className="flex items-start gap-3 px-[18px] py-3 hover:bg-[#f5f4f0] transition-colors cursor-pointer"
+                    onClick={() => setExpandedApproval(isExpanded ? null : item.id)}
+                  >
+                    <span
+                      className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                      style={{ background: item.icon?.bg || '#f5f4f0', color: item.icon?.color || '#6b6b65' }}
+                    >
+                      {item.icon?.letter || 'A'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                      <div className="text-[11px] text-terminal-muted mt-0.5">{item.description || item.desc}</div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel || (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1)}</span>
+                        <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time || (item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      <button onClick={(e) => { e.stopPropagation(); handleApprove(item.id); }} disabled={isProcessing} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity disabled:opacity-50">Approve</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleReject(item.id); }} disabled={isProcessing} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors disabled:opacity-50">Reject</button>
+                      {isExpanded ? <ChevronUp size={14} className="text-terminal-muted ml-1" /> : <ChevronDown size={14} className="text-terminal-muted ml-1" />}
+                    </div>
                   </div>
+                  {isExpanded && (
+                    <div className="px-[18px] pb-4 pt-1 space-y-3">
+                      {/* Email header + body */}
+                      <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
+                        {(payload.to || payload.subject) && (
+                          <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
+                              <div className="flex items-center gap-1.5">
+                                {editingApproval === item.id ? (
+                                  <>
+                                    <button onClick={() => handleSaveEdit(item.id)} disabled={savingEdit} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-white bg-[#1a6b3c] hover:bg-[#155e33] disabled:opacity-50">
+                                      <Save size={10} /> {savingEdit ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button onClick={() => setEditingApproval(null)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] bg-[#e8e6e2] hover:bg-[#d5d3ce]">
+                                      Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => { setEditBody(payload.body || ''); setEditingApproval(item.id); }} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] hover:bg-[#e8e6e2]">
+                                    <Pencil size={10} /> Edit
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            {payload.to && (
+                              <div className="text-[11px] text-[#6b6b65]">
+                                <span className="font-medium text-terminal-text">To:</span> {payload.to}
+                              </div>
+                            )}
+                            {payload.subject && (
+                              <div className="text-[11px] text-[#6b6b65]">
+                                <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
+                              </div>
+                            )}
+                            {/* Sender dropdown */}
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="text-[11px] font-medium text-terminal-text">Sign as:</span>
+                              <select
+                                value={editSender || ''}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setEditSender(e.target.value);
+                                  if (e.target.value) {
+                                    handleRewriteForSender(item.id, e.target.value, payload.body || editBody);
+                                  }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[11px] px-2 py-0.5 rounded border border-[#e8e6e2] bg-white text-terminal-text"
+                              >
+                                <option value="">Select signer...</option>
+                                {SENDERS.map(s => (
+                                  <option key={s.name} value={s.name}>{s.label}</option>
+                                ))}
+                              </select>
+                              {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}
+                            </div>
+                          </div>
+                        )}
+                        <div className="p-4">
+                          {editingApproval === item.id ? (
+                            <textarea
+                              value={editBody}
+                              onChange={(e) => setEditBody(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-full min-h-[200px] text-[12px] text-terminal-text leading-relaxed bg-white border border-[#e8e6e2] rounded-md p-3 resize-y focus:outline-none focus:border-[#1e3a5f]"
+                            />
+                          ) : payload.html ? (
+                            <div
+                              className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
+                              dangerouslySetInnerHTML={{ __html: payload.html }}
+                            />
+                          ) : payload.body ? (
+                            <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
+                              {payload.body}
+                            </div>
+                          ) : (
+                            <div className="text-[12px] text-terminal-muted">
+                              {item.description || 'No preview available'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Attachments */}
+                      {payload.attachments && payload.attachments.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap gap-2">
+                            {payload.attachments.map((att, i) => (
+                              <button
+                                key={i}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (excelPreview?.approvalId === item.id && excelPreview?.index === i) {
+                                    setExcelPreview(null);
+                                    return;
+                                  }
+                                  setLoadingExcel(true);
+                                  fetch(`${API_BASE}/v1/approvals/${item.id}/attachment/${i}`, { headers: getAuthHeaders() })
+                                    .then(r => r.json())
+                                    .then(data => {
+                                      if (data.sheets) setExcelPreview({ approvalId: item.id, index: i, data });
+                                      else setExcelPreview({ approvalId: item.id, index: i, data: null, error: data.error || 'Could not load' });
+                                    })
+                                    .catch(() => setExcelPreview({ approvalId: item.id, index: i, data: null, error: 'Could not load file' }))
+                                    .finally(() => setLoadingExcel(false));
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md hover:bg-[#eeedea] transition-colors cursor-pointer"
+                              >
+                                <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
+                                <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
+                                <ChevronDown size={10} className={`text-terminal-muted transition-transform ${excelPreview?.approvalId === item.id && excelPreview?.index === i ? 'rotate-180' : ''}`} />
+                              </button>
+                            ))}
+                          </div>
+                          {/* Excel preview table */}
+                          {excelPreview?.approvalId === item.id && excelPreview.data && (
+                            <div className="bg-white border border-[#e8e6e2] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                              {excelPreview.data.sheets.map((sheet, si) => (
+                                <div key={si}>
+                                  <div className="px-3 py-1.5 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[10px] font-heading font-semibold text-terminal-muted uppercase">{sheet.name}</div>
+                                  <table className="w-full text-[11px]">
+                                    <tbody>
+                                      {sheet.rows.map((row, ri) => (
+                                        <tr key={ri} className={ri === 0 ? 'bg-[#1e3a5f] text-white font-semibold' : ri % 2 === 0 ? 'bg-[#fafaf8]' : ''}>
+                                          {row.map((cell, ci) => (
+                                            <td key={ci} className={`px-2 py-1 border-b border-[#f0eeea] ${ri === 0 ? 'border-[#2a4d73]' : ''}`}>{cell}</td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {excelPreview?.approvalId === item.id && excelPreview.error && (
+                            <div className="text-[11px] text-terminal-muted italic px-2">{excelPreview.error}</div>
+                          )}
+                          {loadingExcel && excelPreview?.approvalId === item.id && (
+                            <div className="text-[11px] text-terminal-muted italic px-2">Loading spreadsheet...</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* View Original RFQ */}
+                      {payload.bidId && (
+                        <div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (originalEmail?.approvalId === item.id) {
+                                setOriginalEmail(null);
+                                return;
+                              }
+                              setLoadingOriginal(true);
+                              fetch(`${API_BASE}/v1/estimates/inbox/${payload.bidId}`, { headers: getAuthHeaders() })
+                                .then(r => r.json())
+                                .then(data => {
+                                  if (data.bidRequest) setOriginalEmail({ approvalId: item.id, data: data.bidRequest });
+                                  else setOriginalEmail({ approvalId: item.id, data: null, error: 'Could not load original email' });
+                                })
+                                .catch(() => setOriginalEmail({ approvalId: item.id, data: null, error: 'Could not load original email' }))
+                                .finally(() => setLoadingOriginal(false));
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-[#6b6b65] bg-[#f5f4f0] border border-[#e8e6e2] hover:bg-[#eeedea] transition-colors"
+                          >
+                            <Mail size={12} />
+                            {originalEmail?.approvalId === item.id ? 'Hide Original RFQ' : 'View Original RFQ'}
+                            <ChevronDown size={10} className={`transition-transform ${originalEmail?.approvalId === item.id ? 'rotate-180' : ''}`} />
+                          </button>
+                          {loadingOriginal && originalEmail?.approvalId === item.id && (
+                            <div className="text-[11px] text-terminal-muted italic px-2 mt-1">Loading...</div>
+                          )}
+                          {originalEmail?.approvalId === item.id && originalEmail.data && (
+                            <div className="mt-2 bg-white border border-[#e8e6e2] rounded-lg overflow-hidden">
+                              <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
+                                <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase mb-1.5">Original RFQ Email</div>
+                                <div className="text-[11px] text-[#6b6b65]">
+                                  <span className="font-medium text-terminal-text">From:</span> {originalEmail.data.from_name || originalEmail.data.from_email}
+                                  {originalEmail.data.from_name && <span className="text-[#999]"> &lt;{originalEmail.data.from_email}&gt;</span>}
+                                </div>
+                                <div className="text-[11px] text-[#6b6b65]">
+                                  <span className="font-medium text-terminal-text">Subject:</span> {originalEmail.data.subject}
+                                </div>
+                                {originalEmail.data.gc_name && originalEmail.data.gc_name !== originalEmail.data.from_email && (
+                                  <div className="text-[11px] text-[#6b6b65]">
+                                    <span className="font-medium text-terminal-text">GC:</span> {originalEmail.data.gc_name}
+                                  </div>
+                                )}
+                                {originalEmail.data.due_date && (
+                                  <div className="text-[11px] text-[#6b6b65]">
+                                    <span className="font-medium text-terminal-text">Due:</span> {new Date(originalEmail.data.due_date).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="p-4 text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">
+                                {originalEmail.data.body}
+                              </div>
+                            </div>
+                          )}
+                          {originalEmail?.approvalId === item.id && originalEmail.error && (
+                            <div className="text-[11px] text-terminal-muted italic px-2 mt-1">{originalEmail.error}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Edit in Chat button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const context = {
+                            approvalId: item.id,
+                            title: item.title,
+                            description: item.description,
+                            type: item.type,
+                            payload,
+                          };
+                          sessionStorage.setItem('dacp_approval_context', JSON.stringify(context));
+                          onNavigate?.('hivemind-chat');
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-heading font-semibold text-[#1e3a5f] bg-[#eef3f8] border border-[#c8d8e8] hover:bg-[#dde8f2] transition-colors"
+                      >
+                        <MessageSquare size={12} />
+                        Edit in DACP Agent
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
-                  <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1401,276 +1640,6 @@ export default function DacpCommandDashboard({ onNavigate }) {
         )}
       </div>
 
-      {/* Pending Approvals */}
-      {approvals.length > 0 && (
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <div className="flex items-center gap-2">
-              <CheckCircle size={14} className="text-[#b8860b]" />
-              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Pending Approvals</span>
-            </div>
-            <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#fdf6e8] text-[#b8860b] border border-[#f0d88a]">{approvals.length}</span>
-          </div>
-          {approvals.map((item) => {
-            const payload = item.payload || (item.payload_json ? JSON.parse(item.payload_json) : {});
-            const isExpanded = expandedApproval === item.id;
-            const isProcessing = processingApproval === item.id;
-            return (
-              <div key={item.id} className="border-b border-[#f0eeea] last:border-b-0">
-                <div className="flex items-center gap-3 px-[18px] py-3 hover:bg-[#f9f9f7] transition-colors">
-                  <Mail size={14} className="text-[#1e3a5f] shrink-0" />
-                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setExpandedApproval(isExpanded ? null : item.id)}>
-                    <div className="text-[13px] font-medium text-terminal-text truncate">{item.title}</div>
-                    <div className="text-[11px] text-terminal-muted truncate">{item.description}</div>
-                  </div>
-                  <button onClick={() => setExpandedApproval(isExpanded ? null : item.id)} className="p-1 text-terminal-muted hover:text-terminal-text shrink-0">
-                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                  <div className="flex gap-1.5 shrink-0">
-                    <button
-                      onClick={() => handleApprove(item.id)}
-                      disabled={isProcessing}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-white bg-[#1a6b3c] hover:bg-[#155e33] transition-colors disabled:opacity-50"
-                    >
-                      <Check size={10} /> Approve
-                    </button>
-                    <button
-                      onClick={() => handleReject(item.id)}
-                      disabled={isProcessing}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-terminal-red bg-red-50 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
-                    >
-                      <X size={10} /> Reject
-                    </button>
-                  </div>
-                </div>
-                {isExpanded && (
-                  <div className="px-[18px] pb-4 pt-1 space-y-3">
-                    {/* Email header + body */}
-                    <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
-                      {(payload.to || payload.subject) && (
-                        <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
-                            <div className="flex items-center gap-1.5">
-                              {editingApproval === item.id ? (
-                                <>
-                                  <button onClick={() => handleSaveEdit(item.id)} disabled={savingEdit} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-white bg-[#1a6b3c] hover:bg-[#155e33] disabled:opacity-50">
-                                    <Save size={10} /> {savingEdit ? 'Saving...' : 'Save'}
-                                  </button>
-                                  <button onClick={() => setEditingApproval(null)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] bg-[#e8e6e2] hover:bg-[#d5d3ce]">
-                                    Cancel
-                                  </button>
-                                </>
-                              ) : (
-                                <button onClick={() => { setEditBody(payload.body || ''); setEditingApproval(item.id); }} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] hover:bg-[#e8e6e2]">
-                                  <Pencil size={10} /> Edit
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          {payload.to && (
-                            <div className="text-[11px] text-[#6b6b65]">
-                              <span className="font-medium text-terminal-text">To:</span> {payload.to}
-                            </div>
-                          )}
-                          {payload.subject && (
-                            <div className="text-[11px] text-[#6b6b65]">
-                              <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
-                            </div>
-                          )}
-                          {/* Sender dropdown */}
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[11px] font-medium text-terminal-text">Sign as:</span>
-                            <select
-                              value={editSender || (payload.body?.match(/^(.+?)(?:\n|$)/m)?.[0]?.trim() === 'Best regards,' ? '' : '')}
-                              onChange={(e) => {
-                                setEditSender(e.target.value);
-                                if (e.target.value) {
-                                  handleRewriteForSender(item.id, e.target.value, payload.body || editBody);
-                                }
-                              }}
-                              className="text-[11px] px-2 py-0.5 rounded border border-[#e8e6e2] bg-white text-terminal-text"
-                            >
-                              <option value="">Select signer...</option>
-                              {SENDERS.map(s => (
-                                <option key={s.name} value={s.name}>{s.label}</option>
-                              ))}
-                            </select>
-                            {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}
-                          </div>
-                        </div>
-                      )}
-                      <div className="p-4">
-                        {editingApproval === item.id ? (
-                          <textarea
-                            value={editBody}
-                            onChange={(e) => setEditBody(e.target.value)}
-                            className="w-full min-h-[200px] text-[12px] text-terminal-text leading-relaxed bg-white border border-[#e8e6e2] rounded-md p-3 resize-y focus:outline-none focus:border-[#1e3a5f]"
-                          />
-                        ) : payload.html ? (
-                          <div
-                            className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
-                            dangerouslySetInnerHTML={{ __html: payload.html }}
-                          />
-                        ) : payload.body ? (
-                          <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
-                            {payload.body}
-                          </div>
-                        ) : (
-                          <div className="text-[12px] text-terminal-muted">
-                            {item.description || 'No preview available'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Attachments */}
-                    {payload.attachments && payload.attachments.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-2">
-                          {payload.attachments.map((att, i) => (
-                            <button
-                              key={i}
-                              onClick={() => {
-                                if (excelPreview?.approvalId === item.id && excelPreview?.index === i) {
-                                  setExcelPreview(null);
-                                  return;
-                                }
-                                setLoadingExcel(true);
-                                fetch(`${API_BASE}/v1/approvals/${item.id}/attachment/${i}`, { headers: getAuthHeaders() })
-                                  .then(r => r.json())
-                                  .then(data => {
-                                    if (data.sheets) setExcelPreview({ approvalId: item.id, index: i, data });
-                                    else setExcelPreview({ approvalId: item.id, index: i, data: null, error: data.error || 'Could not load' });
-                                  })
-                                  .catch(() => setExcelPreview({ approvalId: item.id, index: i, data: null, error: 'Could not load file' }))
-                                  .finally(() => setLoadingExcel(false));
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md hover:bg-[#eeedea] transition-colors cursor-pointer"
-                            >
-                              <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
-                              <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
-                              <ChevronDown size={10} className={`text-terminal-muted transition-transform ${excelPreview?.approvalId === item.id && excelPreview?.index === i ? 'rotate-180' : ''}`} />
-                            </button>
-                          ))}
-                        </div>
-                        {/* Excel preview table */}
-                        {excelPreview?.approvalId === item.id && excelPreview.data && (
-                          <div className="bg-white border border-[#e8e6e2] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
-                            {excelPreview.data.sheets.map((sheet, si) => (
-                              <div key={si}>
-                                <div className="px-3 py-1.5 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[10px] font-heading font-semibold text-terminal-muted uppercase">{sheet.name}</div>
-                                <table className="w-full text-[11px]">
-                                  <tbody>
-                                    {sheet.rows.map((row, ri) => (
-                                      <tr key={ri} className={ri === 0 ? 'bg-[#1e3a5f] text-white font-semibold' : ri % 2 === 0 ? 'bg-[#fafaf8]' : ''}>
-                                        {row.map((cell, ci) => (
-                                          <td key={ci} className={`px-2 py-1 border-b border-[#f0eeea] ${ri === 0 ? 'border-[#2a4d73]' : ''}`}>{cell}</td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {excelPreview?.approvalId === item.id && excelPreview.error && (
-                          <div className="text-[11px] text-terminal-muted italic px-2">{excelPreview.error}</div>
-                        )}
-                        {loadingExcel && excelPreview?.approvalId === item.id && (
-                          <div className="text-[11px] text-terminal-muted italic px-2">Loading spreadsheet...</div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* View Original RFQ */}
-                    {payload.bidId && (
-                      <div>
-                        <button
-                          onClick={() => {
-                            if (originalEmail?.approvalId === item.id) {
-                              setOriginalEmail(null);
-                              return;
-                            }
-                            setLoadingOriginal(true);
-                            fetch(`${API_BASE}/v1/estimates/inbox/${payload.bidId}`, { headers: getAuthHeaders() })
-                              .then(r => r.json())
-                              .then(data => {
-                                if (data.bidRequest) setOriginalEmail({ approvalId: item.id, data: data.bidRequest });
-                                else setOriginalEmail({ approvalId: item.id, data: null, error: 'Could not load original email' });
-                              })
-                              .catch(() => setOriginalEmail({ approvalId: item.id, data: null, error: 'Could not load original email' }))
-                              .finally(() => setLoadingOriginal(false));
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium text-[#6b6b65] bg-[#f5f4f0] border border-[#e8e6e2] hover:bg-[#eeedea] transition-colors"
-                        >
-                          <Mail size={12} />
-                          {originalEmail?.approvalId === item.id ? 'Hide Original RFQ' : 'View Original RFQ'}
-                          <ChevronDown size={10} className={`transition-transform ${originalEmail?.approvalId === item.id ? 'rotate-180' : ''}`} />
-                        </button>
-                        {loadingOriginal && originalEmail?.approvalId === item.id && (
-                          <div className="text-[11px] text-terminal-muted italic px-2 mt-1">Loading...</div>
-                        )}
-                        {originalEmail?.approvalId === item.id && originalEmail.data && (
-                          <div className="mt-2 bg-white border border-[#e8e6e2] rounded-lg overflow-hidden">
-                            <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
-                              <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase mb-1.5">Original RFQ Email</div>
-                              <div className="text-[11px] text-[#6b6b65]">
-                                <span className="font-medium text-terminal-text">From:</span> {originalEmail.data.from_name || originalEmail.data.from_email}
-                                {originalEmail.data.from_name && <span className="text-[#999]"> &lt;{originalEmail.data.from_email}&gt;</span>}
-                              </div>
-                              <div className="text-[11px] text-[#6b6b65]">
-                                <span className="font-medium text-terminal-text">Subject:</span> {originalEmail.data.subject}
-                              </div>
-                              {originalEmail.data.gc_name && originalEmail.data.gc_name !== originalEmail.data.from_email && (
-                                <div className="text-[11px] text-[#6b6b65]">
-                                  <span className="font-medium text-terminal-text">GC:</span> {originalEmail.data.gc_name}
-                                </div>
-                              )}
-                              {originalEmail.data.due_date && (
-                                <div className="text-[11px] text-[#6b6b65]">
-                                  <span className="font-medium text-terminal-text">Due:</span> {new Date(originalEmail.data.due_date).toLocaleDateString()}
-                                </div>
-                              )}
-                            </div>
-                            <div className="p-4 text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">
-                              {originalEmail.data.body}
-                            </div>
-                          </div>
-                        )}
-                        {originalEmail?.approvalId === item.id && originalEmail.error && (
-                          <div className="text-[11px] text-terminal-muted italic px-2 mt-1">{originalEmail.error}</div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Edit in Chat button */}
-                    <button
-                      onClick={() => {
-                        // Store approval context so AgentChat can pre-populate the conversation
-                        const context = {
-                          approvalId: item.id,
-                          title: item.title,
-                          description: item.description,
-                          type: item.type,
-                          payload,
-                        };
-                        sessionStorage.setItem('dacp_approval_context', JSON.stringify(context));
-                        onNavigate?.('hivemind-chat');
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-heading font-semibold text-[#1e3a5f] bg-[#eef3f8] border border-[#c8d8e8] hover:bg-[#dde8f2] transition-colors"
-                    >
-                      <MessageSquare size={12} />
-                      Edit in DACP Agent
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* Metrics Strip */}
       {metrics.length > 0 && (
