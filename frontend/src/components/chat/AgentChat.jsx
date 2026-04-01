@@ -463,6 +463,8 @@ function TaskReportModal({ assignmentId, title, onClose }) {
   const [loading, setLoading] = useState(true);
   const [artifacts, setArtifacts] = useState([]);
   const [embedUrl, setEmbedUrl] = useState(null);
+  const [emailSending, setEmailSending] = useState(null);
+  const [emailSent, setEmailSent] = useState({});
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -523,6 +525,25 @@ function TaskReportModal({ assignmentId, title, onClose }) {
     } catch (err) { console.error('Download error:', err); }
   };
 
+  const handleSendEmail = async (draftIndex) => {
+    setEmailSending(draftIndex);
+    try {
+      const token = getAuthToken();
+      const r = await fetch(`${API_BASE}/v1/estimates/assignments/${assignmentId}/approve-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ index: draftIndex }),
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Send failed'); }
+      setEmailSent(prev => ({ ...prev, [draftIndex]: true }));
+    } catch (err) {
+      alert(`Failed to send: ${err.message}`);
+    }
+    setEmailSending(null);
+  };
+
+  const emailDrafts = artifacts.filter(a => a.type === 'email_draft');
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className={`bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden ${embedUrl ? 'w-[900px] h-[90vh]' : 'w-[760px] max-h-[85vh]'}`} onClick={e => e.stopPropagation()}>
@@ -543,14 +564,43 @@ function TaskReportModal({ assignmentId, title, onClose }) {
             <X size={16} />
           </button>
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12 text-[13px] text-terminal-muted">Loading report...</div>
           ) : embedUrl ? (
             <iframe src={embedUrl} className="w-full h-full border-0" allow="autoplay" title="Report preview" />
           ) : (
-            <div className="h-full overflow-y-auto px-8 py-6">
+            <div className="px-8 py-6">
               <div className="prose-chat text-[13px] leading-relaxed text-terminal-text">{formatContent(content)}</div>
+            </div>
+          )}
+          {emailDrafts.length > 0 && (
+            <div className="px-8 pb-6">
+              {emailDrafts.map((draft, i) => (
+                <div key={i} className="border border-[#d0cec8] rounded-xl overflow-hidden mt-4">
+                  <div className="px-4 py-2.5 bg-[#faf9f7] border-b border-[#e8e6e1] flex items-center gap-2">
+                    <MailIcon size={13} className="text-[var(--t-ui-accent,#1e3a5f)]" />
+                    <span className="text-[12px] font-bold text-[var(--t-ui-accent,#1e3a5f)] font-heading">Email Draft</span>
+                    <span className="ml-auto">
+                      {emailSent[draft.index ?? i] || draft.status === 'sent' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600"><Check size={10} /> Sent</span>
+                      ) : (
+                        <button onClick={() => handleSendEmail(draft.index ?? i)} disabled={emailSending !== null}
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-3 py-1 rounded-md bg-[var(--t-ui-accent,#1e3a5f)] text-white hover:opacity-90 disabled:opacity-50">
+                          {emailSending === (draft.index ?? i) ? <RotateCcw size={10} className="animate-spin" /> : <Send size={10} />}
+                          {emailSending === (draft.index ?? i) ? 'Sending...' : 'Send Email'}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                  <div className="px-4 py-3 text-[12px] space-y-1">
+                    <div><span className="font-semibold text-terminal-text">To:</span> <span className="text-[#6b6b65]">{draft.to}</span></div>
+                    <div><span className="font-semibold text-terminal-text">Subject:</span> <span className="text-[#6b6b65]">{draft.subject}</span></div>
+                    <hr className="my-2 border-[#e8e6e1]" />
+                    <div className="text-[12px] text-terminal-text leading-relaxed" dangerouslySetInnerHTML={{ __html: draft.body }} />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -567,6 +617,8 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   const [artifacts, setArtifacts] = useState([]);
   const [expanded, setExpanded] = useState(false);
   const [viewingReport, setViewingReport] = useState(false);
+  const [emailSending, setEmailSending] = useState(null);
+  const [emailSent, setEmailSent] = useState({});
   const [contextSources, setContextSources] = useState(null);
   const [loadingContext, setLoadingContext] = useState(false);
 
@@ -715,6 +767,33 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
                 className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-[var(--t-ui-accent-bg,#eef3f9)] text-[var(--t-ui-accent,#1e3a5f)] border-[#d0cec8] cursor-pointer">
                 {art.type === 'gdoc' ? <ExternalLink size={10} /> : <FileText size={10} />}
                 {art.label || art.title || art.type}
+              </button>
+            ))}
+            {artifacts.filter(art => art.type === 'email_draft').map((draft, i) => (
+              <button key={`email-${i}`} onClick={async (e) => {
+                e.stopPropagation();
+                if (emailSent[draft.index ?? i] || draft.status === 'sent') return;
+                setEmailSending(draft.index ?? i);
+                try {
+                  const token = (() => { try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return s.tokens.accessToken; } catch {} return localStorage.getItem('auth_token'); })();
+                  const r = await fetch(`${API_BASE}/v1/estimates/assignments/${data.assignment_id}/approve-email`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    body: JSON.stringify({ index: draft.index ?? i }),
+                  });
+                  if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.error || 'Send failed'); }
+                  setEmailSent(prev => ({ ...prev, [draft.index ?? i]: true }));
+                } catch (err) { alert(`Failed to send: ${err.message}`); }
+                setEmailSending(null);
+              }}
+                className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border cursor-pointer ${
+                  emailSent[draft.index ?? i] || draft.status === 'sent'
+                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                    : 'bg-white hover:bg-blue-50 text-blue-600 border-blue-200'
+                }`}>
+                {emailSent[draft.index ?? i] || draft.status === 'sent' ? <><Check size={10} /> Sent</> :
+                 emailSending === (draft.index ?? i) ? <><RotateCcw size={10} className="animate-spin" /> Sending...</> :
+                 <><Send size={10} /> Send to {draft.to}</>}
               </button>
             ))}
           </div>
@@ -1613,7 +1692,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
               }`}
               style={isUser ? { backgroundColor: accent } : undefined}
             >
-              {formatContent(msg.content)}
+              {formatContent(msg.content?.trim())}
             </div>
             {/* Copy / Edit buttons - appear on hover */}
             <div className={`flex items-center gap-0.5 mt-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity ${isUser ? 'justify-end' : ''}`}>
@@ -1635,7 +1714,7 @@ function ChatMessage({ msg, agentDef, onAction, onApproval, isLastAgent, onEdit 
             <textarea
               value={editText}
               onChange={e => setEditText(e.target.value)}
-              className="w-full px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] text-[#333330] bg-white outline-none resize-none min-h-[60px] focus:border-[#9a9a92]"
+              className="w-full px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] text-[#333330] bg-white outline-none resize-y min-h-[120px] max-h-[400px] focus:border-[#9a9a92] focus:ring-1 focus:ring-[#9a9a92]"
               autoFocus
             />
             <div className="flex gap-1.5 justify-end">
