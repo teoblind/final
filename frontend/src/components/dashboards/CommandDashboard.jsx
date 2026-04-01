@@ -143,6 +143,7 @@ export default function CommandDashboard({ onNavigate }) {
   const [hsIndustryFilter, setHsIndustryFilter] = useState('');
   const [hsReasonFilter, setHsReasonFilter] = useState('');
   const [hsMaterialsFilter, setHsMaterialsFilter] = useState('');
+  const [hsContactModal, setHsContactModal] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -1603,7 +1604,7 @@ export default function CommandDashboard({ onNavigate }) {
                 </thead>
                 <tbody>
                   {hsContacts.map(c => (
-                    <tr key={c.hubspot_id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors">
+                    <tr key={c.hubspot_id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors cursor-pointer" onClick={() => setHsContactModal(c)}>
                       <td className="px-[18px] py-2">
                         <div className="font-medium text-terminal-text">{c.name || 'Unknown'}</div>
                         <div className="text-[10px] text-terminal-muted">{c.email}</div>
@@ -1612,7 +1613,7 @@ export default function CommandDashboard({ onNavigate }) {
                       <td className="px-2 py-2">
                         {c.industry ? (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 cursor-pointer hover:bg-blue-100"
-                            onClick={() => { setHsIndustryFilter(c.industry); doSearch({ industry: c.industry }); }}>
+                            onClick={(e) => { e.stopPropagation(); setHsIndustryFilter(c.industry); doSearch({ industry: c.industry }); }}>
                             {c.industry}
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
@@ -1620,7 +1621,7 @@ export default function CommandDashboard({ onNavigate }) {
                       <td className="px-2 py-2">
                         {c.reason ? (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200 cursor-pointer hover:bg-purple-100"
-                            onClick={() => { setHsReasonFilter(c.reason); doSearch({ reason: c.reason }); }}>
+                            onClick={(e) => { e.stopPropagation(); setHsReasonFilter(c.reason); doSearch({ reason: c.reason }); }}>
                             {c.reason}
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
@@ -1628,7 +1629,7 @@ export default function CommandDashboard({ onNavigate }) {
                       <td className="px-2 py-2">
                         {c.materials ? (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
-                            onClick={() => { setHsMaterialsFilter(c.materials); doSearch({ materials: c.materials }); }}>
+                            onClick={(e) => { e.stopPropagation(); setHsMaterialsFilter(c.materials); doSearch({ materials: c.materials }); }}>
                             {c.materials}
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
@@ -1652,6 +1653,87 @@ export default function CommandDashboard({ onNavigate }) {
         </div>
         );
       })()}
+
+      {/* Contact Profile Modal */}
+      {hsContactModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]" onClick={() => setHsContactModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-[#e5e5e0] w-full max-w-[520px] mx-4 max-h-[calc(100vh-60px)] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-7 pt-6 pb-5 border-b border-[#f0eeea] flex items-start justify-between">
+              <div>
+                <h3 className="text-[15px] font-heading font-bold text-terminal-text">{hsContactModal.name || 'Unknown Contact'}</h3>
+                {hsContactModal.title && <div className="text-[12px] text-terminal-muted mt-0.5">{hsContactModal.title}</div>}
+                {hsContactModal.company && <div className="text-[12px] text-terminal-muted">{hsContactModal.company}</div>}
+              </div>
+              <button onClick={() => setHsContactModal(null)} className="text-[#9a9a92] hover:text-terminal-text p-1">
+                <X size={16} />
+              </button>
+            </div>
+            {/* Contact Info */}
+            <div className="px-7 py-4 border-b border-[#f0eeea]">
+              <div className="grid grid-cols-2 gap-3 text-[11px]">
+                {hsContactModal.email && (
+                  <div>
+                    <div className="text-[9px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-0.5">Email</div>
+                    <div className="text-terminal-text">{hsContactModal.email}</div>
+                  </div>
+                )}
+                {hsContactModal.domain && (
+                  <div>
+                    <div className="text-[9px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-0.5">Domain</div>
+                    <div className="text-terminal-text">{hsContactModal.domain}</div>
+                  </div>
+                )}
+                <div>
+                  <div className="text-[9px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-0.5">HubSpot ID</div>
+                  <div className="text-terminal-text font-mono">{hsContactModal.hubspot_id}</div>
+                </div>
+                {hsContactModal.confidence != null && (
+                  <div>
+                    <div className="text-[9px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-0.5">Confidence</div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-[#f0eeea] rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${hsContactModal.confidence >= 70 ? 'bg-emerald-500' : hsContactModal.confidence >= 40 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${hsContactModal.confidence}%` }} />
+                      </div>
+                      <span className="text-[10px] font-mono text-terminal-muted">{hsContactModal.confidence}%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Classification */}
+            <div className="px-7 py-4 border-b border-[#f0eeea]">
+              <div className="text-[9px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-2.5">Classification</div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {hsContactModal.industry && (
+                  <span className="text-[10px] font-mono px-2 py-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200">{hsContactModal.industry}</span>
+                )}
+                {hsContactModal.reason && (
+                  <span className="text-[10px] font-mono px-2 py-1 rounded-md bg-purple-50 text-purple-600 border border-purple-200">{hsContactModal.reason}</span>
+                )}
+                {hsContactModal.materials && (
+                  <span className="text-[10px] font-mono px-2 py-1 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-200">{hsContactModal.materials}</span>
+                )}
+              </div>
+            </div>
+            {/* Reasoning */}
+            {hsContactModal.reasoning && (
+              <div className="px-7 py-4 border-b border-[#f0eeea]">
+                <div className="text-[9px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px] mb-1.5">Classification Reasoning</div>
+                <div className="text-[12px] text-terminal-text leading-relaxed bg-[#f9f8f6] rounded-lg px-4 py-3 border border-[#f0eeea]">
+                  {hsContactModal.reasoning}
+                </div>
+              </div>
+            )}
+            {/* Classified at */}
+            {hsContactModal.classified_at && (
+              <div className="px-7 py-3">
+                <div className="text-[10px] text-terminal-muted">Classified {new Date(hsContactModal.classified_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Insight Modal */}
       {insightModal && (
