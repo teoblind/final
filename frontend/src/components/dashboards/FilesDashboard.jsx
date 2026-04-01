@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic } from 'lucide-react';
+import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic, Newspaper } from 'lucide-react';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../auth/AuthContext';
 
@@ -18,6 +18,7 @@ const FILE_ICONS = {
   pdf:    { letter: 'F', bg: '#fdedf0', color: '#dc3545' },
   csv:    { letter: 'C', bg: '#edf7f0', color: '#1a6b3c' },
   meeting:{ letter: 'M', bg: '#f0edf7', color: '#7c3aed' },
+  newsletter:{ letter: 'N', bg: '#e8eef5', color: '#1e3a5f' },
   other:  { letter: '?', bg: '#f5f4f0', color: '#666' },
 };
 
@@ -1960,6 +1961,7 @@ export default function FilesDashboard() {
   const [search, setSearch] = useState('');
   const [totalFiles, setTotalFiles] = useState(0);
   const [viewingReport, setViewingReport] = useState(null);
+  const [viewingNewsletter, setViewingNewsletter] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -2165,6 +2167,35 @@ export default function FilesDashboard() {
     fetchMeetings();
   }, []);
 
+  // Fetch newsletters and inject as a "Daily Briefs" folder
+  useEffect(() => {
+    async function fetchNewsletters() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/estimates/newsletters`, { headers: authHeaders });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.newsletters?.length > 0) {
+          const briefFiles = data.newsletters.map(n => ({
+            name: n.title || 'Daily Intelligence',
+            type: 'newsletter',
+            owner: 'Coppice AI',
+            modified: n.created_at ? new Date(n.created_at + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+            agent: true,
+            url: null,
+            isNewsletter: true,
+            newsletterHtml: n.content,
+            knowledgeId: n.id,
+          }));
+          setFolders(prev => ({
+            'Daily Briefs': { path: '/Daily Briefs/', files: briefFiles },
+            ...prev,
+          }));
+        }
+      } catch {}
+    }
+    fetchNewsletters();
+  }, []);
+
   const refreshFiles = async () => {
     setLoading(true);
     try {
@@ -2298,6 +2329,26 @@ export default function FilesDashboard() {
         />
       )}
 
+      {/* Newsletter Viewer Modal */}
+      {viewingNewsletter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setViewingNewsletter(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e6e1]">
+              <div>
+                <h3 className="text-sm font-bold text-terminal-text font-heading">{viewingNewsletter.name}</h3>
+                <span className="text-[11px] text-terminal-muted">{viewingNewsletter.modified}</span>
+              </div>
+              <button onClick={() => setViewingNewsletter(null)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f5f4f0] text-terminal-muted hover:text-terminal-text transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div dangerouslySetInnerHTML={{ __html: viewingNewsletter.newsletterHtml }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <h2 className="text-sm font-bold text-terminal-text tracking-[0.3px] font-heading">Files</h2>
@@ -2403,6 +2454,8 @@ export default function FilesDashboard() {
                     }
                     {name === 'Meetings'
                       ? <Mic size={14} className={`shrink-0 ${isSelected ? 'text-[#7c3aed]' : 'opacity-50'}`} />
+                      : name === 'Daily Briefs'
+                      ? <Newspaper size={14} className={`shrink-0 ${isSelected ? 'text-[#1e3a5f]' : 'opacity-50'}`} />
                       : <FolderOpen size={14} className={`shrink-0 ${isSelected ? 'text-terminal-green' : 'opacity-50'}`} />
                     }
                     <span className="truncate">{name}</span>
@@ -2462,7 +2515,9 @@ export default function FilesDashboard() {
                     <div
                       className="flex items-center gap-2.5 min-w-0 cursor-pointer"
                       onClick={() => {
-                        if (isIntelReport) {
+                        if (file.isNewsletter) {
+                          setViewingNewsletter(file);
+                        } else if (isIntelReport) {
                           setViewingReport(file);
                         } else if (isExternal) {
                           window.open(file.url, '_blank', 'noopener,noreferrer');

@@ -78,7 +78,7 @@ async function callClaude(model, system, user) {
 // ─── Apollo.io Contact Enrichment ────────────────────────────────────────────
 // Two-step: Perplexity finds decision-maker names → Apollo bulk_match verifies emails
 
-async function apolloBulkMatch(details) {
+export async function apolloBulkMatch(details) {
   const apiKey = process.env.APOLLO_API_KEY;
   if (!apiKey) throw new Error('APOLLO_API_KEY not set');
 

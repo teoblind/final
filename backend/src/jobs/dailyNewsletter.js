@@ -8,9 +8,10 @@
  * Architecture:
  *  1. Build search queries from tenant context (GC names, service areas, region)
  *  2. Run web_research (Perplexity) for each query
- *  3. Send results to Claude to analyze, score relevance, and format
- *  4. Email HTML newsletter to tenant users
- *  5. Store newsletter in knowledge_entries for dashboard display
+ *  3. Extract mentioned contacts and verify via Apollo.io bulk_match
+ *  4. Send results + verification data to Claude to analyze, score, and format
+ *  5. Email HTML newsletter to tenant users
+ *  6. Store newsletter in knowledge_entries for dashboard display
  */
 
 import { randomUUID } from 'crypto';
@@ -18,6 +19,7 @@ import {
   getAllTenants, runWithTenant, getUsersByTenant,
   getDacpBidRequests, getDacpJobs, getDacpStats, getTenantDb,
 } from '../cache/database.js';
+import { apolloBulkMatch } from '../services/leadEngine.js';
 
 let timer = null;
 
@@ -128,11 +130,114 @@ async function gatherIntelligence(tenantId) {
   return results;
 }
 
+// ── Contact Verification via Apollo ──────────────────────────────────────────
+
+async function extractAndVerifyContacts(tenantId, searchResults) {
+  if (!process.env.APOLLO_API_KEY) {
+    console.log('[Newsletter] No APOLLO_API_KEY - skipping contact verification');
+    return { verified: [], unverified: [] };
+  }
+
+  const { tunnelPrompt } = await import('../services/cliTunnel.js');
+
+  // Step 1: Have Claude extract structured contacts from research
+  const extractPrompt = `Extract all specific people mentioned in these research results. For each person, provide their first name, last name, and the company/organization they work for.
+
+RESEARCH RESULTS:
+${searchResults.map((r, i) => `--- ${i + 1}. "${r.query}" ---\n${r.answer}`).join('\n\n')}
+
+Return ONLY a JSON array. Each object must have: first_name, last_name, organization_name, mentioned_role (their role/title if mentioned).
+If no specific people are mentioned, return an empty array [].
+Do NOT invent names. Only extract names explicitly stated in the research.
+Return ONLY valid JSON, no commentary or markdown.`;
+
+  let people = [];
+  try {
+    const raw = await tunnelPrompt({
+      tenantId,
+      agentId: 'hivemind',
+      prompt: extractPrompt,
+      maxTurns: 5,
+      timeoutMs: 60_000,
+      label: 'Newsletter Contact Extraction',
+    });
+
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      people = JSON.parse(jsonMatch[0]);
+    }
+  } catch (err) {
+    console.warn('[Newsletter] Contact extraction failed:', err.message);
+    return { verified: [], unverified: [] };
+  }
+
+  if (!Array.isArray(people) || people.length === 0) {
+    console.log('[Newsletter] No contacts to verify');
+    return { verified: [], unverified: [] };
+  }
+
+  // Step 2: Run through Apollo bulk_match
+  const details = people
+    .filter(p => p.first_name && p.last_name && p.organization_name)
+    .slice(0, 20); // Cap at 20 to avoid burning credits
+
+  if (details.length === 0) {
+    return { verified: [], unverified: people };
+  }
+
+  console.log(`[Newsletter] Verifying ${details.length} contacts via Apollo...`);
+
+  try {
+    const matches = await apolloBulkMatch(
+      details.map(p => ({
+        first_name: p.first_name,
+        last_name: p.last_name,
+        organization_name: p.organization_name,
+      }))
+    );
+
+    // Map verified results back to original mentions
+    const verifiedNames = new Set(matches.map(m => m.name.toLowerCase()));
+    const verified = matches.map(m => ({
+      ...m,
+      mentionedRole: details.find(
+        d => `${d.first_name} ${d.last_name}`.toLowerCase() === m.name.toLowerCase()
+      )?.mentioned_role || null,
+    }));
+    const unverified = people.filter(
+      p => !verifiedNames.has(`${p.first_name} ${p.last_name}`.toLowerCase())
+    );
+
+    console.log(`[Newsletter] Apollo: ${verified.length} verified, ${unverified.length} unverified`);
+    return { verified, unverified };
+  } catch (err) {
+    console.warn('[Newsletter] Apollo verification failed:', err.message);
+    return { verified: [], unverified: people };
+  }
+}
+
 // ── Newsletter Generation via Claude ──────────────────────────────────────────
 
-async function generateNewsletter(tenantId, searchResults, businessContext) {
+async function generateNewsletter(tenantId, searchResults, businessContext, contactVerification = null) {
   const config = getTenantConfig(tenantId);
   const { tunnelPrompt } = await import('../services/cliTunnel.js');
+
+  // Build verification context block
+  let verificationBlock = '';
+  if (contactVerification && (contactVerification.verified.length > 0 || contactVerification.unverified.length > 0)) {
+    verificationBlock = `\n\nCONTACT VERIFICATION (via Apollo.io):
+${contactVerification.verified.length > 0 ? `VERIFIED CONTACTS (confirmed real people at these companies):
+${contactVerification.verified.map(c => `- ${c.name} | ${c.title || c.mentionedRole || 'N/A'} at ${c.org || 'N/A'}${c.email ? ' | ' + c.email : ''}${c.linkedin ? ' | LinkedIn: ' + c.linkedin : ''}${c.emailVerified ? ' [EMAIL VERIFIED]' : ''}`).join('\n')}` : ''}
+${contactVerification.unverified.length > 0 ? `\nUNVERIFIED CONTACTS (could not confirm via Apollo - DO NOT include contact details for these people, only mention them by name if the project/news itself is real):
+${contactVerification.unverified.map(c => `- ${c.first_name} ${c.last_name} at ${c.organization_name}`).join('\n')}` : ''}
+
+IMPORTANT RULES FOR CONTACTS:
+- Only include verified email addresses and LinkedIn URLs - never guess or fabricate contact info
+- For VERIFIED contacts: include their real title, email, and LinkedIn if available
+- For UNVERIFIED contacts: you may mention the person by name in context of a real project, but do NOT include email or direct contact details
+- In RECOMMENDED ACTIONS, prefer suggesting outreach to verified contacts`;
+  }
 
   const prompt = `You are writing a daily intelligence newsletter for ${config.name}, a construction subcontractor specializing in ${config.services.join(', ')} in ${config.region}.
 
@@ -140,7 +245,7 @@ WEB RESEARCH RESULTS (gathered this morning):
 ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
 
 CURRENT BUSINESS STATE:
-${JSON.stringify(businessContext, null, 2)}
+${JSON.stringify(businessContext, null, 2)}${verificationBlock}
 
 Write a morning intelligence briefing newsletter. Structure it as clean HTML (no <html>/<body> tags, just the content).
 
@@ -154,7 +259,7 @@ SECTIONS (include only sections with actual findings):
 
 4. **LINKEDIN HIGHLIGHTS** - Interesting posts or announcements from construction industry professionals (if any LinkedIn results were found).
 
-5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center."
+5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
 
 FORMATTING RULES:
 - Use clean, professional HTML with inline styles
@@ -165,6 +270,7 @@ FORMATTING RULES:
 - If no results for a section, omit it entirely
 - Target length: 500-800 words
 - Do NOT use em dashes, use regular hyphens
+- For verified contacts, add a small green "VERIFIED" badge next to their name
 
 Return ONLY the HTML content, no markdown wrapping.`;
 
@@ -300,18 +406,22 @@ async function runDailyNewsletter() {
         }
         console.log(`[Newsletter] Got ${searchResults.length} research results`);
 
-        // Step 2: Generate newsletter via Claude
+        // Step 2: Verify contacts via Apollo
+        console.log(`[Newsletter] Verifying contacts for ${tenant.id}...`);
+        const contactVerification = await extractAndVerifyContacts(tenant.id, searchResults);
+
+        // Step 3: Generate newsletter via Claude (with verification data)
         console.log(`[Newsletter] Generating newsletter for ${tenant.id}...`);
-        const newsletterHtml = await generateNewsletter(tenant.id, searchResults, businessContext);
+        const newsletterHtml = await generateNewsletter(tenant.id, searchResults, businessContext, contactVerification);
         if (!newsletterHtml || newsletterHtml.length < 100) {
           console.log(`[Newsletter] Generation failed or empty for ${tenant.id}`);
           return;
         }
 
-        // Step 3: Store for dashboard
+        // Step 4: Store for dashboard
         storeNewsletter(tenant.id, newsletterHtml, searchResults);
 
-        // Step 4: Email to all users
+        // Step 5: Email to all users
         console.log(`[Newsletter] Sending to ${recipients.length} recipients...`);
         await deliverNewsletter(tenant.id, newsletterHtml, recipients);
 
