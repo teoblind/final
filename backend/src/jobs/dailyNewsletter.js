@@ -333,6 +333,7 @@ FORMATTING RULES:
 - Use clean, professional HTML with inline styles
 - Use ${brandColor} as the primary brand color for ALL headings, borders, accents, and section dividers. Do NOT use navy (#1e3a5f) unless that IS the brand color.
 - START with a branded header banner: full-width block with background color ${brandColor}, white text, "${config.name} ${config.frequency === 'weekly' ? 'Weekly' : 'Daily'} Intelligence" as the title, and today's date below it. Use generous padding (at least 32px 40px) and rounded top corners to match the card container.
+- After the header, wrap ALL body content in a div with padding: 28px 40px. This ensures comfortable whitespace between the text and the card edges. All section content goes inside this padded wrapper.
 ${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (Renewables) - a colored horizontal rule or banner' : ''}
 - Keep it scannable - short paragraphs, bullet points
 - Bold key names (companies, project names, dollar amounts, MW figures)
@@ -366,7 +367,7 @@ function buildEmailHtml(newsletterHtml, tenantName, date, brandColor = '#1e3a5f'
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:700px;margin:0 auto;padding:24px;">
-  <div style="background:white;padding:0;border:1px solid #e8e6e1;border-radius:12px;overflow:hidden;font-size:14px;line-height:1.7;color:#2d2d2d;">
+  <div style="background:white;border:1px solid #e8e6e1;border-radius:12px;overflow:hidden;font-size:14px;line-height:1.7;color:#2d2d2d;">
     ${newsletterHtml}
   </div>
   <div style="text-align:center;padding:16px;font-size:11px;color:#9a9a92;">
