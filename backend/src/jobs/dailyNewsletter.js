@@ -18,7 +18,7 @@ import { randomUUID } from 'crypto';
 import {
   getAllTenants, runWithTenant, getUsersByTenant,
   getDacpBidRequests, getDacpJobs, getDacpStats, getTenantDb,
-  insertAgentAssignment,
+  insertAgentAssignment, updateAgentAssignment,
 } from '../cache/database.js';
 import { apolloBulkMatch } from '../services/leadEngine.js';
 
@@ -486,6 +486,11 @@ Based on the newsletter findings, extract 3-5 specific, actionable tasks that th
 - priority: "high", "medium", or "low"
 - action_prompt: Detailed instructions for an AI agent to execute this task (include specific company names, contacts, data points from the newsletter)
 
+IMPORTANT: For any "outreach" category task, also include an "email_draft" object with:
+- to: The email address to contact (use a realistic placeholder like "biddesk@companyname.com" if unknown)
+- subject: A professional email subject line
+- body: A short, professional HTML email body (2-3 paragraphs, include specific project details from the newsletter, written from ${config.name}'s perspective expressing interest or requesting information). Use <p> tags for paragraphs. Keep it concise and action-oriented.
+
 Return ONLY a JSON array of task objects. No markdown, no explanation.`;
 
     const response = await tunnelPrompt({
@@ -505,6 +510,20 @@ Return ONLY a JSON array of task objects. No markdown, no explanation.`;
 
     for (const task of tasks.slice(0, 5)) {
       const id = `TASK-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+      // For outreach tasks with email drafts, pre-populate artifacts
+      let outputArtifacts = null;
+      if (task.category === 'outreach' && task.email_draft) {
+        outputArtifacts = JSON.stringify([{
+          type: 'email_draft',
+          status: 'pending_approval',
+          to: task.email_draft.to || '',
+          subject: task.email_draft.subject || task.title,
+          body: task.email_draft.body || `<p>${task.description}</p>`,
+          index: 0,
+        }]);
+      }
+
       insertAgentAssignment({
         id,
         tenant_id: tenantId,
@@ -516,7 +535,13 @@ Return ONLY a JSON array of task objects. No markdown, no explanation.`;
         agent_id: 'hivemind',
         context_json: JSON.stringify({ source: 'newsletter', date: new Date().toISOString().slice(0, 10) }),
       });
-      console.log(`[Newsletter] Created task: ${id} "${task.title}"`);
+
+      // Set artifacts after insert (not in insertAgentAssignment schema)
+      if (outputArtifacts) {
+        updateAgentAssignment(tenantId, id, { output_artifacts_json: outputArtifacts });
+      }
+
+      console.log(`[Newsletter] Created task: ${id} "${task.title}"${outputArtifacts ? ' (with email draft)' : ''}`);
     }
     console.log(`[Newsletter] Generated ${Math.min(tasks.length, 5)} tasks for ${tenantId}`);
   } catch (err) {

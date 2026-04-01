@@ -1285,6 +1285,26 @@ router.patch('/assignments/:id/inputs', (req, res) => {
   }
 });
 
+/** PATCH /assignments/:id — Update assignment fields (artifacts, status, etc.) */
+router.patch('/assignments/:id', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user.tenantId;
+    const { id } = req.params;
+    const assignment = getAgentAssignment(tenantId, id);
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+    const { output_artifacts_json, status, result_summary } = req.body;
+    const updates = {};
+    if (output_artifacts_json !== undefined) updates.output_artifacts_json = output_artifacts_json;
+    if (status) updates.status = status;
+    if (result_summary) updates.result_summary = result_summary;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields to update' });
+    updateAgentAssignment(tenantId, id, updates);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** POST /assignments/:id/confirm — Confirm an assignment for execution */
 router.post('/assignments/:id/confirm', async (req, res) => {
   try {

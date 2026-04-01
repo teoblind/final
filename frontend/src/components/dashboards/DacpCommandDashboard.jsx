@@ -1366,6 +1366,12 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             inputsReady = fields.filter(f => f.required).every(f => vals[f.name] && String(vals[f.name]).trim() !== '');
                           }
                         } catch {}
+                        // Check if this proposed task has a pre-loaded email draft
+                        let hasPreloadedDraft = false;
+                        try {
+                          const preArts = JSON.parse(a.output_artifacts_json || '[]');
+                          hasPreloadedDraft = preArts.some(art => art.type === 'email_draft');
+                        } catch {}
                         return (
                           <>
                             <button
@@ -1375,14 +1381,23 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             >
                               <MessageSquare size={13} />
                             </button>
-                            <button
-                              onClick={() => handleConfirmAssignment(a.id)}
-                              disabled={processingAssignment === a.id || !inputsReady}
-                              title={!inputsReady ? 'Fill in required fields to confirm' : ''}
-                              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
-                            >
-                              <Check size={11} /> Run
-                            </button>
+                            {hasPreloadedDraft ? (
+                              <button
+                                onClick={() => setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, _showDraft: !x._showDraft } : x))}
+                                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-heading font-semibold bg-amber-500 text-white rounded-md hover:bg-amber-600"
+                              >
+                                <Mail size={11} /> Draft Email
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleConfirmAssignment(a.id)}
+                                disabled={processingAssignment === a.id || !inputsReady}
+                                title={!inputsReady ? 'Fill in required fields to confirm' : ''}
+                                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-heading font-semibold bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] disabled:opacity-50"
+                              >
+                                <Check size={11} /> Run
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDismissAssignment(a.id)}
                               className="p-1 text-terminal-muted hover:text-red-500 rounded"
@@ -1497,6 +1512,97 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       ))}
                     </div>
                   )}
+                  {/* Pre-loaded email draft for outreach tasks */}
+                  {a._showDraft && a.status === 'proposed' && (() => {
+                    try {
+                      const preArts = JSON.parse(a.output_artifacts_json || '[]');
+                      const drafts = preArts.filter(art => art.type === 'email_draft');
+                      if (drafts.length === 0) return null;
+                      return drafts.map((draft, di) => (
+                        <div key={`pre-draft-${di}`} className="mx-[18px] mb-3 border border-amber-200 bg-amber-50 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Mail size={12} className="text-amber-600" />
+                            <span className="text-[11px] font-semibold text-amber-800">
+                              {draft.status === 'sent' ? 'Email Sent' : draft.status === 'rejected' ? 'Email Rejected' : 'Email Draft - Review & Send'}
+                            </span>
+                          </div>
+                          <div className="space-y-1.5 mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-semibold text-amber-700 w-12">To:</span>
+                              <input type="text" defaultValue={draft.to} className="flex-1 text-[11px] px-2 py-1 border border-amber-200 rounded bg-white focus:outline-none focus:border-amber-400"
+                                onChange={e => {
+                                  const arts = JSON.parse(a.output_artifacts_json || '[]');
+                                  const d = arts.find(ar => ar.type === 'email_draft' && ar.index === draft.index);
+                                  if (d) d.to = e.target.value;
+                                  setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, output_artifacts_json: JSON.stringify(arts) } : x));
+                                }} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-semibold text-amber-700 w-12">Subject:</span>
+                              <input type="text" defaultValue={draft.subject} className="flex-1 text-[11px] px-2 py-1 border border-amber-200 rounded bg-white focus:outline-none focus:border-amber-400"
+                                onChange={e => {
+                                  const arts = JSON.parse(a.output_artifacts_json || '[]');
+                                  const d = arts.find(ar => ar.type === 'email_draft' && ar.index === draft.index);
+                                  if (d) d.subject = e.target.value;
+                                  setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, output_artifacts_json: JSON.stringify(arts) } : x));
+                                }} />
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-[#4a4a42] bg-white rounded border border-amber-100 p-2.5 mb-2.5 max-h-[200px] overflow-y-auto [&_p]:mb-2 [&_p:last-child]:mb-0" contentEditable suppressContentEditableWarning
+                            dangerouslySetInnerHTML={{ __html: draft.body }}
+                            onBlur={e => {
+                              const arts = JSON.parse(a.output_artifacts_json || '[]');
+                              const d = arts.find(ar => ar.type === 'email_draft' && ar.index === draft.index);
+                              if (d) d.body = e.target.innerHTML;
+                              setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, output_artifacts_json: JSON.stringify(arts) } : x));
+                            }} />
+                          {draft.status === 'pending_approval' && (
+                            <div className="flex gap-2">
+                              <button
+                                onClick={async () => {
+                                  // Save updated artifacts to backend first, then approve
+                                  try {
+                                    await fetch(`${API_BASE}/v1/estimates/assignments/${a.id}`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                      body: JSON.stringify({ output_artifacts_json: a.output_artifacts_json, status: 'completed' }),
+                                    });
+                                    if (!window.confirm(`Send email to ${draft.to}?`)) return;
+                                    const resp = await fetch(`${API_BASE}/v1/estimates/assignments/${a.id}/approve-email`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                      body: JSON.stringify({ index: draft.index }),
+                                    });
+                                    if (resp.ok) {
+                                      setAssignments(prev => prev.map(x => {
+                                        if (x.id !== a.id) return x;
+                                        const arts = JSON.parse(x.output_artifacts_json || '[]').map(ar =>
+                                          ar.type === 'email_draft' && ar.index === draft.index ? { ...ar, status: 'sent' } : ar
+                                        );
+                                        return { ...x, status: 'completed', output_artifacts_json: JSON.stringify(arts), _showDraft: false };
+                                      }));
+                                    }
+                                  } catch (err) { console.error('Send failed:', err); }
+                                }}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold px-4 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+                              >
+                                <Check size={11} /> Approve & Send
+                              </button>
+                              <button
+                                onClick={() => setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, _showDraft: false } : x))}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 rounded-lg bg-white hover:bg-gray-50 text-terminal-muted border border-[#e8e6e1] transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                          {draft.status === 'sent' && (
+                            <div className="text-[10px] text-green-600 font-medium"><Check size={10} className="inline" /> Sent {draft.sent_at ? `at ${new Date(draft.sent_at).toLocaleString()}` : ''}</div>
+                          )}
+                        </div>
+                      ));
+                    } catch { return null; }
+                  })()}
                   {/* Inline chat for refining this assignment */}
                   {chatOpenFor === a.id && a.status === 'proposed' && (
                     <div className="px-[18px] pb-3">
