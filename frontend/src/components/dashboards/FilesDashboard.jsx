@@ -1937,9 +1937,57 @@ function ReportViewerModal({ file, onClose }) {
   );
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// ─── Newsletter Viewer Modal ─────────────────────────────────────────────────
 
-// No demo/sample files - only show real uploaded files
+function NewsletterViewerModal({ newsletter, onClose }) {
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    if (!contentRef.current) return;
+    // Find recommended action items (green left-bordered divs) and inject task buttons
+    const actionDivs = contentRef.current.querySelectorAll('div[style*="border-left: 4px solid #2d7a2d"], div[style*="border-left:4px solid #2d7a2d"]');
+    actionDivs.forEach(div => {
+      if (div.querySelector('.newsletter-action-btn')) return; // already injected
+      const text = div.textContent?.trim() || '';
+      if (!text) return;
+      const btn = document.createElement('button');
+      btn.className = 'newsletter-action-btn';
+      btn.textContent = 'Start task in chat';
+      btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:6px 14px;background:#1e3a5f;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.15s;';
+      btn.onmouseenter = () => { btn.style.background = '#2a4f7a'; };
+      btn.onmouseleave = () => { btn.style.background = '#1e3a5f'; };
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        // Extract the action text and create a chat prefill
+        const actionText = text.replace(/^Start task in chat\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        const prefill = `From today's daily brief - ${actionText}\n\nPlease draft an outreach message for this and propose it as a task.`;
+        localStorage.setItem('coppice_chat_prefill', prefill);
+        window.location.hash = 'hivemind-chat';
+        onClose();
+      };
+      div.appendChild(btn);
+    });
+  }, [newsletter, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e6e1]">
+          <div>
+            <h3 className="text-sm font-bold text-terminal-text font-heading">{newsletter.name}</h3>
+            <span className="text-[11px] text-terminal-muted">{newsletter.modified}</span>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f5f4f0] text-terminal-muted hover:text-terminal-text transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6">
+          <div ref={contentRef} dangerouslySetInnerHTML={{ __html: newsletter.newsletterHtml }} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -2331,22 +2379,10 @@ export default function FilesDashboard() {
 
       {/* Newsletter Viewer Modal */}
       {viewingNewsletter && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setViewingNewsletter(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[720px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e6e1]">
-              <div>
-                <h3 className="text-sm font-bold text-terminal-text font-heading">{viewingNewsletter.name}</h3>
-                <span className="text-[11px] text-terminal-muted">{viewingNewsletter.modified}</span>
-              </div>
-              <button onClick={() => setViewingNewsletter(null)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f5f4f0] text-terminal-muted hover:text-terminal-text transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              <div dangerouslySetInnerHTML={{ __html: viewingNewsletter.newsletterHtml }} />
-            </div>
-          </div>
-        </div>
+        <NewsletterViewerModal
+          newsletter={viewingNewsletter}
+          onClose={() => setViewingNewsletter(null)}
+        />
       )}
 
       {/* Header */}
