@@ -4,10 +4,14 @@
  * Usage: node scripts/regen_pdfs.js [--tenant <id>]
  */
 
+import { config } from 'dotenv';
 import Database from 'better-sqlite3';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { generateReport } from '../src/services/documentService.js';
+
+// Load env vars before documentService evaluates OAuth client pairs
+config({ path: join(dirname(fileURLToPath(import.meta.url)), '..', '.env') });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

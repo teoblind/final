@@ -613,12 +613,14 @@ export function generateHtml({ title, content, meta = {}, theme }) {
 
 const SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '/root/google-service-account.json';
 
-// OAuth app credentials - try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+// OAuth app credentials - evaluated lazily so env vars are always picked up
 // (tokens may be issued by either client depending on how the account was authed)
-const DOC_CLIENT_PAIRS = [
-  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
-  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
-].filter(p => p.id && p.secret);
+function getDocClientPairs() {
+  return [
+    { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+    { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+  ].filter(p => p.id && p.secret);
+}
 
 /** Get Drive client using tenant's OAuth token (real Workspace storage) */
 async function getTenantDrive(tenantId) {
@@ -630,7 +632,9 @@ async function getTenantDrive(tenantId) {
     if (!row?.gmail_refresh_token) return null;
 
     // Try primary OAuth client first
-    for (const pair of DOC_CLIENT_PAIRS) {
+    const clientPairs = getDocClientPairs();
+    for (let i = 0; i < clientPairs.length; i++) {
+      const pair = clientPairs[i];
       try {
         const oauth2 = new google.auth.OAuth2(pair.id, pair.secret);
         oauth2.setCredentials({ refresh_token: row.gmail_refresh_token });
@@ -642,7 +646,7 @@ async function getTenantDrive(tenantId) {
         const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
           err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
           err.message?.includes('Token has been expired or revoked');
-        if (isAuthError && DOC_CLIENT_PAIRS.indexOf(pair) < DOC_CLIENT_PAIRS.length - 1) {
+        if (isAuthError && i < clientPairs.length - 1) {
           console.log(`[DocumentService] Primary OAuth client failed for ${tenantId}, trying fallback...`);
           continue; // Try next client pair
         }
