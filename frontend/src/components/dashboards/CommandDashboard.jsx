@@ -91,6 +91,7 @@ export default function CommandDashboard({ onNavigate }) {
   const [leadStats, setLeadStats] = useState(null);
   const [approvalsPage, setApprovalsPage] = useState(0);
   const [expandedApproval, setExpandedApproval] = useState(null);
+  const [meetingsPage, setMeetingsPage] = useState(0);
   // Meetings state (matches DACP pattern)
   const [meetings, setMeetings] = useState([]);
   const [meetingRange, setMeetingRange] = useState('week');
@@ -1153,7 +1154,7 @@ export default function CommandDashboard({ onNavigate }) {
               {MEETING_RANGES.map(r => (
                 <button
                   key={r.key}
-                  onClick={() => setMeetingRange(r.key)}
+                  onClick={() => { setMeetingRange(r.key); setMeetingsPage(0); }}
                   className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${meetingRange === r.key ? 'bg-[var(--t-ui-accent)] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}
                 >
                   {r.label}
@@ -1162,11 +1163,16 @@ export default function CommandDashboard({ onNavigate }) {
             </div>
           </div>
         </div>
-        {meetings.length === 0 ? (
+        {(() => {
+          const MEETINGS_PER_PAGE = 10;
+          const totalMeetingPages = Math.max(1, Math.ceil(meetings.length / MEETINGS_PER_PAGE));
+          const safeMeetingsPage = Math.min(meetingsPage, totalMeetingPages - 1);
+          const pagedMeetings = meetings.slice(safeMeetingsPage * MEETINGS_PER_PAGE, (safeMeetingsPage + 1) * MEETINGS_PER_PAGE);
+          return meetings.length === 0 ? (
           <div className="px-[18px] py-8 text-center text-[13px] text-terminal-muted">No meetings scheduled</div>
         ) : (
           <div>
-            {meetings.map((m) => {
+            {pagedMeetings.map((m) => {
               const isInvited = invitedMeetings.has(m.id);
               const isInviting = invitingId === m.id;
               const hasMeetLink = !!m.meetLink;
@@ -1228,8 +1234,21 @@ export default function CommandDashboard({ onNavigate }) {
                 </div>
               );
             })}
+            {totalMeetingPages > 1 && (
+              <div className="px-[18px] py-2 flex items-center justify-between border-t border-[#f0eeea]">
+                <span className="text-[10px] text-terminal-muted">{meetings.length} meetings</span>
+                <div className="flex items-center gap-2">
+                  <button disabled={safeMeetingsPage <= 0} onClick={() => setMeetingsPage(p => p - 1)}
+                    className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">Prev</button>
+                  <span className="text-[10px] text-terminal-muted">{safeMeetingsPage + 1} / {totalMeetingPages}</span>
+                  <button disabled={safeMeetingsPage >= totalMeetingPages - 1} onClick={() => setMeetingsPage(p => p + 1)}
+                    className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">Next</button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        );
+        })()}
       </div>
 
       {/* Agent Insights */}
