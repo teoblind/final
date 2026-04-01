@@ -358,7 +358,27 @@ Return ONLY the HTML content, no markdown wrapping.`;
   });
 
   // Clean up - remove markdown code fences if present
-  return response.replace(/^```html?\n?/i, '').replace(/\n?```$/i, '').trim();
+  let html = response.replace(/^```html?\n?/i, '').replace(/\n?```$/i, '').trim();
+
+  // ─── Hardcoded header guarantee ───
+  // Claude sometimes drops the branded header banner. We strip any Claude-generated
+  // header and always prepend the correct one so the newsletter never ships broken.
+  const freq = config.frequency === 'weekly' ? 'Weekly' : 'Daily';
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const headerHtml = `<div style="background-color:${brandColor}; padding:28px 32px; border-radius:6px 6px 0 0;">
+  <h1 style="color:#ffffff; margin:0; font-size:22px; font-weight:700; letter-spacing:0.3px;">${config.name} | ${isSangha ? 'Weekly' : 'Morning'} Intelligence Briefing</h1>
+  <p style="color:${isSangha ? '#a8e0c4' : '#a8c4e0'}; margin:6px 0 0 0; font-size:14px;">${dateStr} | ${config.region}</p>
+</div>`;
+
+  // Strip any Claude-generated header banner (background-color + h1 inside a div at the start)
+  html = html.replace(/^<div[^>]*style="[^"]*background[^"]*"[^>]*>[\s\S]*?<\/h1>[\s\S]*?<\/div>\s*/i, '');
+
+  // Ensure body content is wrapped in padding div
+  if (!html.startsWith('<div') || !html.includes('padding: 28px')) {
+    html = `<div style="padding: 28px 40px;">\n${html}\n</div>`;
+  }
+
+  return `<div style="max-width:680px; margin:0 auto; font-family: 'Helvetica Neue', Arial, sans-serif; color:#222; line-height:1.6;">\n${headerHtml}\n${html}\n</div>`;
 }
 
 // ── Email Delivery ────────────────────────────────────────────────────────────
@@ -422,7 +442,9 @@ function stripHtmlToText(html) {
 function storeNewsletter(tenantId, html, searchResults) {
   try {
     const db = getTenantDb(tenantId);
-    const id = `newsletter-${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 6)}`;
+    // Deterministic ID per tenant per day — re-runs REPLACE instead of creating duplicates
+    const dateKey = new Date().toISOString().slice(0, 10);
+    const id = `newsletter-${dateKey}-${tenantId.slice(0, 8)}`;
     const plainText = stripHtmlToText(html);
     const config = getTenantConfig(tenantId);
     const freq = config.frequency === 'weekly' ? 'Weekly' : 'Daily';
@@ -437,7 +459,7 @@ function storeNewsletter(tenantId, html, searchResults) {
       plainText.substring(0, 8000),
       html,
     );
-    console.log(`[Newsletter] Stored as ${id}`);
+    console.log(`[Newsletter] Stored as ${id} (replaces any previous run for ${dateKey})`);
   } catch (err) {
     console.warn(`[Newsletter] Storage failed:`, err.message);
   }
