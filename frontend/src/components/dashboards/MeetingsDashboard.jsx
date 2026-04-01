@@ -392,6 +392,13 @@ export default function MeetingsDashboard() {
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [ffStatus, setFfStatus] = useState(null); // { connected, user }
+  const [ffModal, setFfModal] = useState(false);
+  const [ffKey, setFfKey] = useState('');
+  const [ffConnecting, setFfConnecting] = useState(false);
+  const [ffImporting, setFfImporting] = useState(false);
+  const [ffResult, setFfResult] = useState(null);
+  const [ffError, setFfError] = useState('');
   const [audioTime, setAudioTime] = useState(0);
   const searchRef = React.useRef(null);
   const audioPlayerRef = useRef(null);
@@ -415,6 +422,48 @@ export default function MeetingsDashboard() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Check Fireflies connection status
+  useEffect(() => {
+    api.get('/v1/fireflies/status').then(r => setFfStatus(r.data)).catch(() => {});
+  }, []);
+
+  const connectFireflies = async () => {
+    setFfConnecting(true);
+    setFfError('');
+    try {
+      const r = await api.post('/v1/fireflies/connect', { api_key: ffKey });
+      setFfStatus(r.data);
+      setFfKey('');
+      setFfModal(false);
+    } catch (err) {
+      setFfError(err.response?.data?.error || err.message);
+    } finally {
+      setFfConnecting(false);
+    }
+  };
+
+  const disconnectFireflies = async () => {
+    try {
+      await api.delete('/v1/fireflies/disconnect');
+      setFfStatus({ connected: false });
+      setFfResult(null);
+    } catch {}
+  };
+
+  const importFireflies = async () => {
+    setFfImporting(true);
+    setFfResult(null);
+    try {
+      const r = await api.post('/v1/fireflies/import');
+      setFfResult(r.data);
+      if (r.data.imported > 0) fetchData(); // refresh meeting list
+    } catch (err) {
+      setFfResult({ error: err.response?.data?.error || err.message });
+    } finally {
+      setFfImporting(false);
+    }
+  };
 
   // ─── Derived data ───────────────────────────────────────────────────────
   const filteredMeetings = meetings.filter(m => {
@@ -492,6 +541,32 @@ export default function MeetingsDashboard() {
           </button>
         ))}
         <div className="w-px h-5 bg-terminal-border mx-1" />
+        {ffStatus?.connected ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={importFireflies}
+              disabled={ffImporting}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all font-heading bg-[#6c3bff] text-white border-[#6c3bff] hover:opacity-90 disabled:opacity-50"
+            >
+              {ffImporting ? 'Importing...' : 'Import from Fireflies'}
+            </button>
+            <button
+              onClick={disconnectFireflies}
+              className="px-2 py-1.5 rounded-lg text-[11px] font-semibold border border-terminal-border text-terminal-muted hover:bg-[#f5f4f0] transition-all font-heading"
+              title={`Connected as ${ffStatus.user?.email || 'unknown'}`}
+            >
+              Fireflies Connected
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setFfModal(true)}
+            className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all font-heading bg-[#6c3bff] text-white border-[#6c3bff] hover:opacity-90"
+          >
+            Connect Fireflies
+          </button>
+        )}
+        <div className="w-px h-5 bg-terminal-border mx-1" />
         <button
           onClick={() => searchRef.current?.focus()}
           className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-terminal-green text-white border border-terminal-green hover:opacity-90 transition-all font-heading"
@@ -499,6 +574,71 @@ export default function MeetingsDashboard() {
           Search Transcripts
         </button>
       </div>
+
+      {/* Fireflies import result banner */}
+      {ffResult && (
+        <div className={`mb-4 px-4 py-3 rounded-lg text-[12px] font-heading ${ffResult.error ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-[#edf7f0] text-[#1a6b3c] border border-[#d1e7d9]'}`}>
+          {ffResult.error
+            ? `Import failed: ${ffResult.error}`
+            : `Imported ${ffResult.imported} meetings from Fireflies (${ffResult.skipped} already existed${ffResult.errors ? `, ${ffResult.errors} errors` : ''})`
+          }
+          <button onClick={() => setFfResult(null)} className="ml-3 underline opacity-70 hover:opacity-100">dismiss</button>
+        </div>
+      )}
+
+      {/* Fireflies Connect Modal */}
+      {ffModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setFfModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-[440px] p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#6c3bff] flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </div>
+              <div>
+                <h3 className="text-[15px] font-bold text-terminal-text font-heading">Connect Fireflies.ai</h3>
+                <p className="text-[11px] text-terminal-muted">Import your meeting transcripts and summaries</p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-[11px] font-semibold text-terminal-muted mb-1.5 font-heading">API Key</label>
+              <input
+                type="password"
+                value={ffKey}
+                onChange={e => setFfKey(e.target.value)}
+                placeholder="Paste your Fireflies API key..."
+                className="w-full px-3 py-2.5 border-[1.5px] border-terminal-border rounded-xl text-[13px] text-terminal-text bg-[#f5f4f0] outline-none focus:border-[#6c3bff] focus:bg-white transition-colors placeholder:text-[#c5c5bc]"
+                onKeyDown={e => e.key === 'Enter' && ffKey && connectFireflies()}
+              />
+              <p className="text-[10px] text-terminal-muted mt-1.5">
+                Find your API key at <span className="font-semibold">Fireflies.ai &gt; Integrations &gt; Fireflies API</span>
+              </p>
+            </div>
+
+            {ffError && (
+              <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 text-red-700 text-[11px] border border-red-200">
+                {ffError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setFfModal(false); setFfError(''); setFfKey(''); }}
+                className="px-4 py-2 rounded-xl text-[12px] font-semibold text-terminal-muted border border-terminal-border hover:bg-[#f5f4f0] transition-all font-heading"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={connectFireflies}
+                disabled={!ffKey || ffConnecting}
+                className="px-4 py-2 rounded-xl text-[12px] font-semibold text-white bg-[#6c3bff] border border-[#6c3bff] hover:opacity-90 transition-all font-heading disabled:opacity-50"
+              >
+                {ffConnecting ? 'Connecting...' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats ticker */}
       <div className="flex gap-[1px] bg-terminal-border border border-terminal-border rounded-[14px] overflow-hidden mb-4">
