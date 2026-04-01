@@ -332,8 +332,9 @@ ${sectionInstructions}
 FORMATTING RULES:
 - Use clean, professional HTML with inline styles
 - Use ${brandColor} as the primary brand color for ALL headings, borders, accents, and section dividers. Do NOT use navy (#1e3a5f) unless that IS the brand color.
-- START with a branded header banner: full-width block with background color ${brandColor}, white text, "${config.name} ${config.frequency === 'weekly' ? 'Weekly' : 'Daily'} Intelligence" as the title, and today's date below it. Use generous padding (at least 32px 40px) and rounded top corners to match the card container.
+- START with a branded header banner: ONE single full-width block with background color ${brandColor}, white text. Include the title "${config.name} ${config.frequency === 'weekly' ? 'Weekly' : 'Daily'} Intelligence", the date, AND the first part label (e.g. "PART 1: MINING MARKET DYNAMICS") all inside the same green banner div. Use generous padding (36px 44px) and rounded top corners. Do NOT make the part labels separate colored blocks - they are part of the header.
 - After the header, wrap ALL body content in a div with padding: 28px 40px. This ensures comfortable whitespace between the text and the card edges. All section content goes inside this padded wrapper.
+${isSangha ? '- For Part 2, use a similar full-width green banner (background ' + brandColor + ', white text, padding 20px 44px) as a section divider before the renewables content.' : ''}
 ${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (Renewables) - a colored horizontal rule or banner' : ''}
 - Keep it scannable - short paragraphs, bullet points
 - Bold key names (companies, project names, dollar amounts, MW figures)
