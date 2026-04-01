@@ -15,17 +15,21 @@ import { insertActivity, getTenantEmailConfig } from '../cache/database.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Shared OAuth app credentials (all tenants use the same OAuth app)
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET;
+// Dual OAuth app credentials - tokens may be issued by either client
+const OAUTH_CLIENTS = [
+  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+].filter(c => c.id && c.secret);
+
 const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
 const FALLBACK_SENDER = 'Coppice <agent@zhan.coppice.ai>';
 
 /**
  * Get a Gmail client + sender identity for a tenant.
  * Looks up tenant_email_config in DB; falls back to env var defaults.
+ * Tries both OAuth clients since tokens may be issued by either one.
  */
-function getGmailClient(tenantId) {
+async function getGmailClient(tenantId) {
   let refreshToken = FALLBACK_REFRESH_TOKEN;
   let sender = FALLBACK_SENDER;
 
@@ -41,9 +45,23 @@ function getGmailClient(tenantId) {
     }
   }
 
-  const oAuth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
-  oAuth2Client.setCredentials({ refresh_token: refreshToken });
+  // Try each OAuth client until one works with this refresh token
+  for (const client of OAUTH_CLIENTS) {
+    try {
+      const oAuth2Client = new google.auth.OAuth2(client.id, client.secret, 'http://localhost:8099');
+      oAuth2Client.setCredentials({ refresh_token: refreshToken });
+      await oAuth2Client.getAccessToken(); // test that it works
+      const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+      return { gmail, sender };
+    } catch {
+      // Try next client
+    }
+  }
 
+  // Last resort - use first client without testing (will fail at send time with clear error)
+  const fallback = OAUTH_CLIENTS[0];
+  const oAuth2Client = new google.auth.OAuth2(fallback.id, fallback.secret, 'http://localhost:8099');
+  oAuth2Client.setCredentials({ refresh_token: refreshToken });
   const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
   return { gmail, sender };
 }
@@ -223,7 +241,7 @@ export async function sendEmailWithAttachments({ to, subject, body, html, cc, bc
     return sendEmail({ to, subject, body, cc, bcc, tenantId, threadId, inReplyTo, references });
   }
 
-  const { gmail, sender } = getGmailClient(tenantId);
+  const { gmail, sender } = await getGmailClient(tenantId);
 
   const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -333,7 +351,7 @@ function wrapHtmlBody(html) {
  * Send an HTML email.
  */
 export async function sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, threadId, inReplyTo, references, skipSignature }) {
-  const { gmail, sender } = getGmailClient(tenantId);
+  const { gmail, sender } = await getGmailClient(tenantId);
 
   const wrappedHtml = wrapHtmlBody(html);
   const htmlWithSig = skipSignature ? wrappedHtml : wrappedHtml.replace('</body>', getSignature(tenantId, true) + '\n</body>');
