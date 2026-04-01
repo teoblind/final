@@ -90,6 +90,7 @@ export default function CommandDashboard({ onNavigate }) {
   const [threadModal, setThreadModal] = useState(null); // { thread, messages, loading }
   const [leadStats, setLeadStats] = useState(null);
   const [approvalsPage, setApprovalsPage] = useState(0);
+  const [expandedApproval, setExpandedApproval] = useState(null);
   // Meetings state (matches DACP pattern)
   const [meetings, setMeetings] = useState([]);
   const [meetingRange, setMeetingRange] = useState('week');
@@ -330,8 +331,10 @@ export default function CommandDashboard({ onNavigate }) {
           agentLabel: (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1),
           icon: AGENT_ICON_COLORS[item.agentId] || { letter: 'A', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
           title: item.title,
+          description: item.description || '',
           desc: item.description || '',
           time: formatRelativeTime(item.createdAt),
+          payload: item.payload || {},
         }));
         setApprovals(mapped);
       } catch {}
@@ -787,28 +790,87 @@ export default function CommandDashboard({ onNavigate }) {
               <div>
                 {approvals.length === 0 ? (
                   <EmptyState icon="shield" title="No pending approvals" subtitle="Agent actions requiring your review will appear here." compact />
-                ) : pagedApprovals.map((item) => (
-                  <div key={item.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-                    <span
-                      className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-                      style={{ background: item.icon.bg, color: item.icon.color }}
-                    >
-                      {item.icon.letter}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                      <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
-                        <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
+                ) : pagedApprovals.map((item) => {
+                  const isExpanded = expandedApproval === item.id;
+                  const payload = item.payload || {};
+                  return (
+                    <div key={item.id} className="border-b border-[#f0eeea] last:border-b-0">
+                      <div
+                        className="flex items-start gap-3 px-[18px] py-3 hover:bg-[#f5f4f0] transition-colors cursor-pointer"
+                        onClick={() => setExpandedApproval(isExpanded ? null : item.id)}
+                      >
+                        <span
+                          className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                          style={{ background: item.icon.bg, color: item.icon.color }}
+                        >
+                          {item.icon.letter}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                          <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
+                            <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                          <button onClick={(e) => { e.stopPropagation(); handleApprove(item.id); }} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
+                          <button onClick={(e) => { e.stopPropagation(); handleReject(item.id); }} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
+                          {isExpanded ? <ChevronUp size={14} className="text-terminal-muted ml-1" /> : <ChevronDown size={14} className="text-terminal-muted ml-1" />}
+                        </div>
                       </div>
+                      {isExpanded && (
+                        <div className="px-[18px] pb-4 pt-1 space-y-3">
+                          <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
+                            {(payload.to || payload.subject) && (
+                              <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
+                                <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase mb-1.5">Details</div>
+                                {payload.to && (
+                                  <div className="text-[11px] text-[#6b6b65]">
+                                    <span className="font-medium text-terminal-text">To:</span> {payload.to}
+                                  </div>
+                                )}
+                                {payload.subject && (
+                                  <div className="text-[11px] text-[#6b6b65]">
+                                    <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="p-4">
+                              {payload.html ? (
+                                <div
+                                  className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
+                                  dangerouslySetInnerHTML={{ __html: payload.html }}
+                                />
+                              ) : payload.body ? (
+                                <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
+                                  {payload.body}
+                                </div>
+                              ) : (
+                                <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
+                                  {item.description || 'No preview available'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const context = { approvalId: item.id, title: item.title, description: item.description, type: item.type, payload };
+                              sessionStorage.setItem('approval_context', JSON.stringify(context));
+                              onNavigate?.('hivemind-chat');
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-heading font-semibold text-[var(--t-ui-accent)] bg-[var(--t-ui-accent-bg)] border border-[var(--t-ui-accent-border,#c8d8e8)] hover:opacity-80 transition-opacity"
+                          >
+                            <MessageSquare size={12} />
+                            Edit in Agent Chat
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                      <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
-                      <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {totalApprovalPages > 1 && (
                   <div className="px-[18px] py-2 flex items-center justify-between border-t border-[#f0eeea]">
                     <span className="text-[10px] text-terminal-muted">{approvals.length} pending</span>
