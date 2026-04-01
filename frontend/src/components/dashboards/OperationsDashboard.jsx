@@ -29,7 +29,7 @@ const WorkerFleetPanel = lazy(() => import('../panels/pools/WorkerFleetPanel'));
 const MempoolFeesPanel = lazy(() => import('../panels/pools/MempoolFeesPanel'));
 const PoolComparisonPanel = lazy(() => import('../panels/pools/PoolComparisonPanel'));
 
-// Phase 6 removed — Clawbot Agent panels were demo placeholders
+// Phase 6 removed - Clawbot Agent panels were demo placeholders
 
 function PanelSkeleton() {
   return (

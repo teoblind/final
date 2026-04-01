@@ -1,5 +1,5 @@
 /**
- * MISO (Midcontinent Independent System Operator) Data Service — STUB
+ * MISO (Midcontinent Independent System Operator) Data Service - STUB
  *
  * MISO covers central US from Louisiana to Manitoba.
  * API: https://www.misoenergy.org/markets-and-operations/

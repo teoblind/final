@@ -1,12 +1,12 @@
 /**
- * Construction Copilot V2 — Steps 2-4, 6-7 + Contract Redline + Quote Tracker
+ * Construction Copilot V2 - Steps 2-4, 6-7 + Contract Redline + Quote Tracker
  *
- * 1. Proposal Generator (Step 7) — Word doc from estimate data
- * 2. Bid Sanity Checker (Step 6) — flag cost outliers, labor stress test
- * 3. Takeoff Template Generator (Step 3-4) — pre-populated Excel takeoff sheet
- * 4. Compliance Form Pre-filler — DBE, Buy America, Non-Collusion from company data
- * 5. Contract Redline Generator — marked-up Word doc from comparison results
- * 6. Supplier Quote Tracker — parse incoming supplier quotes from email
+ * 1. Proposal Generator (Step 7) - Word doc from estimate data
+ * 2. Bid Sanity Checker (Step 6) - flag cost outliers, labor stress test
+ * 3. Takeoff Template Generator (Step 3-4) - pre-populated Excel takeoff sheet
+ * 4. Compliance Form Pre-filler - DBE, Buy America, Non-Collusion from company data
+ * 5. Contract Redline Generator - marked-up Word doc from comparison results
+ * 6. Supplier Quote Tracker - parse incoming supplier quotes from email
  */
 
 import {
@@ -118,7 +118,7 @@ export async function generateProposal({
 
         // Concrete Scope
         ...(concreteScope?.length > 0 ? [
-          sectionHeading('SCOPE OF WORK — CONCRETE'),
+          sectionHeading('SCOPE OF WORK - CONCRETE'),
           subHeading('Specific Operations:'),
           ...concreteScope.map((item, i) => numberedItem(i + 1, item)),
         ] : []),
@@ -126,7 +126,7 @@ export async function generateProposal({
         // Masonry Scope
         ...(masonryScope?.length > 0 ? [
           new Paragraph({ spacing: { after: 100 } }),
-          sectionHeading('SCOPE OF WORK — MASONRY'),
+          sectionHeading('SCOPE OF WORK - MASONRY'),
           ...masonryScope.map((item, i) => numberedItem(i + 1, item)),
         ] : []),
 
@@ -319,7 +319,7 @@ export function runBidSanityChecks(estimate) {
         value: `$${costPerCY}/CY`,
         status: 'fail',
         severity: 'high',
-        message: `$${costPerCY}/CY is below the $700 minimum. Possible bid bust — check pricing.`,
+        message: `$${costPerCY}/CY is below the $700 minimum. Possible bid bust - check pricing.`,
         range: '$700 – $1,300/CY',
       });
     } else if (costPerCY > 1300) {
@@ -452,10 +452,10 @@ export function runBidSanityChecks(estimate) {
   return {
     overall: overallStatus,
     summary: fails.length > 0
-      ? `${fails.length} CRITICAL issue(s) found — review before submitting`
+      ? `${fails.length} CRITICAL issue(s) found - review before submitting`
       : warns.length > 0
-      ? `${warns.length} warning(s) — review recommended`
-      : 'All checks passed — bid looks solid',
+      ? `${warns.length} warning(s) - review recommended`
+      : 'All checks passed - bid looks solid',
     checks,
     metrics: { totalCY, totalSogSF, effectiveMargin, laborPct, totalBid },
   };
@@ -468,7 +468,7 @@ export function runBidSanityChecks(estimate) {
 
 export async function generateTakeoffTemplate(projectName, gcName, assemblies) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'DACP Construction — Coppice AI';
+  wb.creator = 'DACP Construction - Coppice AI';
   wb.created = new Date();
 
   // ── Sheet 1: Takeoff ──
@@ -498,7 +498,7 @@ export async function generateTakeoffTemplate(projectName, gcName, assemblies) {
   // Title
   ws.mergeCells('A1:J1');
   const t1 = ws.getCell('A1');
-  t1.value = 'DACP CONSTRUCTION — QUANTITY TAKEOFF';
+  t1.value = 'DACP CONSTRUCTION - QUANTITY TAKEOFF';
   t1.font = { bold: true, size: 14, color: { argb: 'FF1E3A5F' }, name: 'Arial' };
 
   ws.mergeCells('A2:J2');
@@ -548,7 +548,7 @@ export async function generateTakeoffTemplate(projectName, gcName, assemblies) {
       // Formulas for Contact SF, Cubic Ft, Cubic Yd
       const r = dataRow.number;
       // Contact SF = Count * 2 * (Length + Width) * Height (for footings/beams)
-      // Simplified: Contact SF = Count * Length * Width (for slabs) — user adjusts
+      // Simplified: Contact SF = Count * Length * Width (for slabs) - user adjusts
       dataRow.getCell(7).value = { formula: `IF(C${r}="","",C${r}*D${r}*E${r})` };
       dataRow.getCell(7).numFmt = '#,##0';
       // Cubic Ft = Count * Length * Width * Height
@@ -607,7 +607,7 @@ export async function generateTakeoffTemplate(projectName, gcName, assemblies) {
   ];
 
   ps.mergeCells('A1:G1');
-  ps.getCell('A1').value = 'PRICING SHEET — Auto-linked to Takeoff';
+  ps.getCell('A1').value = 'PRICING SHEET - Auto-linked to Takeoff';
   ps.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF1E3A5F' }, name: 'Arial' };
 
   const phdr = ps.addRow(['Item', 'Field Cost', '25% OH/Profit', '% of Total', 'YDS', 'Cost/Per Yd', 'Material']);
@@ -708,7 +708,7 @@ export async function generateComplianceForms(projectName, gcName, bidDate) {
       {
         properties: { page: { margin: { top: 1080, bottom: 720, left: 1080, right: 1080 } } },
         children: [
-          formTitle('DBE FORM 1 — CONTRACT PARTICIPATION AND DBE COMMITMENT'),
+          formTitle('DBE FORM 1 - CONTRACT PARTICIPATION AND DBE COMMITMENT'),
           formField('Project Name:', projectName),
           formField('Bid Date:', bidDate || new Date().toLocaleDateString()),
           formField('General Contractor:', gcName),
@@ -893,20 +893,20 @@ export async function generateContractRedline(comparison, projectName) {
       sectionHeading('LEGEND'),
       new Paragraph({ children: [
         new TextRun({ text: 'RED STRIKETHROUGH', strike: true, color: 'CC0000', size: 22, bold: true }),
-        new TextRun({ text: ' — Language to REMOVE or REJECT', size: 22 }),
+        new TextRun({ text: ' - Language to REMOVE or REJECT', size: 22 }),
       ], spacing: { after: 60 } }),
       new Paragraph({ children: [
         new TextRun({ text: 'GREEN UNDERLINE', color: '008800', underline: {}, size: 22, bold: true }),
-        new TextRun({ text: ' — Language to ADD or INSERT', size: 22 }),
+        new TextRun({ text: ' - Language to ADD or INSERT', size: 22 }),
       ], spacing: { after: 60 } }),
       new Paragraph({ children: [
         new TextRun({ text: 'AMBER NOTE', color: 'CC6600', size: 22, bold: true }),
-        new TextRun({ text: ' — Requires discussion / clarification', size: 22 }),
+        new TextRun({ text: ' - Requires discussion / clarification', size: 22 }),
       ], spacing: { after: 200 } }),
 
       // Scope additions (items in contract but NOT in proposal)
       ...(comparison.scope_comparison?.in_contract_only?.length > 0 ? [
-        sectionHeading('SCOPE ADDITIONS — NOT IN DACP BID'),
+        sectionHeading('SCOPE ADDITIONS - NOT IN DACP BID'),
         new Paragraph({ children: [new TextRun({
           text: 'The following items appear in the GC contract but were NOT included in DACP\'s proposal. These represent additional scope that DACP did not price.',
           size: 22, color: '666666', italics: true,
@@ -916,14 +916,14 @@ export async function generateContractRedline(comparison, projectName) {
             new TextRun({ text: `\u2716  ${item.item}`, strike: true, color: 'CC0000', size: 22, bold: true }),
           ], spacing: { after: 40 } }),
           new Paragraph({ children: [
-            new TextRun({ text: `    Risk: ${item.risk || 'high'} — ${item.impact || 'Not in original bid'}`, size: 20, color: 'CC0000' }),
+            new TextRun({ text: `    Risk: ${item.risk || 'high'} - ${item.impact || 'Not in original bid'}`, size: 20, color: 'CC0000' }),
           ], spacing: { after: 80 }, indent: { left: 360 } }),
         ]),
       ] : []),
 
       // Missing exclusions
       ...(comparison.exclusion_comparison?.exclusions_missing?.length > 0 ? [
-        sectionHeading('MISSING EXCLUSIONS — MUST ADD BEFORE SIGNING'),
+        sectionHeading('MISSING EXCLUSIONS - MUST ADD BEFORE SIGNING'),
         new Paragraph({ children: [new TextRun({
           text: 'The following exclusions from DACP\'s proposal are NOT reflected in the contract. Without these, DACP may be responsible for these costs.',
           size: 22, color: '666666', italics: true,
@@ -987,7 +987,7 @@ export async function generateContractRedline(comparison, projectName) {
             new TextRun({ text: `${i + 1}. `, bold: true, size: 22 }),
             new TextRun({ text: `[${(ai.priority || 'before-signing').toUpperCase()}] `, bold: true, size: 20,
               color: ai.priority === 'immediate' ? 'CC0000' : '1E3A5F' }),
-            new TextRun({ text: `${ai.action} — ${ai.responsible || 'Tom'}`, size: 22 }),
+            new TextRun({ text: `${ai.action} - ${ai.responsible || 'Tom'}`, size: 22 }),
           ],
           spacing: { after: 60 },
           indent: { left: 360 },

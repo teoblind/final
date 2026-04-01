@@ -1,5 +1,5 @@
 /**
- * Pool Management & Data Routes — Phase 5
+ * Pool Management & Data Routes - Phase 5
  *
  * Handles pool connections, hashrate, workers, earnings, payouts,
  * shares, pool info, unified data, and comparison endpoints.
@@ -27,7 +27,7 @@ const router = express.Router();
 
 // ─── Pool Management ─────────────────────────────────────────────────────
 
-/** GET / — List configured pools with connection status and monitoring prefs */
+/** GET / - List configured pools with connection status and monitoring prefs */
 router.get('/', (req, res) => {
   try {
     const pools = getConfiguredPools();
@@ -43,7 +43,7 @@ router.get('/', (req, res) => {
   }
 });
 
-/** POST / — Add pool connection */
+/** POST / - Add pool connection */
 router.post('/', (req, res) => {
   try {
     const { pool, apiKey, apiSecret, accountId } = req.body;
@@ -58,7 +58,7 @@ router.post('/', (req, res) => {
   }
 });
 
-/** PUT /:poolId — Update pool credentials */
+/** PUT /:poolId - Update pool credentials */
 router.put('/:poolId', (req, res) => {
   try {
     const { apiKey, apiSecret, accountId } = req.body;
@@ -72,7 +72,7 @@ router.put('/:poolId', (req, res) => {
   }
 });
 
-/** DELETE /:poolId — Remove pool connection */
+/** DELETE /:poolId - Remove pool connection */
 router.delete('/:poolId', (req, res) => {
   try {
     removePoolConnection(req.params.poolId);
@@ -83,7 +83,7 @@ router.delete('/:poolId', (req, res) => {
   }
 });
 
-/** POST /:poolId/test — Test pool connection */
+/** POST /:poolId/test - Test pool connection */
 router.post('/:poolId/test', async (req, res) => {
   try {
     const result = await testPoolConnection(req.params.poolId);
@@ -94,7 +94,7 @@ router.post('/:poolId/test', async (req, res) => {
   }
 });
 
-/** POST /monitoring — Save pool monitoring preferences */
+/** POST /monitoring - Save pool monitoring preferences */
 router.post('/monitoring', (req, res) => {
   try {
     const { pollIntervalSeconds, workerSnapshotMinutes, hashrateDeviationPct, rejectRateThreshold, deadWorkerTimeoutMinutes } = req.body;
@@ -120,7 +120,7 @@ router.post('/monitoring', (req, res) => {
 
 // ─── Unified Pool Data ───────────────────────────────────────────────────
 
-/** GET /unified — Aggregated data across all pools */
+/** GET /unified - Aggregated data across all pools */
 router.get('/unified', async (req, res) => {
   try {
     const data = await getUnifiedPoolData();
@@ -131,7 +131,7 @@ router.get('/unified', async (req, res) => {
   }
 });
 
-/** GET /comparison — Side-by-side pool comparison */
+/** GET /comparison - Side-by-side pool comparison */
 router.get('/comparison', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
@@ -143,7 +143,7 @@ router.get('/comparison', async (req, res) => {
   }
 });
 
-/** GET /earnings — Aggregated earnings across all pools */
+/** GET /earnings - Aggregated earnings across all pools */
 router.get('/earnings', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
@@ -231,7 +231,7 @@ router.get('/earnings', async (req, res) => {
   }
 });
 
-/** GET /workers — Aggregated worker list across all pools */
+/** GET /workers - Aggregated worker list across all pools */
 router.get('/workers', async (req, res) => {
   try {
     const unified = await getUnifiedPoolData();
@@ -274,7 +274,7 @@ router.get('/workers', async (req, res) => {
   }
 });
 
-/** GET /hashrate/history — Pool hashrate history for charts */
+/** GET /hashrate/history - Pool hashrate history for charts */
 router.get('/hashrate/history', async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 24;
@@ -307,7 +307,7 @@ router.get('/hashrate/history', async (req, res) => {
 
 // ─── Per-Pool Data ───────────────────────────────────────────────────────
 
-/** GET /:poolId/hashrate — Current hashrate for a specific pool */
+/** GET /:poolId/hashrate - Current hashrate for a specific pool */
 router.get('/:poolId/hashrate', async (req, res) => {
   try {
     const data = await getPoolHashrate(req.params.poolId);
@@ -317,7 +317,7 @@ router.get('/:poolId/hashrate', async (req, res) => {
   }
 });
 
-/** GET /:poolId/hashrate/history — Historical hashrate */
+/** GET /:poolId/hashrate/history - Historical hashrate */
 router.get('/:poolId/hashrate/history', async (req, res) => {
   try {
     const data = await getPoolHashrateHistory(
@@ -332,7 +332,7 @@ router.get('/:poolId/hashrate/history', async (req, res) => {
   }
 });
 
-/** GET /:poolId/workers — Worker list for a specific pool */
+/** GET /:poolId/workers - Worker list for a specific pool */
 router.get('/:poolId/workers', async (req, res) => {
   try {
     const data = await getPoolWorkers(req.params.poolId);
@@ -342,7 +342,7 @@ router.get('/:poolId/workers', async (req, res) => {
   }
 });
 
-/** GET /:poolId/workers/:workerId — Worker detail */
+/** GET /:poolId/workers/:workerId - Worker detail */
 router.get('/:poolId/workers/:workerId', async (req, res) => {
   try {
     const data = await getPoolWorkerDetail(req.params.poolId, req.params.workerId);
@@ -352,7 +352,7 @@ router.get('/:poolId/workers/:workerId', async (req, res) => {
   }
 });
 
-/** GET /:poolId/earnings — Earnings summary */
+/** GET /:poolId/earnings - Earnings summary */
 router.get('/:poolId/earnings', async (req, res) => {
   try {
     const data = await getPoolEarnings(req.params.poolId, req.query.period || '24h');
@@ -362,7 +362,7 @@ router.get('/:poolId/earnings', async (req, res) => {
   }
 });
 
-/** GET /:poolId/payouts — Payout history */
+/** GET /:poolId/payouts - Payout history */
 router.get('/:poolId/payouts', async (req, res) => {
   try {
     const data = await getPoolPayouts(
@@ -376,7 +376,7 @@ router.get('/:poolId/payouts', async (req, res) => {
   }
 });
 
-/** GET /:poolId/shares — Share/luck stats */
+/** GET /:poolId/shares - Share/luck stats */
 router.get('/:poolId/shares', async (req, res) => {
   try {
     const data = await getPoolShares(req.params.poolId);
@@ -386,7 +386,7 @@ router.get('/:poolId/shares', async (req, res) => {
   }
 });
 
-/** GET /:poolId/info — Pool info */
+/** GET /:poolId/info - Pool info */
 router.get('/:poolId/info', async (req, res) => {
   try {
     const data = await getPoolInfo(req.params.poolId);

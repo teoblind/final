@@ -1,5 +1,5 @@
 /**
- * Knowledge Processor — AI-powered ingestion pipeline
+ * Knowledge Processor - AI-powered ingestion pipeline
  *
  * Takes raw transcripts/documents, uses Claude to:
  * 1. Summarize content
@@ -8,7 +8,7 @@
  * 4. Extract action items
  * 5. Upload formatted doc to Google Drive
  * 6. Send notification
- * 7. Contradiction detection — if a meeting transcript contradicts a prior report,
+ * 7. Contradiction detection - if a meeting transcript contradicts a prior report,
  *    auto-propose a copilot assignment to redo the analysis
  */
 
@@ -16,7 +16,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { tunnelPrompt } from './cliTunnel.js';
 import { getCurrentTenantId, getTenantDb, insertAgentAssignment, updateAgentAssignment } from '../cache/database.js';
 
-// Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
+// Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
     const tenantId = getCurrentTenantId() || 'default';
@@ -121,7 +121,7 @@ function formatForDrive(entry, parsed) {
     md += `\n## Action Items\n\n`;
     parsed.action_items.forEach(a => {
       md += `- ${a.task}`;
-      if (a.assignee) md += ` — ${a.assignee}`;
+      if (a.assignee) md += ` - ${a.assignee}`;
       if (a.due_date) md += ` (${a.due_date})`;
       md += `\n`;
     });
@@ -153,7 +153,7 @@ export async function processKnowledgeEntry(entryId, tenantId) {
   let parsed;
   try {
     if (!process.env.ANTHROPIC_API_KEY) {
-      // No API key — use basic extraction
+      // No API key - use basic extraction
       parsed = {
         summary: textContent.slice(0, 200) + '...',
         title: entry.title,
@@ -173,17 +173,17 @@ export async function processKnowledgeEntry(entryId, tenantId) {
   2-3 sentence high-level summary of what was discussed and the outcome.
 
   ## Topics Discussed
-  - **Topic Name** — one sentence on what was covered
+  - **Topic Name** - one sentence on what was covered
   (list all major topics, 3-8 items)
 
   ## Key Decisions
   - Decision with context (only if decisions were actually made; omit section if none)
 
   ## Notable Quotes
-  - "Exact quote or close paraphrase" — Speaker Name (only 2-4 most important; omit if none)
+  - "Exact quote or close paraphrase" - Speaker Name (only 2-4 most important; omit if none)
 
   ## Next Steps
-  - Brief description of what happens next — Owner (if known)
+  - Brief description of what happens next - Owner (if known)
 
 - title: a descriptive title if the provided title is generic
 - people: array of full names mentioned
@@ -325,7 +325,7 @@ Output ONLY valid JSON. The summary field should be the full structured markdown
       getStmts().updateDrive.run(driveResult.file_id, driveResult.url, entryId);
     }
   } catch (err) {
-    // Non-fatal — entry is still in the database
+    // Non-fatal - entry is still in the database
     console.warn('Drive upload failed (non-fatal):', err.message);
   }
 
@@ -347,7 +347,7 @@ Output ONLY valid JSON. The summary field should be the full structured markdown
     console.warn('Notification failed (non-fatal):', err.message);
   }
 
-  console.log(`Knowledge entry ${entryId} processed: "${parsed.title || entry.title}" — ${(parsed.action_items || []).length} action items`);
+  console.log(`Knowledge entry ${entryId} processed: "${parsed.title || entry.title}" - ${(parsed.action_items || []).length} action items`);
 
   // ─── Step 7: Contradiction detection (meeting transcripts only) ───
   if (entry.type === 'meeting-transcript' && parsed.summary) {
@@ -480,7 +480,7 @@ INSTRUCTIONS:
 4. Include a "Corrections" section at the top listing each change from the original report
 5. If you are missing any information needed for the corrected report, use INFO_REQUEST
 
-This is a copilot task — produce the deliverable for human review before any external communication.`,
+This is a copilot task - produce the deliverable for human review before any external communication.`,
     context_json: JSON.stringify({
       sourceEntryId: entryId,
       contradictions,
@@ -496,7 +496,7 @@ This is a copilot task — produce the deliverable for human review before any e
     });
   } catch {}
 
-  console.log(`[KnowledgeProcessor] Contradiction detected! Created proposed assignment ${assignmentId} — ${contradictions.length} contradiction(s) vs ${affectedReports.length} report(s)`);
+  console.log(`[KnowledgeProcessor] Contradiction detected! Created proposed assignment ${assignmentId} - ${contradictions.length} contradiction(s) vs ${affectedReports.length} report(s)`);
 }
 
 // ─── Knowledge Search (used by chat context injection) ──────────────────────

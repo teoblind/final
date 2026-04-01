@@ -122,10 +122,10 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
       // Single tenant context (subdomain or explicit selection)
       user = getUserByEmailAndTenant(email, resolvedTenantId);
     } else {
-      // No tenant context — check if user exists in multiple tenants
+      // No tenant context - check if user exists in multiple tenants
       const users = getUsersByEmail(email);
       if (users.length > 1) {
-        // Return tenant picker — don't verify password yet
+        // Return tenant picker - don't verify password yet
         const tenants = users.map(u => {
           const t = getTenant(u.tenant_id);
           const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
@@ -662,7 +662,7 @@ router.post('/forgot-password', authRateLimiter(5), async (req, res) => {
       });
     } catch (emailErr) {
       console.error('Failed to send password reset email:', emailErr.message);
-      // Still return success — don't leak whether email sending works
+      // Still return success - don't leak whether email sending works
     }
 
     insertAuditLog({
@@ -734,7 +734,7 @@ router.post('/reset-password', authRateLimiter(5), async (req, res) => {
   }
 });
 
-// ─── GET /google — Start Google OAuth flow ──────────────────────────────────
+// ─── GET /google - Start Google OAuth flow ──────────────────────────────────
 
 router.get('/google', (req, res) => {
   if (!GOOGLE_CLIENT_ID) {
@@ -754,7 +754,7 @@ router.get('/google', (req, res) => {
   res.redirect(authUrl);
 });
 
-// ─── GET /google/callback — Handle Google OAuth callback ─────────────────────
+// ─── GET /google/callback - Handle Google OAuth callback ─────────────────────
 
 router.get('/google/callback', async (req, res) => {
   try {
@@ -793,7 +793,7 @@ router.get('/google/callback', async (req, res) => {
       const existingUsers = getUsersByEmail(profile.email);
 
       if (existingUsers.length > 0) {
-        // User exists in another tenant — use the first one
+        // User exists in another tenant - use the first one
         user = existingUsers[0];
       } else {
         // Create new user
@@ -889,7 +889,7 @@ function getIntegrationOAuth2Client(req) {
   return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
 }
 
-// ─── GET /google/integration-status — Check if Google Workspace is connected ──
+// ─── GET /google/integration-status - Check if Google Workspace is connected ──
 
 router.get('/google/integration-status', authenticate, async (req, res) => {
   try {
@@ -905,7 +905,7 @@ router.get('/google/integration-status', authenticate, async (req, res) => {
   }
 });
 
-// ─── GET /google/integrate — Start integration OAuth flow ────────────────────
+// ─── GET /google/integrate - Start integration OAuth flow ────────────────────
 
 router.get('/google/integrate', (req, res) => {
   try {
@@ -923,7 +923,7 @@ router.get('/google/integrate', (req, res) => {
       return res.status(400).json({ error: 'scopes and source query parameters are required' });
     }
 
-    // Verify JWT from query param (popup flow — no Authorization header)
+    // Verify JWT from query param (popup flow - no Authorization header)
     let decoded;
     try {
       decoded = verifyAccessToken(token);
@@ -934,12 +934,12 @@ router.get('/google/integrate', (req, res) => {
     const tenantId = decoded.tenantId;
     const userId = decoded.userId;
 
-    // Build state payload — include origin host so callback can postMessage back
+    // Build state payload - include origin host so callback can postMessage back
     const originHost = req.headers['x-forwarded-host'] || req.get('host');
     const originProto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
     const state = Buffer.from(JSON.stringify({ tenantId, userId, source, origin: `${originProto}://${originHost}` })).toString('base64url');
 
-    // Build full scope URLs — openid/email/profile are OIDC scopes (no prefix)
+    // Build full scope URLs - openid/email/profile are OIDC scopes (no prefix)
     const OIDC_SCOPES = new Set(['openid', 'email', 'profile']);
     const scopeList = scopes.split(',').map(s => {
       const trimmed = s.trim();
@@ -1141,7 +1141,7 @@ function renderIntegrationErrorPage(message, detail) {
 </html>`;
 }
 
-// ─── GET /google/integrations — Check connected integrations ─────────────────
+// ─── GET /google/integrations - Check connected integrations ─────────────────
 
 router.get('/google/integrations', authenticate, (req, res) => {
   try {

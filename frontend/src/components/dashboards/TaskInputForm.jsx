@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 /**
- * TaskInputForm — renders form fields based on input_fields_json definitions
+ * TaskInputForm - renders form fields based on input_fields_json definitions
  * and allows users to fill in required values before confirming a task.
  *
  * Props:
  *   inputFields: Array<{name, label, type, required, placeholder, description, options}>
- *   inputValues: Object — existing values keyed by field name
+ *   inputValues: Object - existing values keyed by field name
  *   onSubmit: (values: Object) => void
  *   disabled: boolean
  */

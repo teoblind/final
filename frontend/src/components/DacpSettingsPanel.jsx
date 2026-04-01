@@ -158,7 +158,7 @@ const INTEGRATIONS = [
     logo: <div className="text-[14px] font-bold" style={{ color: '#ff3366' }}>Id</div> },
   { id: 'blender', name: 'Blender', desc: '3D modeling, rendering, and animation', category: 'Creative', color: '#e87d0d', macRequired: true,
     logo: <div className="text-[14px] font-bold" style={{ color: '#e87d0d' }}>B</div> },
-  // Construction software — hardware required
+  // Construction software - hardware required
   { id: 'planswift', name: 'PlanSwift', desc: 'Automated takeoffs, material quantification, and cost estimation', category: 'Estimating', color: '#1a73e8', macRequired: true, construction: true,
     logo: <div className="text-[14px] font-bold" style={{ color: '#1a73e8' }}>PS</div> },
   { id: 'bluebeam', name: 'Bluebeam Revu', desc: 'PDF markup, plan review, and punch list management', category: 'Plan Review', color: '#0054a6', macRequired: true, construction: true,
@@ -958,7 +958,7 @@ export default function DacpSettingsPanel() {
                 <div key={i} className="flex items-center gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-medium text-terminal-text truncate">{s.name}</div>
-                    <div className="text-[11px] text-terminal-muted">{s.material}{s.price ? ` — $${s.price}` : ''}</div>
+                    <div className="text-[11px] text-terminal-muted">{s.material}{s.price ? ` - $${s.price}` : ''}</div>
                   </div>
                   <button onClick={() => removeExtraSupplier(i)} className="text-terminal-muted hover:text-red-600 shrink-0"><X size={13} /></button>
                 </div>

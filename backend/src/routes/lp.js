@@ -201,7 +201,7 @@ router.get('/policies', (req, res) => {
       termMonths: p.term_months,
       startDate: p.start_date,
       endDate: p.end_date,
-      // No tenant_name, no tenant_id — LP sees policy-level data only
+      // No tenant_name, no tenant_id - LP sees policy-level data only
     }));
     res.json({ policies, total: policies.length });
   } catch (err) {
@@ -242,7 +242,7 @@ router.get('/claims/:id/verification', (req, res) => {
     if (!claim) {
       return res.status(404).json({ error: 'Claim not found' });
     }
-    // Return sanitized verification — aggregate stats, no raw telemetry
+    // Return sanitized verification - aggregate stats, no raw telemetry
     const verification = claim.verification || {};
     res.json({
       claimId: claim.id,

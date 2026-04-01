@@ -1,14 +1,14 @@
 /**
- * Portfolio Routes — Portfolio companies management for Zhan Capital
+ * Portfolio Routes - Portfolio companies management for Zhan Capital
  *
- * GET    /api/v1/portfolio/companies          — List all portfolio companies
- * GET    /api/v1/portfolio/companies/:id       — Get single company with accounts + stats
- * POST   /api/v1/portfolio/companies           — Create a new portfolio company
- * PUT    /api/v1/portfolio/companies/:id       — Update a portfolio company
- * POST   /api/v1/portfolio/companies/:id/connect-gmail  — Connect Gmail account
- * POST   /api/v1/portfolio/companies/:id/connect-drive  — Connect Drive folder
- * GET    /api/v1/portfolio/companies/:id/emails — Fetch recent emails from Gmail
- * GET    /api/v1/portfolio/companies/:id/files  — List files from Drive folder
+ * GET    /api/v1/portfolio/companies          - List all portfolio companies
+ * GET    /api/v1/portfolio/companies/:id       - Get single company with accounts + stats
+ * POST   /api/v1/portfolio/companies           - Create a new portfolio company
+ * PUT    /api/v1/portfolio/companies/:id       - Update a portfolio company
+ * POST   /api/v1/portfolio/companies/:id/connect-gmail  - Connect Gmail account
+ * POST   /api/v1/portfolio/companies/:id/connect-drive  - Connect Drive folder
+ * GET    /api/v1/portfolio/companies/:id/emails - Fetch recent emails from Gmail
+ * GET    /api/v1/portfolio/companies/:id/files  - List files from Drive folder
  */
 
 import express from 'express';
@@ -49,7 +49,7 @@ function makeDriveClient(refreshToken) {
   return google.drive({ version: 'v3', auth: client });
 }
 
-// ─── GET /companies — List all portfolio companies ───────────────────────────
+// ─── GET /companies - List all portfolio companies ───────────────────────────
 
 router.get('/companies', async (req, res) => {
   try {
@@ -79,7 +79,7 @@ router.get('/companies', async (req, res) => {
   }
 });
 
-// ─── GET /companies/:id — Single company with full details ───────────────────
+// ─── GET /companies/:id - Single company with full details ───────────────────
 
 router.get('/companies/:id', async (req, res) => {
   try {
@@ -107,7 +107,7 @@ router.get('/companies/:id', async (req, res) => {
   }
 });
 
-// ─── POST /companies — Create a new portfolio company ────────────────────────
+// ─── POST /companies - Create a new portfolio company ────────────────────────
 
 router.post('/companies', async (req, res) => {
   try {
@@ -129,7 +129,7 @@ router.post('/companies', async (req, res) => {
   }
 });
 
-// ─── PUT /companies/:id — Update a portfolio company ─────────────────────────
+// ─── PUT /companies/:id - Update a portfolio company ─────────────────────────
 
 router.put('/companies/:id', async (req, res) => {
   try {
@@ -150,7 +150,7 @@ router.put('/companies/:id', async (req, res) => {
   }
 });
 
-// ─── POST /companies/:id/connect-gmail — Store Gmail OAuth token ─────────────
+// ─── POST /companies/:id/connect-gmail - Store Gmail OAuth token ─────────────
 
 router.post('/companies/:id/connect-gmail', async (req, res) => {
   try {
@@ -193,7 +193,7 @@ router.post('/companies/:id/connect-gmail', async (req, res) => {
   }
 });
 
-// ─── DELETE /companies/:id/email-accounts/:accountId — Remove email account ──
+// ─── DELETE /companies/:id/email-accounts/:accountId - Remove email account ──
 
 router.delete('/companies/:id/email-accounts/:accountId', async (req, res) => {
   try {
@@ -213,7 +213,7 @@ router.delete('/companies/:id/email-accounts/:accountId', async (req, res) => {
   }
 });
 
-// ─── POST /companies/:id/connect-drive — Store Drive folder ──────────────────
+// ─── POST /companies/:id/connect-drive - Store Drive folder ──────────────────
 
 router.post('/companies/:id/connect-drive', async (req, res) => {
   try {
@@ -245,7 +245,7 @@ router.post('/companies/:id/connect-drive', async (req, res) => {
   }
 });
 
-// ─── GET /companies/:id/emails — Fetch recent emails from connected Gmail ────
+// ─── GET /companies/:id/emails - Fetch recent emails from connected Gmail ────
 
 router.get('/companies/:id/emails', async (req, res) => {
   try {
@@ -319,7 +319,7 @@ router.get('/companies/:id/emails', async (req, res) => {
   }
 });
 
-// ─── GET /companies/:id/files — List files from connected Drive folders ──────
+// ─── GET /companies/:id/files - List files from connected Drive folders ──────
 
 router.get('/companies/:id/files', async (req, res) => {
   try {

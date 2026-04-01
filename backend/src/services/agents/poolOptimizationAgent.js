@@ -1,5 +1,5 @@
 /**
- * Pool Optimization Agent — Phase 6
+ * Pool Optimization Agent - Phase 6
  *
  * Monitors mining pool performance across all connected pools and detects
  * sustained underperformance, anomalies, and reallocation opportunities.
@@ -12,7 +12,7 @@
  *   1. Observe: Gather unified pool data, comparison, earnings, workers
  *   2. Analyze: Track rolling effective rates, detect anomalies
  *   3. Decide: Recommend hashrate reallocation if sustained edge detected
- *   4. Act: Log recommendation (recommend-only — most pools lack redirect APIs)
+ *   4. Act: Log recommendation (recommend-only - most pools lack redirect APIs)
  *
  * Guardrails:
  *   - Minimum 1% improvement required to recommend a switch
@@ -47,7 +47,7 @@ const REJECT_RATE_SPIKE_MULT = 2.5;        // 2.5x normal = spike
 const HASHRATE_DISCREPANCY_PCT = 10;       // >10% diff between reported/expected
 
 /**
- * PoolOptimizationAgent — monitors and compares mining pool performance,
+ * PoolOptimizationAgent - monitors and compares mining pool performance,
  * recommending hashrate reallocation when sustained advantages are detected.
  */
 export default class PoolOptimizationAgent {
@@ -575,7 +575,7 @@ export default class PoolOptimizationAgent {
             movePct: decision.params.movePct,
             estimatedMonthlyGain: decision.params.estimatedMonthlyGain,
             reasoning: decision.reasoning,
-            note: 'Recommendation logged. Manual reallocation required — most pools lack redirect APIs.',
+            note: 'Recommendation logged. Manual reallocation required - most pools lack redirect APIs.',
             timestamp: now,
           },
         };

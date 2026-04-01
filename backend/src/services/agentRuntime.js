@@ -1,5 +1,5 @@
 /**
- * Agent Runtime — Phase 6: Clawbot Agent Framework
+ * Agent Runtime - Phase 6: Clawbot Agent Framework
  *
  * Core runtime that registers, manages, and orchestrates autonomous agents.
  * Each agent follows the OODA loop (Observe-Orient/Analyze-Decide-Act) and
@@ -360,7 +360,7 @@ class AgentRuntime {
       if (!decision || decision.action === 'none') {
         insertAgentEvent(
           agentId, 'observe', 'observation',
-          'Observation complete — no action needed',
+          'Observation complete - no action needed',
           { observation: this._summarize(observation), analysis: this._summarize(analysis) },
           0, decision?.reasoning || null
         );
@@ -378,7 +378,7 @@ class AgentRuntime {
       const mode = config.mode || 'observe';
 
       if (mode === 'observe') {
-        // Log observation only — never recommend or act
+        // Log observation only - never recommend or act
         insertAgentEvent(
           agentId, 'observe', 'observation',
           `Observed: ${decision.action}`,
@@ -397,7 +397,7 @@ class AgentRuntime {
         // Log recommendation + notify, but do not act
         insertAgentEvent(
           agentId, 'decide', 'recommendation',
-          `Recommendation: ${decision.action} — ${decision.reasoning || ''}`,
+          `Recommendation: ${decision.action} - ${decision.reasoning || ''}`,
           { decision: this._summarize(decision), analysis: this._summarize(analysis) },
           decision.estimatedImpact || 0,
           decision.reasoning || null
@@ -406,7 +406,7 @@ class AgentRuntime {
         insertNotification(
           agent.id, 'recommendation',
           `${agent.name}: Recommendation`,
-          `${decision.action} — ${decision.reasoning || 'No details'}`,
+          `${decision.action} - ${decision.reasoning || 'No details'}`,
           null
         );
 
@@ -468,7 +468,7 @@ class AgentRuntime {
         const approvalThreshold = permissions.requireApprovalAbove ?? Infinity;
 
         if (Math.abs(impact) > approvalThreshold) {
-          // Impact exceeds auto-approval threshold — escalate to approval queue
+          // Impact exceeds auto-approval threshold - escalate to approval queue
           const expiresAt = new Date(Date.now() + DEFAULT_APPROVAL_TTL_MS).toISOString();
 
           const approvalId = insertAgentApproval(
@@ -478,7 +478,7 @@ class AgentRuntime {
 
           insertAgentEvent(
             agentId, 'decide', 'approval_escalated',
-            `Impact $${impact.toFixed(2)}/hr exceeds auto-approval threshold — escalated`,
+            `Impact $${impact.toFixed(2)}/hr exceeds auto-approval threshold - escalated`,
             { decision: this._summarize(decision), approvalId },
             impact, decision.reasoning || null
           );
@@ -505,7 +505,7 @@ class AgentRuntime {
         }
 
         if (Math.abs(impact) > maxImpact) {
-          // Exceeds maximum allowed financial impact — skip
+          // Exceeds maximum allowed financial impact - skip
           insertAgentEvent(
             agentId, 'decide', 'action_blocked',
             `Action blocked: impact $${impact.toFixed(2)}/hr exceeds max $${maxImpact.toFixed(2)}/hr`,
@@ -570,7 +570,7 @@ class AgentRuntime {
 
         insertAgentEvent(
           agentId, 'act', 'action_executed',
-          `Executed: ${decision.action} — ${actionResult?.summary || 'done'}`,
+          `Executed: ${decision.action} - ${actionResult?.summary || 'done'}`,
           { decision: this._summarize(decision), result: this._summarize(actionResult) },
           decision.estimatedImpact || 0,
           decision.reasoning || null
@@ -654,7 +654,7 @@ class AgentRuntime {
 
       insertAgentEvent(
         approval.agent_id, 'act', 'action_approved_and_executed',
-        `Approved & executed: ${decision.action} — ${actionResult?.summary || 'done'}`,
+        `Approved & executed: ${decision.action} - ${actionResult?.summary || 'done'}`,
         { decision: this._summarize(decision), result: this._summarize(actionResult), approvalId },
         decision.estimatedImpact || 0,
         decision.reasoning || null
@@ -960,7 +960,7 @@ class AgentRuntime {
   }
 
   // =========================================================================
-  // Internal — Scheduling
+  // Internal - Scheduling
   // =========================================================================
 
   /**
@@ -1074,7 +1074,7 @@ class AgentRuntime {
   }
 
   // =========================================================================
-  // Internal — Safety Triggers
+  // Internal - Safety Triggers
   // =========================================================================
 
   /**
@@ -1116,7 +1116,7 @@ class AgentRuntime {
 
         insertAgentEvent(
           agentId, 'safety', 'mode_downgraded',
-          `Safety trigger: ${recent.length} rejections in 1 hour — downgraded from autonomous to approve`,
+          `Safety trigger: ${recent.length} rejections in 1 hour - downgraded from autonomous to approve`,
           { rejectionCount: recent.length }
         );
 
@@ -1170,7 +1170,7 @@ class AgentRuntime {
     if (recent.length >= SAFETY_ERROR_THRESHOLD) {
       insertAgentEvent(
         agentId, 'safety', 'auto_stopped',
-        `Safety trigger: ${recent.length} errors in 1 hour — agent auto-stopped`,
+        `Safety trigger: ${recent.length} errors in 1 hour - agent auto-stopped`,
         { errorCount: recent.length }
       );
 
@@ -1198,7 +1198,7 @@ class AgentRuntime {
   }
 
   // =========================================================================
-  // Internal — Helpers
+  // Internal - Helpers
   // =========================================================================
 
   /**

@@ -22,7 +22,7 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
-// ─── GET / — List Partner Access Grants ─────────────────────────────────────
+// ─── GET / - List Partner Access Grants ─────────────────────────────────────
 
 router.get('/', (req, res) => {
   try {
@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
   }
 });
 
-// ─── POST / — Grant Partner Access ──────────────────────────────────────────
+// ─── POST / - Grant Partner Access ──────────────────────────────────────────
 
 router.post('/', requirePermission('managePartnerAccess'), (req, res) => {
   try {
@@ -95,7 +95,7 @@ router.post('/', requirePermission('managePartnerAccess'), (req, res) => {
   }
 });
 
-// ─── PUT /:id — Update Partner Permissions ──────────────────────────────────
+// ─── PUT /:id - Update Partner Permissions ──────────────────────────────────
 
 router.put('/:id', requirePermission('managePartnerAccess'), (req, res) => {
   try {
@@ -125,7 +125,7 @@ router.put('/:id', requirePermission('managePartnerAccess'), (req, res) => {
   }
 });
 
-// ─── DELETE /:id — Revoke Partner Access ────────────────────────────────────
+// ─── DELETE /:id - Revoke Partner Access ────────────────────────────────────
 
 router.delete('/:id', requirePermission('managePartnerAccess'), (req, res) => {
   try {

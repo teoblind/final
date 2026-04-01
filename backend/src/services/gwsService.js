@@ -1,5 +1,5 @@
 /**
- * Google Workspace CLI (gws) Service — Tenant-Aware
+ * Google Workspace CLI (gws) Service - Tenant-Aware
  *
  * Thin wrapper around `gws` CLI for Hivemind agent tools.
  * Each call uses the correct tenant's OAuth token from tenant_email_config.
@@ -97,8 +97,8 @@ function getTenantGwsConfig(tenantId) {
 /**
  * Execute a gws CLI command for a specific tenant.
  *
- * @param {string[]} args — CLI arguments
- * @param {string} [tenantId] — tenant ID for credential lookup
+ * @param {string[]} args - CLI arguments
+ * @param {string} [tenantId] - tenant ID for credential lookup
  * @returns {Promise<object>} parsed JSON response
  */
 export async function execGws(args, tenantId = null) {

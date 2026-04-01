@@ -1,5 +1,5 @@
 /**
- * DACP Construction — Estimating Routes
+ * DACP Construction - Estimating Routes
  */
 
 import express from 'express';
@@ -912,7 +912,7 @@ async function readLeadsSheet(auth, sheetId, tabName, page = 1, pageSize = 10) {
   return { sheetTitle, headers, dataRows: pageRows, totalRows, tabs, activeTab, page: safePage, totalPages };
 }
 
-/** GET /leads-sheet — Get linked leads sheet info + preview rows (per-user, falls back to tenant-level) */
+/** GET /leads-sheet - Get linked leads sheet info + preview rows (per-user, falls back to tenant-level) */
 router.get('/leads-sheet', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -968,7 +968,7 @@ router.get('/leads-sheet', async (req, res) => {
   }
 });
 
-/** POST /leads-sheet/link — Link a Google Sheet by URL or ID (per-user) */
+/** POST /leads-sheet/link - Link a Google Sheet by URL or ID (per-user) */
 router.post('/leads-sheet/link', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1010,7 +1010,7 @@ router.post('/leads-sheet/link', async (req, res) => {
   }
 });
 
-/** DELETE /leads-sheet/unlink — Remove the linked sheet (per-user) */
+/** DELETE /leads-sheet/unlink - Remove the linked sheet (per-user) */
 router.delete('/leads-sheet/unlink', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1030,7 +1030,7 @@ router.delete('/leads-sheet/unlink', (req, res) => {
   }
 });
 
-/** GET /leads-sheet/search — Search Drive for candidate sheets */
+/** GET /leads-sheet/search - Search Drive for candidate sheets */
 router.get('/leads-sheet/search', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1053,7 +1053,7 @@ router.get('/leads-sheet/search', async (req, res) => {
   }
 });
 
-/** GET /leads-sheet/team — Get team members for share picker */
+/** GET /leads-sheet/team - Get team members for share picker */
 router.get('/leads-sheet/team', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1065,7 +1065,7 @@ router.get('/leads-sheet/team', (req, res) => {
   }
 });
 
-/** POST /leads-sheet/share — Share leads sheet with team members */
+/** POST /leads-sheet/share - Share leads sheet with team members */
 router.post('/leads-sheet/share', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1117,7 +1117,7 @@ router.post('/leads-sheet/share', async (req, res) => {
   }
 });
 
-/** GET /leads-sheet/shares — Get pending share invitations for current user */
+/** GET /leads-sheet/shares - Get pending share invitations for current user */
 router.get('/leads-sheet/shares', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1130,7 +1130,7 @@ router.get('/leads-sheet/shares', (req, res) => {
   }
 });
 
-/** POST /leads-sheet/shares/:id/accept — Accept a share invitation */
+/** POST /leads-sheet/shares/:id/accept - Accept a share invitation */
 router.post('/leads-sheet/shares/:id/accept', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1224,7 +1224,7 @@ router.post('/leads-sheet/shares/:id/accept', async (req, res) => {
   }
 });
 
-/** POST /leads-sheet/shares/:id/decline — Decline a share invitation */
+/** POST /leads-sheet/shares/:id/decline - Decline a share invitation */
 router.post('/leads-sheet/shares/:id/decline', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1244,7 +1244,7 @@ router.post('/leads-sheet/shares/:id/decline', (req, res) => {
 
 // ─── Agent Assignments ────────────────────────────────────────────────────────
 
-/** GET /assignments — List proposed/active assignments */
+/** GET /assignments - List proposed/active assignments */
 router.get('/assignments', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1257,7 +1257,7 @@ router.get('/assignments', (req, res) => {
   }
 });
 
-/** PATCH /assignments/:id/inputs — Submit input values for a task's required fields */
+/** PATCH /assignments/:id/inputs - Submit input values for a task's required fields */
 router.patch('/assignments/:id/inputs', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1285,7 +1285,7 @@ router.patch('/assignments/:id/inputs', (req, res) => {
   }
 });
 
-/** PATCH /assignments/:id — Update assignment fields (artifacts, status, etc.) */
+/** PATCH /assignments/:id - Update assignment fields (artifacts, status, etc.) */
 router.patch('/assignments/:id', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1305,7 +1305,7 @@ router.patch('/assignments/:id', (req, res) => {
   }
 });
 
-/** POST /assignments/:id/confirm — Confirm an assignment for execution */
+/** POST /assignments/:id/confirm - Confirm an assignment for execution */
 router.post('/assignments/:id/confirm', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1328,7 +1328,7 @@ router.post('/assignments/:id/confirm', async (req, res) => {
       }
     }
 
-    // Mark as confirmed and claim for this user — the assignment executor polls for 'confirmed' status and picks it up
+    // Mark as confirmed and claim for this user - the assignment executor polls for 'confirmed' status and picks it up
     const userId = req.user?.id || null;
     updateAgentAssignment(tenantId, id, {
       status: 'confirmed',
@@ -1339,7 +1339,7 @@ router.post('/assignments/:id/confirm', async (req, res) => {
       full_response: null,
       output_artifacts_json: null,
     });
-    console.log(`[Assignments] Confirmed by ${userId}: ${assignment.title} — executor will pick up`);
+    console.log(`[Assignments] Confirmed by ${userId}: ${assignment.title} - executor will pick up`);
 
     res.json({ success: true, status: 'confirmed' });
   } catch (error) {
@@ -1347,7 +1347,7 @@ router.post('/assignments/:id/confirm', async (req, res) => {
   }
 });
 
-/** POST /assignments/:id/chat — Refine an assignment via inline chat */
+/** POST /assignments/:id/chat - Refine an assignment via inline chat */
 router.post('/assignments/:id/chat', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1419,7 +1419,7 @@ Return ONLY the JSON, no markdown or explanation.`;
   }
 });
 
-/** POST /assignments/:id/dismiss — Dismiss a proposed assignment */
+/** POST /assignments/:id/dismiss - Dismiss a proposed assignment */
 router.post('/assignments/:id/dismiss', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1431,7 +1431,7 @@ router.post('/assignments/:id/dismiss', (req, res) => {
   }
 });
 
-/** GET /assignments/team-members — List tenant members for sharing (minimal: id, name, email, role) */
+/** GET /assignments/team-members - List tenant members for sharing (minimal: id, name, email, role) */
 router.get('/assignments/team-members', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1444,7 +1444,7 @@ router.get('/assignments/team-members', (req, res) => {
   }
 });
 
-/** POST /assignments/:id/archive — Archive a completed assignment */
+/** POST /assignments/:id/archive - Archive a completed assignment */
 router.post('/assignments/:id/archive', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1459,7 +1459,7 @@ router.post('/assignments/:id/archive', (req, res) => {
   }
 });
 
-/** POST /assignments/:id/share-internal — Share a completed task with specific tenant users */
+/** POST /assignments/:id/share-internal - Share a completed task with specific tenant users */
 router.post('/assignments/:id/share-internal', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1481,7 +1481,7 @@ router.post('/assignments/:id/share-internal', (req, res) => {
   }
 });
 
-/** POST /assignments/:id/unshare — Make a shared task private again */
+/** POST /assignments/:id/unshare - Make a shared task private again */
 router.post('/assignments/:id/unshare', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1493,7 +1493,7 @@ router.post('/assignments/:id/unshare', (req, res) => {
   }
 });
 
-/** GET /assignments/:id/context — Return knowledge entries attached to this assignment */
+/** GET /assignments/:id/context - Return knowledge entries attached to this assignment */
 router.get('/assignments/:id/context', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1533,7 +1533,7 @@ router.get('/assignments/:id/context', async (req, res) => {
   }
 });
 
-/** POST /assignments/:id/approve-email — Approve and send a drafted email from task execution */
+/** POST /assignments/:id/approve-email - Approve and send a drafted email from task execution */
 router.post('/assignments/:id/approve-email', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1579,7 +1579,7 @@ router.post('/assignments/:id/approve-email', async (req, res) => {
   }
 });
 
-/** POST /assignments/:id/reject-email — Reject a drafted email */
+/** POST /assignments/:id/reject-email - Reject a drafted email */
 router.post('/assignments/:id/reject-email', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1607,7 +1607,7 @@ router.post('/assignments/:id/reject-email', (req, res) => {
   }
 });
 
-/** POST /assignments/:id/attach-to-entity — Attach task artifacts to a knowledge entity */
+/** POST /assignments/:id/attach-to-entity - Attach task artifacts to a knowledge entity */
 router.post('/assignments/:id/attach-to-entity', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1667,7 +1667,7 @@ router.post('/assignments/:id/attach-to-entity', async (req, res) => {
   }
 });
 
-/** POST /assignments/:id/regenerate-report — Regenerate PDF/DOC artifacts for a completed task */
+/** POST /assignments/:id/regenerate-report - Regenerate PDF/DOC artifacts for a completed task */
 router.post('/assignments/:id/regenerate-report', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1709,7 +1709,7 @@ router.post('/assignments/:id/regenerate-report', async (req, res) => {
   }
 });
 
-/** GET /assignments/:id/download/:format — Download a generated document */
+/** GET /assignments/:id/download/:format - Download a generated document */
 router.get('/assignments/:id/download/:format', (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || req.user.tenantId;
@@ -1746,7 +1746,7 @@ router.get('/assignments/:id/download/:format', (req, res) => {
   }
 });
 
-// ─── GET /newsletters — List daily intelligence newsletters for this tenant ──
+// ─── GET /newsletters - List daily intelligence newsletters for this tenant ──
 
 router.get('/newsletters', async (req, res) => {
   try {

@@ -1,5 +1,5 @@
 /**
- * Lead Engine Routes — Discovery, outreach, and pipeline management.
+ * Lead Engine Routes - Discovery, outreach, and pipeline management.
  */
 
 import express from 'express';
@@ -91,6 +91,10 @@ router.get('/stats', async (req, res) => {
     // Find the lead pipeline Google Sheet for this tenant
     const files = getTenantFiles(req.user.tenantId, { category: 'Leads' });
     const sheet = files.find(f => f.file_type === 'google_sheet');
+    // If no lead sheet configured, show 0 leads (DB leads are stale seed data)
+    if (!sheetStats && !sheet) {
+      stats.totalLeads = 0;
+    }
     if (sheet) stats.sheetUrl = sheet.drive_url;
     // Fetch real meeting count from Google Calendar
     const meetings = await getMeetingCount(req.user.tenantId).catch(() => null);

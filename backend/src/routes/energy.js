@@ -19,7 +19,7 @@ const ERCOT_NODES = [
 ];
 
 // =============================================================================
-// GET /api/energy/nodes — Available settlement points
+// GET /api/energy/nodes - Available settlement points
 // =============================================================================
 router.get('/nodes', (req, res) => {
   const iso = req.query.iso || 'ERCOT';
@@ -30,7 +30,7 @@ router.get('/nodes', (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/realtime — Current real-time LMP
+// GET /api/energy/realtime - Current real-time LMP
 // =============================================================================
 router.get('/realtime', async (req, res) => {
   const node = req.query.node || 'HB_NORTH';
@@ -97,7 +97,7 @@ router.get('/realtime', async (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/dayahead — Day-ahead market prices
+// GET /api/energy/dayahead - Day-ahead market prices
 // =============================================================================
 router.get('/dayahead', async (req, res) => {
   const node = req.query.node || 'HB_NORTH';
@@ -143,7 +143,7 @@ router.get('/dayahead', async (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/history — Historical price data
+// GET /api/energy/history - Historical price data
 // =============================================================================
 router.get('/history', (req, res) => {
   const node = req.query.node || 'HB_NORTH';
@@ -170,7 +170,7 @@ router.get('/history', (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/heatmap — Hourly price heatmap data
+// GET /api/energy/heatmap - Hourly price heatmap data
 // =============================================================================
 router.get('/heatmap', (req, res) => {
   const node = req.query.node || 'HB_NORTH';
@@ -211,7 +211,7 @@ router.get('/heatmap', (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/load — System load data
+// GET /api/energy/load - System load data
 // =============================================================================
 router.get('/load', async (req, res) => {
   const iso = req.query.iso || 'ERCOT';
@@ -238,7 +238,7 @@ router.get('/load', async (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/fuelmix — Generation fuel mix
+// GET /api/energy/fuelmix - Generation fuel mix
 // =============================================================================
 router.get('/fuelmix', async (req, res) => {
   const iso = req.query.iso || 'ERCOT';
@@ -265,7 +265,7 @@ router.get('/fuelmix', async (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/grid-status — Grid condition / alerts
+// GET /api/energy/grid-status - Grid condition / alerts
 // =============================================================================
 router.get('/grid-status', (req, res) => {
   const iso = req.query.iso || 'ERCOT';
@@ -291,7 +291,7 @@ router.get('/grid-status', (req, res) => {
 });
 
 // =============================================================================
-// GET /api/energy/alerts — Energy-specific alerts
+// GET /api/energy/alerts - Energy-specific alerts
 // =============================================================================
 router.get('/alerts', (req, res) => {
   const node = req.query.node || 'HB_NORTH';
@@ -348,7 +348,7 @@ router.get('/alerts', (req, res) => {
 });
 
 // =============================================================================
-// GET/POST /api/energy/settings — Energy configuration
+// GET/POST /api/energy/settings - Energy configuration
 // =============================================================================
 router.get('/settings', (req, res) => {
   try {
@@ -377,7 +377,7 @@ router.post('/settings', (req, res) => {
 });
 
 // =============================================================================
-// POST /api/energy/backfill — Trigger historical data backfill
+// POST /api/energy/backfill - Trigger historical data backfill
 // =============================================================================
 router.post('/backfill', async (req, res) => {
   const { node = 'HB_NORTH', days = 365 } = req.body;

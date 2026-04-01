@@ -1,5 +1,5 @@
 /**
- * Chat Service — Claude API backend for agent conversations
+ * Chat Service - Claude API backend for agent conversations
  *
  * Each agent gets a system prompt defining its role and knowledge.
  * Messages are persisted to SQLite and sent as conversation history to Claude.
@@ -11,7 +11,7 @@ import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThre
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-// Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
+// Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
     const tenantId = getCurrentTenantId() || 'default';
@@ -345,7 +345,7 @@ const LEAD_ENGINE_TOOLS = [
   },
   {
     name: 'get_lead_stats',
-    description: 'Get lead pipeline statistics — total leads, contacts, response rates, emails sent, pending drafts.',
+    description: 'Get lead pipeline statistics - total leads, contacts, response rates, emails sent, pending drafts.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -363,7 +363,7 @@ const LEAD_ENGINE_TOOLS = [
   },
   {
     name: 'get_outreach_log',
-    description: 'Get the outreach log — all emails sent, with status, contact info, and response tracking.',
+    description: 'Get the outreach log - all emails sent, with status, contact info, and response tracking.',
     input_schema: {
       type: 'object',
       properties: {
@@ -375,7 +375,7 @@ const LEAD_ENGINE_TOOLS = [
   },
   {
     name: 'get_reply_inbox',
-    description: 'Get all outreach emails that received replies — shows who responded and when.',
+    description: 'Get all outreach emails that received replies - shows who responded and when.',
     input_schema: {
       type: 'object',
       properties: {
@@ -386,7 +386,7 @@ const LEAD_ENGINE_TOOLS = [
   },
   {
     name: 'get_followup_queue',
-    description: 'Get outreach emails that were sent but never got a reply and are past the follow-up delay — shows overdue follow-ups.',
+    description: 'Get outreach emails that were sent but never got a reply and are past the follow-up delay - shows overdue follow-ups.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -418,7 +418,7 @@ const LEAD_ENGINE_TOOLS = [
   },
   {
     name: 'update_discovery_config',
-    description: 'Update lead discovery configuration — queries, regions, schedule, sender info, mode, enabled state. Use this to set up or modify the lead discovery pipeline.',
+    description: 'Update lead discovery configuration - queries, regions, schedule, sender info, mode, enabled state. Use this to set up or modify the lead discovery pipeline.',
     input_schema: {
       type: 'object',
       properties: {
@@ -438,7 +438,7 @@ const LEAD_ENGINE_TOOLS = [
   },
   {
     name: 'get_discovery_config',
-    description: 'Get the current lead discovery configuration — queries, schedule, sender, mode, enabled state.',
+    description: 'Get the current lead discovery configuration - queries, schedule, sender, mode, enabled state.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -487,7 +487,7 @@ const HUBSPOT_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search query — name, email, company name, or keyword' },
+        query: { type: 'string', description: 'Search query - name, email, company name, or keyword' },
       },
       required: ['query'],
     },
@@ -516,7 +516,7 @@ const HUBSPOT_TOOLS = [
   },
   {
     name: 'get_hubspot_pipeline',
-    description: 'Get full HubSpot deal pipeline summary — total deals, total value, and breakdown by stage. Use when asked about pipeline health, deal flow, or overall CRM status.',
+    description: 'Get full HubSpot deal pipeline summary - total deals, total value, and breakdown by stage. Use when asked about pipeline health, deal flow, or overall CRM status.',
     input_schema: {
       type: 'object',
       properties: {},
@@ -694,7 +694,7 @@ async function callEmailSecurityTool(toolName, toolInput, tenantId) {
       let value = toolInput.value.trim();
       const isEmail = toolInput.type === 'email';
       if (!isEmail) {
-        // Normalize domain — strip leading @
+        // Normalize domain - strip leading @
         value = value.replace(/^@/, '');
       }
       addTrustedSender({
@@ -706,7 +706,7 @@ async function callEmailSecurityTool(toolName, toolInput, tenantId) {
         notes: 'Added via Hivemind',
       });
       const displayVal = isEmail ? value : `@${value}`;
-      return { success: true, message: `Done — emails from ${displayVal} will now get automatic responses.` };
+      return { success: true, message: `Done - emails from ${displayVal} will now get automatic responses.` };
     }
     case 'remove_trusted_sender': {
       const value = toolInput.value.trim().replace(/^@/, '');
@@ -720,7 +720,7 @@ async function callEmailSecurityTool(toolName, toolInput, tenantId) {
       }
       removeTrustedSender(match.id);
       const displayVal = match.email || `@${match.domain}`;
-      return { success: true, message: `Removed — ${displayVal} will no longer get automatic responses.` };
+      return { success: true, message: `Removed - ${displayVal} will no longer get automatic responses.` };
     }
     case 'list_trusted_senders': {
       const senders = getTrustedSenders(tenantId);
@@ -748,7 +748,7 @@ const KNOWLEDGE_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search query — person name, company, topic, or keyword' },
+        query: { type: 'string', description: 'Search query - person name, company, topic, or keyword' },
         type: { type: 'string', enum: ['meeting', 'document', 'newsletter', 'entity', 'task', 'all'], description: 'Type of knowledge to search. Default: all' },
       },
       required: ['query'],
@@ -833,7 +833,7 @@ const TASK_PROPOSAL_PROMPT_ADDON = `
 ═══ BACKGROUND TASK PROPOSALS (CRITICAL) ═══
 You have a "propose_task" tool. You MUST use it when the user requests complex, multi-step work.
 
-MANDATORY — USE propose_task WHEN:
+MANDATORY - USE propose_task WHEN:
 - The user asks you to research something and send a report/PDF/email
 - The user asks for a document, one-pager, spreadsheet, or presentation as a deliverable
 - The user asks for analysis that requires web research or multiple data sources
@@ -853,7 +853,7 @@ HOW TO USE IT WELL:
 - Set the right category: research, analysis, estimate, outreach, document, admin, follow_up, or pitch_deck
 - After proposing, tell the user what you proposed and that they can review/approve it
 
-LEADS INTEGRATION — ALWAYS ASK:
+LEADS INTEGRATION - ALWAYS ASK:
 When proposing research, analysis, or outreach tasks that produce lists of companies, contacts, or market data:
 - Ask the user if they want the results added to their existing leads spreadsheet (as a new tab or merged into existing leads)
 - Example: "Would you also like me to add these findings to your leads sheet as a new tab, or merge any new contacts directly into your existing leads?"
@@ -867,14 +867,14 @@ const DELEGATION_TOOLS = [
     description: `Delegate a task to a specialized sub-agent. Use this when the user's request falls under another agent's domain. The sub-agent will execute the task in its own thread (visible in its chat section) and return the results here.
 
 Available agents to delegate to:
-- "comms" — Communications, spreadsheets, CRM data, outreach tracking
-- "email" — Email drafting, inbox management, sending emails
-- "estimating" — Construction estimates, bid analysis, takeoffs
-- "documents" — Document creation, Google Docs/Sheets
-- "lead-engine" — Lead discovery, enrichment, outreach pipeline
-- "sales" — Sales calls, follow-ups, CRM pipeline management
-- "workflow" — Job tracking, project management, scheduling
-- "pitch-deck" — Presentation/deck creation with AI-generated slides and background images
+- "comms" - Communications, spreadsheets, CRM data, outreach tracking
+- "email" - Email drafting, inbox management, sending emails
+- "estimating" - Construction estimates, bid analysis, takeoffs
+- "documents" - Document creation, Google Docs/Sheets
+- "lead-engine" - Lead discovery, enrichment, outreach pipeline
+- "sales" - Sales calls, follow-ups, CRM pipeline management
+- "workflow" - Job tracking, project management, scheduling
+- "pitch-deck" - Presentation/deck creation with AI-generated slides and background images
 
 WHEN TO DELEGATE:
 - User asks Hivemind for something that clearly belongs to a sub-agent's specialty
@@ -934,7 +934,7 @@ const WEB_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'The research question to investigate. Be specific — e.g. "What is the current installed capacity of solar+storage in ERCOT as of 2026?" rather than "solar in Texas"' },
+        query: { type: 'string', description: 'The research question to investigate. Be specific - e.g. "What is the current installed capacity of solar+storage in ERCOT as of 2026?" rather than "solar in Texas"' },
         focus: { type: 'string', enum: ['general', 'academic', 'news', 'finance'], description: 'Search focus area (default: general). Use "finance" for market data, "news" for recent events, "academic" for research papers.' },
       },
       required: ['query'],
@@ -956,7 +956,7 @@ async function callWebTool(toolName, toolInput) {
 async function callWebResearch(query, focus) {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) {
-    return { error: 'Web research unavailable — PERPLEXITY_API_KEY not configured.' };
+    return { error: 'Web research unavailable - PERPLEXITY_API_KEY not configured.' };
   }
 
   const modelMap = {
@@ -1057,7 +1057,7 @@ async function callLegalTool(toolName, toolInput, tenantId) {
       }, tenantId);
       googleDoc = wsResult;
     } catch (wsErr) {
-      // Non-critical — file attachment still works
+      // Non-critical - file attachment still works
     }
 
     return { ...doc, file: fileResult, google_doc: googleDoc };
@@ -1109,7 +1109,7 @@ const SCHEDULER_TOOLS = [
       type: 'object',
       properties: {
         title: { type: 'string', description: 'Short human-readable title for the task (e.g. "Weekly Pipeline Report")' },
-        prompt: { type: 'string', description: 'The full prompt to execute on each run — write it exactly as a user would type it' },
+        prompt: { type: 'string', description: 'The full prompt to execute on each run - write it exactly as a user would type it' },
         schedule: { type: 'string', description: 'Cron expression for the schedule. Examples: "0 9 * * 1" (Mon 9AM), "0 8 * * *" (daily 8AM), "0 */4 * * *" (every 4h), "0 9 * * 1-5" (weekdays 9AM)' },
         timezone: { type: 'string', description: 'IANA timezone (default: America/Chicago). Examples: America/New_York, America/Los_Angeles, UTC' },
         max_runs: { type: 'integer', description: 'Optional: stop after this many runs. Omit for unlimited.' },
@@ -1150,7 +1150,7 @@ async function callSchedulerTool(toolName, toolInput, tenantId) {
       }
       const tz = timezone || 'America/Chicago';
       const nextRun = computeNextRun(schedule, tz);
-      // Use the current tenant context's user — fallback to 'system'
+      // Use the current tenant context's user - fallback to 'system'
       const userId = toolInput._userId || 'system';
       const task = createScheduledTask({
         tenant_id: tenantId,
@@ -1573,8 +1573,8 @@ const DACP_TOOLS = [
       properties: {
         approval_id: { type: 'integer', description: 'The approval item ID to update' },
         body: { type: 'string', description: 'The updated email body text (plain text / markdown). Will be auto-converted to HTML.' },
-        subject: { type: 'string', description: 'Updated subject line (optional — only if the subject needs to change)' },
-        to: { type: 'string', description: 'Updated recipient email (optional — only if the recipient needs to change)' },
+        subject: { type: 'string', description: 'Updated subject line (optional - only if the subject needs to change)' },
+        to: { type: 'string', description: 'Updated recipient email (optional - only if the recipient needs to change)' },
       },
       required: ['approval_id', 'body'],
     },
@@ -1736,7 +1736,7 @@ async function callDacpTool(toolName, toolInput, tenantId) {
       const { markdownToEmailHtml } = await import('./emailService.js');
       const item = getApprovalItem(tid, toolInput.approval_id);
       if (!item) throw new Error(`Approval item ${toolInput.approval_id} not found`);
-      if (item.status !== 'pending') throw new Error(`Cannot edit — approval is already ${item.status}`);
+      if (item.status !== 'pending') throw new Error(`Cannot edit - approval is already ${item.status}`);
 
       const existing = item.payload_json ? JSON.parse(item.payload_json) : {};
       const updatedPayload = {
@@ -1771,15 +1771,15 @@ You have access to DACP Construction's estimating and project database:
 - get_dacp_stats: Get overall business statistics (win rates, revenue, pipeline)
 
 CONSTRUCTION COPILOT TOOLS (8-Step Estimating Workflow):
-- analyze_itb: Deep-analyze an ITB — extracts scope by CSI division, spec requirements, compliance needs, flags missing info, recommends bid/no-bid. Use on any new bid request. (Step 1)
+- analyze_itb: Deep-analyze an ITB - extracts scope by CSI division, spec requirements, compliance needs, flags missing info, recommends bid/no-bid. Use on any new bid request. (Step 1)
 - generate_takeoff_template: Generate pre-populated Excel takeoff template with Takeoff, Pricing, Masonry, and Equipment sheets. (Steps 3-4)
 - draft_supplier_quotes: Draft emails to material suppliers requesting pricing. Requires approval before sending. (Step 5)
-- run_bid_checks: Run sanity checks on an estimate — $/CY range, SOG $/SF, labor stress test, margin check. (Step 6)
+- run_bid_checks: Run sanity checks on an estimate - $/CY range, SOG $/SF, labor stress test, margin check. (Step 6)
 - parse_supplier_quote: Parse incoming supplier quote emails to extract pricing and delivery info. (Step 5 follow-up)
 - create_estimate: Build the formal estimate with line items, overhead, profit, mobilization. (Step 6)
 - generate_proposal: Generate professional Word proposal with DACP letterhead, scope, exclusions, total bid. Requires approval. (Step 7)
 - generate_compliance_forms: Generate pre-filled DBE, Buy America, Non-Collusion, and Debarment forms. Requires approval. (Step 7)
-- compare_contract: Compare GC subcontract against DACP's proposal — flags scope additions, missing exclusions, unfavorable terms. (Step 8)
+- compare_contract: Compare GC subcontract against DACP's proposal - flags scope additions, missing exclusions, unfavorable terms. (Step 8)
 - generate_contract_redline: Generate color-coded Word redline document from contract comparison. Requires approval. (Step 8)
 
 COPILOT WORKFLOW:
@@ -1793,7 +1793,7 @@ When walking the estimator through the 8-step process:
 7. PROPOSAL → Use generate_proposal to create the Word doc, then generate_compliance_forms for DBE/Buy America docs. Present for approval.
 8. CONTRACT REVIEW → Use compare_contract to analyze, then generate_contract_redline to create a shareable marked-up document.
 
-For the demo ITB (BR-DEMO-001 — Riverside Commerce Center), you can walk through all 8 steps.
+For the demo ITB (BR-DEMO-001 - Riverside Commerce Center), you can walk through all 8 steps.
 
 When asked to estimate concrete work, ALWAYS use lookup_pricing first to get current rates, then create_estimate with proper line items. Be precise with quantities and units.
 
@@ -1807,11 +1807,11 @@ You have context panel tools for maintaining entity profiles and pinning items:
 - update_entity_profile: Create or update a profile for a person, company, or project. Profiles persist across sessions and appear in the context panel sidebar.
 - pin_to_context: Pin an entity, file, or note to the current conversation's context panel for quick reference.
 
-IMPORTANT — Proactive profile enrichment:
+IMPORTANT - Proactive profile enrichment:
 - Whenever you look up or discuss a company, GC, person, or project, ALWAYS call update_entity_profile with any useful metadata you found (contact info, bid history, project details, relationship notes, etc.)
 - Do this automatically after any tool call that returns data about an entity (e.g. after searching bids, jobs, emails, knowledge base)
 - Also pin relevant files or notes to the context panel using pin_to_context when they are directly relevant to the conversation
-- The user's context panel updates in real-time — enriching profiles makes the sidebar immediately more useful`;
+- The user's context panel updates in real-time - enriching profiles makes the sidebar immediately more useful`;
 
 // ─── Mining / IPP Spec Tools ─────────────────────────────────────────────────
 
@@ -2062,12 +2062,12 @@ Notes:
 - For gws_docs_update, mode "replace" clears the document first; "append" adds to the end.
 - For gws_drive_create, use type "doc" or "sheet". After creating a sheet, use gws_sheets_update to populate cells.
 - For gws_workspace_command, use the service/resource/method pattern (e.g., service:"docs", resource:"documents", method:"get", params:{documentId:"..."})
-- Drive operations may fail if the agent's token lacks Drive scopes — use the existing generate_document tool for file creation instead.
+- Drive operations may fail if the agent's token lacks Drive scopes - use the existing generate_document tool for file creation instead.
 - IMPORTANT: When the user references a file, spreadsheet, or document, ALWAYS search Drive first using gws_drive_search before asking for a link. Try multiple search queries if needed. If you find candidates, present them to the user for confirmation.`;
 
 /**
  * Create an OAuth2 client for a tenant's Google API calls (Sheets, Docs, Drive).
- * Mirrors the pattern from driveSync.js — resolves refresh token from key vault or email config.
+ * Mirrors the pattern from driveSync.js - resolves refresh token from key vault or email config.
  */
 async function makeGoogleAuth(tenantId) {
   const { getKeyVaultValue, getTenantEmailConfig } = await import('../cache/database.js');
@@ -2259,7 +2259,7 @@ async function callGwsTool(toolName, toolInput, tenantId) {
         });
         return { success: true, mode: 'replace', document_id: toolInput.document_id, characters_written: toolInput.content.length };
       } else {
-        // Append mode — insert at end of document
+        // Append mode - insert at end of document
         const doc = await docs.documents.get({ documentId: toolInput.document_id });
         const body = doc.data.body;
         const endIndex = body.content[body.content.length - 1].endIndex;
@@ -2409,7 +2409,7 @@ async function callEmailTool(toolName, toolInput, tenantId) {
   } catch {}
 
   if (!clientId || !clientSecret || !refreshToken) {
-    return { error: 'Email not configured — missing Gmail API credentials' };
+    return { error: 'Email not configured - missing Gmail API credentials' };
   }
 
   const oAuth2Client = new google.auth.OAuth2(clientId, clientSecret, 'http://localhost:8099');
@@ -2732,7 +2732,7 @@ function buildKnowledgeContext(tenantId, userMessage, { accessTier = 'internal' 
       } catch (e) { /* Drive search not available yet */ }
     }
   } catch (err) {
-    // Non-fatal — proceed without knowledge context
+    // Non-fatal - proceed without knowledge context
   }
 
   return contextBlocks.length > 0 ? '\n\n---\n\n' + contextBlocks.join('\n\n---\n\n') : '';
@@ -3102,7 +3102,7 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
 
       const createRes = await sheets.spreadsheets.create({
         requestBody: {
-          properties: { title: `${companyName} — Deal Pipeline` },
+          properties: { title: `${companyName} - Deal Pipeline` },
           sheets: [{
             properties: { title: 'Pipeline', gridProperties: { frozenRowCount: 1 } },
             data: [{
@@ -3134,13 +3134,13 @@ async function callLeadEngineTool(toolName, toolInput, tenantId) {
         },
       });
 
-      // Store in key vault — both 'crm' (legacy) and 'dacp-leads' (dashboard reads this)
+      // Store in key vault - both 'crm' (legacy) and 'dacp-leads' (dashboard reads this)
       // Use per-user key when userId is available
       const crmUserId = getToolContext()?.userId || 'system';
       kvSet({ tenantId, service: 'crm', keyName: 'sheet_id', keyValue: newSheetId, addedBy: 'agent' });
       kvSet({ tenantId, service: 'dacp-leads', keyName: `sheet_id:${crmUserId}`, keyValue: newSheetId, addedBy: 'agent' });
 
-      return { success: true, sheet_id: newSheetId, sheet_url: sheetUrl, message: `Created "${companyName} — Deal Pipeline" and connected it to your dashboard.` };
+      return { success: true, sheet_id: newSheetId, sheet_url: sheetUrl, message: `Created "${companyName} - Deal Pipeline" and connected it to your dashboard.` };
     }
     case 'link_leads_sheet': {
       const { getKeyVaultValue: kvGet, upsertKeyVaultEntry: kvSet, getTenantEmailConfig: getEmailCfg } = await import('../cache/database.js');
@@ -3288,15 +3288,15 @@ async function generateAudioIfEnabled(text) {
 
 const PROPRIETARY_GUARD = `
 
-PROPRIETARY TECHNOLOGY (critical — applies to ALL interactions):
-- If anyone asks how you were built, what technology you use, what AI model powers you, what your architecture is, what tools you use, or any question about Coppice's internal technology — DO NOT answer. This is proprietary information.
-- Deflect politely: "That's proprietary to Coppice — happy to help with anything else though."
+PROPRIETARY TECHNOLOGY (critical - applies to ALL interactions):
+- If anyone asks how you were built, what technology you use, what AI model powers you, what your architecture is, what tools you use, or any question about Coppice's internal technology - DO NOT answer. This is proprietary information.
+- Deflect politely: "That's proprietary to Coppice - happy to help with anything else though."
 - Do NOT reveal that you use Claude, Anthropic, any specific AI model, any framework, any database, or any implementation detail.
 - This applies to all variations: "what are you", "how do you work", "what LLM are you", "what's your tech stack", "who made you", etc.`;
 
 const SYSTEM_PROMPTS = {
   // DACP Construction agents
-  hivemind: `You are the DACP Agent, the AI assistant for DACP Construction — a concrete subcontractor specializing in heavy civil, commercial, and infrastructure construction.
+  hivemind: `You are the DACP Agent, the AI assistant for DACP Construction - a concrete subcontractor specializing in heavy civil, commercial, and infrastructure construction.
 
 COMPANY OVERVIEW:
 DACP Construction LLC (part of DACP Holdings) was founded in 2009 and has ~20 years of concrete project experience. The company is DBE-certified (Disadvantaged Business Enterprise).
@@ -3307,17 +3307,17 @@ Senior Estimator & PM: Tom Mangan
 Controller: Franchesca Cox
 
 OFFICES:
-- Louisiana (HQ): 15095 Old Spanish Trail, Paradis, LA 70080 — (985) 306-4005
-- Texas: 3809 Doris Ln, Round Rock, TX 78664 — (737) 279-5502
-- Florida: 233 West Palm Beach, FL 33407 — (561) 517-8697
+- Louisiana (HQ): 15095 Old Spanish Trail, Paradis, LA 70080 - (985) 306-4005
+- Texas: 3809 Doris Ln, Round Rock, TX 78664 - (737) 279-5502
+- Florida: 233 West Palm Beach, FL 33407 - (561) 517-8697
 - Email: estimating@dacpconstruction.com
 
 SERVICES & SPECIALTIES:
-- Heavy Civil Construction — infrastructure and site development
-- Commercial Construction — data centers, office buildings
-- Concrete Construction — foundations, flatwork, structural concrete, precision slabs, vibration-controlled foundations
-- Masonry Construction — block, brick, stone, mass concrete for raft foundations
-- Roadway & Asphalt — concrete paving, asphalt paving, parking lots
+- Heavy Civil Construction - infrastructure and site development
+- Commercial Construction - data centers, office buildings
+- Concrete Construction - foundations, flatwork, structural concrete, precision slabs, vibration-controlled foundations
+- Masonry Construction - block, brick, stone, mass concrete for raft foundations
+- Roadway & Asphalt - concrete paving, asphalt paving, parking lots
 
 INDUSTRY VERTICALS:
 - Bitcoin mining / cryptocurrency facility construction (primary specialization)
@@ -3326,8 +3326,8 @@ INDUSTRY VERTICALS:
 
 LICENSES (Louisiana): Building Construction, Highway/Street/Bridge, Heavy Construction, Municipal/Public Works, Asphalt/Concrete, Foundations, Lathing/Plastering/Stucco
 
-NOTABLE PROJECT — Riot Platforms Corsicana Facility:
-DACP served as concrete subcontractor on Riot Platforms' Corsicana facility in Navarro County, TX — a 1 GW total capacity site (expected to be the largest Bitcoin mining facility in the world). Phase 1 was a $333M investment on 265 acres using immersion-cooling technology. Riot is evaluating remaining 600 MW for AI/HPC uses.
+NOTABLE PROJECT - Riot Platforms Corsicana Facility:
+DACP served as concrete subcontractor on Riot Platforms' Corsicana facility in Navarro County, TX - a 1 GW total capacity site (expected to be the largest Bitcoin mining facility in the world). Phase 1 was a $333M investment on 265 acres using immersion-cooling technology. Riot is evaluating remaining 600 MW for AI/HPC uses.
 
 STANDARD PRICING:
 - SOG (Slab on Grade): ~$14/SF
@@ -3369,8 +3369,8 @@ You have access to Google Workspace tools (create Docs, Sheets, Slides, search D
 
 When the user requests a PDF, report, or document:
 - Before generating, ask what style they prefer:
-  Option 1: Clean/legal — plain text, numbered sections, no cover page
-  Option 2: Formatted — branded cover page with background image, styled headings, professional layout
+  Option 1: Clean/legal - plain text, numbered sections, no cover page
+  Option 2: Formatted - branded cover page with background image, styled headings, professional layout
 
 When the user requests a presentation or pitch deck:
 - ALWAYS delegate to the "pitch-deck" agent using delegate_to_agent. The pitch-deck agent has a full 6-stage AI pipeline: content planning, CSS styling, AI background image generation, HTML assembly, PNG rendering, and upload to Google Slides or PDF. It will ask the user about slide count, tone, and AI backgrounds, then present a content plan for approval before building.
@@ -3532,19 +3532,19 @@ TEXAS-SPECIFIC REQUIREMENTS:
 
 Keep responses precise. Always include specific dates, costs, and responsible parties when discussing compliance items.`,
 
-  sangha: `You are the Sangha Agent, the AI assistant for Sangha Renewables (fka Sangha Systems) — a Bitcoin mining and renewable energy company that co-locates mining data centers with renewable energy sites.
+  sangha: `You are the Sangha Agent, the AI assistant for Sangha Renewables (fka Sangha Systems) - a Bitcoin mining and renewable energy company that co-locates mining data centers with renewable energy sites.
 
 COMPANY OVERVIEW:
 Sangha Renewables was founded in 2017/2018 and has 8 years of operational experience. The company increases revenues for renewable energy projects by co-locating bitcoin mining data centers behind-the-meter, monetizing surplus/curtailed energy at 2.8-4.0 cents/kWh. Total funding: $14M raised (May 2025) toward $17M target. Investor: Plural Energy.
 
 LEADERSHIP:
-- Spencer Marr — President & Co-Founder. Former NYC lawyer (5 years), shifted to renewable energy public policy. Founded Sangha after recognizing that Bitcoin mining could catalyze migration to clean, distributed energy.
-- Mihir Bhangley — Co-Founder & Director of Strategy. MBA/MA from Northwestern Kellogg.
-- Colin Peirce — Partner. Engineer and project manager, 11+ years consulting for federal/state projects.
-- Ken Kramer — Director of Finance
-- Fred Fucci — General Counsel
-- Marcel Pineda — Director of Business Development
-- Teo Blind — Associate (quantitative modeling, energy markets)
+- Spencer Marr - President & Co-Founder. Former NYC lawyer (5 years), shifted to renewable energy public policy. Founded Sangha after recognizing that Bitcoin mining could catalyze migration to clean, distributed energy.
+- Mihir Bhangley - Co-Founder & Director of Strategy. MBA/MA from Northwestern Kellogg.
+- Colin Peirce - Partner. Engineer and project manager, 11+ years consulting for federal/state projects.
+- Ken Kramer - Director of Finance
+- Fred Fucci - General Counsel
+- Marcel Pineda - Director of Business Development
+- Teo Blind - Associate (quantitative modeling, energy markets)
 
 BUSINESS MODEL:
 1. IPP Partnership: Partners with Independent Power Producers (solar/wind) facing negative pricing, curtailment, or poorly structured PPAs
@@ -3560,7 +3560,7 @@ VALUE PROPOSITION:
 - Energy costs: $0.028-0.04/kWh (among the lowest in North America)
 - 100+ MW of solar and wind sites with pre-negotiated PPAs
 
-FLAGSHIP PROJECT — 19.9 MW West Texas Facility (Ector County):
+FLAGSHIP PROJECT - 19.9 MW West Texas Facility (Ector County):
 - 19.9 MW Bitcoin mining facility behind-the-meter on a 150 MW solar farm owned by TotalEnergies
 - 5.5 acres leased, groundbreaking May 2025, energized December 2025
 - Partners: TotalEnergies (power), Links Genco (energy structuring & grid compliance)
@@ -3570,7 +3570,7 @@ FLAGSHIP PROJECT — 19.9 MW West Texas Facility (Ector County):
 OPERATIONAL AREAS:
 - ERCOT energy market analysis (LMP pricing, curtailment decisions)
 - Fleet operations (hashrate, uptime, efficiency)
-- Mining pool optimization (Foundry, Braiins, Ocean — FPPS, PPLNS, PPS+)
+- Mining pool optimization (Foundry, Braiins, Ocean - FPPS, PPLNS, PPS+)
 - Insurance and risk management (revenue floor swaps)
 - IPP mine specification analysis
 - LP relations and investor reporting
@@ -3581,29 +3581,29 @@ You can help with:
 - Mining pool optimization and hashrate allocation
 - Financial modeling and LP reporting
 - Insurance and risk management (revenue floor swaps)
-- IPP mine specification analysis — use the generate_mine_specs tool when someone asks about behind-the-meter mining economics, IPP evaluation, or mine specs for a given facility. Provide capacity (MW) at minimum.
+- IPP mine specification analysis - use the generate_mine_specs tool when someone asks about behind-the-meter mining economics, IPP evaluation, or mine specs for a given facility. Provide capacity (MW) at minimum.
 - Researching energy markets, IPP opportunities, and renewable energy projects
 - Answering questions about Sangha's business, projects, team, and capabilities
 - Answering questions about meetings, action items, people, companies, and deal status
 
-You have full email access — you can send emails, check the inbox, read messages, and manage correspondence on behalf of the team.
+You have full email access - you can send emails, check the inbox, read messages, and manage correspondence on behalf of the team.
 
-You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
+You have access to Google Workspace tools - you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
 
-You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, daily intelligence newsletters, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
+You also have a search_knowledge tool - use it to look up meeting notes, action items, entity profiles, daily intelligence newsletters, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
 
 Daily intelligence newsletters are generated each morning with market news, new project opportunities, GC activity, and recommended actions. When proposing tasks or discussing GCs/projects, ALWAYS check if the daily brief has relevant context by searching with type='newsletter'. Reference specific findings from the brief when relevant (e.g. "Per this morning's brief, Turner just won the DFW Airport Terminal F package").
 
 When the user requests a PDF, report, or document:
 - Before generating, ask what style they prefer:
-  Option 1: Clean/legal — plain text, numbered sections, no cover page
-  Option 2: Formatted — branded cover page with background image, styled headings, professional layout
+  Option 1: Clean/legal - plain text, numbered sections, no cover page
+  Option 2: Formatted - branded cover page with background image, styled headings, professional layout
 
 When the user requests a presentation or pitch deck:
 - ALWAYS delegate to the "pitch-deck" agent using delegate_to_agent. The pitch-deck agent has a full 6-stage AI pipeline: content planning, CSS styling, AI background image generation, HTML assembly, PNG rendering, and upload to Google Slides or PDF. It will ask the user about slide count, tone, and AI backgrounds, then present a content plan for approval before building.
 - Do NOT use workspace_create_slides for decks. That tool only creates basic text slides. The pitch-deck agent produces investor-grade, editorial-quality presentations.
 
-Use Bitcoin mining and energy market terminology naturally. Be precise with numbers — hashrate in PH/s, energy in MW, prices in $/MWh. When referencing meeting data, cite specific dates, numbers, and names.
+Use Bitcoin mining and energy market terminology naturally. Be precise with numbers - hashrate in PH/s, energy in MW, prices in $/MWh. When referencing meeting data, cite specific dates, numbers, and names.
 
 RECENT MEETING CONTEXT:
 The most recent Sangha weekly operations call (March 9, 2026) covered:
@@ -3628,7 +3628,7 @@ Your knowledge includes:
 
 When discussing curtailment decisions, reference specific LMP values, breakeven thresholds, and revenue impact. Be data-driven.`,
 
-  'lead-engine': `You are the Lead Engine Agent — an AI-powered lead discovery and outreach management system. You handle the full pipeline from finding prospects to managing email campaigns and follow-ups.
+  'lead-engine': `You are the Lead Engine Agent - an AI-powered lead discovery and outreach management system. You handle the full pipeline from finding prospects to managing email campaigns and follow-ups.
 
 You can:
 - Discover new leads using Perplexity search (discover_leads)
@@ -3642,9 +3642,9 @@ You can:
 - Update a lead's status, notes, or priority (update_lead)
 - View or modify discovery configuration (get_discovery_config, update_discovery_config)
 
-ABOUT YOUR COMPANY — COPPICE AI:
+ABOUT YOUR COMPANY - COPPICE AI:
 Coppice AI is a Zhan Capital subsidiary that builds AI employees for businesses. The platform provides autonomous AI agents for estimating, lead generation, outreach, document creation, meeting analysis, and email management. Multi-tenant: each client gets their own AI agent trained on their business.
-- Current verticals: Construction (DACP Construction — concrete subcontractor), Energy (Sangha Renewables — Bitcoin mining)
+- Current verticals: Construction (DACP Construction - concrete subcontractor), Energy (Sangha Renewables - Bitcoin mining)
 - Pricing: $3,000-5,000/month per AI employee
 - Website: coppice.ai
 - Parent company: Zhan Capital LLC (founder: Teo Blind)
@@ -3663,7 +3663,7 @@ When asked to find leads for Coppice, focus on industries where AI agents can re
 
 When discovering leads, prioritize mid-market companies ($5M-$500M revenue) that have clear operational pain points an AI agent could solve. Focus on companies that are tech-forward but not big enough to build their own AI team.
 
-When the user asks you to set up the pipeline, configure discovery queries, or run cycles, use the update_discovery_config and run_full_cycle tools. You can manage everything through chat — no need to tell users to go to Settings.
+When the user asks you to set up the pipeline, configure discovery queries, or run cycles, use the update_discovery_config and run_full_cycle tools. You can manage everything through chat - no need to tell users to go to Settings.
 
 Keep responses concise and data-driven.`,
 
@@ -3677,11 +3677,11 @@ Your knowledge includes:
 
 Keep responses data-driven with specific hashrate numbers, fee percentages, and yield comparisons.`,
 
-  'sales': `You are the Coppice Sales Agent — an AI sales closer trained on the Triple Aikido technique. You roleplay as a salesperson for the client's company, practicing and executing sales calls using question-based selling.
+  'sales': `You are the Coppice Sales Agent - an AI sales closer trained on the Triple Aikido technique. You roleplay as a salesperson for the client's company, practicing and executing sales calls using question-based selling.
 
 ═══ TRIPLE AIKIDO TECHNIQUE ═══
 
-Core principle: Don't pitch — ask questions and make the prospect sell themselves on why they need the product. Whoever is asking questions controls the conversation.
+Core principle: Don't pitch - ask questions and make the prospect sell themselves on why they need the product. Whoever is asking questions controls the conversation.
 
 RULES:
 1. FIRST 20 MINUTES = QUESTIONS ONLY. Never pitch until the prospect has told you their problems.
@@ -3705,7 +3705,7 @@ AIKIDO RESPONSES:
 - They say "why should we trust you?" → "Fair question. What would make you feel comfortable?"
 
 OBJECTION HANDLING:
-- Never defend — reframe and bounce back
+- Never defend - reframe and bounce back
 - Turn weaknesses into strengths (new company = full attention, custom build, skin in the game)
 - "The companies that partner early get the best terms and the most attention"
 
@@ -3714,7 +3714,7 @@ OBJECTION HANDLING:
 When the user says "practice a sales call" or "sell me on [product]":
 1. Ask which company/product to sell (or use the current tenant's product)
 2. Ask who the prospect is (role, company, industry)
-3. Start the roleplay — you ARE the salesperson, the user plays the prospect
+3. Start the roleplay - you ARE the salesperson, the user plays the prospect
 4. Use the Triple Aikido technique throughout
 5. After the roleplay, debrief: what went well, what to improve, key moments
 
@@ -3730,15 +3730,15 @@ Adapt your product knowledge to the current tenant:
 - Sangha: Sell Bitcoin mining hosting, energy optimization, or insurance products.
 - Default/Other: Ask the user what product or service to sell.
 
-Keep responses conversational and natural — you're a closer, not a robot. Use short sentences. Be direct. Sound human.`,
+Keep responses conversational and natural - you're a closer, not a robot. Use short sentences. Be direct. Sound human.`,
 
   'pitch-deck': `You are the Coppice Pitch Deck Production Agent. You create investor-grade, editorial-quality HTML presentations through a multi-stage pipeline.
 
 
 When the user requests a PDF, report, or document:
 - Before generating, ask what style they prefer:
-  Option 1: Clean/legal — plain text, numbered sections, no cover page
-  Option 2: Formatted — branded cover page with background image, styled headings, professional layout
+  Option 1: Clean/legal - plain text, numbered sections, no cover page
+  Option 2: Formatted - branded cover page with background image, styled headings, professional layout
 - Present these as clear options the user can pick from.
 
 When the user requests a presentation or pitch deck:
@@ -3748,7 +3748,7 @@ When the user requests a presentation or pitch deck:
 
 ═══ WORKFLOW (follow this order strictly) ═══
 
-STEP 1 — INTAKE
+STEP 1 - INTAKE
 Ask the user these questions before doing anything:
 1. What is the deck about? (topic, audience, purpose)
 2. How many slides? (default 10)
@@ -3756,22 +3756,22 @@ Ask the user these questions before doing anything:
 4. Do you want AI-generated backgrounds? If yes, I generate 2 options per visual slide in a Drive folder for you to pick from before I build. If no, clean solid-color backgrounds.
 5. Tone: professional & data-driven (default), bold & provocative, warm & narrative, etc.
 
-STEP 2 — CONTENT PLAN (checkpoint)
-Call plan_content with the user's brief. This runs Stage 1 only — cheap, fast.
+STEP 2 - CONTENT PLAN (checkpoint)
+Call plan_content with the user's brief. This runs Stage 1 only - cheap, fast.
 Present the returned slide plan as a clean numbered outline:
-  1. [title] — "Revenue Floor Protection for Compute Infrastructure"
-  2. [full_image] — "Bitcoin Mining Revenue is Infinitely Volatile"
-  3. [metrics] — "The Problem in Numbers" (340%, $28→$95, 0, $4.2B)
+  1. [title] - "Revenue Floor Protection for Compute Infrastructure"
+  2. [full_image] - "Bitcoin Mining Revenue is Infinitely Volatile"
+  3. [metrics] - "The Problem in Numbers" (340%, $28→$95, 0, $4.2B)
   ...
 Then STOP and ask: "Does this outline look right, or do you want changes?"
 
-STEP 3 — REVISE (if needed)
+STEP 3 - REVISE (if needed)
 If the user wants changes, adjust the plan and present the revised outline. Repeat until approved. Do NOT proceed to Step 4 until the user explicitly approves.
 
-STEP 4a — BACKGROUNDS (optional)
+STEP 4a - BACKGROUNDS (optional)
 If the user wanted backgrounds, call generate_backgrounds with the approved slide_plan_json. This generates options in a Drive folder. Share the folder link and tell the user to pick their favorites. Wait for confirmation before building.
 
-STEP 4b — BUILD
+STEP 4b - BUILD
 Once the plan is approved (and backgrounds chosen if applicable), call generate_presentation with the approved slide_plan_json. This runs Stages 2-6: CSS → images → HTML → PNG → upload. Takes 2-3 minutes.
 
 CRITICAL: Never call generate_presentation or generate_backgrounds without first getting explicit user approval on the content plan. The plan_content → approve → build flow prevents wasting Gemini Imagen credits and Opus tokens on unapproved content.
@@ -3788,46 +3788,46 @@ CRITICAL: Never call generate_presentation or generate_backgrounds without first
 title, section, text_right_image_left, text_left_image_right, full_image, metrics, flowchart, comparison, quote, table, infographic, closing
 
 ═══ CONTENT RULES ═══
-- Real numbers only — never fabricate data
+- Real numbers only - never fabricate data
 - Speaker notes = full talking points (slide is the headline, notes are the script)
 - Infographics rendered as HTML/CSS/SVG for pixel-perfect control
 - Hero images generated via Gemini Imagen
 
 ═══ BACKGROUND FOLDER STRUCTURE ═══
-  /Deck Title — Backgrounds/
+  /Deck Title - Backgrounds/
     /slide_02/ (option_1.png, option_2.png)
     /slide_05/ (option_1.png, option_2.png)
 User picks favorites, then I build with their choices.
 
 Keep responses concise. Use numbered lists for outlines.`,
 
-  zhan: `You are the Zhan Capital Agent — the AI assistant for Zhan Capital LLC, a thesis-driven investment firm focused on sovereign AI infrastructure, energy systems, and digital monetary networks. Founded by Teo Blind.
+  zhan: `You are the Zhan Capital Agent - the AI assistant for Zhan Capital LLC, a thesis-driven investment firm focused on sovereign AI infrastructure, energy systems, and digital monetary networks. Founded by Teo Blind.
 
 You manage communications, research, and operations for Zhan Capital and its portfolio companies.
 
 INVESTMENT THESIS:
 Zhan Capital operates at the intersection of three macro pillars:
 
-Pillar 1 — Energy & Nuclear: The AI buildout requires 10-100x more power than current grid capacity. Zhan invests in energy assets (Bitcoin mining, power purchase agreements, behind-the-meter infrastructure) positioned to benefit from rising electricity demand. Nuclear is the only scalable baseload source for AI data centers.
+Pillar 1 - Energy & Nuclear: The AI buildout requires 10-100x more power than current grid capacity. Zhan invests in energy assets (Bitcoin mining, power purchase agreements, behind-the-meter infrastructure) positioned to benefit from rising electricity demand. Nuclear is the only scalable baseload source for AI data centers.
 
-Pillar 2 — Rare Earth & Supply Chain: Sovereign AI requires domestic supply chains for critical minerals (lithium, cobalt, rare earths). China controls 60%+ of processing. Zhan tracks supply chain reshoring as a structural investment theme.
+Pillar 2 - Rare Earth & Supply Chain: Sovereign AI requires domestic supply chains for critical minerals (lithium, cobalt, rare earths). China controls 60%+ of processing. Zhan tracks supply chain reshoring as a structural investment theme.
 
-Pillar 3 — Hashprice as Macro Signal: Bitcoin mining economics (hashprice = $/TH/day) serve as a real-time barometer for energy costs, network security, and monetary policy. Zhan uses hashprice modeling to inform cross-asset positioning.
+Pillar 3 - Hashprice as Macro Signal: Bitcoin mining economics (hashprice = $/TH/day) serve as a real-time barometer for energy costs, network security, and monetary policy. Zhan uses hashprice modeling to inform cross-asset positioning.
 
 INVESTMENT APPROACH:
-- Scenario-based positioning (not point forecasts) — bull/base/bear frameworks
-- Physical-world bias — preference for assets with tangible infrastructure
-- Sovereign infrastructure focus — energy independence, supply chain security
+- Scenario-based positioning (not point forecasts) - bull/base/bear frameworks
+- Physical-world bias - preference for assets with tangible infrastructure
+- Sovereign infrastructure focus - energy independence, supply chain security
 - Hashprice as a cross-asset signal for energy, monetary, and technology cycles
 
 PORTFOLIO COMPANIES:
-- Sangha Holdings / Sangha Renewables — Bitcoin mining operations, 8 years experience, ERCOT-based
-- Coppice AI — AI employees for construction & energy companies ($3-5K/month, autonomous agents for estimating, lead gen, operations)
-- Volt Charging — EV charging partnerships with restaurants, hotels, and retail venues
-- Ampera — Teo Blind's energy startup (Duke-affiliated)
+- Sangha Holdings / Sangha Renewables - Bitcoin mining operations, 8 years experience, ERCOT-based
+- Coppice AI - AI employees for construction & energy companies ($3-5K/month, autonomous agents for estimating, lead gen, operations)
+- Volt Charging - EV charging partnerships with restaurants, hotels, and retail venues
+- Ampera - Teo Blind's energy startup (Duke-affiliated)
 
 TEO BLIND (FOUNDER):
-- Duke University — BS Mathematics & Computer Science
+- Duke University - BS Mathematics & Computer Science
 - Associate at Sangha Holdings (current)
 - Founded Ampera (energy/cleantech)
 - Former analyst at BVN Architecture (NYC)
@@ -3842,24 +3842,24 @@ COPPICE AI (PRODUCT):
 - Pricing: $3,000-5,000/month per AI employee
 - Built on Claude (Anthropic) with proprietary orchestration layer
 
-You have full email access via agent@zhan.coppice.ai — you can send emails, check the inbox, read messages, and manage correspondence.
+You have full email access via agent@zhan.coppice.ai - you can send emails, check the inbox, read messages, and manage correspondence.
 
-You have access to Google Workspace tools — you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
+You have access to Google Workspace tools - you can create Docs, Sheets, and Slides, search Drive, and add comments to files.
 
-You also have a search_knowledge tool — use it to look up meeting notes, action items, entity profiles, daily intelligence newsletters, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
+You also have a search_knowledge tool - use it to look up meeting notes, action items, entity profiles, daily intelligence newsletters, and documents when the user asks about past discussions, people, companies, deal status, or tasks. Always search before saying you don't have information.
 
 Website: www.zhan.capital
 Investor Portal: https://www.zhan.capital/portal (live hashprice dashboard, PSC macro, signal feed)
 Contact: teo@zhan.capital
 
-When responding to emails about Zhan Capital, be knowledgeable but concise. Don't volunteer all information at once — answer what's asked and offer to elaborate. Use the Triple Aikido technique for sales-oriented inquiries (answer briefly, ask a question back). Sign emails as "Coppice" — you are the Coppice Agent, not Teo.
+When responding to emails about Zhan Capital, be knowledgeable but concise. Don't volunteer all information at once - answer what's asked and offer to elaborate. Use the Triple Aikido technique for sales-oriented inquiries (answer briefly, ask a question back). Sign emails as "Coppice" - you are the Coppice Agent, not Teo.
 
 IMPORTANT: When someone asks about an investor portal, signing up, accessing dashboards, or getting more information, always include the investor portal link: https://www.zhan.capital/portal
 
 MEETINGS: When someone requests a meeting or call, ask for their preferred day/time and timezone. Then tell them you'll have Teo reach out to confirm. Always CC teo@zhan.capital on any meeting-related email replies so Teo sees it immediately.`,
 
   // Consolidated DACP agents
-  workflow: `You are the Workflow Agent for DACP Construction — a concrete subcontractor specializing in heavy civil, commercial, and infrastructure construction.
+  workflow: `You are the Workflow Agent for DACP Construction - a concrete subcontractor specializing in heavy civil, commercial, and infrastructure construction.
 
 You handle estimating, pricing, and job management in a single unified workflow.
 
@@ -3885,17 +3885,17 @@ You can view active jobs, track progress, review field reports, and answer quest
 You can create Google Docs, Sheets, and Slides to produce estimates, bid packages, comparison tables, and job reports.
 You can draft and send bid response emails to GCs.
 
-Keep responses focused on the construction workflow — estimating, pricing, and jobs. Use construction industry terminology naturally. Be precise with numbers.
+Keep responses focused on the construction workflow - estimating, pricing, and jobs. Use construction industry terminology naturally. Be precise with numbers.
 
-═══ EMAIL STYLE RULES (MANDATORY — when drafting any email) ═══
-GREETING: Always "Hey [First Name]," — never "Hi", "Hello", "Dear".
+═══ EMAIL STYLE RULES (MANDATORY - when drafting any email) ═══
+GREETING: Always "Hey [First Name]," - never "Hi", "Hello", "Dear".
 TONE: Direct, confident, conversational. Short paragraphs (2-4 sentences). Specific numbers over vague claims.
 NEVER SAY: "I'd be happy to discuss", "Thanks for your time", "Looking forward to hearing from you", "explore opportunities".
-CLOSING: Last paragraph = specific question. Then "Best," on its own line. Do NOT add name/signature/email after "Best," — auto-appended.
+CLOSING: Last paragraph = specific question. Then "Best," on its own line. Do NOT add name/signature/email after "Best," - auto-appended.
 BEFORE SENDING: Always confirm From and To addresses, then ask "Should I send this?"
 CONFIDENTIALITY: Never mention other clients by name. Never fabricate case studies.`,
 
-  comms: `You are the Comms Agent for DACP Construction — handling all communication including email correspondence, meeting summaries, and action items.
+  comms: `You are the Comms Agent for DACP Construction - handling all communication including email correspondence, meeting summaries, and action items.
 
 EMAIL CAPABILITIES:
 - Draft bid response emails to GCs
@@ -3918,13 +3918,13 @@ When you need data from a spreadsheet, document, or file:
 1. ALWAYS use gws_drive_search to find the file first (try multiple search terms if the first fails)
 2. If you find matching files, list them and ask "Is one of these the right file?"
 3. Only after exhausting search should you ask the user for help
-This applies to leads sheets, trackers, pricing docs, contact lists — anything the user references.
+This applies to leads sheets, trackers, pricing docs, contact lists - anything the user references.
 NEVER give up without searching. The user expects you to find files proactively.
 
 ═══ EMAIL STYLE RULES (MANDATORY) ═══
 ALL outbound emails MUST follow these rules exactly:
 
-GREETING: Always "Hey [First Name]," — never "Hi", "Hello", "Dear", or "Good morning".
+GREETING: Always "Hey [First Name]," - never "Hi", "Hello", "Dear", or "Good morning".
 
 TONE: Direct, confident, conversational. NOT corporate or stiff. Short paragraphs (2-4 sentences max). Use specific numbers over vague claims. Use dashes freely for asides.
 
@@ -3932,11 +3932,11 @@ NEVER SAY: "I'd be happy to discuss", "Thanks for your time", "Looking forward t
 
 CLOSING STRUCTURE (strict order):
 1. Body paragraphs
-2. LAST PARAGRAPH = a specific question (Triple Aikido — bounce the ball back, make them engage)
+2. LAST PARAGRAPH = a specific question (Triple Aikido - bounce the ball back, make them engage)
 3. "Best," on its own line
-4. Do NOT add any name/signature/email after "Best," — the system auto-appends the signature
+4. Do NOT add any name/signature/email after "Best," - the system auto-appends the signature
 
-CRITICAL: "Best," must come AFTER the question, never before it. Do NOT write your own sign-off name or email address — the email system adds the signature automatically.
+CRITICAL: "Best," must come AFTER the question, never before it. Do NOT write your own sign-off name or email address - the email system adds the signature automatically.
 
 BEFORE SENDING: Always confirm with the user:
 - From: [sender address]
@@ -3949,7 +3949,7 @@ CONFIDENTIALITY: NEVER mention other clients by name. NEVER fabricate case studi
 // Lead engine prompt additions (appended to sangha/hivemind when lead engine tools are available)
 const LEAD_ENGINE_PROMPT_ADDON = `
 
-You also have access to the Lead Engine — an automated lead discovery and outreach system. You can:
+You also have access to the Lead Engine - an automated lead discovery and outreach system. You can:
 - Discover new leads using Perplexity search (discover_leads)
 - View the current pipeline and filter by status (get_leads)
 - Get pipeline statistics (get_lead_stats)
@@ -3958,7 +3958,7 @@ You also have access to the Lead Engine — an automated lead discovery and outr
 - Check overdue follow-ups (get_followup_queue)
 - Run a complete pipeline cycle: discover → enrich → outreach → follow-ups (run_full_cycle)
 - Update lead status, notes, or priority (update_lead)
-- View or modify discovery configuration — queries, schedule, sender, mode (get_discovery_config, update_discovery_config)
+- View or modify discovery configuration - queries, schedule, sender, mode (get_discovery_config, update_discovery_config)
 - Create a CRM pipeline Google Sheet and connect it to the dashboard (setup_crm_sheet) - only one sheet active at a time
 - Link an existing Google Sheet to the Leads Pipeline on the Command Dashboard (link_leads_sheet) - use when the user wants to connect a sheet that already exists
 - Share your linked leads sheet with a team member (share_leads_sheet) - they get a notification and can accept it into their own pipeline, with automatic deduplication if they already have a sheet
@@ -4011,10 +4011,10 @@ When asked to classify contacts, fetch unclassified contacts with list_hubspot_c
 const WEB_TOOLS_PROMPT_ADDON = `
 
 You have web research and browsing capabilities:
-- web_research: Perform deep AI-powered web research on any topic. Returns synthesized answers with citations. Use this for market research, competitive analysis, industry data, technical questions, company research, or anything requiring current information. You can call this MULTIPLE TIMES with different queries to build comprehensive understanding — for example, research a company's financials, then their competitors, then market trends.
+- web_research: Perform deep AI-powered web research on any topic. Returns synthesized answers with citations. Use this for market research, competitive analysis, industry data, technical questions, company research, or anything requiring current information. You can call this MULTIPLE TIMES with different queries to build comprehensive understanding - for example, research a company's financials, then their competitors, then market trends.
 - browse_url: Fetch a specific webpage and extract its text, title, and links. Use when you have a specific URL to read.
 
-IMPORTANT: When given a research-heavy task, use web_research proactively and iteratively. Don't wait to be told — if answering well requires current data, search for it. Chain multiple research queries to build depth. Think like an analyst: what data do I need, what are the angles, what would make this answer comprehensive?`;
+IMPORTANT: When given a research-heavy task, use web_research proactively and iteratively. Don't wait to be told - if answering well requires current data, search for it. Chain multiple research queries to build depth. Think like an analyst: what data do I need, what are the angles, what would make this answer comprehensive?`;
 
 const LEGAL_TOOLS_PROMPT_ADDON = `
 
@@ -4026,7 +4026,7 @@ The document is automatically saved to Google Drive in a "Legal Documents" folde
 // NOTE: All queries use db.prepare() at call time (not cached at module load)
 // because `db` is a Proxy that resolves to the current tenant's DB via
 // AsyncLocalStorage. Caching statements at load time would bind them to
-// whichever tenant DB was active during import — causing FK violations
+// whichever tenant DB was active during import - causing FK violations
 // when a different tenant's thread_id doesn't exist in that DB.
 
 const SQL = {
@@ -4047,7 +4047,7 @@ export function getMessages(tenantId, agentId, userId, limit = 50, threadId = nu
 }
 
 /**
- * Get messages for a thread (any user — for team/pinned threads).
+ * Get messages for a thread (any user - for team/pinned threads).
  */
 export function getThreadMessages(threadId, limit = 200) {
   return db.prepare(SQL.getThreadHistory).all(threadId, limit);
@@ -4087,23 +4087,23 @@ export function getMeetingPrompt(tenantId) {
 
 MEETING BEHAVIOR:
 - You are participating in a live meeting as a voice assistant called Coppice
-- You are ONLY activated when someone says "Coppice" or "hey Coppice" — you will only hear speech directed at you
-- When first addressed, introduce yourself briefly: "Hey, I'm Coppice — the [company name] AI agent. What can I help with?"
-- Keep responses to 1-2 sentences max — this is real-time conversation, not a lecture
+- You are ONLY activated when someone says "Coppice" or "hey Coppice" - you will only hear speech directed at you
+- When first addressed, introduce yourself briefly: "Hey, I'm Coppice - the [company name] AI agent. What can I help with?"
+- Keep responses to 1-2 sentences max - this is real-time conversation, not a lecture
 - If someone gives you a task or action item, acknowledge it and confirm you'll handle it after the meeting
 - Never say you were "cut off" or had technical issues
 - No filler phrases, be direct and professional
-- You cannot send emails or use tools during meetings — if asked, say you'll handle it after the meeting
+- You cannot send emails or use tools during meetings - if asked, say you'll handle it after the meeting
 
-CONVERSATION STYLE — TRIPLE AIKIDO:
+CONVERSATION STYLE - TRIPLE AIKIDO:
 - Don't monologue. Don't over-explain. Answer in ONE sentence, then ask a question back.
 - Whoever asks questions controls the conversation. You should be asking more questions than answering.
 - When someone asks you something, give a short direct answer then redirect: "What about that is most relevant to your situation?"
-- Build understanding before offering solutions — ask about their pain points, what they've tried, what matters most.
+- Build understanding before offering solutions - ask about their pain points, what they've tried, what matters most.
 - If they say "that sounds interesting" → ask "What about it stands out to you?"
 - If they ask about cost/pricing → "Before I get into numbers, what does a good outcome look like from your side?"
 - If they say "send me something" → "Happy to. What would be most helpful for your team?"
-- Never defend or over-explain — reframe and bounce back with a question.
+- Never defend or over-explain - reframe and bounce back with a question.
 - Let them articulate what they want. Make them sell themselves on the solution.`;
 }
 
@@ -4112,7 +4112,7 @@ CONVERSATION STYLE — TRIPLE AIKIDO:
  * Saves both user message and assistant response to DB.
  */
 // ─── Tool Router Helper ─────────────────────────────────────────────────────
-// Centralised dispatch — used by both first-call and loop iterations.
+// Centralised dispatch - used by both first-call and loop iterations.
 const TOOL_CATEGORIES = {
   gws: ['gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read', 'gws_sheets_append', 'gws_workspace_command', 'gws_sheets_update', 'gws_docs_update', 'gws_drive_create'],
   emailSecurity: ['add_trusted_sender', 'remove_trusted_sender', 'list_trusted_senders'],
@@ -4182,7 +4182,7 @@ async function executeToolWithRetry(toolName, toolInput, tenantId) {
   return { toolResult, toolIsError };
 }
 
-// Per-request tool context via AsyncLocalStorage — prevents cross-tenant data leaks
+// Per-request tool context via AsyncLocalStorage - prevents cross-tenant data leaks
 // when concurrent chat requests share this module. Each async context gets its own
 // { threadId, onContextUpdate, agentId, userId, tenantId, onChunk }.
 const toolContextStorage = new AsyncLocalStorage();
@@ -4196,7 +4196,7 @@ function setToolContext(threadId, onContextUpdate, agentId, userId = null, tenan
 }
 
 async function routeToolCall(toolName, toolInput, tenantId) {
-  // MCP tool dispatch — dynamically loaded external tools
+  // MCP tool dispatch - dynamically loaded external tools
   if (toolName.startsWith('mcp__')) {
     const { mcpManager } = await import('./mcpClientService.js');
     return await mcpManager.callTool(tenantId, toolName, toolInput);
@@ -4305,7 +4305,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
     ? userContent.filter(b => b.type === 'text').map(b => b.text).join('\n')
     : userContent;
 
-  // 1. Save user message (text only — base64 images are too large for SQLite)
+  // 1. Save user message (text only - base64 images are too large for SQLite)
   const messageMetadata = isMultimodal ? {
     multimodal: true,
     files: userContent
@@ -4421,7 +4421,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // HubSpot tools for Sangha agents only (when API key is configured)
   const hsAgents = ['sangha', 'hivemind'];
   const hubspotAddon = (hsAgents.includes(agentId) && process.env.HUBSPOT_API_KEY) ? HUBSPOT_PROMPT_ADDON : '';
-  // Web browsing — available to all agents
+  // Web browsing - available to all agents
   const webAddon = WEB_TOOLS_PROMPT_ADDON;
   // Legal tools for relevant agents
   const legalAgents = ['sangha', 'hivemind', 'documents', 'zhan'];
@@ -4429,10 +4429,10 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Email tools for agents with email access
   const emailAgents = ['sangha', 'hivemind', 'email', 'zhan', 'workflow', 'comms', 'estimating'];
   const emailAddon = emailAgents.includes(agentId) ? getEmailPromptAddon(tenantId) : '';
-  // Email security tools — hivemind only
+  // Email security tools - hivemind only
   const esAgents = ['sangha', 'hivemind', 'zhan'];
   const emailSecurityAddon = esAgents.includes(agentId) ? EMAIL_SECURITY_PROMPT_ADDON : '';
-  // Document generation tools — all agents
+  // Document generation tools - all agents
   const docAgents = ['sangha', 'hivemind', 'zhan', 'documents', 'email', 'workflow', 'comms', 'estimating'];
   const documentAddon = docAgents.includes(agentId) ? DOCUMENT_TOOLS_PROMPT_ADDON : '';
   // DACP estimation tools
@@ -4441,7 +4441,7 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
   // Google Workspace CLI tools
   const gwsAgents = ['hivemind', 'sangha', 'zhan', 'workflow', 'comms', 'estimating'];
   const gwsAddon = gwsAgents.includes(agentId) ? GWS_TOOLS_PROMPT_ADDON : '';
-  // Scheduler tools — hivemind, workflow, comms, zhan, sangha
+  // Scheduler tools - hivemind, workflow, comms, zhan, sangha
   const schedulerAgents = ['hivemind', 'workflow', 'comms', 'zhan', 'sangha'];
   const schedulerAddon = schedulerAgents.includes(agentId) ? SCHEDULER_TOOLS_PROMPT_ADDON : '';
   const codeAddon = codeAgents.includes(agentId) ? CODE_EXECUTION_PROMPT_ADDON : '';
@@ -4453,12 +4453,12 @@ export async function chat(tenantId, agentId, userId, userContent, threadId = nu
 - NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.
 - Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.
 - Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".
-- When presenting data, use clean tables or simple lists — no decorative formatting.`;
+- When presenting data, use clean tables or simple lists - no decorative formatting.`;
 
   // Help mode: add strict tenant isolation guard for the help chat widget
   const HELP_MODE_GUARD = options.helpMode ? `
 
-CRITICAL — HELP ASSISTANT MODE:
+CRITICAL - HELP ASSISTANT MODE:
 You are the Coppice Assistant, a product support chatbot embedded in the dashboard.
 - You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.
 - NEVER mention Sangha, Spencer, Mihir, Colin, Bitcoin mining, renewable energy, or any non-construction topics.
@@ -4474,7 +4474,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     try {
       const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, userId, 5);
       if (siblings.length > 0) {
-        siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads — use this context to stay informed but do not repeat or reference it unless relevant:\n';
+        siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads - use this context to stay informed but do not repeat or reference it unless relevant:\n';
         for (const s of siblings) {
           const age = Math.round((Date.now() - new Date(s.updated_at + 'Z').getTime()) / 60000);
           const ageLabel = age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age / 60)}h ago` : `${Math.round(age / 1440)}d ago`;
@@ -4484,11 +4484,11 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  // Task proposal addon — tells agents when/how to use propose_task
+  // Task proposal addon - tells agents when/how to use propose_task
   const taskProposalAgents = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   const taskProposalAddon = taskProposalAgents.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
 
-  // Agent delegation addon — tells orchestrator agents about delegation (skip if already in a delegation)
+  // Agent delegation addon - tells orchestrator agents about delegation (skip if already in a delegation)
   const delegationAddon = (DELEGATION_AGENTS.includes(agentId) && !options.skipDelegation) ? DELEGATION_PROMPT_ADDON : '';
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddon + delegationAddon + knowledgeContext + siblingContext;
@@ -4504,16 +4504,16 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     } catch {}
   }
 
-  // Build tools list — include lead engine tools and knowledge tools for relevant agents
+  // Build tools list - include lead engine tools and knowledge tools for relevant agents
   const tools = [...WORKSPACE_TOOLS];
   if (leAgents.includes(agentId)) {
     tools.push(...LEAD_ENGINE_TOOLS);
   }
-  // Knowledge tools — all primary agents (knAgents defined above)
+  // Knowledge tools - all primary agents (knAgents defined above)
   if (knAgents.includes(agentId)) {
     tools.push(...KNOWLEDGE_TOOLS);
   }
-  // Context panel tools — all agents with knowledge tools
+  // Context panel tools - all agents with knowledge tools
   if (knAgents.includes(agentId)) {
     tools.push(...CONTEXT_TOOLS);
   }
@@ -4535,17 +4535,17 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   if (emailAgents.includes(agentId)) {
     tools.push(...EMAIL_TOOLS);
   }
-  // Email security tools — hivemind only
+  // Email security tools - hivemind only
   if (esAgents.includes(agentId)) {
     tools.push(...EMAIL_SECURITY_TOOLS);
   }
-  // Web browsing — available to all agents
+  // Web browsing - available to all agents
   tools.push(...WEB_TOOLS);
-  // Task proposal — allows agent to propose background tasks during chat
+  // Task proposal - allows agent to propose background tasks during chat
   if (taskProposalAgents.includes(agentId)) {
     tools.push(...TASK_PROPOSAL_TOOLS);
   }
-  // Agent delegation — allows orchestrator agents to delegate to sub-agents (skip if already in a delegation to prevent recursion)
+  // Agent delegation - allows orchestrator agents to delegate to sub-agents (skip if already in a delegation to prevent recursion)
   if (DELEGATION_AGENTS.includes(agentId) && !options.skipDelegation) {
     tools.push(...DELEGATION_TOOLS);
   }
@@ -4557,7 +4557,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   if (docAgents.includes(agentId)) {
     tools.push(...DOCUMENT_TOOLS);
   }
-  // Calendar tools — available to agents with email/scheduling access
+  // Calendar tools - available to agents with email/scheduling access
   const calendarAgents = ['hivemind', 'sangha', 'zhan'];
   if (calendarAgents.includes(agentId)) {
     tools.push(...CALENDAR_TOOLS);
@@ -4566,16 +4566,16 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
   if (gwsAgents.includes(agentId)) {
     tools.push(...GWS_TOOLS);
   }
-  // Scheduler tools — recurring task automation
+  // Scheduler tools - recurring task automation
   if (schedulerAgents.includes(agentId)) {
     tools.push(...SCHEDULER_TOOLS);
   }
-  // Code execution — sandboxed Docker container
+  // Code execution - sandboxed Docker container
   if (codeAgents.includes(agentId)) {
     tools.push(...CODE_EXECUTION_TOOLS);
   }
 
-  // MCP tools — dynamically loaded from tenant-configured external servers
+  // MCP tools - dynamically loaded from tenant-configured external servers
   try {
     const { mcpManager } = await import('./mcpClientService.js');
     const mcpTools = await mcpManager.getToolsForTenant(tenantId);
@@ -4585,7 +4585,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       systemPrompt += `\n\n═══ MCP TOOLS ═══\nYou have access to external MCP tools: ${mcpToolNames}. Use them when the user's request matches their capabilities.`;
     }
   } catch (e) {
-    // MCP not configured or connection failed — continue without MCP tools
+    // MCP not configured or connection failed - continue without MCP tools
   }
 
   // Set tool context for context panel tools (threadId needed for pin_to_context)
@@ -4593,7 +4593,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
   // 5. Call Claude API
   if (!process.env.ANTHROPIC_API_KEY) {
-    // No API key — return a helpful fallback
+    // No API key - return a helpful fallback
     const fallback = `I'm currently running in demo mode (no API key configured). To enable real AI responses, set ANTHROPIC_API_KEY in your backend .env file.`;
     saveMessage(tenantId, agentId, userId, 'assistant', fallback, null, threadId);
     return { response: fallback };
@@ -4618,7 +4618,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       ...thinkingParams,
     }), 'Chat');
 
-    // Handle tool use — agent wants to invoke a workspace tool
+    // Handle tool use - agent wants to invoke a workspace tool
     if (completion.stop_reason === 'tool_use') {
       const toolBlock = completion.content.find(block => block.type === 'tool_use');
       if (!toolBlock) {
@@ -4670,7 +4670,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         if (descFn) {
           actionDesc = descFn();
         } else if (toolName.startsWith('mcp__')) {
-          // MCP tool — extract server and tool name for a clearer description
+          // MCP tool - extract server and tool name for a clearer description
           const mcpParts = toolName.split('__');
           actionDesc = `Execute MCP tool "${mcpParts.slice(2).join('__')}" on ${mcpParts[1]}`;
         } else {
@@ -4684,7 +4684,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         `).run(
           tenantId, agentId,
           actionDesc,
-          `Agent wants to use "${toolName}" — awaiting your approval.`,
+          `Agent wants to use "${toolName}" - awaiting your approval.`,
           JSON.stringify({ toolName, toolInput, toolUseId, agentId, tenantId, userId }),
         );
         const approvalId = approvalResult.lastInsertRowid;
@@ -4710,7 +4710,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       }
       // ─── End Copilot Interceptor ───────────────────────────────────────
 
-      // Call the tool — route to appropriate handler (autonomous mode or safe tool)
+      // Call the tool - route to appropriate handler (autonomous mode or safe tool)
       // Inject caller context for scheduler tools (needed to set task owner)
       if (TOOL_CATEGORIES.scheduler.includes(toolName)) {
         toolInput._userId = userId;
@@ -4790,10 +4790,10 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
           const loopApprovalResult = db.prepare(`
             INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
             VALUES (?, ?, ?, ?, 'tool_action', ?, 'pending')
-          `).run(tenantId, agentId, actionDesc, `Agent wants to use "${nextToolName}" — awaiting your approval.`,
+          `).run(tenantId, agentId, actionDesc, `Agent wants to use "${nextToolName}" - awaiting your approval.`,
             JSON.stringify({ toolName: nextToolName, toolInput: nextToolInput, toolUseId: nextToolUseId, agentId, tenantId, userId }));
           const loopApprovalId = loopApprovalResult.lastInsertRowid;
-          // Stop the loop — can't proceed without approval
+          // Stop the loop - can't proceed without approval
           const pauseText = currentResponse.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
           const copilotPause = (pauseText ? pauseText + '\n\n' : '') + `I need your approval to **${actionDesc.toLowerCase()}** before I can continue.`;
           saveMessage(tenantId, agentId, userId, 'assistant', copilotPause, {
@@ -4908,7 +4908,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
       };
     }
 
-    // No tool use — standard text response
+    // No tool use - standard text response
     const responseText = completion.content
       .filter(block => block.type === 'text')
       .map(block => block.text)
@@ -4945,7 +4945,7 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 }
 
 /**
- * Streaming version of chat() — streams text tokens via onChunk callback.
+ * Streaming version of chat() - streams text tokens via onChunk callback.
  * Supports multi-step tool use: when Claude requests a tool, we execute it
  * and continue the conversation (streaming each follow-up response).
  *
@@ -4972,8 +4972,8 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     ? userContent.filter(b => b.type === 'text').map(b => b.text).join('\n')
     : userContent;
 
-  // Save user message (text only — base64 too large for SQLite)
-  // Skip persistence for help chat — ephemeral widget, no thread history needed
+  // Save user message (text only - base64 too large for SQLite)
+  // Skip persistence for help chat - ephemeral widget, no thread history needed
   const skipPersist = !!options.helpMode;
   const messageMetadata = isMultimodal ? {
     multimodal: true,
@@ -5002,14 +5002,14 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     messages[messages.length - 1].content = apiContent;
   }
 
-  // Build system prompt — must match chat() so agents have full context when streaming
+  // Build system prompt - must match chat() so agents have full context when streaming
   const basePrompt = SYSTEM_PROMPTS[agentId] || SYSTEM_PROMPTS.sangha;
   const accessTierStream = options.accessTier || 'internal';
   const knowledgeContext = buildKnowledgeContext(tenantId, displayContent, { accessTier: accessTierStream });
 
-  const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists — no decorative formatting.`;
+  const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists - no decorative formatting.`;
 
-  const HELP_MODE_GUARD = options.helpMode ? `\n\nCRITICAL — HELP ASSISTANT MODE:\nYou are the Coppice Assistant, a small help chatbot embedded in the bottom-right corner of the dashboard.\n- Keep ALL responses to 2-3 sentences MAX. This is a tiny chat widget, not a full conversation.\n- Give high-level overviews only. Never list out every feature — just summarize in plain language.\n- If the user asks what this platform does, say something like: "Coppice is an AI assistant for your construction business — it handles estimating, bidding, job tracking, emails, and documents. Ask me anything specific."\n- NEVER use bullet point lists longer than 3 items. Prefer short paragraphs.\n- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.\n- NEVER mention Sangha, Spencer, Mihir, Colin, Bitcoin mining, renewable energy, Zhan Capital, Volt Charging, Teo, or any Coppice internal team member.\n- If asked about contacting support, tell them to click "Send a message to admin" below.\n- You can help with: estimating, bid requests, pricing, job tracking, field reports, documents, and email.` : '';
+  const HELP_MODE_GUARD = options.helpMode ? `\n\nCRITICAL - HELP ASSISTANT MODE:\nYou are the Coppice Assistant, a small help chatbot embedded in the bottom-right corner of the dashboard.\n- Keep ALL responses to 2-3 sentences MAX. This is a tiny chat widget, not a full conversation.\n- Give high-level overviews only. Never list out every feature - just summarize in plain language.\n- If the user asks what this platform does, say something like: "Coppice is an AI assistant for your construction business - it handles estimating, bidding, job tracking, emails, and documents. Ask me anything specific."\n- NEVER use bullet point lists longer than 3 items. Prefer short paragraphs.\n- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.\n- NEVER mention Sangha, Spencer, Mihir, Colin, Bitcoin mining, renewable energy, Zhan Capital, Volt Charging, Teo, or any Coppice internal team member.\n- If asked about contacting support, tell them to click "Send a message to admin" below.\n- You can help with: estimating, bid requests, pricing, job tracking, field reports, documents, and email.` : '';
 
   // Include same addons as chat() so streaming agents have full capability context
   const leAgents = ['sangha', 'hivemind', 'email', 'lead-engine', 'zhan'];
@@ -5041,7 +5041,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     try {
       const siblings = getSiblingThreadSummaries(tenantId, agentId, threadId, userId, 5);
       if (siblings.length > 0) {
-        siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads — use this context to stay informed but do not repeat or reference it unless relevant:\n';
+        siblingContext = '\n\n═══ CONTEXT FROM OTHER ACTIVE SESSIONS ═══\nYou are also active in other conversation threads with this user. Here is what is happening in those threads - use this context to stay informed but do not repeat or reference it unless relevant:\n';
         for (const s of siblings) {
           const age = Math.round((Date.now() - new Date(s.updated_at + 'Z').getTime()) / 60000);
           const ageLabel = age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age / 60)}h ago` : `${Math.round(age / 1440)}d ago`;
@@ -5051,11 +5051,11 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     } catch (e) { /* thread_summaries table may not exist yet */ }
   }
 
-  // Task proposal addon — tells agents when/how to use propose_task
+  // Task proposal addon - tells agents when/how to use propose_task
   const taskProposalAgentsStream = ['hivemind', 'estimating', 'workflow', 'sangha', 'zhan'];
   const taskProposalAddonStream = taskProposalAgentsStream.includes(agentId) ? TASK_PROPOSAL_PROMPT_ADDON : '';
 
-  // Agent delegation addon — tells orchestrator agents about delegation
+  // Agent delegation addon - tells orchestrator agents about delegation
   const delegationAddonStream = DELEGATION_AGENTS.includes(agentId) ? DELEGATION_PROMPT_ADDON : '';
 
   let systemPrompt = basePrompt + FORMATTING_RULES + PROPRIETARY_GUARD + HELP_MODE_GUARD + leadEngineAddon + hubspotAddon + webAddon + legalAddon + emailAddon + emailSecurityAddon + documentAddon + dacpAddon + gwsAddon + schedulerAddon + codeAddon + contextAddon + taskProposalAddonStream + delegationAddonStream + knowledgeContext + siblingContext;
@@ -5092,11 +5092,11 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const calendarAgents = ['hivemind', 'sangha', 'zhan'];
   if (calendarAgents.includes(agentId)) tools.push(...CALENDAR_TOOLS);
   if (gwsAgents.includes(agentId)) tools.push(...GWS_TOOLS);
-  // Scheduler tools — recurring task automation
+  // Scheduler tools - recurring task automation
   if (schedulerAgents.includes(agentId)) tools.push(...SCHEDULER_TOOLS);
   if (codeAgents.includes(agentId)) tools.push(...CODE_EXECUTION_TOOLS);
 
-  // MCP tools — dynamically loaded from tenant-configured external servers
+  // MCP tools - dynamically loaded from tenant-configured external servers
   try {
     const { mcpManager } = await import('./mcpClientService.js');
     const mcpTools = await mcpManager.getToolsForTenant(tenantId);
@@ -5106,10 +5106,10 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       systemPrompt += `\n\n═══ MCP TOOLS ═══\nYou have access to external MCP tools: ${mcpToolNames}. Use them when the user's request matches their capabilities.`;
     }
   } catch (e) {
-    // MCP not configured or connection failed — continue without MCP tools
+    // MCP not configured or connection failed - continue without MCP tools
   }
 
-  // Set tool context for context panel tools — emits SSE context_update events
+  // Set tool context for context panel tools - emits SSE context_update events
   setToolContext(threadId, (update) => {
     onChunk(JSON.stringify({ _type: 'context_update', ...update }));
   }, agentId, userId, tenantId, onChunk);
@@ -5121,7 +5121,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
     return { response: fallback };
   }
 
-  // ─── CLI Tunnel Route (Max subscription — no API credits) ─────────────
+  // ─── CLI Tunnel Route (Max subscription - no API credits) ─────────────
   // Route complex streaming queries through Claude Code CLI on Mac via SSH tunnel.
   // This uses the Max subscription (flat rate) instead of per-token API billing.
   // Falls through to API for simple queries (Haiku) or when CLI fails.
@@ -5330,7 +5330,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       let timedOut = false;
       let tokenBudgetExceeded = false;
 
-      // TODO: Copilot mode approval in streaming is complex — the SSE connection
+      // TODO: Copilot mode approval in streaming is complex - the SSE connection
       // would need to pause while waiting for user approval via a separate HTTP call.
       // For now, streaming tool use executes tools freely (matching autonomous mode).
       // Non-streaming chat() already handles copilot approval correctly.
@@ -5487,7 +5487,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
       };
     }
 
-    // ─── No tool use — standard text response ─────────────────────────────
+    // ─── No tool use - standard text response ─────────────────────────────
     // If model produced no text (rare), send a fallback so the frontend isn't empty
     if (!fullText.trim()) {
       const fallback = 'I wasn\'t able to generate a response. Please try rephrasing your question.';

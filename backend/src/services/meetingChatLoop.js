@@ -1,5 +1,5 @@
 /**
- * Meeting Chat Loop — silent transcription + text chat responses
+ * Meeting Chat Loop - silent transcription + text chat responses
  *
  * Replaces meetingVoiceLoop.js. Coppice no longer speaks in meetings.
  * Instead it:
@@ -14,7 +14,7 @@ import { getVisualContext, isVisionActive } from './geminiVisionService.js';
 
 const SPEECH_PAUSE_MS = 3000; // longer debounce for chat (less urgency than voice)
 
-const SYSTEM_PROMPT = `You are Coppice — an AI operations platform built by Sangha Renewables. You are sitting in a live meeting as a silent observer and note-taker.
+const SYSTEM_PROMPT = `You are Coppice - an AI operations platform built by Sangha Renewables. You are sitting in a live meeting as a silent observer and note-taker.
 
 Rules:
 - You are transcribing the meeting silently. You do NOT speak out loud.
@@ -46,7 +46,7 @@ export function startChatLoop(botId) {
   };
 
   activeLoops.set(botId, state);
-  console.log(`[ChatLoop] Started for bot ${botId} (silent mode — chat responses only)`);
+  console.log(`[ChatLoop] Started for bot ${botId} (silent mode - chat responses only)`);
 
   // Send a brief join message in the meeting chat
   sendJoinMessage(botId);
@@ -56,7 +56,7 @@ async function sendJoinMessage(botId) {
   // Wait a bit for the bot to actually be in the call
   setTimeout(async () => {
     try {
-      await sendChatMessage(botId, "Hi! Coppice here — I'll be transcribing this meeting silently. Tag me by name if you need anything.");
+      await sendChatMessage(botId, "Hi! Coppice here - I'll be transcribing this meeting silently. Tag me by name if you need anything.");
       console.log(`[ChatLoop] Join message sent for bot ${botId}`);
     } catch (err) {
       console.error(`[ChatLoop] Failed to send join message:`, err.message);
@@ -143,7 +143,7 @@ async function respondViaChat(state, userMessage, speaker) {
       if (vision && vision.description) {
         systemPrompt += `\n\n--- VISUAL CONTEXT (what you can see on screen right now) ---\n${vision.description}`;
         if (vision.screenShareDetected) {
-          systemPrompt += `\n[Screen share is active — you can see and describe what's being shared]`;
+          systemPrompt += `\n[Screen share is active - you can see and describe what's being shared]`;
         }
         if (vision.history && vision.history.length > 1) {
           const recent = vision.history.slice(-3).map(h => `- ${h.description}`).join('\n');

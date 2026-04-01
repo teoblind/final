@@ -1,5 +1,5 @@
 /**
- * On-Chain Data Routes — Phase 5
+ * On-Chain Data Routes - Phase 5
  *
  * Mempool, blocks, fees, fee history, and network health endpoints.
  * Data sourced from Mempool.space API with fallback to mock data.
@@ -18,7 +18,7 @@ import {
 
 const router = express.Router();
 
-/** GET /mempool — Current mempool state */
+/** GET /mempool - Current mempool state */
 router.get('/mempool', async (req, res) => {
   try {
     const mempool = await getMempool();
@@ -29,7 +29,7 @@ router.get('/mempool', async (req, res) => {
   }
 });
 
-/** GET /mempool/history — Mempool history */
+/** GET /mempool/history - Mempool history */
 router.get('/mempool/history', async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 24;
@@ -41,7 +41,7 @@ router.get('/mempool/history', async (req, res) => {
   }
 });
 
-/** GET /blocks — Recent blocks */
+/** GET /blocks - Recent blocks */
 router.get('/blocks', async (req, res) => {
   try {
     const count = parseInt(req.query.count) || 10;
@@ -53,7 +53,7 @@ router.get('/blocks', async (req, res) => {
   }
 });
 
-/** GET /blocks/:height — Block detail */
+/** GET /blocks/:height - Block detail */
 router.get('/blocks/:height', async (req, res) => {
   try {
     const height = parseInt(req.params.height);
@@ -68,7 +68,7 @@ router.get('/blocks/:height', async (req, res) => {
   }
 });
 
-/** GET /fees — Current fee estimates */
+/** GET /fees - Current fee estimates */
 router.get('/fees', async (req, res) => {
   try {
     const fees = await getFeeEstimates();
@@ -88,7 +88,7 @@ router.get('/fees', async (req, res) => {
   }
 });
 
-/** GET /fees/history — Fee history */
+/** GET /fees/history - Fee history */
 router.get('/fees/history', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 7;
@@ -100,7 +100,7 @@ router.get('/fees/history', async (req, res) => {
   }
 });
 
-/** GET /health — Network health metrics */
+/** GET /health - Network health metrics */
 router.get('/health', async (req, res) => {
   try {
     const health = await getNetworkHealth();

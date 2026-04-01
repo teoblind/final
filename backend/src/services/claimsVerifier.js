@@ -1,5 +1,5 @@
 /**
- * Claims Verifier — Phase 9
+ * Claims Verifier - Phase 9
  *
  * Automated claims verification and generation for hashprice insurance.
  *
@@ -165,7 +165,7 @@ function runVerificationChecks(policy, month, telemetry) {
   const energyCheck = {
     name: 'energy_cost_range',
     description: 'Energy costs must be within expected operational range',
-    expectedRangeMWh: [15, 120], // $/MWh — reasonable range for mining
+    expectedRangeMWh: [15, 120], // $/MWh - reasonable range for mining
     actual: telemetry.avgEnergyCostMWh,
     passed: false,
     skipped: false,
@@ -180,10 +180,10 @@ function runVerificationChecks(policy, month, telemetry) {
   }
   checks.push(energyCheck);
 
-  // Check 4: Curtailment was optimal (not gaming — excessive curtailment to trigger claim)
+  // Check 4: Curtailment was optimal (not gaming - excessive curtailment to trigger claim)
   const curtailmentCheck = {
     name: 'curtailment_optimality',
-    description: 'Curtailment hours must be reasonable — not artificially high',
+    description: 'Curtailment hours must be reasonable - not artificially high',
     maxCurtailmentRatio: 0.40, // No more than 40% of total hours curtailed
     passed: false,
     skipped: false,
@@ -294,7 +294,7 @@ export async function generateMonthlyClaims(month) {
         recommendedPayout = grossClaimAmount * Math.max(0, 1 - reductionPct);
         adjustmentReason = `Verification failures: ${failedChecks.map(c => c.name).join(', ')}`;
       } else if (verification.overallStatus === 'insufficient_data') {
-        adjustmentReason = 'Insufficient telemetry for full verification — manual review recommended';
+        adjustmentReason = 'Insufficient telemetry for full verification - manual review recommended';
       }
 
       const claimId = uuidv4();
@@ -411,7 +411,7 @@ export function verifyClaim(claimId) {
     recommendedPayout = (claim.gross_claim_amount || 0) * Math.max(0, 1 - reductionPct);
     adjustmentReason = `Verification failures: ${failedChecks.map(c => c.name).join(', ')}`;
   } else if (verification.overallStatus === 'insufficient_data') {
-    adjustmentReason = 'Insufficient telemetry for full verification — manual review recommended';
+    adjustmentReason = 'Insufficient telemetry for full verification - manual review recommended';
   }
 
   // Update the claim with verification results

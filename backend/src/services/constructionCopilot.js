@@ -1,11 +1,11 @@
 /**
- * Construction Copilot — Steps 1, 5, 8 of the DACP Estimating Workflow
+ * Construction Copilot - Steps 1, 5, 8 of the DACP Estimating Workflow
  *
- * Step 1: ITB Analysis — Deep-parse an invitation to bid, extract scope, specs,
+ * Step 1: ITB Analysis - Deep-parse an invitation to bid, extract scope, specs,
  *         compliance requirements, flag missing info, recommend bid/no-bid.
- * Step 5: Supplier Quote Drafting — Generate email drafts to material suppliers
+ * Step 5: Supplier Quote Drafting - Generate email drafts to material suppliers
  *         with specs, quantities, and project context for pricing requests.
- * Step 8: Contract vs Proposal Comparison — Line-by-line comparison of GC contract
+ * Step 8: Contract vs Proposal Comparison - Line-by-line comparison of GC contract
  *         against DACP proposal, flagging scope additions, missing exclusions,
  *         and financial discrepancies.
  */
@@ -96,7 +96,7 @@ Analyze and return a JSON object with these sections:
   ]
 }
 
-Be thorough but practical. Flag anything that could cause DACP to lose money. DACP is a concrete/masonry sub — only analyze scope relevant to their trade. Return ONLY the JSON, no other text.`;
+Be thorough but practical. Flag anything that could cause DACP to lose money. DACP is a concrete/masonry sub - only analyze scope relevant to their trade. Return ONLY the JSON, no other text.`;
 
 export async function analyzeItb(bidRequest) {
   const prompt = ITB_ANALYSIS_PROMPT
@@ -132,7 +132,7 @@ export async function analyzeItb(bidRequest) {
 const SUPPLIER_TEMPLATES = {
   concrete: {
     default_suppliers: [
-      { name: 'Patrick Ready Mix', email: 'quotes@patrickreadymix.com', phone: '(504) 555-0142', rep: 'Patrick Didier', notes: 'Preferred — excellent reliability and service history' },
+      { name: 'Patrick Ready Mix', email: 'quotes@patrickreadymix.com', phone: '(504) 555-0142', rep: 'Patrick Didier', notes: 'Preferred - excellent reliability and service history' },
       { name: 'Boral Ready Mix', email: 'neworleans@boralrm.com', phone: '(504) 555-0198', rep: 'Sales Department', notes: 'Competitive pricing, good availability' },
       { name: 'Argos Ready Mix', email: 'quotes.nola@argos-us.com', phone: '(504) 555-0221', rep: 'Regional Sales', notes: 'Large fleet, good for high-volume pours' },
     ],
@@ -151,7 +151,7 @@ const SUPPLIER_TEMPLATES = {
   },
   formwork: {
     default_suppliers: [
-      { name: 'PERI Formwork', email: 'rental.south@peri-usa.com', phone: '(504) 555-0212', rep: 'Rental Dept', notes: 'Metal form rental — good for complex pours' },
+      { name: 'PERI Formwork', email: 'rental.south@peri-usa.com', phone: '(504) 555-0212', rep: 'Rental Dept', notes: 'Metal form rental - good for complex pours' },
     ],
   },
 };
@@ -190,7 +190,7 @@ export function draftSupplierQuotes(projectName, gcName, bidDueDate, materials, 
       alternate_suppliers: alternates.map(s => ({ name: s.name, email: s.email, notes: s.notes })),
       email_draft: {
         to: supplier.email,
-        subject: `Quote Request: ${projectName} — ${mat.type || category}`,
+        subject: `Quote Request: ${projectName} - ${mat.type || category}`,
         body: emailBody,
       },
     });
@@ -281,10 +281,10 @@ Perform a thorough comparison and return a JSON object:
       {"item": "description", "notes": "any differences in wording/detail"}
     ],
     "in_proposal_only": [
-      {"item": "description", "risk": "DACP committed to this but contract doesn't include it — clarify if DACP is still responsible"}
+      {"item": "description", "risk": "DACP committed to this but contract doesn't include it - clarify if DACP is still responsible"}
     ],
     "in_contract_only": [
-      {"item": "description", "risk": "high|medium|low", "impact": "This scope was NOT in DACP's bid — potential cost exposure", "estimated_impact": "rough $ impact if possible"}
+      {"item": "description", "risk": "high|medium|low", "impact": "This scope was NOT in DACP's bid - potential cost exposure", "estimated_impact": "rough $ impact if possible"}
     ]
   },
   "exclusion_comparison": {
@@ -312,7 +312,7 @@ Perform a thorough comparison and return a JSON object:
   ]
 }
 
-Be aggressive in protecting DACP's interests. Flag EVERYTHING that could cost DACP money. Missing exclusions are the #1 risk — if DACP excluded something in their proposal but it's not excluded in the contract, DACP is on the hook. Return ONLY the JSON.`;
+Be aggressive in protecting DACP's interests. Flag EVERYTHING that could cost DACP money. Missing exclusions are the #1 risk - if DACP excluded something in their proposal but it's not excluded in the contract, DACP is on the hook. Return ONLY the JSON.`;
 
 export async function compareContractProposal(proposalText, contractText) {
   const prompt = CONTRACT_COMPARISON_PROMPT
@@ -342,7 +342,7 @@ export const DEMO_ITB = {
   from_email: 'lthompson@renegadeconstruction.com',
   from_name: 'Lisa Thompson',
   gc_name: 'Renegade Construction (RNGD)',
-  subject: 'ITB: Riverside Commerce Center — Concrete & Masonry Package',
+  subject: 'ITB: Riverside Commerce Center - Concrete & Masonry Package',
   body: `Tom,
 
 Renegade is soliciting bids for the concrete and masonry scope on the Riverside Commerce Center project in Kenner, LA. This is a 3-story mixed-use building (retail ground floor, office above) with structured parking.
@@ -354,7 +354,7 @@ Project Details:
 - Addenda: #1 issued March 5, 2026
 
 Bid Due: April 1, 2026 by 2:00 PM CST
-Pre-Bid Meeting: March 25, 2026 at 10:00 AM — project site, 400 Riverside Dr, Kenner, LA 70062
+Pre-Bid Meeting: March 25, 2026 at 10:00 AM - project site, 400 Riverside Dr, Kenner, LA 70062
 
 Plans are available on BuildingConnected. Access code: RNGD-RSC-2026
 
@@ -372,7 +372,7 @@ Specification Highlights (Division 03):
 - PT system: VSL or approved equal
 - Formwork: architectural finish required on exposed columns (Class B finish per ACI 347)
 - Curing: ASTM C309 Type 1-D moisture-retaining compound
-- Testing: Contractor to provide test cylinders — 4 per 50 CY minimum
+- Testing: Contractor to provide test cylinders - 4 per 50 CY minimum
 
 Specification Highlights (Division 04):
 - CMU: ASTM C90, lightweight, 8" and 12"
@@ -413,27 +413,27 @@ lthompson@renegadeconstruction.com`,
   ],
   scope: {
     items: [
-      'Drilled piers 24" dia — 52 EA, avg 30\' depth',
-      'Pile caps (3PC, 4PC, 6PC) — 38 EA',
-      'Grade beams 18"x24" — 1,800 LF',
-      'Columns (various) — 64 EA',
-      'SOG 6" (ground floor retail) — 32,000 SF',
-      'SOG 8" (parking structure) — 45,000 SF',
-      'PT elevated deck 10" — 28,000 SF (3 levels)',
-      'Stairs — 4 EA (3 stories each)',
-      'CMU backup walls 8" — 14,000 SF',
-      'CMU walls 12" — 6,200 SF',
-      'Brick veneer — 18,500 SF',
-      'Sidewalks 4" — 4,800 SF',
-      'Curb & gutter — 2,200 LF',
-      'Loading dock 8" — 3,600 SF',
+      'Drilled piers 24" dia - 52 EA, avg 30\' depth',
+      'Pile caps (3PC, 4PC, 6PC) - 38 EA',
+      'Grade beams 18"x24" - 1,800 LF',
+      'Columns (various) - 64 EA',
+      'SOG 6" (ground floor retail) - 32,000 SF',
+      'SOG 8" (parking structure) - 45,000 SF',
+      'PT elevated deck 10" - 28,000 SF (3 levels)',
+      'Stairs - 4 EA (3 stories each)',
+      'CMU backup walls 8" - 14,000 SF',
+      'CMU walls 12" - 6,200 SF',
+      'Brick veneer - 18,500 SF',
+      'Sidewalks 4" - 4,800 SF',
+      'Curb & gutter - 2,200 LF',
+      'Loading dock 8" - 3,600 SF',
     ],
     estimated_volume: '~5,200 CY concrete + 38,700 CMU + 18,500 SF brick',
   },
   due_date: '2026-04-01',
   status: 'new',
   urgency: 'high',
-  missing_info: ['Soil boring logs referenced but not attached to email', 'PT design drawings not included — VSL or approved equal'],
+  missing_info: ['Soil boring logs referenced but not attached to email', 'PT design drawings not included - VSL or approved equal'],
   received_at: '2026-03-19T09:30:00Z',
 };
 
@@ -452,37 +452,37 @@ GC: Renegade Construction (RNGD)
 Plans Dated: February 15, 2026
 Addendum #1: March 5, 2026
 
-SCOPE OF WORK — CONCRETE:
+SCOPE OF WORK - CONCRETE:
 
 Specific Operations:
-1. Drilled piers 24" dia — 52 EA (avg 30' depth)
-2. Pile caps (3PC, 4PC, 6PC) — 38 EA
-3. Grade beams 18"x24" — 1,800 LF
-4. Columns (various sizes per schedule) — 64 EA
-5. Slab on Grade 6" (ground floor retail) — 32,000 SF
-6. Slab on Grade 8" (parking structure) — 45,000 SF
-7. Post-tension elevated deck 10" — 28,000 SF (3 levels)
-8. Stairs — 4 sets, 3 stories each
+1. Drilled piers 24" dia - 52 EA (avg 30' depth)
+2. Pile caps (3PC, 4PC, 6PC) - 38 EA
+3. Grade beams 18"x24" - 1,800 LF
+4. Columns (various sizes per schedule) - 64 EA
+5. Slab on Grade 6" (ground floor retail) - 32,000 SF
+6. Slab on Grade 8" (parking structure) - 45,000 SF
+7. Post-tension elevated deck 10" - 28,000 SF (3 levels)
+8. Stairs - 4 sets, 3 stories each
 9. Concrete pump services for all pours
 10. All formwork (material and labor)
-11. All reinforcing steel — furnish, fabricate, and place
+11. All reinforcing steel - furnish, fabricate, and place
 12. Post-tension system (elevated decks)
 13. Hoisting for concrete operations
 
-SCOPE OF WORK — MASONRY:
+SCOPE OF WORK - MASONRY:
 
-1. CMU backup walls 8" — 14,000 SF
-2. CMU walls 12" — 6,200 SF
-3. Brick veneer (Boral Heritage, Williamsburg Red) — 18,500 SF
+1. CMU backup walls 8" - 14,000 SF
+2. CMU walls 12" - 6,200 SF
+3. Brick veneer (Boral Heritage, Williamsburg Red) - 18,500 SF
 4. Masonry mortar (Type S per ASTM C270)
 5. Grout (ASTM C476)
 6. Hoisting for masonry materials
 
 SITE WORK:
 
-1. Sidewalks 4" — 4,800 SF
-2. Curb & gutter — 2,200 LF
-3. Loading dock 8" — 3,600 SF
+1. Sidewalks 4" - 4,800 SF
+2. Curb & gutter - 2,200 LF
+3. Loading dock 8" - 3,600 SF
 
 MATERIAL SPECIFICATIONS:
 - Concrete: 4,000 psi (foundations, columns, beams); 5,000 psi (PT elevated decks)
@@ -496,7 +496,7 @@ EQUIPMENT:
 - Crane for masonry material hoisting (included in masonry scope)
 
 EXCLUSIONS:
-1. Sales tax (Jefferson Parish — verify exemption status)
+1. Sales tax (Jefferson Parish - verify exemption status)
 2. Building layout by engineer/surveyor
 3. Demolition of any kind
 4. Performance and payment bond (available upon request at additional cost)
@@ -549,45 +549,45 @@ GENERAL CONTRACTOR: Renegade Construction LLC
 
 CONTRACT AMOUNT: $1,847,500.00
 
-SCOPE OF WORK — EXHIBIT A:
+SCOPE OF WORK - EXHIBIT A:
 
 Subcontractor shall furnish all labor, materials, tools, and equipment to complete the following work per the Contract Documents dated January 10, 2026:
 
-Division 03 — Concrete:
+Division 03 - Concrete:
 - 03 10 00: Concrete Formwork (including architectural Class B finish on all exposed concrete)
 - 03 20 00: Concrete Reinforcement (furnish, fabricate, place)
 - 03 30 00: Cast-in-Place Concrete
 - 03 38 00: Post-Tensioned Concrete
 
-Division 04 — Masonry:
+Division 04 - Masonry:
 - 04 05 11: Masonry Mortaring & Grout
 - 04 22 00: Concrete Unit Masonry
 - 04 21 13: Brick Masonry
 
 SPECIFIC SCOPE ITEMS:
-1. Drilled piers 24" dia — 52 EA
-2. Pile caps — 38 EA
-3. Grade beams — 1,800 LF
-4. Columns — 64 EA
-5. SOG ground floor — 32,000 SF
-6. SOG parking — 45,000 SF
-7. PT elevated deck — 28,000 SF
-8. Stairs — 4 sets
-9. CMU walls 8" — 14,000 SF
-10. CMU walls 12" — 6,200 SF
-11. Brick veneer — 18,500 SF
-12. Sidewalks — 4,800 SF
-13. Curb & gutter — 2,200 LF
-14. Loading dock — 3,600 SF
+1. Drilled piers 24" dia - 52 EA
+2. Pile caps - 38 EA
+3. Grade beams - 1,800 LF
+4. Columns - 64 EA
+5. SOG ground floor - 32,000 SF
+6. SOG parking - 45,000 SF
+7. PT elevated deck - 28,000 SF
+8. Stairs - 4 sets
+9. CMU walls 8" - 14,000 SF
+10. CMU walls 12" - 6,200 SF
+11. Brick veneer - 18,500 SF
+12. Sidewalks - 4,800 SF
+13. Curb & gutter - 2,200 LF
+14. Loading dock - 3,600 SF
 15. Concrete pump services
 16. Formwork (material and labor)
 17. Reinforcing steel
 18. Post-tension system
 19. Hoisting
 20. Expansion joint installation and covers
-21. Concrete sealer application — parking structure SOG (2 coats)
-22. Core drilling for MEP penetrations — up to 150 cores, 2"-6" diameter
-23. Provide and install embed plates for structural steel connections — per steel erector's layout
+21. Concrete sealer application - parking structure SOG (2 coats)
+22. Core drilling for MEP penetrations - up to 150 cores, 2"-6" diameter
+23. Provide and install embed plates for structural steel connections - per steel erector's layout
 
 EXCLUSIONS BY CONTRACTOR:
 1. Building layout

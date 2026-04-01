@@ -149,7 +149,7 @@ function googleDocToMarkdown(text) {
         i = j;
         continue;
       }
-      // Not a table — fall through to other handlers
+      // Not a table - fall through to other handlers
     }
 
     // Numbered section headings: "1. Title" or "2. Title" at start of line
@@ -160,7 +160,7 @@ function googleDocToMarkdown(text) {
       continue;
     }
 
-    // Sub-section headings: "2.1 Title" or "Step 1 —" patterns
+    // Sub-section headings: "2.1 Title" or "Step 1 -" patterns
     if (/^\d+\.\d+\s+/.test(line.trim()) && line.trim().length < 120) {
       const heading = line.trim();
       md.push(`### ${heading}`);
@@ -168,8 +168,8 @@ function googleDocToMarkdown(text) {
       continue;
     }
 
-    // "Step N —" headings
-    if (/^Step\s+\d+\s*[—–-]/i.test(line.trim())) {
+    // "Step N -" headings
+    if (/^Step\s+\d+\s*[-–-]/i.test(line.trim())) {
       md.push(`### ${line.trim()}`);
       i++;
       continue;
@@ -613,7 +613,7 @@ export function generateHtml({ title, content, meta = {}, theme }) {
 
 const SERVICE_ACCOUNT_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '/root/google-service-account.json';
 
-// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+// OAuth app credentials - try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
 // (tokens may be issued by either client depending on how the account was authed)
 const DOC_CLIENT_PAIRS = [
   { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
@@ -646,7 +646,7 @@ async function getTenantDrive(tenantId) {
           console.log(`[DocumentService] Primary OAuth client failed for ${tenantId}, trying fallback...`);
           continue; // Try next client pair
         }
-        throw err; // Last pair or non-auth error — propagate
+        throw err; // Last pair or non-auth error - propagate
       }
     }
     return null;
@@ -764,7 +764,7 @@ export async function generateReport({ title, content, tenantName, agentName, ag
   }
   console.log(`[DocumentService] Generated PDF: ${pdf.filePath}`);
 
-  // Generate Word doc (HTML saved as .doc — Word opens natively)
+  // Generate Word doc (HTML saved as .doc - Word opens natively)
   const docxFilename = `${safeName}.doc`;
   const docxPath = join(OUTPUT_DIR, docxFilename);
   try {

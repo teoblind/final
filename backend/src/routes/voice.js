@@ -1,14 +1,14 @@
 /**
- * Voice Routes — ElevenLabs TTS + Twilio voice agent
+ * Voice Routes - ElevenLabs TTS + Twilio voice agent
  *
- * POST   /api/v1/voice/tts           — Generate TTS audio from text
- * POST   /api/v1/voice/tts/stream    — Stream TTS audio
- * GET    /api/v1/voice/audio/:file   — Serve cached audio file
- * GET    /api/v1/voice/voices        — List available voices
- * GET    /api/v1/voice/usage         — Get ElevenLabs usage stats
- * POST   /api/v1/voice/call/inbound  — Twilio webhook for inbound calls
- * POST   /api/v1/voice/call/outbound — Initiate outbound call
- * POST   /api/v1/voice/call/status   — Twilio call status webhook
+ * POST   /api/v1/voice/tts           - Generate TTS audio from text
+ * POST   /api/v1/voice/tts/stream    - Stream TTS audio
+ * GET    /api/v1/voice/audio/:file   - Serve cached audio file
+ * GET    /api/v1/voice/voices        - List available voices
+ * GET    /api/v1/voice/usage         - Get ElevenLabs usage stats
+ * POST   /api/v1/voice/call/inbound  - Twilio webhook for inbound calls
+ * POST   /api/v1/voice/call/outbound - Initiate outbound call
+ * POST   /api/v1/voice/call/status   - Twilio call status webhook
  */
 
 import express from 'express';
@@ -47,7 +47,7 @@ const APP_BASE_URL = process.env.APP_BASE_URL || 'http://localhost:3002';
 // ─── STT (Whisper) ──────────────────────────────────────────────────────────
 
 /**
- * POST /transcribe — Transcribe audio to text via OpenAI Whisper
+ * POST /transcribe - Transcribe audio to text via OpenAI Whisper
  *
  * Accepts multipart form data with an 'audio' file field.
  * Returns { text, language, duration }.
@@ -102,7 +102,7 @@ router.post('/transcribe', upload.single('audio'), async (req, res) => {
 // ─── TTS Endpoints ──────────────────────────────────────────────────────────
 
 /**
- * POST /tts — Generate TTS audio from text
+ * POST /tts - Generate TTS audio from text
  */
 router.post('/tts', async (req, res) => {
   try {
@@ -122,7 +122,7 @@ router.post('/tts', async (req, res) => {
 });
 
 /**
- * POST /tts/stream — Stream TTS audio directly
+ * POST /tts/stream - Stream TTS audio directly
  */
 router.post('/tts/stream', async (req, res) => {
   try {
@@ -157,7 +157,7 @@ router.post('/tts/stream', async (req, res) => {
 });
 
 /**
- * GET /audio/:filename — Serve cached audio file
+ * GET /audio/:filename - Serve cached audio file
  */
 router.get('/audio/:filename', (req, res) => {
   const audioPath = getAudioPath(req.params.filename);
@@ -169,7 +169,7 @@ router.get('/audio/:filename', (req, res) => {
 });
 
 /**
- * GET /voices — List available ElevenLabs voices
+ * GET /voices - List available ElevenLabs voices
  */
 router.get('/voices', async (req, res) => {
   try {
@@ -182,7 +182,7 @@ router.get('/voices', async (req, res) => {
 });
 
 /**
- * GET /usage — ElevenLabs usage statistics
+ * GET /usage - ElevenLabs usage statistics
  */
 router.get('/usage', async (req, res) => {
   try {
@@ -196,7 +196,7 @@ router.get('/usage', async (req, res) => {
 // ─── Twilio Voice Agent ─────────────────────────────────────────────────────
 
 /**
- * POST /call/inbound — Twilio webhook for incoming calls
+ * POST /call/inbound - Twilio webhook for incoming calls
  *
  * When someone calls the Twilio number, this handler:
  * 1. Gets a signed WebSocket URL from ElevenLabs Conversational AI
@@ -208,7 +208,7 @@ router.post('/call/inbound', async (req, res) => {
     console.log(`Inbound call: ${From} → ${To} (${CallSid})`);
 
     if (!ELEVENLABS_AGENT_ID) {
-      // No agent configured — play a message and hang up
+      // No agent configured - play a message and hang up
       res.type('text/xml');
       return res.send(`
         <Response>
@@ -246,7 +246,7 @@ router.post('/call/inbound', async (req, res) => {
 });
 
 /**
- * POST /call/outbound — Initiate an outbound call
+ * POST /call/outbound - Initiate an outbound call
  */
 router.post('/call/outbound', async (req, res) => {
   try {
@@ -295,7 +295,7 @@ router.post('/call/outbound', async (req, res) => {
 });
 
 /**
- * POST /call/status — Twilio call status webhook
+ * POST /call/status - Twilio call status webhook
  */
 router.post('/call/status', (req, res) => {
   const { CallSid, CallStatus, Duration, From, To } = req.body;
@@ -308,7 +308,7 @@ router.post('/call/status', (req, res) => {
 // ─── Browser Voice Chat (ElevenLabs Conversational AI) ──────────────────────
 
 /**
- * GET /conversation/signed-url — Get a signed WebSocket URL for browser voice chat
+ * GET /conversation/signed-url - Get a signed WebSocket URL for browser voice chat
  *
  * Returns a signed URL that the frontend uses to connect directly to
  * ElevenLabs Conversational AI. This keeps the API key server-side.
@@ -329,7 +329,7 @@ router.get('/conversation/signed-url', async (req, res) => {
 });
 
 /**
- * GET /conversation/config — Get voice chat configuration for the frontend
+ * GET /conversation/config - Get voice chat configuration for the frontend
  *
  * Returns the agent ID (for public mode) and whether signed URLs are available.
  */
@@ -344,7 +344,7 @@ router.get('/conversation/config', (req, res) => {
 // ─── Custom LLM for ElevenLabs Conversational AI ────────────────────────────
 
 /**
- * POST /llm/chat/completions — OpenAI-compatible endpoint for ElevenLabs
+ * POST /llm/chat/completions - OpenAI-compatible endpoint for ElevenLabs
  *
  * ElevenLabs sends transcribed speech here, we route through our Coppice
  * chat service (Hivemind w/ full DB access), and return the response.
@@ -367,11 +367,11 @@ router.post('/llm/chat/completions', async (req, res) => {
     const Anthropic = (await import('@anthropic-ai/sdk')).default;
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const voiceSystemPrompt = `You are Coppice — an AI operations platform built by Sangha Renewables. You're in a live voice conversation, possibly on a Google Meet call with multiple participants.
+    const voiceSystemPrompt = `You are Coppice - an AI operations platform built by Sangha Renewables. You're in a live voice conversation, possibly on a Google Meet call with multiple participants.
 
 Who you are:
 - You ARE the product. You live inside a dashboard and are the hivemind that orchestrates specialized agents (lead generation, email outreach, estimating, document management, data analysis, pitch decks).
-- Each agent has real system access — databases, files, APIs, email, shell commands. You don't just chat, you execute.
+- Each agent has real system access - databases, files, APIs, email, shell commands. You don't just chat, you execute.
 - You were built by Sangha Renewables, an 8-year Bitcoin mining and renewable energy company.
 
 Rules:
@@ -382,7 +382,7 @@ Rules:
 - If the user is silent or says nothing meaningful, respond with an empty string.
 - Never repeat yourself.
 - Wait for the user to drive the conversation.
-- Use the Triple Aikido technique: don't pitch — ask questions, make them sell themselves on why they need you. Answer in one sentence, bounce a question back.
+- Use the Triple Aikido technique: don't pitch - ask questions, make them sell themselves on why they need you. Answer in one sentence, bounce a question back.
 
 Pricing: Coppice is currently in early access. Interested businesses should schedule a demo at coppice.ai or email teo@zhan.capital. Pricing is usage-based and depends on which agents and integrations are needed.
 

@@ -1,9 +1,9 @@
 /**
- * Calibration Exporter — Phase 9
+ * Calibration Exporter - Phase 9
  *
  * Exports anonymized, aggregated fleet telemetry to the SanghaModel simulator
  * for calibration of its Monte Carlo risk models. All data is anonymized
- * before export — no tenant identifiers, site names, or individually
+ * before export - no tenant identifiers, site names, or individually
  * identifiable information leaves the platform.
  *
  * Aggregation buckets:
@@ -37,7 +37,7 @@ let schedulerInterval = null;
 
 /**
  * Aggregate fleet data across all tenants.
- * Returns anonymized totals and distributions — no tenant identifiers.
+ * Returns anonymized totals and distributions - no tenant identifiers.
  */
 function aggregateFleetData() {
   let totalHashrateTH = 0;
@@ -145,7 +145,7 @@ function aggregateCurtailmentData() {
       ? dailyRatios.reduce((a, b) => a + b, 0) / dailyRatios.length
       : 0;
 
-    // Extract thresholds from settings (anonymized — just the numbers)
+    // Extract thresholds from settings (anonymized - just the numbers)
     let curtailmentThresholdMWh = null;
     let drParticipation = false;
     if (settings) {

@@ -1,10 +1,10 @@
 /**
  * Scheduled Tasks Routes
  *
- * GET    /api/v1/scheduler        — List tasks for tenant
- * POST   /api/v1/scheduler        — Create task
- * PATCH  /api/v1/scheduler/:id    — Update (enable/disable/modify)
- * DELETE /api/v1/scheduler/:id    — Delete
+ * GET    /api/v1/scheduler        - List tasks for tenant
+ * POST   /api/v1/scheduler        - Create task
+ * PATCH  /api/v1/scheduler/:id    - Update (enable/disable/modify)
+ * DELETE /api/v1/scheduler/:id    - Delete
  */
 
 import express from 'express';
@@ -24,7 +24,7 @@ function resolveIds(req) {
 }
 
 // ---------------------------------------------------------------------------
-// GET / — list scheduled tasks for tenant
+// GET / - list scheduled tasks for tenant
 // ---------------------------------------------------------------------------
 router.get('/', (req, res) => {
   try {
@@ -38,7 +38,7 @@ router.get('/', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST / — create a new scheduled task
+// POST / - create a new scheduled task
 // ---------------------------------------------------------------------------
 router.post('/', (req, res) => {
   try {
@@ -76,7 +76,7 @@ router.post('/', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// PATCH /:id — update a scheduled task
+// PATCH /:id - update a scheduled task
 // ---------------------------------------------------------------------------
 router.patch('/:id', (req, res) => {
   try {
@@ -125,7 +125,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /:id — delete a scheduled task
+// DELETE /:id - delete a scheduled task
 // ---------------------------------------------------------------------------
 router.delete('/:id', (req, res) => {
   try {

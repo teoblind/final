@@ -43,7 +43,7 @@ import { getTenantEmailConfig } from '../cache/database.js';
 
 const router = express.Router();
 
-// ─── GET /public — Public Tenant Branding (no auth) ─────────────────────────
+// ─── GET /public - Public Tenant Branding (no auth) ─────────────────────────
 
 router.get('/public', (req, res) => {
   const tenant = req.resolvedTenant;
@@ -70,7 +70,7 @@ router.get('/public', (req, res) => {
 // All routes below require authentication
 router.use(authenticate);
 
-// ─── GET / — Get Current Tenant Info ────────────────────────────────────────
+// ─── GET / - Get Current Tenant Info ────────────────────────────────────────
 
 router.get('/', (req, res) => {
   try {
@@ -90,7 +90,7 @@ router.get('/', (req, res) => {
   }
 });
 
-// ─── PUT / — Update Tenant ──────────────────────────────────────────────────
+// ─── PUT / - Update Tenant ──────────────────────────────────────────────────
 
 router.put('/', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -122,7 +122,7 @@ router.put('/', requirePermission('manageSettings'), (req, res) => {
   }
 });
 
-// ─── GET /users — List Tenant Users ─────────────────────────────────────────
+// ─── GET /users - List Tenant Users ─────────────────────────────────────────
 
 router.get('/users', requirePermission('manageUsers'), (req, res) => {
   try {
@@ -134,7 +134,7 @@ router.get('/users', requirePermission('manageUsers'), (req, res) => {
   }
 });
 
-// ─── POST /users/invite — Invite User ───────────────────────────────────────
+// ─── POST /users/invite - Invite User ───────────────────────────────────────
 
 router.post('/users/invite', requirePermission('manageUsers'), async (req, res) => {
   try {
@@ -227,7 +227,7 @@ router.post('/users/invite', requirePermission('manageUsers'), async (req, res) 
       });
     } catch (emailErr) {
       console.warn('Failed to send invitation email:', emailErr.message);
-      // Non-blocking — invitation still created, link still works
+      // Non-blocking - invitation still created, link still works
     }
 
     res.status(201).json({
@@ -245,7 +245,7 @@ router.post('/users/invite', requirePermission('manageUsers'), async (req, res) 
   }
 });
 
-// ─── PUT /users/:id — Update User Role ──────────────────────────────────────
+// ─── PUT /users/:id - Update User Role ──────────────────────────────────────
 
 router.put('/users/:id', requirePermission('manageUsers'), (req, res) => {
   try {
@@ -279,7 +279,7 @@ router.put('/users/:id', requirePermission('manageUsers'), (req, res) => {
   }
 });
 
-// ─── DELETE /users/:id — Remove User ────────────────────────────────────────
+// ─── DELETE /users/:id - Remove User ────────────────────────────────────────
 
 router.delete('/users/:id', requirePermission('manageUsers'), (req, res) => {
   try {
@@ -307,7 +307,7 @@ router.delete('/users/:id', requirePermission('manageUsers'), (req, res) => {
   }
 });
 
-// ─── GET /invitations — List Invitations ────────────────────────────────────
+// ─── GET /invitations - List Invitations ────────────────────────────────────
 
 router.get('/invitations', (req, res) => {
   try {
@@ -319,7 +319,7 @@ router.get('/invitations', (req, res) => {
   }
 });
 
-// ─── DELETE /invitations/:id — Revoke Invitation ────────────────────────────
+// ─── DELETE /invitations/:id - Revoke Invitation ────────────────────────────
 
 router.delete('/invitations/:id', (req, res) => {
   try {
@@ -332,7 +332,7 @@ router.delete('/invitations/:id', (req, res) => {
   }
 });
 
-// ─── GET /api-keys — List API Keys ──────────────────────────────────────────
+// ─── GET /api-keys - List API Keys ──────────────────────────────────────────
 
 router.get('/api-keys', requirePermission('createApiKeys'), (req, res) => {
   try {
@@ -344,7 +344,7 @@ router.get('/api-keys', requirePermission('createApiKeys'), (req, res) => {
   }
 });
 
-// ─── POST /api-keys — Create API Key ────────────────────────────────────────
+// ─── POST /api-keys - Create API Key ────────────────────────────────────────
 
 router.post('/api-keys', requirePermission('createApiKeys'), (req, res) => {
   try {
@@ -395,7 +395,7 @@ router.post('/api-keys', requirePermission('createApiKeys'), (req, res) => {
   }
 });
 
-// ─── DELETE /api-keys/:id — Revoke API Key ──────────────────────────────────
+// ─── DELETE /api-keys/:id - Revoke API Key ──────────────────────────────────
 
 router.delete('/api-keys/:id', requirePermission('createApiKeys'), (req, res) => {
   try {
@@ -418,7 +418,7 @@ router.delete('/api-keys/:id', requirePermission('createApiKeys'), (req, res) =>
   }
 });
 
-// ─── GET /audit-log — View Audit Log ────────────────────────────────────────
+// ─── GET /audit-log - View Audit Log ────────────────────────────────────────
 
 router.get('/audit-log', requirePermission('viewAuditLog'), (req, res) => {
   try {
@@ -432,7 +432,7 @@ router.get('/audit-log', requirePermission('viewAuditLog'), (req, res) => {
   }
 });
 
-// ─── GET /sites — List Sites ────────────────────────────────────────────────
+// ─── GET /sites - List Sites ────────────────────────────────────────────────
 
 router.get('/sites', (req, res) => {
   try {
@@ -444,7 +444,7 @@ router.get('/sites', (req, res) => {
   }
 });
 
-// ─── POST /sites — Create Site ──────────────────────────────────────────────
+// ─── POST /sites - Create Site ──────────────────────────────────────────────
 
 router.post('/sites', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -484,7 +484,7 @@ router.post('/sites', requirePermission('manageSettings'), (req, res) => {
   }
 });
 
-// ─── PUT /sites/:id — Update Site ───────────────────────────────────────────
+// ─── PUT /sites/:id - Update Site ───────────────────────────────────────────
 
 router.put('/sites/:id', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -508,7 +508,7 @@ router.put('/sites/:id', requirePermission('manageSettings'), (req, res) => {
   }
 });
 
-// ─── DELETE /sites/:id — Delete Site ────────────────────────────────────────
+// ─── DELETE /sites/:id - Delete Site ────────────────────────────────────────
 
 router.delete('/sites/:id', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -531,7 +531,7 @@ router.delete('/sites/:id', requirePermission('manageSettings'), (req, res) => {
   }
 });
 
-// ─── GET /email-security/trusted-senders — List Trusted Senders ─────────────
+// ─── GET /email-security/trusted-senders - List Trusted Senders ─────────────
 
 router.get('/email-security/trusted-senders', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -543,7 +543,7 @@ router.get('/email-security/trusted-senders', requirePermission('manageSettings'
   }
 });
 
-// ─── POST /email-security/trusted-senders — Add Trusted Sender ──────────────
+// ─── POST /email-security/trusted-senders - Add Trusted Sender ──────────────
 
 router.post('/email-security/trusted-senders', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -579,7 +579,7 @@ router.post('/email-security/trusted-senders', requirePermission('manageSettings
   }
 });
 
-// ─── DELETE /email-security/trusted-senders/:id — Remove Trusted Sender ─────
+// ─── DELETE /email-security/trusted-senders/:id - Remove Trusted Sender ─────
 
 router.delete('/email-security/trusted-senders/:id', requirePermission('manageSettings'), (req, res) => {
   try {
@@ -602,7 +602,7 @@ router.delete('/email-security/trusted-senders/:id', requirePermission('manageSe
   }
 });
 
-// ─── GET /email-security/log — View Email Security Log ──────────────────────
+// ─── GET /email-security/log - View Email Security Log ──────────────────────
 
 router.get('/email-security/log', requirePermission('viewAuditLog'), (req, res) => {
   try {

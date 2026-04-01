@@ -32,7 +32,7 @@ function resolveTenant(req) {
 // ─── Background Jobs ─────────────────────────────────────────────────────────
 
 /**
- * POST / — Create a new background job
+ * POST / - Create a new background job
  */
 router.post('/', (req, res) => {
   try {
@@ -55,7 +55,7 @@ router.post('/', (req, res) => {
 });
 
 /**
- * GET / — List jobs for current tenant
+ * GET / - List jobs for current tenant
  */
 router.get('/', (req, res) => {
   try {
@@ -70,7 +70,7 @@ router.get('/', (req, res) => {
 });
 
 /**
- * GET /pending-requests — Get all unanswered agent questions across jobs
+ * GET /pending-requests - Get all unanswered agent questions across jobs
  */
 router.get('/pending-requests', (req, res) => {
   try {
@@ -84,7 +84,7 @@ router.get('/pending-requests', (req, res) => {
 });
 
 /**
- * GET /:id — Get job details + messages
+ * GET /:id - Get job details + messages
  */
 router.get('/:id', (req, res) => {
   try {
@@ -105,7 +105,7 @@ router.get('/:id', (req, res) => {
 });
 
 /**
- * PATCH /:id — Update job status/progress (used by agent internally)
+ * PATCH /:id - Update job status/progress (used by agent internally)
  */
 router.patch('/:id', (req, res) => {
   try {
@@ -131,7 +131,7 @@ router.patch('/:id', (req, res) => {
 });
 
 /**
- * POST /:id/messages — User responds to an agent prompt, or agent posts a message
+ * POST /:id/messages - User responds to an agent prompt, or agent posts a message
  */
 router.post('/:id/messages', (req, res) => {
   try {
@@ -171,7 +171,7 @@ router.post('/:id/messages', (req, res) => {
 // ─── Key Vault ───────────────────────────────────────────────────────────────
 
 /**
- * GET /keys — List API keys for tenant (values masked)
+ * GET /keys - List API keys for tenant (values masked)
  */
 router.get('/keys/list', (req, res) => {
   try {
@@ -185,7 +185,7 @@ router.get('/keys/list', (req, res) => {
 });
 
 /**
- * POST /keys — Add or update a key
+ * POST /keys - Add or update a key
  */
 router.post('/keys', (req, res) => {
   try {
@@ -210,7 +210,7 @@ router.post('/keys', (req, res) => {
 });
 
 /**
- * DELETE /keys/:id — Remove a key
+ * DELETE /keys/:id - Remove a key
  */
 router.delete('/keys/:id', (req, res) => {
   try {

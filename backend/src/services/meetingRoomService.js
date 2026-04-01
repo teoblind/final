@@ -1,11 +1,11 @@
 /**
- * Meeting Room Service — Multi-agent live meeting rooms
+ * Meeting Room Service - Multi-agent live meeting rooms
  *
  * Creates Google Meet → Recall.ai bot joins → transcript fans out to multiple agents
  * Each agent processes transcript in real-time and can respond to user queries.
  *
  * RULES:
- * - Agents respond SEQUENTIALLY — never in parallel. One speaks at a time.
+ * - Agents respond SEQUENTIALLY - never in parallel. One speaks at a time.
  * - The Hivemind (chat) agent orchestrates: it speaks first, can ask other agents
  *   questions via tool use, then summarizes.
  * - Other agents only speak when asked by Hivemind or directly by the user.
@@ -21,7 +21,7 @@ emitter.setMaxListeners(50);
 const meetingRooms = new Map();
 // Bot ID -> meeting ID mapping for webhook routing
 const botToMeeting = new Map();
-// Speaking lock per meeting — prevents agents from talking over each other
+// Speaking lock per meeting - prevents agents from talking over each other
 const speakingLock = new Map();
 
 let _anthropic;
@@ -109,7 +109,7 @@ export function addAgentResponse(meetingId, response) {
 }
 
 /**
- * Ask a single agent a question (internal — used by Hivemind tool use).
+ * Ask a single agent a question (internal - used by Hivemind tool use).
  * Acquires speaking lock so only one agent speaks at a time.
  */
 async function askSingleAgent(meetingId, agent, question, transcriptText) {
@@ -123,7 +123,7 @@ You are in a live meeting. Here is the transcript so far:
 ${transcriptText || '(No transcript yet)'}
 --- END TRANSCRIPT ---
 
-Answer concisely based on the transcript and your expertise. Keep responses short and focused — this is a live meeting, not a report.`;
+Answer concisely based on the transcript and your expertise. Keep responses short and focused - this is a live meeting, not a report.`;
 
     const anthropic = getAnthropic();
     const msg = await anthropic.messages.create({
@@ -157,7 +157,7 @@ Answer concisely based on the transcript and your expertise. Keep responses shor
  * 1. Hivemind receives the question + transcript
  * 2. Hivemind can use `ask_agent` tool to consult Workflow or Research agents
  * 3. Hivemind synthesizes and gives final answer
- * 4. All responses are sequential — one at a time
+ * 4. All responses are sequential - one at a time
  */
 export async function askAgents(meetingId, question) {
   const room = meetingRooms.get(meetingId);
@@ -167,12 +167,12 @@ export async function askAgents(meetingId, question) {
     .map(s => `[${s.speaker}]: ${s.text}`)
     .join('\n');
 
-  // Find the Hivemind (chat) agent — it orchestrates
+  // Find the Hivemind (chat) agent - it orchestrates
   const hivemind = room.agents.find(a => a.role === 'chat');
   const otherAgents = room.agents.filter(a => a.role !== 'chat');
 
   if (!hivemind) {
-    // No hivemind — just ask agents sequentially
+    // No hivemind - just ask agents sequentially
     const responses = [];
     for (const agent of room.agents) {
       const resp = await askSingleAgent(meetingId, agent, question, transcriptText);
@@ -204,13 +204,13 @@ export async function askAgents(meetingId, question) {
 
   const hivemindSystem = `${hivemind.systemPrompt}
 
-You are the lead agent in a live meeting. You ORCHESTRATE responses — you speak first, and you can consult other agents using the ask_agent tool when their expertise is needed.
+You are the lead agent in a live meeting. You ORCHESTRATE responses - you speak first, and you can consult other agents using the ask_agent tool when their expertise is needed.
 
 STRICT RULES:
 - NEVER have multiple agents respond to the same question unless each adds unique value.
 - Only use ask_agent when the question genuinely requires another agent's domain expertise.
 - For general questions, answer yourself without consulting others.
-- Keep all responses concise — this is a live meeting.
+- Keep all responses concise - this is a live meeting.
 - After consulting other agents, synthesize their input into your final answer. Don't just repeat what they said.
 
 Available agents you can consult:
@@ -229,7 +229,7 @@ ${transcriptText || '(No transcript yet)'}
     const messages = [{ role: 'user', content: question }];
     const allResponses = [];
 
-    // Agentic loop — Hivemind may call ask_agent multiple times
+    // Agentic loop - Hivemind may call ask_agent multiple times
     let iterations = 0;
     const MAX_ITERATIONS = 5;
 

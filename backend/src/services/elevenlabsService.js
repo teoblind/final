@@ -1,5 +1,5 @@
 /**
- * ElevenLabs TTS Service — Text-to-speech generation and voice management
+ * ElevenLabs TTS Service - Text-to-speech generation and voice management
  *
  * Provides:
  * - Standard TTS (text → MP3 file)
@@ -19,8 +19,8 @@ const __dirname = dirname(__filename);
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || '';
 const ELEVENLABS_BASE = 'https://api.elevenlabs.io/v1';
 
-// Default voice — can be overridden per tenant
-const DEFAULT_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // "Sarah" — clear, professional
+// Default voice - can be overridden per tenant
+const DEFAULT_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL'; // "Sarah" - clear, professional
 const DEFAULT_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_v3';
 
 // Audio cache directory
@@ -233,7 +233,7 @@ function estimateDuration(text) {
 
 /**
  * Get a signed URL for an ElevenLabs Conversational AI agent session.
- * Used for Twilio integration — the agent handles STT + LLM + TTS.
+ * Used for Twilio integration - the agent handles STT + LLM + TTS.
  */
 export async function getConversationalAgentUrl(agentId) {
   if (!ELEVENLABS_API_KEY) {

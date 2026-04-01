@@ -1,5 +1,5 @@
 /**
- * Agent Management & Control Routes — Phase 6
+ * Agent Management & Control Routes - Phase 6
  *
  * Handles agent lifecycle, approval queue, activity feed,
  * performance metrics, reports, and emergency controls.
@@ -31,7 +31,7 @@ async function getRuntime() {
 
 // ─── Agent Management ─────────────────────────────────────────────────────
 
-/** GET / — List all agents with status */
+/** GET / - List all agents with status */
 router.get('/', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-/** GET /system-status — Overall agent system status */
+/** GET /system-status - Overall agent system status */
 router.get('/system-status', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -54,7 +54,7 @@ router.get('/system-status', async (req, res) => {
   }
 });
 
-/** GET /activity — Unified activity feed across all agents */
+/** GET /activity - Unified activity feed across all agents */
 router.get('/activity', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -67,7 +67,7 @@ router.get('/activity', (req, res) => {
   }
 });
 
-/** GET /performance — Performance summary across all agents */
+/** GET /performance - Performance summary across all agents */
 router.get('/performance', (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
@@ -125,7 +125,7 @@ router.get('/performance', (req, res) => {
   }
 });
 
-/** GET /reports — List generated reports */
+/** GET /reports - List generated reports */
 router.get('/reports', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
@@ -136,7 +136,7 @@ router.get('/reports', (req, res) => {
   }
 });
 
-/** GET /reports/:id — Get specific report content */
+/** GET /reports/:id - Get specific report content */
 router.get('/reports/:id', (req, res) => {
   try {
     const report = getAgentReport(parseInt(req.params.id));
@@ -147,7 +147,7 @@ router.get('/reports/:id', (req, res) => {
   }
 });
 
-/** POST /reports/generate — Force generate a report */
+/** POST /reports/generate - Force generate a report */
 router.post('/reports/generate', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -171,7 +171,7 @@ router.post('/reports/generate', async (req, res) => {
 
 // ─── Approval Queue ───────────────────────────────────────────────────────
 
-/** GET /approvals — All pending approvals */
+/** GET /approvals - All pending approvals */
 router.get('/approvals', (req, res) => {
   try {
     const approvals = getPendingApprovals();
@@ -187,7 +187,7 @@ router.get('/approvals', (req, res) => {
   }
 });
 
-/** GET /approvals/:id — Approval detail */
+/** GET /approvals/:id - Approval detail */
 router.get('/approvals/:id', (req, res) => {
   try {
     const approval = getApproval(parseInt(req.params.id));
@@ -201,7 +201,7 @@ router.get('/approvals/:id', (req, res) => {
   }
 });
 
-/** POST /approvals/:id/approve — Approve action */
+/** POST /approvals/:id/approve - Approve action */
 router.post('/approvals/:id/approve', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -212,7 +212,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
   }
 });
 
-/** POST /approvals/:id/reject — Reject action */
+/** POST /approvals/:id/reject - Reject action */
 router.post('/approvals/:id/reject', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -225,7 +225,7 @@ router.post('/approvals/:id/reject', async (req, res) => {
 
 // ─── Global Controls ──────────────────────────────────────────────────────
 
-/** POST /pause-all — Emergency pause all agents */
+/** POST /pause-all - Emergency pause all agents */
 router.post('/pause-all', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -236,7 +236,7 @@ router.post('/pause-all', async (req, res) => {
   }
 });
 
-/** POST /resume-all — Resume all agents */
+/** POST /resume-all - Resume all agents */
 router.post('/resume-all', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -249,7 +249,7 @@ router.post('/resume-all', async (req, res) => {
 
 // ─── Per-Agent Endpoints ──────────────────────────────────────────────────
 
-/** GET /:id — Agent detail */
+/** GET /:id - Agent detail */
 router.get('/:id', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -277,13 +277,13 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-/** GET /:id/mode — Get agent operational mode */
+/** GET /:id/mode - Get agent operational mode */
 router.get('/:id/mode', (req, res) => {
   const mode = getAgentMode(req.params.id);
   res.json({ agentId: req.params.id, mode });
 });
 
-/** PUT /:id/mode — Set agent mode (autonomous/copilot/off) */
+/** PUT /:id/mode - Set agent mode (autonomous/copilot/off) */
 router.put('/:id/mode', (req, res) => {
   const { mode } = req.body;
   if (!['autonomous', 'copilot', 'off'].includes(mode)) {
@@ -298,7 +298,7 @@ router.put('/:id/mode', (req, res) => {
   res.json({ success: true, agentId: req.params.id, mode });
 });
 
-/** PUT /:id/config — Update agent config */
+/** PUT /:id/config - Update agent config */
 router.put('/:id/config', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -309,7 +309,7 @@ router.put('/:id/config', async (req, res) => {
   }
 });
 
-/** POST /:id/start — Start agent */
+/** POST /:id/start - Start agent */
 router.post('/:id/start', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -320,7 +320,7 @@ router.post('/:id/start', async (req, res) => {
   }
 });
 
-/** POST /:id/stop — Stop agent */
+/** POST /:id/stop - Stop agent */
 router.post('/:id/stop', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -331,7 +331,7 @@ router.post('/:id/stop', async (req, res) => {
   }
 });
 
-/** POST /:id/restart — Restart agent */
+/** POST /:id/restart - Restart agent */
 router.post('/:id/restart', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -343,7 +343,7 @@ router.post('/:id/restart', async (req, res) => {
   }
 });
 
-/** GET /:id/status — Agent status */
+/** GET /:id/status - Agent status */
 router.get('/:id/status', async (req, res) => {
   try {
     const runtime = await getRuntime();
@@ -355,7 +355,7 @@ router.get('/:id/status', async (req, res) => {
   }
 });
 
-/** GET /:id/history — Agent event history */
+/** GET /:id/history - Agent event history */
 router.get('/:id/history', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
@@ -366,7 +366,7 @@ router.get('/:id/history', (req, res) => {
   }
 });
 
-/** GET /:id/metrics — Agent performance metrics */
+/** GET /:id/metrics - Agent performance metrics */
 router.get('/:id/metrics', (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
@@ -407,7 +407,7 @@ router.get('/:id/metrics', (req, res) => {
 
 // ─── Run History (eval / regression tracking) ──────────────────────────────
 
-/** GET /runs — All runs across agents for this tenant */
+/** GET /runs - All runs across agents for this tenant */
 router.get('/runs', (req, res) => {
   try {
     const tenantId = req.user.tenantId;
@@ -420,7 +420,7 @@ router.get('/runs', (req, res) => {
   }
 });
 
-/** GET /:id/runs — Paginated run history for a specific agent */
+/** GET /:id/runs - Paginated run history for a specific agent */
 router.get('/:id/runs', (req, res) => {
   try {
     const tenantId = req.user.tenantId;
@@ -434,7 +434,7 @@ router.get('/:id/runs', (req, res) => {
   }
 });
 
-/** GET /runs/:runId — Single run detail */
+/** GET /runs/:runId - Single run detail */
 router.get('/runs/:runId', (req, res) => {
   try {
     const run = getAgentRun(req.params.runId);
@@ -451,7 +451,7 @@ router.get('/runs/:runId', (req, res) => {
   }
 });
 
-/** GET /runs/diff — Compare two run outputs */
+/** GET /runs/diff - Compare two run outputs */
 router.get('/runs/diff', (req, res) => {
   try {
     const { a, b } = req.query;

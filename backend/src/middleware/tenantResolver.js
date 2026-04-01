@@ -2,10 +2,10 @@ import { getTenantBySlug, getTenantByDomain, setTenantContext } from '../cache/d
 
 const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 
-// Slug aliases — map subdomain to DB slug if they differ
+// Slug aliases - map subdomain to DB slug if they differ
 const SLUG_ALIASES = { sangha: 'default', admin: 'default' };
 
-// Reverse alias — map DB slug back to subdomain
+// Reverse alias - map DB slug back to subdomain
 const REVERSE_ALIASES = { default: 'sangha' };
 
 /** Get the canonical subdomain for a tenant slug */
@@ -14,7 +14,7 @@ export function getSubdomainForSlug(slug) {
 }
 
 /**
- * Tenant resolver middleware — runs before auth.
+ * Tenant resolver middleware - runs before auth.
  * Extracts tenant from hostname (subdomain or custom domain)
  * and sets req.resolvedTenant for downstream use.
  *

@@ -112,10 +112,10 @@ app.use(express.json());
 // Initialize database (includes Phase 8 tables)
 initDatabase();
 
-// Landing page routes — no tenant required (root domain)
+// Landing page routes - no tenant required (root domain)
 app.use('/api/v1', landingRoutes);
 
-// Voice session instructions — pre-built by createVoiceBot, fetched by voice-agent.html
+// Voice session instructions - pre-built by createVoiceBot, fetched by voice-agent.html
 app.get('/api/v1/voice-session/:sessionId', (req, res) => {
   try {
     const { voiceSessions } = require('./services/recallService.js');
@@ -141,7 +141,7 @@ app.get('/api/v1/voice-session/:sessionId', (req, res) => {
   }
 });
 
-// Voice agent context — public (no auth), used by voice-agent.html in Recall bot
+// Voice agent context - public (no auth), used by voice-agent.html in Recall bot
 app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
   try {
     const { getMeetingPrompt } = await import('./services/chatService.js');
@@ -216,11 +216,11 @@ app.get('/api/v1/voice-context/:tenantId', async (req, res) => {
 // Serve demo files (estimates, reports, etc.)
 app.use('/files', express.static(join(__dirname, '../demo-files')));
 
-// Internal tool endpoint — localhost-only, used by MCP bridge for CLI tunnel agent
+// Internal tool endpoint - localhost-only, used by MCP bridge for CLI tunnel agent
 // Larger JSON limit for document/presentation tool inputs
 app.use('/api/v1/internal', express.json({ limit: '10mb' }), internalRoutes);
 
-// Tenant resolver — runs before all routes, no auth required
+// Tenant resolver - runs before all routes, no auth required
 app.use(tenantResolver);
 
 // Start liquidity data refresh scheduler (every 5 minutes)
@@ -244,7 +244,7 @@ try {
   console.warn('Gmail poll scheduler not started:', err.message);
 }
 
-// Start calendar poll scheduler — multi-tenant meeting auto-join (every 30s)
+// Start calendar poll scheduler - multi-tenant meeting auto-join (every 30s)
 try {
   const { startCalendarPollScheduler } = await import('./jobs/calendarPoll.js');
   if (process.env.GMAIL_REFRESH_TOKEN || process.env.RECALL_API_KEY) {
@@ -310,7 +310,7 @@ try {
   console.warn('Daily newsletter not started:', err.message);
 }
 
-// Assignment executor — polls confirmed assignments and executes via CLI tunnel
+// Assignment executor - polls confirmed assignments and executes via CLI tunnel
 try {
   const { startAssignmentExecutor } = await import('./jobs/assignmentExecutor.js');
   startAssignmentExecutor(30000);
@@ -318,7 +318,7 @@ try {
   console.warn('Assignment executor not started:', err.message);
 }
 
-// Chat health check — BBB heartbeat monitor (every 5 minutes)
+// Chat health check - BBB heartbeat monitor (every 5 minutes)
 try {
   const { startChatHealthCheck } = await import('./jobs/chatHealthCheck.js');
   startChatHealthCheck(5 * 60 * 1000);
@@ -326,7 +326,7 @@ try {
   console.warn('Chat health check not started:', err.message);
 }
 
-// Phase 9 schedulers: NOT auto-started — enable via Settings or API
+// Phase 9 schedulers: NOT auto-started - enable via Settings or API
 // POST /api/v1/insurance/schedulers/start to start them
 // POST /api/v1/insurance/schedulers/stop to stop them
 
@@ -338,7 +338,7 @@ server.on('upgrade', (request, socket, head) => {
   const url = request.url || '';
 
   if (url.startsWith('/ws/recall-audio/')) {
-    // Recall.ai real-time audio WebSocket — handle separately
+    // Recall.ai real-time audio WebSocket - handle separately
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('recall-audio', ws, request);
     });
@@ -378,7 +378,7 @@ wss.on('recall-audio', async (ws, req) => {
         console.log(`[WS] Unknown event type: ${msg.event || msg.type || 'none'}`);
       }
     } catch {
-      // Not JSON — ignore
+      // Not JSON - ignore
     }
   });
 
@@ -420,10 +420,10 @@ onActivityInsert((activity) => {
 // Phase 8: Versioned API Routes (/api/v1/)
 // =========================================================================
 
-// Auth routes (no auth middleware — public)
+// Auth routes (no auth middleware - public)
 app.use('/api/v1/auth', authRoutes);
 
-// Email open tracking pixel (public — no auth)
+// Email open tracking pixel (public - no auth)
 app.get('/api/v1/track/open/:trackingId', (req, res) => {
   const { trackingId } = req.params;
   try {
@@ -532,7 +532,7 @@ app.use('/api/v1/mcp-servers', mcpConfigRoutes);
 app.use('/api/v1/ceo', ceoRoutes);
 
 // =========================================================================
-// Backward-compatible routes (/api/) — redirect to /api/v1/
+// Backward-compatible routes (/api/) - redirect to /api/v1/
 // =========================================================================
 app.use('/api/yahoo', yahooRoutes);
 app.use('/api/hashprice', hashpriceRoutes);

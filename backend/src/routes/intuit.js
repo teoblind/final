@@ -17,7 +17,7 @@ const router = Router();
 const INTUIT_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
 const INTUIT_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 const INTUIT_REVOKE_URL = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
-// Read-only accounting scope only — no payment initiation
+// Read-only accounting scope only - no payment initiation
 const INTUIT_SCOPES = 'com.intuit.quickbooks.accounting';
 
 function getRedirectUri(req) {
@@ -26,7 +26,7 @@ function getRedirectUri(req) {
   return `${proto}://${host}/api/v1/auth/intuit/callback`;
 }
 
-// ─── GET /integrate — Start Intuit OAuth flow ────────────────────────────────
+// ─── GET /integrate - Start Intuit OAuth flow ────────────────────────────────
 
 router.get('/integrate', (req, res) => {
   try {
@@ -67,7 +67,7 @@ router.get('/integrate', (req, res) => {
   }
 });
 
-// ─── GET /callback — Handle Intuit OAuth callback ────────────────────────────
+// ─── GET /callback - Handle Intuit OAuth callback ────────────────────────────
 
 router.get('/callback', async (req, res) => {
   try {
@@ -92,7 +92,7 @@ router.get('/callback', async (req, res) => {
       return res.status(400).send(renderErrorPage('Missing required state fields.', 'incomplete_state'));
     }
 
-    // Exchange code for tokens — Intuit uses Basic auth header
+    // Exchange code for tokens - Intuit uses Basic auth header
     const clientId = process.env.INTUIT_CLIENT_ID;
     const clientSecret = process.env.INTUIT_CLIENT_SECRET;
     const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
@@ -182,7 +182,7 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-// ─── GET /status — Check connection status ───────────────────────────────────
+// ─── GET /status - Check connection status ───────────────────────────────────
 
 router.get('/status', authenticate, (req, res) => {
   try {
@@ -202,7 +202,7 @@ router.get('/status', authenticate, (req, res) => {
   }
 });
 
-// ─── DELETE /disconnect — Remove QuickBooks connection ────────────────────────
+// ─── DELETE /disconnect - Remove QuickBooks connection ────────────────────────
 
 router.delete('/disconnect', authenticate, async (req, res) => {
   try {
@@ -227,7 +227,7 @@ router.delete('/disconnect', authenticate, async (req, res) => {
           timeout: 10000,
         });
       } catch {
-        // Revoke failed — still remove locally
+        // Revoke failed - still remove locally
       }
     }
 

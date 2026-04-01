@@ -1,5 +1,5 @@
 /**
- * PJM Interconnection Data Service — STUB
+ * PJM Interconnection Data Service - STUB
  *
  * PJM serves Mid-Atlantic and Great Lakes regions.
  * API: https://dataminer2.pjm.com/feed (requires registration)

@@ -1,13 +1,13 @@
 /**
- * Meetings Routes — Google Calendar integration + Live Meeting Rooms
+ * Meetings Routes - Google Calendar integration + Live Meeting Rooms
  *
- * GET    /                        — List meetings from calendar
- * POST   /start                   — Create Google Meet + Recall bot + meeting room
- * GET    /room/:meetingId/live    — SSE stream for live transcript + agent responses
- * POST   /room/:meetingId/ask    — Ask agents a question during the meeting
- * POST   /room/:meetingId/end    — End meeting, save transcript
- * GET    /rooms                   — List active meeting rooms
- * POST   /:eventId/invite        — Invite agent to existing calendar event
+ * GET    /                        - List meetings from calendar
+ * POST   /start                   - Create Google Meet + Recall bot + meeting room
+ * GET    /room/:meetingId/live    - SSE stream for live transcript + agent responses
+ * POST   /room/:meetingId/ask    - Ask agents a question during the meeting
+ * POST   /room/:meetingId/end    - End meeting, save transcript
+ * GET    /rooms                   - List active meeting rooms
+ * POST   /:eventId/invite        - Invite agent to existing calendar event
  */
 import express from 'express';
 import { google } from 'googleapis';
@@ -27,12 +27,12 @@ import {
 const router = express.Router();
 
 // SSE endpoint needs to go before router.use(authenticate) because
-// EventSource can't send Authorization headers — token comes via query param.
+// EventSource can't send Authorization headers - token comes via query param.
 // We manually verify the JWT here.
 import { verifyAccessToken } from '../services/authService.js';
 
 /**
- * GET /room/:meetingId/live — SSE stream for live transcript + agent responses
+ * GET /room/:meetingId/live - SSE stream for live transcript + agent responses
  * Auth via ?token= query param (EventSource limitation)
  */
 router.get('/room/:meetingId/live', (req, res) => {
@@ -134,7 +134,7 @@ const AGENT_PROMPTS = {
 };
 
 /**
- * GET / — List meetings for the current tenant
+ * GET / - List meetings for the current tenant
  */
 router.get('/', async (req, res) => {
   try {
@@ -223,7 +223,7 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * POST /start — Create a Google Meet + Recall.ai bot + meeting room
+ * POST /start - Create a Google Meet + Recall.ai bot + meeting room
  *
  * Body: { title?, agents?: string[] }
  * agents = array of role keys to include (default: all tenant agents)
@@ -313,7 +313,7 @@ router.post('/start', async (req, res) => {
         tenantId,
         type: 'meeting',
         title: `Meeting started: ${title}`,
-        subtitle: `${agents.length} agents participating — ${meetLink}`,
+        subtitle: `${agents.length} agents participating - ${meetLink}`,
         sourceType: 'meeting-room',
         sourceId: meetingId,
       });
@@ -338,7 +338,7 @@ router.post('/start', async (req, res) => {
 });
 
 /**
- * POST /room/:meetingId/ask — Ask agents a question during the meeting
+ * POST /room/:meetingId/ask - Ask agents a question during the meeting
  *
  * Body: { question: string }
  */
@@ -365,7 +365,7 @@ router.post('/room/:meetingId/ask', async (req, res) => {
 });
 
 /**
- * POST /room/:meetingId/end — End the meeting, save transcript to knowledge
+ * POST /room/:meetingId/end - End the meeting, save transcript to knowledge
  */
 router.post('/room/:meetingId/end', async (req, res) => {
   try {
@@ -425,14 +425,14 @@ router.post('/room/:meetingId/end', async (req, res) => {
 });
 
 /**
- * GET /rooms — List active meeting rooms
+ * GET /rooms - List active meeting rooms
  */
 router.get('/rooms', (req, res) => {
   res.json({ rooms: listMeetingRooms() });
 });
 
 /**
- * POST /:eventId/invite — Invite Coppice to an existing calendar event
+ * POST /:eventId/invite - Invite Coppice to an existing calendar event
  */
 router.post('/:eventId/invite', async (req, res) => {
   try {

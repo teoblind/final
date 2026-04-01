@@ -462,6 +462,7 @@ function TaskReportModal({ assignmentId, title, onClose }) {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [artifacts, setArtifacts] = useState([]);
+  const [embedUrl, setEmbedUrl] = useState(null);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -485,7 +486,23 @@ function TaskReportModal({ assignmentId, title, onClose }) {
         const a = d.assignments?.find(x => x.id === assignmentId);
         if (a) {
           setContent(a.result_summary || 'No report content available.');
-          try { setArtifacts(JSON.parse(a.output_artifacts_json || '[]')); } catch {}
+          try {
+            const arts = JSON.parse(a.output_artifacts_json || '[]');
+            setArtifacts(arts);
+            // Find an embeddable artifact - check all artifacts for Drive URLs
+            for (const art of arts) {
+              if (!art.url) continue;
+              // drive.google.com/file/d/{id}/view -> /preview
+              const fileMatch = art.url.match(/drive\.google\.com\/file\/d\/([^/?]+)/);
+              if (fileMatch) { setEmbedUrl(`https://drive.google.com/file/d/${fileMatch[1]}/preview`); break; }
+              // docs.google.com/document/d/{id} -> /preview
+              const docMatch = art.url.match(/docs\.google\.com\/document\/d\/([^/?]+)/);
+              if (docMatch) { setEmbedUrl(`https://docs.google.com/document/d/${docMatch[1]}/preview`); break; }
+              // docs.google.com/spreadsheets/d/{id} -> /preview
+              const sheetMatch = art.url.match(/docs\.google\.com\/spreadsheets\/d\/([^/?]+)/);
+              if (sheetMatch) { setEmbedUrl(`https://docs.google.com/spreadsheets/d/${sheetMatch[1]}/preview`); break; }
+            }
+          } catch {}
         }
         setLoading(false);
       })
@@ -508,15 +525,15 @@ function TaskReportModal({ assignmentId, title, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e6e1]">
+      <div className={`bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden ${embedUrl ? 'w-[900px] h-[90vh]' : 'w-[760px] max-h-[85vh]'}`} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-3 border-b border-[#e8e6e1] shrink-0">
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-bold text-terminal-text font-heading truncate">{title || 'Task Report'}</h3>
             <div className="flex items-center gap-2 mt-1">
               {artifacts.filter(a => a.type !== 'email_draft').map((art, i) => (
                 <button key={i} onClick={() => handleDownload(art)}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border bg-[#f5f4f0] hover:bg-blue-50 text-[#1e3a5f] border-[#d0cec8]">
-                  <Download size={9} />
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border bg-[#f5f4f0] hover:bg-[var(--t-ui-accent-bg,#eef3f9)] text-[var(--t-ui-accent,#1e3a5f)] border-[#d0cec8]">
+                  {art.type === 'gdoc' ? <ExternalLink size={9} /> : <Download size={9} />}
                   {art.label || art.type}
                 </button>
               ))}
@@ -526,11 +543,15 @@ function TaskReportModal({ assignmentId, title, onClose }) {
             <X size={16} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-12 text-[13px] text-terminal-muted">Loading report...</div>
+          ) : embedUrl ? (
+            <iframe src={embedUrl} className="w-full h-full border-0" allow="autoplay" title="Report preview" />
           ) : (
-            <div className="prose-chat text-[13px] leading-relaxed text-terminal-text">{formatContent(content)}</div>
+            <div className="h-full overflow-y-auto px-8 py-6">
+              <div className="prose-chat text-[13px] leading-relaxed text-terminal-text">{formatContent(content)}</div>
+            </div>
           )}
         </div>
       </div>
@@ -3211,7 +3232,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
       .catch(() => {});
   }, [activeThreadId]);
 
-  // Refresh context data helper — merges workspace files created this session
+  // Refresh context data helper - merges workspace files created this session
   const refreshContextData = useCallback(() => {
     if (!activeThreadId) return;
     const token = getAuthToken();
@@ -3232,6 +3253,23 @@ export default function AgentChat({ agentId = 'estimating' }) {
         }
       })
       .catch(() => {});
+  }, [activeThreadId]);
+
+  // Pick up context file from dashboard "Chat" button (stores report in context panel)
+  useEffect(() => {
+    const stored = localStorage.getItem('coppice_chat_context_file');
+    if (!stored) return;
+    localStorage.removeItem('coppice_chat_context_file');
+    try {
+      const file = JSON.parse(stored);
+      setContextData(prev => ({
+        ...(prev || {}),
+        recentFiles: [
+          { title: file.title, type: file.type || 'gdoc', drive_url: file.url, file_id: file.fileId },
+          ...((prev?.recentFiles) || []),
+        ],
+      }));
+    } catch {}
   }, [activeThreadId]);
 
   // Create new thread

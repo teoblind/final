@@ -1,11 +1,11 @@
 /**
  * Approval Queue Routes
  *
- * GET    /api/v1/approvals        — List approval items (query: status, limit)
- * POST   /api/v1/approvals        — Create new approval item
- * GET    /api/v1/approvals/:id    — Get single approval item
- * POST   /api/v1/approvals/:id/approve — Approve item
- * POST   /api/v1/approvals/:id/reject  — Reject item
+ * GET    /api/v1/approvals        - List approval items (query: status, limit)
+ * POST   /api/v1/approvals        - Create new approval item
+ * GET    /api/v1/approvals/:id    - Get single approval item
+ * POST   /api/v1/approvals/:id/approve - Approve item
+ * POST   /api/v1/approvals/:id/reject  - Reject item
  */
 
 import express from 'express';
@@ -45,7 +45,7 @@ function resolveIds(req) {
 }
 
 // ---------------------------------------------------------------------------
-// GET / — list approval items
+// GET / - list approval items
 // ---------------------------------------------------------------------------
 router.get('/', (req, res) => {
   try {
@@ -72,7 +72,7 @@ router.get('/', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST / — create new approval item
+// POST / - create new approval item
 // ---------------------------------------------------------------------------
 router.post('/', (req, res) => {
   try {
@@ -110,7 +110,7 @@ router.post('/', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /insights — list agent insights for Command dashboard
+// GET /insights - list agent insights for Command dashboard
 // ---------------------------------------------------------------------------
 router.get('/insights', (req, res) => {
   const { tenantId } = resolveIds(req);
@@ -158,7 +158,7 @@ router.post('/insights/:id/dismiss', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /:id — get single item
+// GET /:id - get single item
 // ---------------------------------------------------------------------------
 router.get('/:id', (req, res) => {
   try {
@@ -177,7 +177,7 @@ router.get('/:id', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /:id/attachment/:index — preview attachment content (Excel → JSON)
+// GET /:id/attachment/:index - preview attachment content (Excel → JSON)
 // ---------------------------------------------------------------------------
 router.get('/:id/attachment/:index', async (req, res) => {
   try {
@@ -302,7 +302,7 @@ router.get('/:id/attachment/:index', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /:id/approve — approve item
+// POST /:id/approve - approve item
 // ---------------------------------------------------------------------------
 router.post('/:id/approve', async (req, res) => {
   try {
@@ -343,7 +343,7 @@ router.post('/:id/approve', async (req, res) => {
         const recipient = payload.demo_to || payload.to;
 
         if (payload.attachments && payload.html) {
-          // Estimate pipeline format — HTML body + file attachments
+          // Estimate pipeline format - HTML body + file attachments
           await sendEmailWithAttachments({
             to: recipient,
             subject: payload.subject,
@@ -397,7 +397,7 @@ router.post('/:id/approve', async (req, res) => {
         let prompt;
 
         if (item.type === 'meeting_instruction' && payload.instruction) {
-          // Meeting instruction — re-send the full instruction prompt
+          // Meeting instruction - re-send the full instruction prompt
           const instr = payload.instruction;
           prompt = `You are processing a post-meeting instruction that has been APPROVED by the user. During the meeting "${payload.meetingTitle}", someone directed you to do the following:
 
@@ -411,8 +411,8 @@ ${payload.summary || ''}
 
 Execute this instruction now. This action has been explicitly approved.`;
         } else {
-          // Tool action — re-invoke with tool parameters
-          prompt = `The user has APPROVED your previous request to use the "${payload.toolName}" tool. Execute it now with exactly these parameters:\n\nTool: ${payload.toolName}\nInput: ${JSON.stringify(payload.toolInput, null, 2)}\n\nProceed immediately — this action has been explicitly approved.`;
+          // Tool action - re-invoke with tool parameters
+          prompt = `The user has APPROVED your previous request to use the "${payload.toolName}" tool. Execute it now with exactly these parameters:\n\nTool: ${payload.toolName}\nInput: ${JSON.stringify(payload.toolInput, null, 2)}\n\nProceed immediately - this action has been explicitly approved.`;
         }
 
         const result = await chat(
@@ -453,7 +453,7 @@ Execute this instruction now. This action has been explicitly approved.`;
 });
 
 // ---------------------------------------------------------------------------
-// POST /:id/reject — reject item
+// POST /:id/reject - reject item
 // ---------------------------------------------------------------------------
 router.post('/:id/reject', (req, res) => {
   try {
@@ -521,32 +521,32 @@ function seedDemoApprovals() {
   const sanghaItems = [
     {
       agent_id: 'outreach',
-      title: 'Outreach draft: Sarah Chen — Meridian Renewables',
+      title: 'Outreach draft: Sarah Chen - Meridian Renewables',
       description: 'Personalized cold email referencing behind-the-meter mining opportunity at their Crane County solar site.',
       type: 'email_draft',
       payload_json: JSON.stringify({
         demo_to: 'teo@zhan.capital',
         to: 'sarah.chen@meridianrenewables.com',
         subject: 'Behind-the-meter mining at Crane County',
-        body: `Hi Sarah,\n\nI noticed Meridian's 120 MW solar farm in Crane County is averaging 34% curtailment during off-peak hours. We've been helping operators like you convert that wasted energy into Bitcoin mining revenue — without any capex.\n\nOur co-location model at a similar ERCOT site generated $18K/month in incremental revenue last quarter while the panels were curtailed.\n\nWould you have 15 minutes this week to discuss how this could work at Crane County?\n\nBest,\nCoppice`,
+        body: `Hi Sarah,\n\nI noticed Meridian's 120 MW solar farm in Crane County is averaging 34% curtailment during off-peak hours. We've been helping operators like you convert that wasted energy into Bitcoin mining revenue - without any capex.\n\nOur co-location model at a similar ERCOT site generated $18K/month in incremental revenue last quarter while the panels were curtailed.\n\nWould you have 15 minutes this week to discuss how this could work at Crane County?\n\nBest,\nCoppice`,
       }),
     },
     {
       agent_id: 'outreach',
-      title: 'Follow-up draft: Mark Liu — GridScale Partners',
-      description: '5 days since initial outreach — gentle check-in with updated hashrate economics attached.',
+      title: 'Follow-up draft: Mark Liu - GridScale Partners',
+      description: '5 days since initial outreach - gentle check-in with updated hashrate economics attached.',
       type: 'email_draft',
       payload_json: JSON.stringify({
         demo_to: 'teo@zhan.capital',
         to: 'mark.liu@gridscalepartners.com',
-        subject: 'Re: Co-location opportunity — updated economics',
-        body: `Hi Mark,\n\nFollowing up on my note last week about co-locating miners at your West Texas facilities. Since then, network difficulty dropped 3.2% which improves unit economics meaningfully.\n\nAt current BTC prices and your $0.038/kWh rate, we're projecting $0.12/kWh effective revenue — a 3.2x spread.\n\nHappy to walk through the model if you have 15 minutes.\n\nBest,\nCoppice`,
+        subject: 'Re: Co-location opportunity - updated economics',
+        body: `Hi Mark,\n\nFollowing up on my note last week about co-locating miners at your West Texas facilities. Since then, network difficulty dropped 3.2% which improves unit economics meaningfully.\n\nAt current BTC prices and your $0.038/kWh rate, we're projecting $0.12/kWh effective revenue - a 3.2x spread.\n\nHappy to walk through the model if you have 15 minutes.\n\nBest,\nCoppice`,
       }),
     },
     {
       agent_id: 'reporting',
       title: 'Weekly briefing ready for review',
-      description: 'Week 10 operations report — revenue, curtailment savings, pipeline summary.',
+      description: 'Week 10 operations report - revenue, curtailment savings, pipeline summary.',
       type: 'report',
       payload_json: JSON.stringify({
         reportType: 'weekly_briefing',
@@ -557,7 +557,7 @@ function seedDemoApprovals() {
     {
       agent_id: 'curtailment',
       title: 'Curtailment recommendation: Pecos County',
-      description: 'ERCOT price forecast shows $92/MWh window 14:00–16:30 — recommends pre-curtailment at 13:45.',
+      description: 'ERCOT price forecast shows $92/MWh window 14:00–16:30 - recommends pre-curtailment at 13:45.',
       type: 'curtailment',
       payload_json: JSON.stringify({
         site: 'Pecos County',
@@ -570,13 +570,13 @@ function seedDemoApprovals() {
     {
       agent_id: 'meetings',
       title: 'Post-meeting summary: Reassurity strategy call',
-      description: 'Recap email for the Reassurity product strategy call — 4 action items, 2 assigned to you.',
+      description: 'Recap email for the Reassurity product strategy call - 4 action items, 2 assigned to you.',
       type: 'email_draft',
       payload_json: JSON.stringify({
         demo_to: 'teo@zhan.capital',
         to: 'team@sanghasystems.com',
-        subject: 'Reassurity Strategy Call — Summary & Action Items',
-        body: `Hi team,\n\nQuick recap from today's Reassurity call:\n\n1. Insurance product MVP scope confirmed — parametric trigger on ERCOT node prices\n2. Spencer to send Hanwha KMZ files to Kishan by EOD Wednesday\n3. Teo to draft the energy pricing assumptions for section 4.2 of the deal memo\n4. Next check-in scheduled for March 14\n\nLet me know if I missed anything.\n\nBest,\nCoppice`,
+        subject: 'Reassurity Strategy Call - Summary & Action Items',
+        body: `Hi team,\n\nQuick recap from today's Reassurity call:\n\n1. Insurance product MVP scope confirmed - parametric trigger on ERCOT node prices\n2. Spencer to send Hanwha KMZ files to Kishan by EOD Wednesday\n3. Teo to draft the energy pricing assumptions for section 4.2 of the deal memo\n4. Next check-in scheduled for March 14\n\nLet me know if I missed anything.\n\nBest,\nCoppice`,
       }),
     },
   ];
@@ -590,7 +590,7 @@ function seedDemoApprovals() {
   }
   console.log(`Seeded ${sanghaItems.length} approval items for tenant default`);
 
-  // DACP seeds (only if none exist) — must run inside DACP tenant context
+  // DACP seeds (only if none exist) - must run inside DACP tenant context
   // so the db proxy routes to the correct SQLite file
   setTenantContext('dacp-construction-001', () => {
   const dacpCount = db.prepare("SELECT COUNT(*) as c FROM approval_items WHERE tenant_id = 'dacp-construction-001'").get();
@@ -599,13 +599,13 @@ function seedDemoApprovals() {
       {
         agent_id: 'estimating',
         title: 'Send estimate reply to Turner Construction: $595,000',
-        description: 'Reply to "RFQ: Parking Garage Foundation — Frisco Station Phase 2" with estimate EST-20260312 ($595,000) + Excel attachment',
+        description: 'Reply to "RFQ: Parking Garage Foundation - Frisco Station Phase 2" with estimate EST-20260312 ($595,000) + Excel attachment',
         type: 'email_draft',
         payload_json: JSON.stringify({
           to: 'bids@turnerconstruction.com',
-          subject: 'Re: RFQ: Parking Garage Foundation — Frisco Station Phase 2',
-          body: 'Hey Mike,\n\nThanks for sending over the Frisco Station Phase 2 parking garage foundation package. We reviewed the drawings and specs — here\'s our number.\n\nTotal Bid: $595,000\n\nBreakdown attached as an Excel file. Includes mobilization, concrete foundations, rebar, formwork, and backfill. We excluded dewatering and any structural steel above grade.\n\nA few things we noticed:\n- The geotech report shows high water table at 8\' — might need dewatering depending on your schedule\n- Specs call for 5000 PSI concrete but the structural drawings note 4000 PSI in a couple spots — which one governs?\n\nWhen are you looking to start? We could mobilize within 2 weeks of NTP.\n\nMarcel\nDACP Construction',
-          html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6"><p>Hey Mike,</p><p>Thanks for sending over the Frisco Station Phase 2 parking garage foundation package. We reviewed the drawings and specs — here\'s our number.</p><p><strong>Total Bid: $595,000</strong></p><p>Breakdown attached as an Excel file. Includes mobilization, concrete foundations, rebar, formwork, and backfill. We excluded dewatering and any structural steel above grade.</p><p>A few things we noticed:</p><ul><li>The geotech report shows high water table at 8\' — might need dewatering depending on your schedule</li><li>Specs call for 5000 PSI concrete but the structural drawings note 4000 PSI in a couple spots — which one governs?</li></ul><p>When are you looking to start? We could mobilize within 2 weeks of NTP.</p><p>Marcel<br/>DACP Construction</p></div>',
+          subject: 'Re: RFQ: Parking Garage Foundation - Frisco Station Phase 2',
+          body: 'Hey Mike,\n\nThanks for sending over the Frisco Station Phase 2 parking garage foundation package. We reviewed the drawings and specs - here\'s our number.\n\nTotal Bid: $595,000\n\nBreakdown attached as an Excel file. Includes mobilization, concrete foundations, rebar, formwork, and backfill. We excluded dewatering and any structural steel above grade.\n\nA few things we noticed:\n- The geotech report shows high water table at 8\' - might need dewatering depending on your schedule\n- Specs call for 5000 PSI concrete but the structural drawings note 4000 PSI in a couple spots - which one governs?\n\nWhen are you looking to start? We could mobilize within 2 weeks of NTP.\n\nMarcel\nDACP Construction',
+          html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6"><p>Hey Mike,</p><p>Thanks for sending over the Frisco Station Phase 2 parking garage foundation package. We reviewed the drawings and specs - here\'s our number.</p><p><strong>Total Bid: $595,000</strong></p><p>Breakdown attached as an Excel file. Includes mobilization, concrete foundations, rebar, formwork, and backfill. We excluded dewatering and any structural steel above grade.</p><p>A few things we noticed:</p><ul><li>The geotech report shows high water table at 8\' - might need dewatering depending on your schedule</li><li>Specs call for 5000 PSI concrete but the structural drawings note 4000 PSI in a couple spots - which one governs?</li></ul><p>When are you looking to start? We could mobilize within 2 weeks of NTP.</p><p>Marcel<br/>DACP Construction</p></div>',
           attachments: [{ filename: 'DACP_Estimate_EST-20260312_Parking_Garage_Foundation.xlsx', path: '', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
           estimateId: 'EST-20260312',
           bidId: 'BID-FRISCO-001',
@@ -615,13 +615,13 @@ function seedDemoApprovals() {
       {
         agent_id: 'estimating',
         title: 'Send estimate reply to Hensel Phelps: $1,250,000',
-        description: 'Reply to "RFQ: Site Work & Utilities — Legacy West Phase 3" with estimate EST-20260315 ($1,250,000) + Excel attachment',
+        description: 'Reply to "RFQ: Site Work & Utilities - Legacy West Phase 3" with estimate EST-20260315 ($1,250,000) + Excel attachment',
         type: 'email_draft',
         payload_json: JSON.stringify({
           to: 'preconstruction@henselphelps.com',
-          subject: 'Re: RFQ: Site Work & Utilities — Legacy West Phase 3',
-          body: 'Hey Rachel,\n\nAppreciate you including us on Legacy West Phase 3. We went through the civil drawings and utility plans — here\'s where we landed.\n\nTotal Bid: $1,250,000\n\nCovers earthwork, storm drainage, water/sewer, paving, and site concrete. Excel breakdown attached. We excluded any landscaping and irrigation.\n\nOne question — the civil plans show a 24" storm line crossing the existing water main at Station 4+50. Has that conflict been resolved or should we carry a contingency for rerouting?\n\nHappy to walk through the numbers if helpful.\n\nMarcel\nDACP Construction',
-          html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6"><p>Hey Rachel,</p><p>Appreciate you including us on Legacy West Phase 3. We went through the civil drawings and utility plans — here\'s where we landed.</p><p><strong>Total Bid: $1,250,000</strong></p><p>Covers earthwork, storm drainage, water/sewer, paving, and site concrete. Excel breakdown attached. We excluded any landscaping and irrigation.</p><p>One question — the civil plans show a 24" storm line crossing the existing water main at Station 4+50. Has that conflict been resolved or should we carry a contingency for rerouting?</p><p>Happy to walk through the numbers if helpful.</p><p>Marcel<br/>DACP Construction</p></div>',
+          subject: 'Re: RFQ: Site Work & Utilities - Legacy West Phase 3',
+          body: 'Hey Rachel,\n\nAppreciate you including us on Legacy West Phase 3. We went through the civil drawings and utility plans - here\'s where we landed.\n\nTotal Bid: $1,250,000\n\nCovers earthwork, storm drainage, water/sewer, paving, and site concrete. Excel breakdown attached. We excluded any landscaping and irrigation.\n\nOne question - the civil plans show a 24" storm line crossing the existing water main at Station 4+50. Has that conflict been resolved or should we carry a contingency for rerouting?\n\nHappy to walk through the numbers if helpful.\n\nMarcel\nDACP Construction',
+          html: '<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6"><p>Hey Rachel,</p><p>Appreciate you including us on Legacy West Phase 3. We went through the civil drawings and utility plans - here\'s where we landed.</p><p><strong>Total Bid: $1,250,000</strong></p><p>Covers earthwork, storm drainage, water/sewer, paving, and site concrete. Excel breakdown attached. We excluded any landscaping and irrigation.</p><p>One question - the civil plans show a 24" storm line crossing the existing water main at Station 4+50. Has that conflict been resolved or should we carry a contingency for rerouting?</p><p>Happy to walk through the numbers if helpful.</p><p>Marcel<br/>DACP Construction</p></div>',
           attachments: [{ filename: 'DACP_Estimate_EST-20260315_Site_Work_Utilities.xlsx', path: '', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
           estimateId: 'EST-20260315',
           bidId: 'BID-LEGACY-001',
@@ -685,7 +685,7 @@ function seedDemoInsights() {
       type: 'Follow-up',
       category: 'action_items',
       title: 'Overdue action item: Oberon deal memo',
-      description: 'Action item from March 3 call: "<b>Revise energy pricing assumptions in section 4.2</b>" — assigned to you, 4 days overdue.',
+      description: 'Action item from March 3 call: "<b>Revise energy pricing assumptions in section 4.2</b>" - assigned to you, 4 days overdue.',
       priority: 'high',
       actions_json: JSON.stringify(['Mark Done', 'Snooze']),
     },
@@ -712,7 +712,7 @@ function seedDemoInsights() {
 }
 
 /**
- * POST /:id/update-draft — Update the email body of a pending approval
+ * POST /:id/update-draft - Update the email body of a pending approval
  */
 router.post('/:id/update-draft', async (req, res) => {
   try {
@@ -739,7 +739,7 @@ router.post('/:id/update-draft', async (req, res) => {
 });
 
 /**
- * POST /:id/rewrite — Rewrite the email body for a different sender
+ * POST /:id/rewrite - Rewrite the email body for a different sender
  */
 router.post('/:id/rewrite', async (req, res) => {
   try {
@@ -751,8 +751,8 @@ router.post('/:id/rewrite', async (req, res) => {
     const { chat } = await import('../services/chatService.js');
     const isCoppice = senderName === 'Coppice';
     const prompt = isCoppice
-      ? `Remove any personal sign-off or signature from this email (like "Best regards, [Name]" or "Sincerely, [Name]"). The email system will automatically append the correct Coppice signature. Keep the same content, tone, and structure — just remove the closing name/signature. Return ONLY the email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`
-      : `Rewrite this email so it is signed by ${senderName} instead of whoever currently signs it. Keep the same content, tone, and structure — only change the signature/sign-off and any first-person references to match ${senderName}. Return ONLY the rewritten email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`;
+      ? `Remove any personal sign-off or signature from this email (like "Best regards, [Name]" or "Sincerely, [Name]"). The email system will automatically append the correct Coppice signature. Keep the same content, tone, and structure - just remove the closing name/signature. Return ONLY the email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`
+      : `Rewrite this email so it is signed by ${senderName} instead of whoever currently signs it. Keep the same content, tone, and structure - only change the signature/sign-off and any first-person references to match ${senderName}. Return ONLY the rewritten email body, no explanation.\n\nCurrent email:\n---\n${currentBody}\n---`;
     const result = await chat(tenantId, 'estimating', 'system', prompt, null, { helpMode: false });
 
     const { markdownToEmailHtml } = await import('../services/emailService.js');
@@ -775,9 +775,9 @@ router.post('/:id/rewrite', async (req, res) => {
 // Run seeds on import
 try {
   seedDemoApprovals();
-  // seedDemoInsights(); — removed, was fake demo data
+  // seedDemoInsights(); - removed, was fake demo data
 } catch (err) {
-  // Table may not exist yet if initDatabase hasn't run — safe to ignore
+  // Table may not exist yet if initDatabase hasn't run - safe to ignore
   console.warn('Approval/insight seed skipped:', err.message);
 }
 

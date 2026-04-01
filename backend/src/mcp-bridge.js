@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * MCP Bridge Server — Exposes Coppice backend tools to Claude Code CLI
+ * MCP Bridge Server - Exposes Coppice backend tools to Claude Code CLI
  *
  * This is a stdio-based MCP server that:
  * 1. Fetches available tools from the backend's /api/v1/internal/tools endpoint

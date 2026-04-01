@@ -1,5 +1,5 @@
 /**
- * HPC Contract Management & SLA Tracking Service — Phase 7
+ * HPC Contract Management & SLA Tracking Service - Phase 7
  *
  * Manages high-performance compute contracts (reserved, interruptible, spot),
  * tracks SLA compliance against uptime targets, computes curtailment
@@ -86,7 +86,7 @@ export function getContractSummary() {
  * Calculate SLA compliance for a specific contract over a rolling window.
  *
  * @param {string} contractId
- * @param {number} [days=30] — Rolling window in days
+ * @param {number} [days=30] - Rolling window in days
  * @returns {{
  *   contractId: string,
  *   customer: string,
@@ -224,7 +224,7 @@ export function checkSlaBreachRisk() {
  * Build HPC curtailment constraints from all active contracts.
  *
  * Returns an object describing how much HPC capacity can be curtailed, for
- * how long, and at what cost — used by the curtailment engine to make
+ * how long, and at what cost - used by the curtailment engine to make
  * workload-aware decisions.
  *
  * @returns {{
@@ -316,9 +316,9 @@ export function getHpcCurtailmentConstraints() {
  * Allocates curtailment across the provided contracts in priority order
  * (lowest penalty first) and sums up total penalty cost.
  *
- * @param {number} capacityMW — MW to curtail
- * @param {number} durationHours — Duration of curtailment
- * @param {Array<object>} contracts — Contracts to evaluate (from DB rows)
+ * @param {number} capacityMW - MW to curtail
+ * @param {number} durationHours - Duration of curtailment
+ * @param {Array<object>} contracts - Contracts to evaluate (from DB rows)
  * @returns {{ totalPenalty: number, affectedContracts: Array<{ contractId: string, customer: string, curtailedMW: number, penalty: number }> }}
  */
 export function calculateCurtailmentPenalty(capacityMW, durationHours, contracts) {

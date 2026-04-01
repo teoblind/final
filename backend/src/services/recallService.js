@@ -1,5 +1,5 @@
 /**
- * Recall.ai Service — Meeting bot API client
+ * Recall.ai Service - Meeting bot API client
  *
  * Replaces the Playwright/Chrome/PulseAudio stack with 3 API calls:
  * - createBot() → bot joins meeting
@@ -23,13 +23,13 @@ let BOT_AVATAR_B64 = '';
 try {
   BOT_AVATAR_B64 = fs.readFileSync(path.join(__dirname, '../../assets/coppice-bot-avatar.b64'), 'utf8').trim();
 } catch (e) {
-  console.warn('[Recall] Bot avatar not found — bot will show default black tile');
+  console.warn('[Recall] Bot avatar not found - bot will show default black tile');
 }
 
-// In-memory bot registry — tracks active bots and their state
+// In-memory bot registry - tracks active bots and their state
 const activeBots = new Map();
 
-// Voice session instructions — keyed by session ID, fetched by voice agent page
+// Voice session instructions - keyed by session ID, fetched by voice agent page
 export const voiceSessions = new Map();
 
 function headers() {
@@ -160,7 +160,7 @@ export async function sendAudio(botId, mp3Buffer) {
 }
 
 /**
- * Create a voice agent bot — joins meeting with output_media (webpage as camera).
+ * Create a voice agent bot - joins meeting with output_media (webpage as camera).
  * The webpage captures meeting audio, sends to relay → OpenAI Realtime API,
  * and plays AI responses back into the meeting.
  *
@@ -179,7 +179,7 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
   } = opts;
 
-  // Pre-generate a voice session ID — instructions are stored server-side and fetched by the page
+  // Pre-generate a voice session ID - instructions are stored server-side and fetched by the page
   const sessionId = `vs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   // Build instructions server-side so the page doesn't need to fetch them unreliably

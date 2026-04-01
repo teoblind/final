@@ -12,8 +12,8 @@
  *   - calculations.py     (process_row, safe_json_number)
  *   - winner.py           (summarize, annualize)
  *
- * Data: nodal_8760.json — 8,760 hourly nodal + load LMP values
- * Zero LLM cost — all math + ExcelJS.
+ * Data: nodal_8760.json - 8,760 hourly nodal + load LMP values
+ * Zero LLM cost - all math + ExcelJS.
  */
 
 import ExcelJS from 'exceljs';
@@ -47,7 +47,7 @@ try {
 // ─── Utility Functions (exact match to Lambda) ───────────────────────────────
 
 /**
- * safe_json_number — safely convert any value to float, 0.0 for invalid.
+ * safe_json_number - safely convert any value to float, 0.0 for invalid.
  * Matches Lambda: safe_json_number()
  */
 function safeJsonNumber(x, def = 0) {
@@ -58,7 +58,7 @@ function safeJsonNumber(x, def = 0) {
 }
 
 /**
- * annualize — convert multi-period sum to annual equivalent.
+ * annualize - convert multi-period sum to annual equivalent.
  * KEY FIX from Lambda: uses actual hour count, not hardcoded 8760.
  * Matches Excel: COUNT(tblHourly[Hour]) dynamically.
  */
@@ -68,7 +68,7 @@ function annualize(total, actualHours) {
 }
 
 /**
- * calculate_strike_price — breakeven electricity price from mining economics.
+ * calculate_strike_price - breakeven electricity price from mining economics.
  * Formula: (hashprice / TH_per_PH / hr_per_day) / (efficiency / W_per_MW)
  * Matches Excel: =(Hashprice / 1000 / 24) / (Efficiency / 1000000)
  */
@@ -83,8 +83,8 @@ function calculateStrikePrice(hashprice, efficiencyWTh) {
 // ─── Default Economic Parameters ─────────────────────────────────────────────
 
 const DEFAULT_ECON = {
-  miner_floor_price: 5.00,       // $/MWh — minimum the miner pays
-  import_burden: 11.00,          // $/MWh — burden on imported power
+  miner_floor_price: 5.00,       // $/MWh - minimum the miner pays
+  import_burden: 11.00,          // $/MWh - burden on imported power
   offtake_index: 'Node',         // 'Node' or 'Hub'
   hashprice: 100.00,             // $/PH/day (Base scenario)
   efficiency: 29.5,              // W/TH (miner fleet)
@@ -270,7 +270,7 @@ function parseEmailBody(body, data) {
 // ─── 3. PricingToolUSA Logic (exact port from Lambda) ────────────────────────
 
 /**
- * processRow — exact port of calculations.py process_row
+ * processRow - exact port of calculations.py process_row
  *
  * Excel formulas from tblHourly:
  *   Offtake Price: IF(Index="Node", MAX(Nodal, Floor), MAX(Load, Floor))
@@ -341,7 +341,7 @@ function processRow(row, mineSize, econ) {
 }
 
 /**
- * summarize — exact port of winner.py summarize
+ * summarize - exact port of winner.py summarize
  * Generates full winner summary for the optimal mine size.
  */
 function summarize(rows, mineSize, econ) {
@@ -388,7 +388,7 @@ function summarize(rows, mineSize, econ) {
   const dealValueDollarOfftake = ippRevOfftakeDollar - ippRevBaseDollar;
   const dealValueMwhOfftake = ippRevOfftakeMwh - ippRevBaseMwh;
 
-  // Uptime: annual consumption / (mine_size * 8760) — capacity factor
+  // Uptime: annual consumption / (mine_size * 8760) - capacity factor
   const maxTheoreticalConsumption = mineSize * 8760;
   const uptimePct = maxTheoreticalConsumption > 0 ? (annualElecConsumption / maxTheoreticalConsumption) * 100 : 0;
 
@@ -439,14 +439,14 @@ function summarize(rows, mineSize, econ) {
 }
 
 /**
- * buildHourlyData — merge IPP generation data with ERCOT nodal/load data.
+ * buildHourlyData - merge IPP generation data with ERCOT nodal/load data.
  * If IPP provides hourly gen, use it. Otherwise, synthesize from capacity.
  */
 function buildHourlyData(ippData) {
   const nodalLen = NODAL_DATA.length || 8760;
 
   if (ippData.hourlyGeneration && ippData.hourlyGeneration.length >= 8000) {
-    // IPP provided hourly generation — use it, match length to nodal data
+    // IPP provided hourly generation - use it, match length to nodal data
     const len = Math.min(ippData.hourlyGeneration.length, nodalLen);
     const hours = [];
     for (let i = 0; i < len; i++) {
@@ -502,7 +502,7 @@ function buildHourlyData(ippData) {
 }
 
 /**
- * runPricingAnalysis — exact replica of PricingToolUSA lambda_handler.
+ * runPricingAnalysis - exact replica of PricingToolUSA lambda_handler.
  * Runs mine size sensitivity analysis across all MINE_SIZES.
  * Optimizes by deal_value_per_mwh (not total), matching Lambda logic.
  */
@@ -682,7 +682,7 @@ export async function generateMineSpecExcel(analysis, ippData) {
   // ── Header ──
   ws.mergeCells(r, 1, r, 6);
   const hdr = ws.getCell(r, 1);
-  hdr.value = 'SANGHA RENEWABLES — MINE SPECIFICATION REPORT';
+  hdr.value = 'SANGHA RENEWABLES - MINE SPECIFICATION REPORT';
   hdr.font = { bold: true, size: 16, color: { argb: W } };
   hdr.fill = greenFill;
   hdr.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -713,7 +713,7 @@ export async function generateMineSpecExcel(analysis, ippData) {
 
   // ── Winner Summary (from summarize()) ──
   const w = analysis.winner;
-  sectionHeader(`OPTIMAL CONFIGURATION — ${analysis.bestMineSize} MW MINE`);
+  sectionHeader(`OPTIMAL CONFIGURATION - ${analysis.bestMineSize} MW MINE`);
   kvRow('Best Mine Size', `${analysis.bestMineSize} MW`);
   kvRow('Annual BTM Offtake', `${w.annual_btm_offtake_MWh?.toLocaleString()} MWh`);
   kvRow('Annual Import', `${w.annual_import_MWh?.toLocaleString()} MWh`);
@@ -723,18 +723,18 @@ export async function generateMineSpecExcel(analysis, ippData) {
   kvRow('Curtailment Hours', `${w.curtailment_hours.toLocaleString()} hrs`);
   r++;
 
-  kvRow('IPP Revenue — Grid Only ($/MWh)', fmtD(w.ipp_revenue_base_mwh));
-  kvRow('IPP Revenue — Miner Offtake ($/MWh)', fmtD(w.ipp_revenue_offtake_mwh));
-  kvRow('IPP Revenue — Vertical Integration ($/MWh)', fmtD(w.ipp_revenue_vi_mwh));
+  kvRow('IPP Revenue - Grid Only ($/MWh)', fmtD(w.ipp_revenue_base_mwh));
+  kvRow('IPP Revenue - Miner Offtake ($/MWh)', fmtD(w.ipp_revenue_offtake_mwh));
+  kvRow('IPP Revenue - Vertical Integration ($/MWh)', fmtD(w.ipp_revenue_vi_mwh));
   r++;
-  kvRow('IPP Revenue — Grid Only (Annual)', fmt(w.ipp_revenue_base_dollar));
-  kvRow('IPP Revenue — Miner Offtake (Annual)', fmt(w.ipp_revenue_offtake_dollar));
-  kvRow('IPP Revenue — Vertical Integration (Annual)', fmt(w.ipp_revenue_vi_dollar));
+  kvRow('IPP Revenue - Grid Only (Annual)', fmt(w.ipp_revenue_base_dollar));
+  kvRow('IPP Revenue - Miner Offtake (Annual)', fmt(w.ipp_revenue_offtake_dollar));
+  kvRow('IPP Revenue - Vertical Integration (Annual)', fmt(w.ipp_revenue_vi_dollar));
   r++;
-  kvRow('Deal Value — Miner Offtake ($/MWh)', fmtD(w.deal_value_offtake_mwh));
-  kvRow('Deal Value — Miner Offtake (Annual)', fmt(w.deal_value_offtake_dollar));
-  kvRow('Deal Value — Vertical Integration ($/MWh)', fmtD(w.deal_value_vi_mwh));
-  kvRow('Deal Value — Vertical Integration (Annual)', fmt(w.deal_value_vi_dollar));
+  kvRow('Deal Value - Miner Offtake ($/MWh)', fmtD(w.deal_value_offtake_mwh));
+  kvRow('Deal Value - Miner Offtake (Annual)', fmt(w.deal_value_offtake_dollar));
+  kvRow('Deal Value - Vertical Integration ($/MWh)', fmtD(w.deal_value_vi_mwh));
+  kvRow('Deal Value - Vertical Integration (Annual)', fmt(w.deal_value_vi_dollar));
   r++;
 
   // ── Offer Type Comparison ──
@@ -743,8 +743,8 @@ export async function generateMineSpecExcel(analysis, ippData) {
   const compRows = [
     ['IPP Revenue ($/MWh)', fmtD(w.ipp_revenue_base_mwh), fmtD(w.ipp_revenue_offtake_mwh), fmtD(w.ipp_revenue_vi_mwh)],
     ['IPP Revenue (Annual)', fmt(w.ipp_revenue_base_dollar), fmt(w.ipp_revenue_offtake_dollar), fmt(w.ipp_revenue_vi_dollar)],
-    ['Deal Value ($/MWh)', '—', fmtD(w.deal_value_offtake_mwh), fmtD(w.deal_value_vi_mwh)],
-    ['Deal Value (Annual)', '—', fmt(w.deal_value_offtake_dollar), fmt(w.deal_value_vi_dollar)],
+    ['Deal Value ($/MWh)', '-', fmtD(w.deal_value_offtake_mwh), fmtD(w.deal_value_vi_mwh)],
+    ['Deal Value (Annual)', '-', fmt(w.deal_value_offtake_dollar), fmt(w.deal_value_vi_dollar)],
   ];
   for (const row of compRows) {
     ws.getCell(r, 1).value = row[0];
@@ -848,7 +848,7 @@ You must return ONLY valid JSON with these fields (use null for missing data):
   "summary": string
 }
 
-Extract ALL numerical data you can find — pricing tables, production stats, EBITDA calculations, etc. The "summary" field should be a 1-2 sentence plain-English description of what the sender is sharing/asking. Be aggressive about extracting data — if you see numbers, capture them.`,
+Extract ALL numerical data you can find - pricing tables, production stats, EBITDA calculations, etc. The "summary" field should be a 1-2 sentence plain-English description of what the sender is sharing/asking. Be aggressive about extracting data - if you see numbers, capture them.`,
     messages: [{
       role: 'user',
       content: `Extract all IPP/energy data from this email:\n\n${body}${attachmentText}`,
@@ -895,7 +895,7 @@ async function generateTailoredExcel(claudeData, rigidData, emailContext) {
     }
   }
 
-  // Sheet 1: Data Summary (always present — from Claude extraction)
+  // Sheet 1: Data Summary (always present - from Claude extraction)
   const summary = wb.addWorksheet('Data Summary');
   summary.columns = [
     { header: 'Field', key: 'field', width: 30 },
@@ -993,15 +993,15 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
 
   // If rigid parser found clean data, use the standard pipeline
   if (rigidData.capacityMW && rigidData.annualGenerationMWh) {
-    // Standard pipeline — unchanged (fall through to existing logic below)
+    // Standard pipeline - unchanged (fall through to existing logic below)
   } else {
     // Route through Claude to extract + analyze messy/non-standard data
-    console.log(`[IPP Pipeline] Rigid parser insufficient — routing through Claude`);
+    console.log(`[IPP Pipeline] Rigid parser insufficient - routing through Claude`);
     const claudeData = await extractWithClaude(body, attachments);
 
     if (!claudeData) {
-      // Claude extraction failed too — ask for more data
-      console.log(`[IPP Pipeline] Claude extraction also failed — requesting more info`);
+      // Claude extraction failed too - ask for more data
+      console.log(`[IPP Pipeline] Claude extraction also failed - requesting more info`);
       const needsDataText = [
         `Hey ${firstName},`,
         '',
@@ -1029,7 +1029,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       insertActivity({
         tenantId, type: 'in',
         title: `IPP Inquiry from ${fromName || from}`,
-        subtitle: `${subject} — Requested additional data`,
+        subtitle: `${subject} - Requested additional data`,
         detailJson: JSON.stringify({ from, fromName, subject, dataParsed: rigidData }),
         sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
       });
@@ -1060,7 +1060,7 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       return { status: 'need-data', messageId };
     }
 
-    // Claude found data — generate tailored spreadsheet
+    // Claude found data - generate tailored spreadsheet
     console.log(`[IPP Pipeline] Claude extracted: ${claudeData.summary}`);
     const { filepath, filename, analysis } = await generateTailoredExcel(claudeData, rigidData, { fromName, from });
 
@@ -1103,25 +1103,25 @@ export async function processIppEmail({ messageId, threadId, from, fromName, sub
       const replyResp = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1024,
-        system: `You are Coppice, an AI agent at Sangha Renewables. Write a brief email reply to an IPP inquiry. Keep it under 150 words. Be specific about the data you analyzed. Don't use markdown formatting — write plain text.
+        system: `You are Coppice, an AI agent at Sangha Renewables. Write a brief email reply to an IPP inquiry. Keep it under 150 words. Be specific about the data you analyzed. Don't use markdown formatting - write plain text.
 
 WRITING STYLE (mandatory):
 - Greeting: "Hey [First Name]," (casual, never "Dear", never "Hi", never "Hello", never "Good morning")
-- Get straight to the point — no pleasantries, no "Thank you for your inquiry"
+- Get straight to the point - no pleasantries, no "Thank you for your inquiry"
 - Short paragraphs: 2-4 sentences max
 - Direct and confident tone, not corporate or stiff
 - Use specific numbers over vague claims
 - Use dashes freely for asides
 - No emoji
 - Never say "I'd be happy to discuss", "Please don't hesitate", or "Looking forward to hearing from you"
-- IMPORTANT: The LAST paragraph before "Best," must be a specific question that bounces the ball back to the sender. Ask about their data, curtailment patterns, or goals — not generic "would you be available for a call".
+- IMPORTANT: The LAST paragraph before "Best," must be a specific question that bounces the ball back to the sender. Ask about their data, curtailment patterns, or goals - not generic "would you be available for a call".
 - Closing structure (strict order): question paragraph → "Best," → "Coppice" → "Sangha Renewables". NEVER put "Best," before the question.
 
 CONFIDENTIALITY (critical):
 - NEVER mention other clients, partners, or prospects by name
 - NEVER reference specific case studies, deal terms, contract values, or revenue figures from other engagements
 - NEVER fabricate or hallucinate case studies, client names, or partnership details
-- If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" — never name names or cite specific numbers from other deals`,
+- If you want to reference past work, say "we've worked with similar portfolios" or "in comparable deployments" - never name names or cite specific numbers from other deals`,
         messages: [{
           role: 'user',
           content: `Write a reply to ${firstName} about their IPP data. Here's what we extracted and analyzed:\n\n${JSON.stringify(claudeData, null, 2)}\n\nWe generated a tailored Excel report (${filename}) with their data organized into sheets. ${analysis ? `Our mine spec analysis suggests an optimal mine size of ${analysis.bestMineSize}MW.` : 'We included all the pricing, production, and market data they shared.'}\n\nThe original email subject was: ${subject}`,
@@ -1133,9 +1133,9 @@ CONFIDENTIALITY (critical):
       replyBody = [
         `Hey ${firstName},`,
         '',
-        `Thanks for sharing the data — we've put together an analysis report based on what you sent over. The attached spreadsheet includes the pricing, production, and market data organized for review.`,
+        `Thanks for sharing the data - we've put together an analysis report based on what you sent over. The attached spreadsheet includes the pricing, production, and market data organized for review.`,
         '',
-        analysis ? `Our initial analysis suggests an optimal mine size of ${analysis.bestMineSize}MW. Take a look at the sensitivity analysis in the report and let us know what questions come up.` : `Take a look and let us know what questions come up — happy to dig deeper into any of the numbers.`,
+        analysis ? `Our initial analysis suggests an optimal mine size of ${analysis.bestMineSize}MW. Take a look at the sensitivity analysis in the report and let us know what questions come up.` : `Take a look and let us know what questions come up - happy to dig deeper into any of the numbers.`,
         '',
         `Best,`,
         `Coppice`,
@@ -1186,7 +1186,7 @@ CONFIDENTIALITY (critical):
   insertActivity({
     tenantId, type: 'in',
     title: `IPP Inquiry from ${fromName || from}`,
-    subtitle: `${data.capacityMW}MW ${data.facilityType} — ${data.annualGenerationMWh?.toLocaleString()} MWh/yr`,
+    subtitle: `${data.capacityMW}MW ${data.facilityType} - ${data.annualGenerationMWh?.toLocaleString()} MWh/yr`,
     detailJson: JSON.stringify({ from, fromName, subject, data }),
     sourceType: 'email', sourceId: `ipp-${messageId}`, agentId: 'coppice',
   });
@@ -1226,7 +1226,7 @@ CONFIDENTIALITY (critical):
   insertActivity({
     tenantId, type: 'agent',
     title: 'Mine Specification Generated',
-    subtitle: `${baseAnalysis.bestMineSize}MW optimal — Deal value $${baseAnalysis.bestDealValue.toLocaleString()} ($${baseAnalysis.bestDealValuePerMwh}/MWh)`,
+    subtitle: `${baseAnalysis.bestMineSize}MW optimal - Deal value $${baseAnalysis.bestDealValue.toLocaleString()} ($${baseAnalysis.bestDealValuePerMwh}/MWh)`,
     detailJson: JSON.stringify({
       bestMineSize: baseAnalysis.bestMineSize,
       dealValueVI: baseAnalysis.bestDealValue,
@@ -1247,11 +1247,11 @@ CONFIDENTIALITY (critical):
   const replyBody = [
     `Hey ${firstName},`,
     '',
-    `Ran the numbers on your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} site — the short version is a ${baseAnalysis.bestMineSize}MW behind-the-meter mine looks like it adds about ${fmtD(baseAnalysis.bestDealValuePerMwh)}/MWh in deal value, which comes out to roughly ${fmt(baseAnalysis.bestDealValue)} annually on a VI structure. That's at ${w.uptime_pct}% uptime with an all-in electricity cost to the miner of ${fmtD(w.all_in_electricity_cost_miner)}/MWh.`,
+    `Ran the numbers on your ${data.capacityMW}MW ${data.facilityType.toLowerCase()} site - the short version is a ${baseAnalysis.bestMineSize}MW behind-the-meter mine looks like it adds about ${fmtD(baseAnalysis.bestDealValuePerMwh)}/MWh in deal value, which comes out to roughly ${fmt(baseAnalysis.bestDealValue)} annually on a VI structure. That's at ${w.uptime_pct}% uptime with an all-in electricity cost to the miner of ${fmtD(w.all_in_electricity_cost_miner)}/MWh.`,
     '',
     `Attached the full report with the sensitivity across mine sizes (${baseAnalysis.allResults[0]?.mineSize || 10}MW to ${baseAnalysis.allResults[baseAnalysis.allResults.length - 1]?.mineSize || 150}MW), grid vs offtake vs VI comparisons, and the economic assumptions we used. It's based on ${baseAnalysis.totalHoursProcessed.toLocaleString()} hours of actual ERCOT nodal data so the numbers should be pretty tight.`,
     '',
-    `Curious — are you currently curtailing much, or is most of your generation hitting the grid today? That context would help us dial in the offtake structure.`,
+    `Curious - are you currently curtailing much, or is most of your generation hitting the grid today? That context would help us dial in the offtake structure.`,
     '',
     `Best,`,
     `Coppice`,
@@ -1278,7 +1278,7 @@ CONFIDENTIALITY (critical):
   insertActivity({
     tenantId, type: 'out',
     title: 'Mine Specification Sent',
-    subtitle: `Replied to ${fromName || from} — ${baseAnalysis.bestMineSize}MW optimal, $${baseAnalysis.bestDealValuePerMwh}/MWh deal value`,
+    subtitle: `Replied to ${fromName || from} - ${baseAnalysis.bestMineSize}MW optimal, $${baseAnalysis.bestDealValuePerMwh}/MWh deal value`,
     detailJson: JSON.stringify({ to: from, filename, bestMineSize: baseAnalysis.bestMineSize, dealValuePerMwh: baseAnalysis.bestDealValuePerMwh }),
     sourceType: 'email', sourceId: `ipp-reply-${messageId}`, agentId: 'coppice',
   });

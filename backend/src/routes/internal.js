@@ -1,5 +1,5 @@
 /**
- * Internal Tool Endpoint — localhost-only route for MCP bridge
+ * Internal Tool Endpoint - localhost-only route for MCP bridge
  *
  * The CLI tunnel agent (claude -p on Mac) uses MCP tools that proxy back
  * to this endpoint via SSH. This lets the CLI agent call Google Workspace,

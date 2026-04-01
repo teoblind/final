@@ -1,5 +1,5 @@
 /**
- * Chat Health Check — BBB Heartbeat Monitor
+ * Chat Health Check - BBB Heartbeat Monitor
  *
  * Sends test messages through the full chat pipeline every 5 minutes
  * to catch errors before users do. Tests both chat() and chatStream()

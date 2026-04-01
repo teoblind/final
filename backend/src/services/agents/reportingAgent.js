@@ -1,5 +1,5 @@
 /**
- * Reporting Engine Agent — Phase 6
+ * Reporting Engine Agent - Phase 6
  *
  * Generates structured Markdown operations reports on configurable schedules:
  *   - Daily report at 6 AM (fleet status, financials, curtailment, pools)
@@ -10,7 +10,7 @@
  * dashboard reports API. Each report includes fleet status, financial summary,
  * curtailment activity, pool performance, notable events, and recommendations.
  *
- * This agent is autonomous/informational — it never modifies operational state.
+ * This agent is autonomous/informational - it never modifies operational state.
  */
 
 import {
@@ -38,7 +38,7 @@ const WEEKLY_REPORT_DAY = 1;   // Monday (0 = Sunday)
 const MONTHLY_REPORT_DATE = 1; // 1st of the month
 
 /**
- * ReportingAgent — generates daily, weekly, and monthly operations reports
+ * ReportingAgent - generates daily, weekly, and monthly operations reports
  * in Markdown format, stored for dashboard consumption.
  */
 export default class ReportingAgent {
@@ -238,17 +238,17 @@ export default class ReportingAgent {
 
     const dueReports = [];
 
-    // Daily report — due once per day at the configured hour
+    // Daily report - due once per day at the configured hour
     if (hour === reportHour && this._lastGenerated.daily !== todayStr) {
       dueReports.push('daily');
     }
 
-    // Weekly report — due on the configured day at the configured hour
+    // Weekly report - due on the configured day at the configured hour
     if (dayOfWeek === weeklyDay && hour === reportHour && this._lastGenerated.weekly !== todayStr) {
       dueReports.push('weekly');
     }
 
-    // Monthly report — due on the configured date at the configured hour
+    // Monthly report - due on the configured date at the configured hour
     if (dayOfMonth === monthlyDate && hour === reportHour && this._lastGenerated.monthly !== todayStr) {
       dueReports.push('monthly');
     }
@@ -380,10 +380,10 @@ export default class ReportingAgent {
           : todayStr;
 
       const title = reportType === 'daily'
-        ? `Daily Operations Report — ${todayStr}`
+        ? `Daily Operations Report - ${todayStr}`
         : reportType === 'weekly'
-          ? `Weekly Operations Summary — ${period}`
-          : `Monthly Operations Report — ${period}`;
+          ? `Weekly Operations Summary - ${period}`
+          : `Monthly Operations Report - ${period}`;
 
       const content = this._generateReport(reportType, data, todayStr);
 
@@ -495,7 +495,7 @@ export default class ReportingAgent {
     const recs = this._generateRecommendations(data);
 
     return [
-      `# Daily Operations Report — ${todayStr}`,
+      `# Daily Operations Report - ${todayStr}`,
       '',
       '## Fleet Status',
       `- ${fleet.online}/${fleet.total} machines online (${fleet.onlinePct}%)`,
@@ -539,7 +539,7 @@ export default class ReportingAgent {
     const period = this._getWeekPeriod();
 
     return [
-      `# Weekly Operations Summary — ${period}`,
+      `# Weekly Operations Summary - ${period}`,
       '',
       '## Week Overview',
       `- Fleet availability: ${fleet.onlinePct}% average`,
@@ -581,7 +581,7 @@ export default class ReportingAgent {
     const period = this._getMonthPeriod();
 
     return [
-      `# Monthly Operations Report — ${period}`,
+      `# Monthly Operations Report - ${period}`,
       '',
       '## Month Overview',
       `- Fleet availability: ${fleet.onlinePct}% average`,
@@ -729,7 +729,7 @@ export default class ReportingAgent {
     const earnings = data.poolEarnings || [];
 
     const totalBtc = earnings.reduce((s, e) => s + (e.earned_btc || 0), 0);
-    // Approximate luck from variance — use 100% if no data
+    // Approximate luck from variance - use 100% if no data
     const luck = earnings.length > 0
       ? (100 + (Math.random() - 0.5) * 4).toFixed(1) // realistic variance around 100%
       : '100.0';

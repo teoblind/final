@@ -3,7 +3,7 @@
  *
  * Handles token refresh, invoice/bill/payment CRUD via QuickBooks API.
  * Uses OAuth2 with Basic auth header for token exchange (not client_secret_post).
- * Refresh tokens expire after 100 days — must handle re-auth prompts.
+ * Refresh tokens expire after 100 days - must handle re-auth prompts.
  */
 
 import axios from 'axios';
@@ -74,7 +74,7 @@ async function refreshAccessToken(tenantId) {
 async function getAccessToken(tenantId) {
   const stored = getKeyVaultValue(tenantId, 'intuit-quickbooks', 'access_token');
   if (stored) {
-    // Try using stored token — if it fails with 401, we'll refresh
+    // Try using stored token - if it fails with 401, we'll refresh
     return stored;
   }
   return refreshAccessToken(tenantId);
@@ -85,7 +85,7 @@ async function getAccessToken(tenantId) {
  */
 async function qbRequest(tenantId, method, path, data = null) {
   const realmId = getKeyVaultValue(tenantId, 'intuit-quickbooks', 'realm_id');
-  if (!realmId) throw new Error('No QuickBooks realm ID found — reconnect QuickBooks');
+  if (!realmId) throw new Error('No QuickBooks realm ID found - reconnect QuickBooks');
 
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/v3/company/${realmId}${path}`;
@@ -114,7 +114,7 @@ async function qbRequest(tenantId, method, path, data = null) {
     return resp.data;
   } catch (err) {
     if (err.response?.status === 401) {
-      // Token expired — refresh and retry once
+      // Token expired - refresh and retry once
       token = await refreshAccessToken(tenantId);
       const resp = await makeRequest(token);
       return resp.data;

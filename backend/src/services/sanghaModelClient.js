@@ -1,5 +1,5 @@
 /**
- * SanghaModel Client — Phase 9
+ * SanghaModel Client - Phase 9
  *
  * HTTP client for the SanghaModel FastAPI service (Python simulator).
  * The simulator runs on port 8100 and provides:
@@ -48,7 +48,7 @@ function isTransientError(error) {
 }
 
 /**
- * Format error message — user-friendly for 503.
+ * Format error message - user-friendly for 503.
  */
 function formatError(error, endpoint) {
   if (error.response?.status === 503) {
@@ -432,7 +432,7 @@ export async function verifyOnStartup() {
     console.log(`[SanghaModel] Simulator is ${health.status} (version: ${health.model_version || 'unknown'})`);
     return true;
   } else {
-    console.warn(`[SanghaModel] Simulator unreachable at ${SANGHA_MODEL_URL} — insurance features will use mock data until it comes online.`);
+    console.warn(`[SanghaModel] Simulator unreachable at ${SANGHA_MODEL_URL} - insurance features will use mock data until it comes online.`);
     return false;
   }
 }

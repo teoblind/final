@@ -25,7 +25,7 @@ function tenantDirName(tenantId) {
   return tenantId.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
-// System DB — stores tenants table for routing, always available
+// System DB - stores tenants table for routing, always available
 const systemDb = new Database(join(dataDir, 'system.db'));
 systemDb.pragma('journal_mode = WAL');
 systemDb.pragma('busy_timeout = 5000');
@@ -189,7 +189,7 @@ export function sanitizeTenantField(value) {
 
 /**
  * Check if a string is a SQL reserved word (case-insensitive).
- * Returns true if reserved — callers should reject or quote.
+ * Returns true if reserved - callers should reject or quote.
  */
 export function isSqlReserved(value) {
   if (typeof value !== 'string') return false;
@@ -980,7 +980,7 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_tenant ON scheduled_tasks(tenant_id, enabled)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run ON scheduled_tasks(next_run_at, enabled)'); } catch (e) {}
 
-  // Agent assignments — overnight autonomous analysis proposals
+  // Agent assignments - overnight autonomous analysis proposals
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_assignments (
       id TEXT PRIMARY KEY,
@@ -1017,7 +1017,7 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN input_fields_json TEXT'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN input_values_json TEXT'); } catch (e) {}
 
-  // CC thread tracking — auto-trigger assignments from accumulated observations
+  // CC thread tracking - auto-trigger assignments from accumulated observations
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS cc_thread_tracker (
       id TEXT PRIMARY KEY,
@@ -1053,7 +1053,7 @@ function initSchemaForDb(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_mcp_servers_tenant ON mcp_servers(tenant_id, enabled)'); } catch (e) {}
 
-  // Add tenant_id to ALL existing tables (idempotent) — kept for defense-in-depth
+  // Add tenant_id to ALL existing tables (idempotent) - kept for defense-in-depth
   const tablesToMigrate = [
     'cache', 'alerts', 'alert_history', 'notes', 'imec_milestones',
     'datacenter_projects', 'fiber_deals', 'btc_wallets',
@@ -1222,7 +1222,7 @@ function seedTenantsInSystemDb() {
     );
   }
 
-  // Backfill settings_json for Zhan Capital — ensure industry: 'venture' is set
+  // Backfill settings_json for Zhan Capital - ensure industry: 'venture' is set
   const existingZhan = systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('zhan-capital');
   if (existingZhan) {
     const zhanSettings = existingZhan.settings_json ? JSON.parse(existingZhan.settings_json) : {};
@@ -1242,7 +1242,7 @@ function seedTenantData(targetDb, tenantId) {
   // Seed admin users, demo data, etc. into tenant DB
   // This also creates a tenants table in each tenant DB (for joins that reference it)
 
-  // Create tenants table in tenant DB (defense-in-depth — some queries JOIN on it)
+  // Create tenants table in tenant DB (defense-in-depth - some queries JOIN on it)
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS tenants (
       id TEXT PRIMARY KEY,
@@ -1329,7 +1329,7 @@ function seedTenantData(targetDb, tenantId) {
   // Seed demo data via the existing initDacpTables seed logic (called per-tenant)
   initDacpSeedData(targetDb, tenantId);
 
-  // Activity log seed data disabled — dashboards now show EmptyState when empty
+  // Activity log seed data disabled - dashboards now show EmptyState when empty
 
   // Seed trusted senders for email guard
   initEmailTrustSeedData(targetDb, tenantId);
@@ -1343,28 +1343,28 @@ function initEmailTrustSeedData(targetDb, tenantId) {
     'INSERT OR IGNORE INTO email_trusted_senders (tenant_id, email, domain, display_name, trust_level, notes) VALUES (?, ?, ?, ?, ?, ?)'
   );
 
-  // Platform owners — observe-only unless explicitly addressed
-  insert.run(tenantId, 'teo@zhan.capital', null, 'Teo Blind', 'owner', 'Platform owner — Zhan Capital');
-  insert.run(tenantId, 'teo.blind@gmail.com', null, 'Teo Blind', 'owner', 'Platform owner — personal Gmail');
+  // Platform owners - observe-only unless explicitly addressed
+  insert.run(tenantId, 'teo@zhan.capital', null, 'Teo Blind', 'owner', 'Platform owner - Zhan Capital');
+  insert.run(tenantId, 'teo.blind@gmail.com', null, 'Teo Blind', 'owner', 'Platform owner - personal Gmail');
 
   if (tenantId === 'default') {
-    // Sangha internal team — trust by domain and key individuals
+    // Sangha internal team - trust by domain and key individuals
     insert.run('default', null, 'sanghasystems.com', null, 'trusted', 'Sangha Systems internal domain');
     insert.run('default', null, 'zhan.capital', null, 'trusted', 'Zhan Capital internal domain');
-    insert.run('default', 'spencer@sanghasystems.com', null, 'Spencer Marr', 'owner', 'CEO — Sangha');
+    insert.run('default', 'spencer@sanghasystems.com', null, 'Spencer Marr', 'owner', 'CEO - Sangha');
     console.log('Email trust: Seeded Sangha trusted senders');
   }
 
   if (tenantId === 'dacp-construction-001') {
     // DACP owner
-    insert.run('dacp-construction-001', 'mpineda@dacpholdings.com', null, 'Marcel Pineda', 'owner', 'CEO — DACP Holdings');
-    // DACP key GC contacts — trust by domain for known GCs
-    insert.run('dacp-construction-001', null, 'turnerconstruction.com', null, 'trusted', 'Turner Construction — active GC partner');
-    insert.run('dacp-construction-001', null, 'dpr.com', null, 'trusted', 'DPR Construction — active GC partner');
-    insert.run('dacp-construction-001', null, 'austin-ind.com', null, 'trusted', 'Austin Commercial — active GC partner');
-    insert.run('dacp-construction-001', null, 'mccarthy.com', null, 'trusted', 'McCarthy Building — prospective GC');
-    insert.run('dacp-construction-001', null, 'henselphelps.com', null, 'trusted', 'Hensel Phelps — prospective GC');
-    insert.run('dacp-construction-001', null, 'usa.skanska.com', null, 'trusted', 'Skanska USA — prospective GC');
+    insert.run('dacp-construction-001', 'mpineda@dacpholdings.com', null, 'Marcel Pineda', 'owner', 'CEO - DACP Holdings');
+    // DACP key GC contacts - trust by domain for known GCs
+    insert.run('dacp-construction-001', null, 'turnerconstruction.com', null, 'trusted', 'Turner Construction - active GC partner');
+    insert.run('dacp-construction-001', null, 'dpr.com', null, 'trusted', 'DPR Construction - active GC partner');
+    insert.run('dacp-construction-001', null, 'austin-ind.com', null, 'trusted', 'Austin Commercial - active GC partner');
+    insert.run('dacp-construction-001', null, 'mccarthy.com', null, 'trusted', 'McCarthy Building - prospective GC');
+    insert.run('dacp-construction-001', null, 'henselphelps.com', null, 'trusted', 'Hensel Phelps - prospective GC');
+    insert.run('dacp-construction-001', null, 'usa.skanska.com', null, 'trusted', 'Skanska USA - prospective GC');
     insert.run('dacp-construction-001', 'admin@dacpconstruction.com', null, 'DACP Admin', 'trusted', 'Internal admin account');
     console.log('Email trust: Seeded DACP trusted senders');
   }
@@ -3121,7 +3121,7 @@ export function deleteSite(id) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function initPhase9Tables(targetDb) {
-  // Calibration exports — audit log of telemetry exports to SanghaModel
+  // Calibration exports - audit log of telemetry exports to SanghaModel
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS calibration_exports (
       id TEXT PRIMARY KEY,
@@ -3137,7 +3137,7 @@ function initPhase9Tables(targetDb) {
     )
   `);
 
-  // Risk assessments — cached risk assessments from simulator
+  // Risk assessments - cached risk assessments from simulator
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS risk_assessments (
       id TEXT PRIMARY KEY,
@@ -3156,7 +3156,7 @@ function initPhase9Tables(targetDb) {
     )
   `);
 
-  // Quote requests — formal quote requests from miners
+  // Quote requests - formal quote requests from miners
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS quote_requests (
       id TEXT PRIMARY KEY,
@@ -3181,7 +3181,7 @@ function initPhase9Tables(targetDb) {
     )
   `);
 
-  // Insurance policies — active insurance policies
+  // Insurance policies - active insurance policies
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS insurance_policies (
       id TEXT PRIMARY KEY,
@@ -3202,7 +3202,7 @@ function initPhase9Tables(targetDb) {
     )
   `);
 
-  // Insurance claims — monthly claims with verification
+  // Insurance claims - monthly claims with verification
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS insurance_claims (
       id TEXT PRIMARY KEY,
@@ -3226,7 +3226,7 @@ function initPhase9Tables(targetDb) {
     )
   `);
 
-  // Insurance upside sharing — upside revenue sharing calculations
+  // Insurance upside sharing - upside revenue sharing calculations
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS insurance_upside_sharing (
       id TEXT PRIMARY KEY,
@@ -3258,7 +3258,7 @@ function initPhase9Tables(targetDb) {
 
   // ── Phase 9b: Three-Party Insurance Structure ──────────────────────────────
 
-  // Balance sheet partners — LP / capital provider entities
+  // Balance sheet partners - LP / capital provider entities
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS balance_sheet_partners (
       id TEXT PRIMARY KEY,
@@ -3283,7 +3283,7 @@ function initPhase9Tables(targetDb) {
     )
   `);
 
-  // LP allocations — tracks which LP backs which quote/policy
+  // LP allocations - tracks which LP backs which quote/policy
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS lp_allocations (
       id TEXT PRIMARY KEY,
@@ -4266,7 +4266,7 @@ function initDacpTablesSchema(targetDb) {
   // Add is_pinned column to chat_threads (idempotent)
   try { targetDb.exec('ALTER TABLE chat_threads ADD COLUMN is_pinned INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 
-  // Thread context summaries — shared across sibling threads for cross-thread awareness
+  // Thread context summaries - shared across sibling threads for cross-thread awareness
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS thread_summaries (
       thread_id TEXT PRIMARY KEY,
@@ -4341,7 +4341,7 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bid_docs_tenant ON dacp_bid_documents(tenant_id, bid_request_id)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_plan_analyses_tenant ON dacp_plan_analyses(tenant_id, bid_request_id)'); } catch (e) {}
 
-  // Migrate dacp_bid_requests — add workflow columns (idempotent)
+  // Migrate dacp_bid_requests - add workflow columns (idempotent)
   try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN workflow_step INTEGER DEFAULT 0"); } catch (e) { /* already exists */ }
   try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN pass_reason TEXT"); } catch (e) { /* already exists */ }
   try { targetDb.exec("ALTER TABLE dacp_bid_requests ADD COLUMN itb_analysis_json TEXT"); } catch (e) { /* already exists */ }
@@ -4415,7 +4415,7 @@ function initDacpTablesSchema(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_hs_class_tenant ON hubspot_classifications(tenant_id, industry)'); } catch (e) {}
 
-  // Context pins — items pinned to chat threads (entities, files, notes, threads)
+  // Context pins - items pinned to chat threads (entities, files, notes, threads)
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS context_pins (
       id TEXT PRIMARY KEY,
@@ -4449,7 +4449,7 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec("ALTER TABLE action_items ADD COLUMN completed_at TEXT"); } catch (e) { /* already exists */ }
   try { targetDb.exec("ALTER TABLE action_items ADD COLUMN completed_by TEXT"); } catch (e) { /* already exists */ }
 
-  // Agent memory — per-tenant persistent memory for CLI agent context
+  // Agent memory - per-tenant persistent memory for CLI agent context
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS agent_memory (
       id TEXT PRIMARY KEY,
@@ -4807,11 +4807,11 @@ function initDacpSeedData(targetDb, tenantId) {
 
     // Sangha leads
     const S = 'default';
-    insertLead.run('le-s-001', S, 'Meridian Renewables', 'ERCOT', 'Solar IPP', 'Crane County portfolio facing negative LMPs', 92, 'meridianrenewables.com', 'responded', 'discovery', 'solar IPP Texas ERCOT', '2026-02-20', '2026-03-02', '2026-03-07', null, 'Strong interest — exploring BTM mining for Crane County');
+    insertLead.run('le-s-001', S, 'Meridian Renewables', 'ERCOT', 'Solar IPP', 'Crane County portfolio facing negative LMPs', 92, 'meridianrenewables.com', 'responded', 'discovery', 'solar IPP Texas ERCOT', '2026-02-20', '2026-03-02', '2026-03-07', null, 'Strong interest - exploring BTM mining for Crane County');
     insertLead.run('le-s-002', S, 'GridScale Partners', 'PJM', 'Wind IPP', 'Reviewing underperforming PJM wind assets', 85, 'gridscalepartners.com', 'responded', 'discovery', 'wind IPP PJM underperforming', '2026-02-22', '2026-03-03', '2026-03-05', null, 'Wants partnership structure details');
-    insertLead.run('le-s-003', S, 'Nexus Solar', 'MISO', 'Solar IPP', '95 MW portfolio in MISO', 60, 'nexussolar.com', 'contacted', 'discovery', 'solar developer MISO', '2026-02-25', '2026-03-04', null, null, 'Not right time — revisit Q3');
-    insertLead.run('le-s-004', S, 'SunPeak Energy', 'ERCOT', 'Solar IPP', '240 MW West Texas solar portfolio', 88, 'sunpeakenergy.com', 'meeting', 'discovery', 'solar IPP ERCOT West Texas', '2026-02-18', '2026-02-28', '2026-03-02', null, 'Call scheduled — two sites may fit');
-    insertLead.run('le-s-005', S, 'Apex Clean Energy Partners', 'SPP', 'Wind/Solar', '400 MW mixed portfolio struggling with negative LMPs in Oklahoma', 90, 'apexcleanenergy.com', 'responded', 'discovery', 'renewable IPP SPP negative LMP', '2026-02-15', '2026-02-26', '2026-03-01', null, 'Looping in energy team — strong signal');
+    insertLead.run('le-s-003', S, 'Nexus Solar', 'MISO', 'Solar IPP', '95 MW portfolio in MISO', 60, 'nexussolar.com', 'contacted', 'discovery', 'solar developer MISO', '2026-02-25', '2026-03-04', null, null, 'Not right time - revisit Q3');
+    insertLead.run('le-s-004', S, 'SunPeak Energy', 'ERCOT', 'Solar IPP', '240 MW West Texas solar portfolio', 88, 'sunpeakenergy.com', 'meeting', 'discovery', 'solar IPP ERCOT West Texas', '2026-02-18', '2026-02-28', '2026-03-02', null, 'Call scheduled - two sites may fit');
+    insertLead.run('le-s-005', S, 'Apex Clean Energy Partners', 'SPP', 'Wind/Solar', '400 MW mixed portfolio struggling with negative LMPs in Oklahoma', 90, 'apexcleanenergy.com', 'responded', 'discovery', 'renewable IPP SPP negative LMP', '2026-02-15', '2026-02-26', '2026-03-01', null, 'Looping in energy team - strong signal');
     insertLead.run('le-s-006', S, 'Clearway Energy', 'ERCOT', 'Wind IPP', '520 MW wind portfolio in ERCOT', 75, 'clearwayenergy.com', 'contacted', 'discovery', 'wind energy ERCOT large portfolio', '2026-03-01', '2026-03-04', null, null, null);
     insertLead.run('le-s-007', S, 'EDP Renewables', 'MISO', 'Solar IPP', '350 MW solar development in MISO', 70, 'edprenewables.com', 'new', 'discovery', 'solar developer MISO 2026', '2026-03-07', null, null, null, null);
     insertLead.run('le-s-008', S, 'NextEra Partners', 'ERCOT', 'Wind/Solar', '1.2 GW mixed portfolio', 95, 'nextera.com', 'new', 'discovery', 'large IPP ERCOT portfolio', '2026-03-07', null, null, null, null);
@@ -4827,8 +4827,8 @@ function initDacpSeedData(targetDb, tenantId) {
     insertContact.run('lc-s-008', S, 'le-s-008', 'Amanda Foster', 'afoster@nextera.com', 'VP Partnerships', null, 'discovery', 1);
 
     // Sangha outreach
-    insertOutreach.run('lo-s-001', S, 'le-s-001', 'lc-s-001', 'initial', 'Behind-the-meter mining for Crane County', 'Hi Sarah,\n\nI came across Meridian\'s Crane County solar portfolio and noticed your assets have been facing some of the same negative LMP challenges that many ERCOT operators are dealing with right now.\n\nWe\'ve been working with renewable operators to co-locate behind-the-meter Bitcoin mining on underperforming sites — effectively creating an additional revenue stream from the same infrastructure.\n\nWould be happy to share how this has worked on similar assets.\n\nBest,\nSangha Renewables', 'sent', '2026-03-02T09:14:00', '2026-03-07T11:42:00', 'auto', '2026-03-02');
-    insertOutreach.run('lo-s-002', S, 'le-s-002', 'lc-s-002', 'initial', 'Hashrate co-location for underperforming wind assets', 'Hi Mark,\n\nGridScale\'s PJM wind portfolio caught our attention — we work with operators who are turning curtailed or low-price hours into reliable mining revenue.\n\nWould love to share our approach if relevant.\n\nBest,\nSangha Renewables', 'sent', '2026-03-03T10:22:00', '2026-03-05T14:18:00', 'auto', '2026-03-03');
+    insertOutreach.run('lo-s-001', S, 'le-s-001', 'lc-s-001', 'initial', 'Behind-the-meter mining for Crane County', 'Hi Sarah,\n\nI came across Meridian\'s Crane County solar portfolio and noticed your assets have been facing some of the same negative LMP challenges that many ERCOT operators are dealing with right now.\n\nWe\'ve been working with renewable operators to co-locate behind-the-meter Bitcoin mining on underperforming sites - effectively creating an additional revenue stream from the same infrastructure.\n\nWould be happy to share how this has worked on similar assets.\n\nBest,\nSangha Renewables', 'sent', '2026-03-02T09:14:00', '2026-03-07T11:42:00', 'auto', '2026-03-02');
+    insertOutreach.run('lo-s-002', S, 'le-s-002', 'lc-s-002', 'initial', 'Hashrate co-location for underperforming wind assets', 'Hi Mark,\n\nGridScale\'s PJM wind portfolio caught our attention - we work with operators who are turning curtailed or low-price hours into reliable mining revenue.\n\nWould love to share our approach if relevant.\n\nBest,\nSangha Renewables', 'sent', '2026-03-03T10:22:00', '2026-03-05T14:18:00', 'auto', '2026-03-03');
     insertOutreach.run('lo-s-003', S, 'le-s-004', 'lc-s-004', 'initial', 'Mining + solar in West Texas', 'Hi James,\n\nSunPeak\'s West Texas solar sites are exactly the kind of assets where behind-the-meter mining adds the most value.\n\nWe have 8 years of operational data to back it up. Happy to walk through the numbers.\n\nBest,\nSangha Renewables', 'sent', '2026-02-28T08:45:00', '2026-03-02T16:30:00', 'auto', '2026-02-28');
     insertOutreach.run('lo-s-004', S, 'le-s-001', 'lc-s-001', 'followup_1', 'Re: Behind-the-meter mining for Crane County', 'Hi Sarah,\n\nGreat to hear there\'s alignment. I\'ll put together a brief overview of our typical project structure for a site in your capacity range.\n\nWould Thursday or Friday afternoon work for a quick call?\n\nBest,\nSangha Renewables', 'draft', null, null, null, '2026-03-07');
 
@@ -4850,7 +4850,7 @@ function initDacpSeedData(targetDb, tenantId) {
     const insertContact = targetDb.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     const D = 'dacp-construction-001';
-    insertLead.run('le-d-001', D, 'Turner Construction — Houston', 'Texas', 'General Contractor', 'Multiple active projects in Houston metro', 90, 'turnerconstruction.com', 'contacted', 'discovery', 'GC Houston concrete subcontractor needed', '2026-02-10', '2026-02-20', null, null, null);
+    insertLead.run('le-d-001', D, 'Turner Construction - Houston', 'Texas', 'General Contractor', 'Multiple active projects in Houston metro', 90, 'turnerconstruction.com', 'contacted', 'discovery', 'GC Houston concrete subcontractor needed', '2026-02-10', '2026-02-20', null, null, null);
     insertLead.run('le-d-002', D, 'DPR Construction', 'Texas', 'General Contractor', 'Expanding Texas healthcare portfolio', 85, 'dpr.com', 'responded', 'discovery', 'GC Texas healthcare construction', '2026-02-12', '2026-02-22', '2026-03-01', null, 'Interested in concrete sub for medical center');
     insertLead.run('le-d-003', D, 'Austin Commercial', 'Texas', 'General Contractor', 'New mixed-use project in Austin', 80, 'austin-ind.com', 'contacted', 'discovery', 'GC Austin mixed use development', '2026-02-15', '2026-02-25', null, null, null);
     insertLead.run('le-d-004', D, 'McCarthy Building', 'Texas', 'General Contractor', 'University campus expansion in San Antonio', 75, 'mccarthy.com', 'new', 'discovery', 'GC San Antonio university construction', '2026-03-01', null, null, null, null);
@@ -6019,7 +6019,7 @@ export function getPendingJobRequests(tenantId) {
   `).all(tenantId);
 }
 
-// Agent Memory CRUD — per-tenant persistent memory for CLI agent
+// Agent Memory CRUD - per-tenant persistent memory for CLI agent
 
 export function getAgentMemory(tenantId) {
   return db.prepare('SELECT key, value, updated_at FROM agent_memory WHERE tenant_id = ? ORDER BY updated_at DESC').all(tenantId);
@@ -6043,9 +6043,9 @@ export function deleteAgentMemory(tenantId, key) {
   db.prepare('DELETE FROM agent_memory WHERE tenant_id = ? AND key = ?').run(tenantId, key);
 }
 
-// Key Vault CRUD — values encrypted at rest with AES-256-GCM
+// Key Vault CRUD - values encrypted at rest with AES-256-GCM
 
-// Derive encryption key from env secret (lazy — dotenv may not have loaded yet at import time)
+// Derive encryption key from env secret (lazy - dotenv may not have loaded yet at import time)
 let _vaultMasterKey = null;
 function getVaultMasterKey() {
   if (_vaultMasterKey) return _vaultMasterKey;
@@ -6253,7 +6253,7 @@ function initActivityLogSeedData(targetDb, tenantId) {
     insert.run('default', 'out', 'Outreach sent to James Torres, VP Ops at SunPeak Energy', 'Personalized re: ERCOT curtailment patterns on their Crane County site', JSON.stringify({ to: 'jtorres@sunpeak.com', subject: 'ERCOT curtailment optimization for Crane County', body: 'Hi James,\n\nI noticed SunPeak\'s Crane County site has been seeing significant curtailment during afternoon price spikes. We\'ve helped similar operators capture $1,200+ per curtailment event through our automated response system.\n\nWould you have 15 minutes this week to discuss how this could work for your fleet?\n\nBest,\nCoppice' }), 'email', 'lead-engine', ts(2));
     insert.run('default', 'meet', 'Transcribed: Reassurity Product Strategy Call', '42 min \u2014 6 attendees \u2014 4 action items extracted', JSON.stringify({ summary: 'Discussed insurance product structure for behind-the-meter mining operations. Agreed on parametric trigger design using ERCOT price data. Next steps: finalize term sheet, schedule actuarial review.', actionItems: ['Finalize term sheet draft by Friday', 'Schedule actuarial review with Munich Re', 'Send updated loss model to Adam', 'Prepare board presentation for March 20'], attendees: ['Spencer Marr', 'Adam Reeve', 'Teo Blind', 'Miguel Alvarez', 'Sarah Chen', 'Jason Gunderson'] }), 'meeting', 'knowledge', ts(60));
     insert.run('default', 'lead', '12 new leads discovered \u2014 PJM region', 'Solar IPPs with merchant exposure, 50 MW+ capacity', JSON.stringify({ leads: [{ company: 'Apex Clean Energy', location: 'Virginia', score: 82 }, { company: 'Clearway Energy', location: 'New Jersey', score: 78 }, { company: 'NextEra Energy Partners', location: 'Pennsylvania', score: 75 }] }), 'lead_engine', 'lead-engine', ts(180));
-    insert.run('default', 'in', 'Reply received: Sarah Chen, CFO at Meridian Renewables', 'Re: Behind-the-meter mining conversation', JSON.stringify({ from: 'sarah.chen@meridian-renewables.com', subject: 'Re: Behind-the-meter mining conversation', body: 'Hi,\n\nThanks for reaching out. We\'ve actually been exploring this exact concept for our West Texas sites. Would love to connect — how does Thursday at 2pm CT work?\n\nBest,\nSarah' }), 'email', 'coppice', ts(300));
+    insert.run('default', 'in', 'Reply received: Sarah Chen, CFO at Meridian Renewables', 'Re: Behind-the-meter mining conversation', JSON.stringify({ from: 'sarah.chen@meridian-renewables.com', subject: 'Re: Behind-the-meter mining conversation', body: 'Hi,\n\nThanks for reaching out. We\'ve actually been exploring this exact concept for our West Texas sites. Would love to connect - how does Thursday at 2pm CT work?\n\nBest,\nSarah' }), 'email', 'coppice', ts(300));
     insert.run('default', 'doc', 'Ingested: Oberon Deal Memo v3', 'deal_memo \u2014 Revised energy pricing assumptions and site economics for Oberon Solar project', JSON.stringify({ summary: 'Updated deal memo incorporating revised PPA pricing at $0.042/kWh, new interconnection timeline (Q3 2026), and updated IRR projections showing 18.2% levered returns.', type: 'deal_memo', source: 'drive' }), 'knowledge', 'knowledge', ts(360));
     insert.run('default', 'out', 'Follow-up drafted for Mark Liu at GridScale Partners', 'Awaiting approval \u2014 5 days since last contact', JSON.stringify({ to: 'mliu@gridscale.com', subject: 'Re: Mining infrastructure partnership', body: 'Hi Mark,\n\nJust following up on our conversation last week about co-locating mining infrastructure at your solar sites. Happy to share the economics model we discussed.\n\nLet me know if you\'d like to reconnect.\n\nBest,\nCoppice' }), 'email', 'lead-engine', ts(420));
 
@@ -6261,7 +6261,7 @@ function initActivityLogSeedData(targetDb, tenantId) {
   }
 }
 
-// Activity insert hook — notifies listeners (e.g. office WebSocket broadcast)
+// Activity insert hook - notifies listeners (e.g. office WebSocket broadcast)
 let _activityHook = null;
 export function onActivityInsert(hook) { _activityHook = hook; }
 
@@ -6364,7 +6364,7 @@ export function markEmailRetry({ messageId, threadId, retryCount, tenantId }) {
 export function isEmailPermanentlyProcessed(messageId) {
   const row = db.prepare('SELECT pipeline FROM processed_emails WHERE message_id = ? LIMIT 1').get(messageId);
   if (!row) return false;
-  // retry-N entries are NOT permanently processed — they should be retried
+  // retry-N entries are NOT permanently processed - they should be retried
   if (row.pipeline && /^retry-\d+$/.test(row.pipeline)) return false;
   return true;
 }
@@ -6909,8 +6909,9 @@ export function getDueScheduledTasks() {
 export function getAgentAssignments(tenantId, status = null, userId = null) {
   const excludeArchived = "AND status != 'archived'";
   const orderBy = "ORDER BY CASE status WHEN 'proposed' THEN 0 WHEN 'confirmed' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'completed' THEN 3 WHEN 'dismissed' THEN 4 END, created_at DESC";
+  if (status === 'all') status = null; // 'all' means no status filter
   if (status === 'archived') {
-    // Explicit archived query — show only archived for this tenant
+    // Explicit archived query - show only archived for this tenant
     return db.prepare(`SELECT * FROM agent_assignments WHERE tenant_id = ? AND status = 'archived' ORDER BY completed_at DESC, created_at DESC`).all(tenantId);
   }
   if (status && userId) {
@@ -7339,7 +7340,7 @@ export function closeAllDatabases() {
 }
 
 function handleShutdown(signal) {
-  console.log(`${signal} received — closing databases...`);
+  console.log(`${signal} received - closing databases...`);
   closeAllDatabases();
   process.exit(0);
 }

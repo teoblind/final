@@ -1,5 +1,5 @@
 /**
- * Capital Allocation Scenario Modeler Routes — Phase 7
+ * Capital Allocation Scenario Modeler Routes - Phase 7
  *
  * API endpoints for simulating BTC/HPC capital allocation scenarios,
  * running sensitivity analysis across different capacity splits,
@@ -17,7 +17,7 @@ const router = express.Router();
 // ─── Simulate Capital Allocation Scenario ───────────────────────────────────
 
 /**
- * POST /simulate — Run a full capital allocation scenario
+ * POST /simulate - Run a full capital allocation scenario
  * Body: {
  *   totalCapacityMW,
  *   btcPercentage,
@@ -214,7 +214,7 @@ router.post('/simulate', (req, res) => {
 // ─── Quick Sensitivity Analysis ─────────────────────────────────────────────
 
 /**
- * GET /sensitivity — Quick sensitivity analysis across BTC/HPC splits
+ * GET /sensitivity - Quick sensitivity analysis across BTC/HPC splits
  * Query params: ?totalCapacityMW=150&btcRevenuePerMW=1000&hpcRevenuePerMW=1200
  */
 router.get('/sensitivity', (req, res) => {

@@ -1,5 +1,5 @@
 /**
- * Insurance Routes — Phase 9 (Miner-Facing)
+ * Insurance Routes - Phase 9 (Miner-Facing)
  *
  * Endpoints for miner risk profiles, indicative & formal quotes,
  * policy management, claims history, and coverage status.
@@ -91,7 +91,7 @@ function computeIndicativePremium(floor, hashrate, term, riskScore) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /risk-profile — Get latest risk assessment for tenant
+ * GET /risk-profile - Get latest risk assessment for tenant
  */
 router.get('/risk-profile', async (req, res) => {
   try {
@@ -126,7 +126,7 @@ router.get('/risk-profile', async (req, res) => {
 });
 
 /**
- * POST /risk-profile/refresh — Request new risk assessment
+ * POST /risk-profile/refresh - Request new risk assessment
  */
 router.post('/risk-profile/refresh', async (req, res) => {
   try {
@@ -174,7 +174,7 @@ router.post('/risk-profile/refresh', async (req, res) => {
         expiresAt: completed.expires_at,
       });
     } catch (modelError) {
-      // Model service unavailable — generate mock quick assessment
+      // Model service unavailable - generate mock quick assessment
       const mockResult = {
         riskScore: 42,
         probBelowBreakeven12m: 0.18,
@@ -234,7 +234,7 @@ router.post('/risk-profile/refresh', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /quotes/indicative — Calculate indicative premium
+ * GET /quotes/indicative - Calculate indicative premium
  * Query params: floor, hashrate, term
  */
 router.get('/quotes/indicative', async (req, res) => {
@@ -282,7 +282,7 @@ router.get('/quotes/indicative', async (req, res) => {
 });
 
 /**
- * POST /quotes/request — Submit formal quote request
+ * POST /quotes/request - Submit formal quote request
  * Body: { desiredFloor, desiredTerm, coveredHashrate, additionalNotes }
  */
 router.post('/quotes/request', async (req, res) => {
@@ -373,7 +373,7 @@ router.post('/quotes/request', async (req, res) => {
 });
 
 /**
- * GET /quotes — List quote requests for tenant
+ * GET /quotes - List quote requests for tenant
  */
 router.get('/quotes', async (req, res) => {
   try {
@@ -403,7 +403,7 @@ router.get('/quotes', async (req, res) => {
 });
 
 /**
- * GET /quotes/:id — Get specific quote request
+ * GET /quotes/:id - Get specific quote request
  */
 router.get('/quotes/:id', async (req, res) => {
   try {
@@ -444,7 +444,7 @@ router.get('/quotes/:id', async (req, res) => {
 });
 
 /**
- * POST /quotes/:id/accept — Accept a formal quote (status must be 'quote_issued')
+ * POST /quotes/:id/accept - Accept a formal quote (status must be 'quote_issued')
  */
 router.post('/quotes/:id/accept', async (req, res) => {
   try {
@@ -548,7 +548,7 @@ router.post('/quotes/:id/accept', async (req, res) => {
 });
 
 /**
- * POST /quotes/:id/decline — Decline a formal quote
+ * POST /quotes/:id/decline - Decline a formal quote
  */
 router.post('/quotes/:id/decline', async (req, res) => {
   try {
@@ -589,7 +589,7 @@ router.post('/quotes/:id/decline', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /policy — Get active insurance policies for tenant
+ * GET /policy - Get active insurance policies for tenant
  */
 router.get('/policy', async (req, res) => {
   try {
@@ -623,7 +623,7 @@ router.get('/policy', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /claims — Get all claims for tenant. Optional query: ?policy_id=X
+ * GET /claims - Get all claims for tenant. Optional query: ?policy_id=X
  */
 router.get('/claims', async (req, res) => {
   try {
@@ -656,7 +656,7 @@ router.get('/claims', async (req, res) => {
 });
 
 /**
- * GET /claims/:month — Get claims for specific month (format: YYYY-MM)
+ * GET /claims/:month - Get claims for specific month (format: YYYY-MM)
  */
 router.get('/claims/:month', async (req, res) => {
   try {
@@ -702,7 +702,7 @@ router.get('/claims/:month', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /coverage-status — Combined coverage view
+ * GET /coverage-status - Combined coverage view
  * Active policy details, current month claim status, cumulative paid,
  * net value (premiums paid vs claims received).
  */
@@ -773,13 +773,13 @@ router.get('/coverage-status', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Scheduler Controls — start/stop background jobs from the dashboard
+// Scheduler Controls - start/stop background jobs from the dashboard
 // ═══════════════════════════════════════════════════════════════════════════════
 
 let schedulerState = { claims: false, calibration: false };
 
 /**
- * GET /schedulers — Get status of all Phase 9 schedulers
+ * GET /schedulers - Get status of all Phase 9 schedulers
  */
 router.get('/schedulers', (req, res) => {
   res.json({
@@ -789,7 +789,7 @@ router.get('/schedulers', (req, res) => {
 });
 
 /**
- * POST /schedulers/start — Start one or all schedulers
+ * POST /schedulers/start - Start one or all schedulers
  * Body: { scheduler: 'claims' | 'calibration' | 'all' }
  */
 router.post('/schedulers/start', async (req, res) => {
@@ -820,7 +820,7 @@ router.post('/schedulers/start', async (req, res) => {
 });
 
 /**
- * POST /schedulers/stop — Stop one or all schedulers
+ * POST /schedulers/stop - Stop one or all schedulers
  * Body: { scheduler: 'claims' | 'calibration' | 'all' }
  */
 router.post('/schedulers/stop', async (req, res) => {

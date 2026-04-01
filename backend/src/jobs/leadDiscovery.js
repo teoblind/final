@@ -28,7 +28,7 @@ async function runDiscoveryCycle() {
       try {
         await runWithTenant(tenant.id, async () => {
           const result = await runFullCycle(tenant.id);
-          console.log(`[LeadDiscovery] ${tenant.id} — discovered: ${result.discovery?.newLeads || 0}, enriched: ${result.enrichment?.enriched || 0}, outreach: ${result.outreach?.generated || 0}`);
+          console.log(`[LeadDiscovery] ${tenant.id} - discovered: ${result.discovery?.newLeads || 0}, enriched: ${result.enrichment?.enriched || 0}, outreach: ${result.outreach?.generated || 0}`);
         });
       } catch (err) {
         console.error(`[LeadDiscovery] Error for tenant ${tenant.id}:`, err.message);
@@ -55,7 +55,7 @@ export function startLeadDiscoveryJob({ runAtHour = 2, intervalHours = 24 } = {}
 
   const msToFirstRun = msUntilTime(runAtHour);
   const hoursToFirst = (msToFirstRun / 3600000).toFixed(1);
-  console.log(`[LeadDiscovery] Scheduled — first run in ${hoursToFirst}h (at ${runAtHour}:00), then every ${intervalHours}h`);
+  console.log(`[LeadDiscovery] Scheduled - first run in ${hoursToFirst}h (at ${runAtHour}:00), then every ${intervalHours}h`);
 
   scheduledTimeout = setTimeout(() => {
     runDiscoveryCycle().catch(err => console.error('[LeadDiscovery] Scheduled run failed:', err.message));

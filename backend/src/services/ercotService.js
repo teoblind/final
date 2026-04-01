@@ -75,7 +75,7 @@ async function ercotApiGet(endpoint, params = {}) {
 }
 
 // =============================================================================
-// EIA API (for fuel mix — free, just needs API key)
+// EIA API (for fuel mix - free, just needs API key)
 // =============================================================================
 async function fetchEiaFuelMix() {
   const key = process.env.EIA_API_KEY;

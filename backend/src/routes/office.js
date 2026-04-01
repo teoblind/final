@@ -1,5 +1,5 @@
 /**
- * Office Status Routes — OpenClaw Office Visualization
+ * Office Status Routes - OpenClaw Office Visualization
  *
  * Provides a unified endpoint that aggregates agent statuses,
  * recent activity, and meeting bot state across all tenants
@@ -15,7 +15,7 @@ import { getCalendarPollStatus } from '../jobs/calendarPoll.js';
 
 const router = express.Router();
 
-// Simple API key auth for office frontend (not full JWT — office runs standalone)
+// Simple API key auth for office frontend (not full JWT - office runs standalone)
 router.use((req, res, next) => {
   const key = req.headers['x-office-key'] || req.query.key;
   const expected = process.env.OFFICE_API_KEY || 'dev-office-key';
@@ -36,7 +36,7 @@ async function getRuntime() {
 }
 
 /**
- * GET /status — Unified office status for all tenants
+ * GET /status - Unified office status for all tenants
  *
  * Returns agents (Clawbot + per-tenant email agents), recent activities,
  * and active meeting bots in a single payload.

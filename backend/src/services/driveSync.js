@@ -1,5 +1,5 @@
 /**
- * Drive Sync Service — Crawls tenant's Google Drive, extracts text, stores for RAG
+ * Drive Sync Service - Crawls tenant's Google Drive, extracts text, stores for RAG
  *
  * Uses the tenant agent's OAuth token to list all accessible files,
  * export text from Google Docs/Sheets/Slides, and store in SQLite

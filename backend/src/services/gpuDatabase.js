@@ -1,5 +1,5 @@
 /**
- * GPU Model Database — Phase 7: HPC / AI Compute Abstraction Layer
+ * GPU Model Database - Phase 7: HPC / AI Compute Abstraction Layer
  *
  * Pre-populated specifications for datacenter-grade GPU accelerators used in
  * AI training, inference, and HPC workloads. Provides fleet power/performance

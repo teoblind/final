@@ -130,7 +130,7 @@ export async function deliverWebhook(webhookId, eventType, data) {
 }
 
 /**
- * Shared failure handler — logs the delivery and bumps the failure counter.
+ * Shared failure handler - logs the delivery and bumps the failure counter.
  * If the webhook has failed >= 10 consecutive times it is paused.
  */
 function handleDeliveryFailure(webhookId, eventType, payload, statusCode, responseBody) {
@@ -192,7 +192,7 @@ export async function retryFailedDeliveries() {
 
   for (const delivery of pending) {
     if (delivery.attempts >= 3) {
-      // Give up — mark abandoned
+      // Give up - mark abandoned
       insertWebhookDelivery({
         webhookId: delivery.webhook_id,
         eventType: delivery.event_type,

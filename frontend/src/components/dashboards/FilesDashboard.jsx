@@ -2505,7 +2505,7 @@ export default function FilesDashboard() {
         </div>
       </div>
 
-      {/* Type filter tabs removed — folders already organize by type */}
+      {/* Type filter tabs removed - folders already organize by type */}
 
       {Object.keys(folders).length === 0 && !loading ? (
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-12 text-center">

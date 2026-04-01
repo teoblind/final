@@ -40,7 +40,7 @@ async function proxyRequest(url, options = {}) {
   try {
     response = await fetch(url, options);
   } catch (err) {
-    // Network-level failure — service is unreachable
+    // Network-level failure - service is unreachable
     const error = new Error('Workspace agent is unavailable');
     error.status = 503;
     error.detail = err.message;
@@ -69,7 +69,7 @@ async function proxyRequest(url, options = {}) {
 
 // ─── Tool Proxy ──────────────────────────────────────────────────────────────
 
-/** POST /tools/:toolName — Proxy any tool call to the Python workspace agent */
+/** POST /tools/:toolName - Proxy any tool call to the Python workspace agent */
 router.post('/tools/:toolName', async (req, res) => {
   try {
     const tenantId = getTenantId(req);
@@ -92,7 +92,7 @@ router.post('/tools/:toolName', async (req, res) => {
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
-/** GET /templates — List available workspace templates */
+/** GET /templates - List available workspace templates */
 router.get('/templates', async (req, res) => {
   try {
     const tenantId = getTenantId(req);
@@ -108,7 +108,7 @@ router.get('/templates', async (req, res) => {
   }
 });
 
-/** GET /templates/:templateId — Get a specific template */
+/** GET /templates/:templateId - Get a specific template */
 router.get('/templates/:templateId', async (req, res) => {
   try {
     const tenantId = getTenantId(req);
@@ -127,7 +127,7 @@ router.get('/templates/:templateId', async (req, res) => {
 
 // ─── Health ──────────────────────────────────────────────────────────────────
 
-/** GET /health — Health check for the workspace agent service */
+/** GET /health - Health check for the workspace agent service */
 router.get('/health', async (req, res) => {
   try {
     const result = await proxyRequest(`${WORKSPACE_URL}/health`, {
@@ -147,7 +147,7 @@ router.get('/health', async (req, res) => {
 
 // ─── Files ───────────────────────────────────────────────────────────────────
 
-/** GET /files — List recent files from the workspace (via search with generic query) */
+/** GET /files - List recent files from the workspace (via search with generic query) */
 router.get('/files', async (req, res) => {
   const tenantId = getTenantId(req);
 

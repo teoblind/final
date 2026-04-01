@@ -1,5 +1,5 @@
 /**
- * Notification Routes — Phase 6
+ * Notification Routes - Phase 6
  *
  * In-dashboard notification system for agent events,
  * approvals, and operational alerts.
@@ -17,7 +17,7 @@ import { authenticate } from '../middleware/auth.js';
 const router = express.Router();
 router.use(authenticate);
 
-/** GET / — Get notifications */
+/** GET / - Get notifications */
 router.get('/', (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
@@ -30,7 +30,7 @@ router.get('/', (req, res) => {
   }
 });
 
-/** GET /count — Get unread count only (lightweight polling) */
+/** GET /count - Get unread count only (lightweight polling) */
 router.get('/count', (req, res) => {
   try {
     const count = getUnreadNotificationCount();
@@ -40,7 +40,7 @@ router.get('/count', (req, res) => {
   }
 });
 
-/** POST /:id/read — Mark notification as read */
+/** POST /:id/read - Mark notification as read */
 router.post('/:id/read', (req, res) => {
   try {
     markNotificationRead(parseInt(req.params.id));
@@ -50,7 +50,7 @@ router.post('/:id/read', (req, res) => {
   }
 });
 
-/** POST /read-all — Mark all as read */
+/** POST /read-all - Mark all as read */
 router.post('/read-all', (req, res) => {
   try {
     markAllNotificationsRead();
@@ -60,7 +60,7 @@ router.post('/read-all', (req, res) => {
   }
 });
 
-/** POST /:id/dismiss — Dismiss notification */
+/** POST /:id/dismiss - Dismiss notification */
 router.post('/:id/dismiss', (req, res) => {
   try {
     dismissNotification(parseInt(req.params.id));

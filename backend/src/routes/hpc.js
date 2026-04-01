@@ -1,5 +1,5 @@
 /**
- * HPC Contract & SLA Routes — Phase 7
+ * HPC Contract & SLA Routes - Phase 7
  *
  * API endpoints for managing HPC/AI compute contracts,
  * tracking SLA compliance, monitoring breach risks,
@@ -42,7 +42,7 @@ async function getHpcService() {
 // ─── List Contracts ─────────────────────────────────────────────────────────
 
 /**
- * GET /contracts — List all HPC contracts with computed uptime
+ * GET /contracts - List all HPC contracts with computed uptime
  */
 router.get('/contracts', async (req, res) => {
   try {
@@ -103,7 +103,7 @@ router.get('/contracts', async (req, res) => {
 // ─── Create Contract ────────────────────────────────────────────────────────
 
 /**
- * POST /contracts — Create a new HPC contract
+ * POST /contracts - Create a new HPC contract
  */
 router.post('/contracts', (req, res) => {
   try {
@@ -155,7 +155,7 @@ router.post('/contracts', (req, res) => {
 // ─── Update Contract ────────────────────────────────────────────────────────
 
 /**
- * PUT /contracts/:id — Update an existing HPC contract
+ * PUT /contracts/:id - Update an existing HPC contract
  */
 router.put('/contracts/:id', (req, res) => {
   try {
@@ -176,7 +176,7 @@ router.put('/contracts/:id', (req, res) => {
 // ─── Delete (Archive) Contract ──────────────────────────────────────────────
 
 /**
- * DELETE /contracts/:id — Archive (soft delete) an HPC contract
+ * DELETE /contracts/:id - Archive (soft delete) an HPC contract
  */
 router.delete('/contracts/:id', (req, res) => {
   try {
@@ -197,7 +197,7 @@ router.delete('/contracts/:id', (req, res) => {
 // ─── SLA Compliance for One Contract ────────────────────────────────────────
 
 /**
- * GET /contracts/:id/sla — SLA compliance details for one contract
+ * GET /contracts/:id/sla - SLA compliance details for one contract
  * Query params: ?days=30
  */
 router.get('/contracts/:id/sla', async (req, res) => {
@@ -254,7 +254,7 @@ router.get('/contracts/:id/sla', async (req, res) => {
 // ─── Overall SLA Summary ────────────────────────────────────────────────────
 
 /**
- * GET /sla/summary — Overall SLA summary across all contracts
+ * GET /sla/summary - Overall SLA summary across all contracts
  * Query params: ?days=30
  */
 router.get('/sla/summary', async (req, res) => {
@@ -328,7 +328,7 @@ router.get('/sla/summary', async (req, res) => {
 // ─── Contract Calendar ──────────────────────────────────────────────────────
 
 /**
- * GET /calendar — Contract calendar view
+ * GET /calendar - Contract calendar view
  */
 router.get('/calendar', async (req, res) => {
   try {

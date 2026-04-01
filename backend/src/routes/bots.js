@@ -19,7 +19,7 @@ import { optionalAuth, authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// External paths (defaults — can be overridden per-bot via registration config)
+// External paths (defaults - can be overridden per-bot via registration config)
 const LEADS_DB_PATH = join(homedir(), 'Charger-Bot/data/leads.db');
 const MEETINGS_DIR = join(homedir(), 'Desktop/notes/Meetings');
 const RECORDER_LOGS_DIR = join(homedir(), 'Desktop/notes/setup/logs');
@@ -435,7 +435,7 @@ router.get('/stats', (req, res) => {
 
 // ─── Authenticated team endpoints ───────────────────────────────────────────
 
-// GET /api/v1/bots/team — list all bots registered by team members
+// GET /api/v1/bots/team - list all bots registered by team members
 router.get('/team', authenticate, (req, res) => {
   try {
     const bots = getBotRegistrationsByTenant(req.user.tenantId);
@@ -445,7 +445,7 @@ router.get('/team', authenticate, (req, res) => {
   }
 });
 
-// POST /api/v1/bots/register — register a bot for the current user
+// POST /api/v1/bots/register - register a bot for the current user
 router.post('/register', authenticate, (req, res) => {
   try {
     const { name, botType, config } = req.body;
@@ -469,7 +469,7 @@ router.post('/register', authenticate, (req, res) => {
   }
 });
 
-// PUT /api/v1/bots/register/:id — update a registered bot
+// PUT /api/v1/bots/register/:id - update a registered bot
 router.put('/register/:id', authenticate, (req, res) => {
   try {
     const { name, config, status } = req.body;
@@ -484,7 +484,7 @@ router.put('/register/:id', authenticate, (req, res) => {
   }
 });
 
-// DELETE /api/v1/bots/register/:id — remove a registered bot (owner only)
+// DELETE /api/v1/bots/register/:id - remove a registered bot (owner only)
 router.delete('/register/:id', authenticate, (req, res) => {
   try {
     deleteBotRegistration(req.params.id, req.user.id);
@@ -494,7 +494,7 @@ router.delete('/register/:id', authenticate, (req, res) => {
   }
 });
 
-// POST /api/v1/bots/events/:eventId/comments — add a comment on a bot event
+// POST /api/v1/bots/events/:eventId/comments - add a comment on a bot event
 router.post('/events/:eventId/comments', authenticate, (req, res) => {
   try {
     const { text } = req.body;
@@ -512,7 +512,7 @@ router.post('/events/:eventId/comments', authenticate, (req, res) => {
   }
 });
 
-// GET /api/v1/bots/events/:eventId/comments — get comments for a bot event
+// GET /api/v1/bots/events/:eventId/comments - get comments for a bot event
 router.get('/events/:eventId/comments', authenticate, (req, res) => {
   try {
     const comments = getBotComments(req.params.eventId, req.user.tenantId);

@@ -1,5 +1,5 @@
 /**
- * Web Browse Service — fetch URLs and extract clean text content
+ * Web Browse Service - fetch URLs and extract clean text content
  *
  * Uses native fetch + cheerio to scrape pages. Strips noise (scripts, styles, nav, ads)
  * and returns structured data: title, description, text, and links.
@@ -64,7 +64,7 @@ export async function browseUrl(url, options = {}) {
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
-    // Non-HTML — return raw text preview
+    // Non-HTML - return raw text preview
     const text = await response.text();
     return {
       title: parsed.hostname,

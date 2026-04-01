@@ -1,5 +1,5 @@
 /**
- * Unified Curtailment Engine — Phase 7
+ * Unified Curtailment Engine - Phase 7
  *
  * Extends the existing BTC mining curtailment engine to support HPC/AI workloads.
  * Provides unified curtailment recommendations across both BTC mining and HPC
@@ -67,7 +67,7 @@ function getDefaultNode() {
  *
  * Contract types handled:
  *   - firm / reserved (non-interruptible): ALWAYS run, never curtail
- *   - spot / burst: treat like BTC mining — curtail when energy cost > spot revenue
+ *   - spot / burst: treat like BTC mining - curtail when energy cost > spot revenue
  *   - interruptible reserved: curtail only when energy_savings > (contract_revenue + curtailment_penalty)
  *
  * @param {object} workload - Workload row from the database
@@ -550,7 +550,7 @@ export async function generateUnifiedSchedule(opts = {}) {
           }
         }
       } else {
-        // No contracts — treat as spot
+        // No contracts - treat as spot
         contractHourActions.push({
           contractId: null,
           customer: null,

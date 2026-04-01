@@ -1,5 +1,5 @@
 /**
- * Estimate Pipeline — End-to-end RFQ → Estimate → Excel → Reply
+ * Estimate Pipeline - End-to-end RFQ → Estimate → Excel → Reply
  *
  * Parses incoming RFQ emails, creates bid requests, generates estimates,
  * builds Excel attachments, and sends reply emails.
@@ -127,7 +127,7 @@ function extractDueDate(body) {
 
 async function generateEstimateExcel(estimate) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = 'DACP Construction — Coppice AI';
+  wb.creator = 'DACP Construction - Coppice AI';
   wb.created = new Date();
 
   const ws = wb.addWorksheet('Estimate');
@@ -160,7 +160,7 @@ async function generateEstimateExcel(estimate) {
   titleCell.alignment = { horizontal: 'left' };
 
   ws.mergeCells('A2:G2');
-  ws.getCell('A2').value = `Bid Proposal — ${estimate.projectName}`;
+  ws.getCell('A2').value = `Bid Proposal - ${estimate.projectName}`;
   ws.getCell('A2').font = { size: 12, color: { argb: 'FF666666' } };
 
   ws.mergeCells('A3:G3');
@@ -324,7 +324,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
     tenantId,
     type: 'in',
     title: `New RFQ from ${gcName}`,
-    subtitle: `${subject} — ${scopeItems.length} scope items`,
+    subtitle: `${subject} - ${scopeItems.length} scope items`,
     detailJson: JSON.stringify({ from, gcName, scopeItems, dueDate, bidId }),
     sourceType: 'email',
     sourceId: `rfq-${messageId}`,
@@ -347,7 +347,7 @@ export async function processRfqEmail({ messageId, threadId, from, fromName, sub
     tenantId,
     type: 'agent',
     title: `Estimate generated: $${estimate.totalBid.toLocaleString()}`,
-    subtitle: `${estimate.projectName} — ${(estimate.lineItems || []).length} line items, ${estimate.confidence} confidence`,
+    subtitle: `${estimate.projectName} - ${(estimate.lineItems || []).length} line items, ${estimate.confidence} confidence`,
     detailJson: JSON.stringify({ estimateId: estimate.id, totalBid: estimate.totalBid, confidence: estimate.confidence, lineItems: estimate.lineItems?.length, comparables: comparables?.length }),
     sourceType: 'estimate',
     sourceId: `est-${estimate.id}`,
@@ -400,7 +400,7 @@ CONFIDENTIALITY (critical):
 - NEVER mention other clients, GCs, or projects by name
 - NEVER reference specific pricing, deal terms, or bid amounts from other jobs
 - NEVER fabricate case studies or client references
-- If referencing past work, say "we've done similar scope" — never name names or cite specific numbers from other projects`;
+- If referencing past work, say "we've done similar scope" - never name names or cite specific numbers from other projects`;
 
   let agentResponse;
   try {
@@ -414,12 +414,12 @@ CONFIDENTIALITY (critical):
   const replySubject = subject.startsWith('Re:') || subject.startsWith('RE:') ? subject : `Re: ${subject}`;
   const html = markdownToEmailHtml(agentResponse);
 
-  // Check copilot mode — if enabled, queue for approval instead of auto-sending
+  // Check copilot mode - if enabled, queue for approval instead of auto-sending
   const agentMode = getAgentMode('estimating');
   const isCopilot = agentMode === 'copilot';
 
   if (isCopilot) {
-    // Queue the reply as an approval item — user must approve before it sends
+    // Queue the reply as an approval item - user must approve before it sends
     const approvalPayload = {
       to: from,
       subject: replySubject,
@@ -447,20 +447,20 @@ CONFIDENTIALITY (critical):
     // Update bid status to 'draft' (pending approval)
     updateDacpBidRequest(tenantId, bidId, { status: 'draft' });
 
-    console.log(`[EstimatePipeline] Reply queued for approval (copilot mode) — ${estimate.id}`);
+    console.log(`[EstimatePipeline] Reply queued for approval (copilot mode) - ${estimate.id}`);
 
     insertActivity({
       tenantId,
       type: 'agent',
-      title: `Estimate reply drafted — awaiting approval`,
-      subtitle: `$${estimate.totalBid.toLocaleString()} to ${gcName} — review in Approvals`,
+      title: `Estimate reply drafted - awaiting approval`,
+      subtitle: `$${estimate.totalBid.toLocaleString()} to ${gcName} - review in Approvals`,
       detailJson: JSON.stringify({ to: from, estimateId: estimate.id, totalBid: estimate.totalBid, excelFile: filename, copilotPending: true }),
       sourceType: 'email',
       sourceId: `draft-${messageId}`,
       agentId: 'estimating',
     });
   } else {
-    // Autonomous mode — send immediately
+    // Autonomous mode - send immediately
     await sendEmailWithAttachments({
       to: from,
       subject: replySubject,
@@ -482,7 +482,7 @@ CONFIDENTIALITY (critical):
       tenantId,
       type: 'out',
       title: `Bid proposal sent to ${gcName}`,
-      subtitle: `$${estimate.totalBid.toLocaleString()} — ${estimate.projectName}`,
+      subtitle: `$${estimate.totalBid.toLocaleString()} - ${estimate.projectName}`,
       detailJson: JSON.stringify({ to: from, estimateId: estimate.id, totalBid: estimate.totalBid, excelFile: filename }),
       sourceType: 'email',
       sourceId: `reply-${messageId}`,

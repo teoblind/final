@@ -1,13 +1,13 @@
 /**
- * Knowledge Routes — Ingestion, search, and entity queries
+ * Knowledge Routes - Ingestion, search, and entity queries
  *
- * POST   /api/v1/knowledge/ingest         — Ingest a transcript/document
- * GET    /api/v1/knowledge/search         — Search knowledge base
- * GET    /api/v1/knowledge/entity/:name   — Get everything linked to an entity
- * GET    /api/v1/knowledge/action-items   — Get open action items
- * GET    /api/v1/knowledge/recent         — Get recent entries
- * GET    /api/v1/knowledge/entries/:id    — Get full entry detail (transcript, actions, entities)
- * GET    /api/v1/knowledge/entities       — List all entities for a tenant
+ * POST   /api/v1/knowledge/ingest         - Ingest a transcript/document
+ * GET    /api/v1/knowledge/search         - Search knowledge base
+ * GET    /api/v1/knowledge/entity/:name   - Get everything linked to an entity
+ * GET    /api/v1/knowledge/action-items   - Get open action items
+ * GET    /api/v1/knowledge/recent         - Get recent entries
+ * GET    /api/v1/knowledge/entries/:id    - Get full entry detail (transcript, actions, entities)
+ * GET    /api/v1/knowledge/entities       - List all entities for a tenant
  */
 
 import express from 'express';
@@ -40,7 +40,7 @@ const audioUpload = multer({
   limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
 });
 
-// Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
+// Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
     const tenantId = getCurrentTenantId() || 'default';
@@ -56,7 +56,7 @@ const router = express.Router();
 // ─── Public routes (no auth) ─────────────────────────────────────────────────
 
 /**
- * GET /shared/:token — Public share link for a meeting
+ * GET /shared/:token - Public share link for a meeting
  * Returns meeting data if share_enabled = 1
  */
 router.get('/shared/:token', async (req, res) => {
@@ -106,7 +106,7 @@ router.get('/shared/:token', async (req, res) => {
 });
 
 /**
- * GET /audio/:id — Serve meeting audio file (public)
+ * GET /audio/:id - Serve meeting audio file (public)
  */
 router.get('/audio/:id', async (req, res) => {
   try {
@@ -135,7 +135,7 @@ function resolveIds(req) {
 }
 
 /**
- * POST /ingest — Ingest a transcript, document, or call recording
+ * POST /ingest - Ingest a transcript, document, or call recording
  */
 router.post('/ingest', async (req, res) => {
   try {
@@ -179,7 +179,7 @@ router.post('/ingest', async (req, res) => {
     insertActivity({
       tenantId, type: 'doc',
       title: `Ingested: ${title || 'Untitled'}`,
-      subtitle: `${type} — ${(content || transcript || '').slice(0, 80)}`,
+      subtitle: `${type} - ${(content || transcript || '').slice(0, 80)}`,
       detailJson: JSON.stringify({ type, source, title }),
       sourceType: 'knowledge', sourceId: entryId, agentId: 'knowledge',
     });
@@ -192,7 +192,7 @@ router.post('/ingest', async (req, res) => {
 });
 
 /**
- * POST /share-to-hivemind — Share a completed assignment or chat thread to the knowledge graph
+ * POST /share-to-hivemind - Share a completed assignment or chat thread to the knowledge graph
  */
 router.post('/share-to-hivemind', async (req, res) => {
   try {
@@ -269,7 +269,7 @@ router.post('/share-to-hivemind', async (req, res) => {
 });
 
 /**
- * GET /search — Search across all knowledge entries
+ * GET /search - Search across all knowledge entries
  */
 router.get('/search', async (req, res) => {
   try {
@@ -290,7 +290,7 @@ router.get('/search', async (req, res) => {
 });
 
 /**
- * GET /entity/:name — Get everything linked to a specific entity
+ * GET /entity/:name - Get everything linked to a specific entity
  */
 router.get('/entity/:name', async (req, res) => {
   try {
@@ -304,7 +304,7 @@ router.get('/entity/:name', async (req, res) => {
 });
 
 /**
- * GET /action-items — Get action items (open by default, or all)
+ * GET /action-items - Get action items (open by default, or all)
  */
 router.get('/action-items', async (req, res) => {
   try {
@@ -333,7 +333,7 @@ router.get('/action-items', async (req, res) => {
 });
 
 /**
- * PATCH /action-items/:id — Update action item status
+ * PATCH /action-items/:id - Update action item status
  */
 router.patch('/action-items/:id', async (req, res) => {
   try {
@@ -367,7 +367,7 @@ router.patch('/action-items/:id', async (req, res) => {
 });
 
 /**
- * POST /entries/:id/share — Generate a public share link for a meeting
+ * POST /entries/:id/share - Generate a public share link for a meeting
  */
 router.post('/entries/:id/share', async (req, res) => {
   try {
@@ -392,7 +392,7 @@ router.post('/entries/:id/share', async (req, res) => {
 });
 
 /**
- * DELETE /entries/:id/share — Disable sharing for a meeting
+ * DELETE /entries/:id/share - Disable sharing for a meeting
  */
 router.delete('/entries/:id/share', async (req, res) => {
   try {
@@ -412,7 +412,7 @@ router.delete('/entries/:id/share', async (req, res) => {
 });
 
 /**
- * POST /entries/:id/audio — Upload audio file for a meeting
+ * POST /entries/:id/audio - Upload audio file for a meeting
  * Accepts multipart form with 'audio' field
  */
 router.post('/entries/:id/audio', audioUpload.single('audio'), async (req, res) => {
@@ -442,7 +442,7 @@ router.post('/entries/:id/audio', audioUpload.single('audio'), async (req, res) 
 });
 
 /**
- * GET /recent — Get most recent knowledge entries
+ * GET /recent - Get most recent knowledge entries
  */
 router.get('/recent', async (req, res) => {
   try {
@@ -465,7 +465,7 @@ router.get('/recent', async (req, res) => {
 });
 
 /**
- * GET /entries/:id — Full entry detail with transcript, action items, and linked entities
+ * GET /entries/:id - Full entry detail with transcript, action items, and linked entities
  */
 router.get('/entries/:id', async (req, res) => {
   try {
@@ -499,7 +499,7 @@ router.get('/entries/:id', async (req, res) => {
 });
 
 /**
- * GET /entities — List all entities for the tenant (people, companies, projects)
+ * GET /entities - List all entities for the tenant (people, companies, projects)
  */
 router.get('/entities', async (req, res) => {
   try {
@@ -532,7 +532,7 @@ router.get('/entities', async (req, res) => {
 });
 
 /**
- * DELETE /entities/:id — Delete an entity
+ * DELETE /entities/:id - Delete an entity
  */
 router.delete('/entities/:id', async (req, res) => {
   try {
@@ -556,7 +556,7 @@ router.delete('/entities/:id', async (req, res) => {
 });
 
 /**
- * POST /meeting-complete — Process a completed meeting: extract per-person tasks + send emails
+ * POST /meeting-complete - Process a completed meeting: extract per-person tasks + send emails
  *
  * Called by MeetingBot after transcription + summarization.
  * Body: { title, transcript, summary, attendees: string[] }
@@ -605,7 +605,7 @@ router.post('/meeting-complete', async (req, res) => {
       console.error(`[MeetingComplete] Failed:`, err.message);
     });
 
-    res.json({ id: entryId, status: 'processing', message: 'Meeting ingested — extracting tasks and sending emails' });
+    res.json({ id: entryId, status: 'processing', message: 'Meeting ingested - extracting tasks and sending emails' });
   } catch (error) {
     console.error('Meeting-complete error:', error);
     res.status(500).json({ error: error.message });

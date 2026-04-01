@@ -452,7 +452,7 @@ function stripHtmlToText(html) {
 function storeNewsletter(tenantId, html, searchResults) {
   try {
     const db = getTenantDb(tenantId);
-    // Deterministic ID per tenant per day — re-runs REPLACE instead of creating duplicates
+    // Deterministic ID per tenant per day - re-runs REPLACE instead of creating duplicates
     const dateKey = new Date().toISOString().slice(0, 10);
     const id = `newsletter-${dateKey}-${tenantId.slice(0, 8)}`;
     const plainText = stripHtmlToText(html);

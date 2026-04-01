@@ -1,5 +1,5 @@
 /**
- * Hashprice Engine — Core calculation engine for fleet-aware mining profitability.
+ * Hashprice Engine - Core calculation engine for fleet-aware mining profitability.
  *
  * Computes hashprice at three levels:
  *   1. Network-level (what the existing macro panel shows)
@@ -7,7 +7,7 @@
  *   3. Machine-level (per ASIC model profitability)
  *
  * Designed as a pure calculation module that Phase 4 (Curtailment) can consume
- * programmatically — no Express/HTTP dependencies.
+ * programmatically - no Express/HTTP dependencies.
  */
 
 import axios from 'axios';
@@ -68,7 +68,7 @@ export async function fetchNetworkData() {
     // Rough estimate: use hashrate growth as proxy
     const estimatedAdjustmentPercent = 0; // We'll refine this from historical data
 
-    // Average transaction fees — use approximate 0.5 BTC/block as baseline
+    // Average transaction fees - use approximate 0.5 BTC/block as baseline
     // This is the same approximation used in the existing hashprice route
     const avgFeesPerBlock = 0.5;
 

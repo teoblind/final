@@ -21,21 +21,21 @@ let pollInterval = null;
 let lastPoll = null;
 let repliesFound = 0;
 
-// Token health tracking — in-memory map of { label -> { status, lastChecked, error } }
+// Token health tracking - in-memory map of { label -> { status, lastChecked, error } }
 const tokenHealth = new Map();
 let lastHealthCheck = null;
 
 // Track which inboxes need the fallback client (persists across poll cycles)
 const useFallbackClient = new Set();
 
-// In-memory set of message IDs currently being processed — prevents overlapping
+// In-memory set of message IDs currently being processed - prevents overlapping
 // poll cycles from double-processing the same message concurrently.
 const currentlyProcessing = new Set();
 
 // Maximum number of retry attempts before giving up permanently.
 const MAX_RETRIES = 3;
 
-// OAuth app credentials — lazy evaluation to avoid ESM ordering bug
+// OAuth app credentials - lazy evaluation to avoid ESM ordering bug
 // (admin.js statically imports this module before dotenv.config() runs)
 let _clientPairs = null;
 function getClientPairs() {
@@ -218,7 +218,7 @@ async function extractAttachmentText(attachments) {
 /**
  * Persist extracted attachment text to knowledge_entries for future retrieval.
  * Parses each attachment (PDF, DOCX, XLSX, CSV, TXT) and saves up to 50KB of
- * text per attachment. Fire-and-forget — errors are caught and logged.
+ * text per attachment. Fire-and-forget - errors are caught and logged.
  */
 async function saveAttachmentKnowledge(attachments, { tenantId, senderEmail, subject, threadId, messageId }) {
   if (!attachments || attachments.length === 0) return;
@@ -438,7 +438,7 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
   // Unknown senders: don't auto-reply, but draft a response and create a
   // proposed task so the tenant can review, approve, or dismiss.
   if (!canAutoRespond(verdict)) {
-    console.log(`[GmailPoll] Unknown sender ${from} (verdict: ${verdict}) — drafting reply for approval`);
+    console.log(`[GmailPoll] Unknown sender ${from} (verdict: ${verdict}) - drafting reply for approval`);
 
     // Save to knowledge base
     let knId;
@@ -522,7 +522,7 @@ EXTERNAL COMMUNICATION GUARDRAILS (highest priority):
       tenantId: resolvedTenant,
       type: 'in',
       title: `Email from unknown sender: ${fromName || from}`,
-      subtitle: `${subject} — draft reply pending your review`,
+      subtitle: `${subject} - draft reply pending your review`,
       detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, emailGuard: classification, assignmentId, draftReply: draftReply.slice(0, 500) }),
       sourceType: 'email',
       sourceId: messageId,
@@ -626,12 +626,12 @@ EXTERNAL COMMUNICATION GUARDRAILS (highest priority):
   const isDirectlyAddressed = agentIsDirectRecipient || coppiceAddressed.test(body.slice(0, 2000));
 
   if (!isDirectlyAddressed) {
-    console.log(`[GmailPoll] Agent not directly addressed in email from ${from} ("${subject}") — observing only`);
+    console.log(`[GmailPoll] Agent not directly addressed in email from ${from} ("${subject}") - observing only`);
     insertActivity({
       tenantId: resolvedTenant,
       type: 'in',
       title: `Email from ${fromName || from}`,
-      subtitle: `${subject} (observed — agent not directly addressed)`,
+      subtitle: `${subject} (observed - agent not directly addressed)`,
       detailJson: JSON.stringify({ from, fromName, subject, body: body.slice(0, 5000), threadId, messageId, notAddressed: true }),
       sourceType: 'email',
       sourceId: messageId,
@@ -839,7 +839,7 @@ You are responding to an external email. Your text response will be sent as the 
     }
   } catch (err) {
     console.error(`[GmailPoll] Auto-reply send failed:`, err.message);
-    // Do NOT mark as processed — let the next poll cycle retry this message.
+    // Do NOT mark as processed - let the next poll cycle retry this message.
     // The caller (pollSingleInbox) handles retry counting.
     throw err;
   }
@@ -849,7 +849,7 @@ You are responding to an external email. Your text response will be sent as the 
     try {
       const threadRes = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' });
       const threadMessages = threadRes.data.messages || [];
-      let threadHtml = `<h3 style="font-family:sans-serif;color:#333;">Meeting-related thread — ${fromName || from}</h3><hr>`;
+      let threadHtml = `<h3 style="font-family:sans-serif;color:#333;">Meeting-related thread - ${fromName || from}</h3><hr>`;
       for (const tm of threadMessages) {
         const tmHeaders = tm.payload?.headers || [];
         const tmFrom = tmHeaders.find(h => h.name.toLowerCase() === 'from')?.value || 'Unknown';
@@ -857,14 +857,14 @@ You are responding to an external email. Your text response will be sent as the 
         const tmBody = extractEmailBody(tm.payload);
         const tmHtml = markdownToEmailHtml(tmBody);
         threadHtml += `<div style="margin:16px 0;padding:12px;border-left:3px solid #ddd;font-family:sans-serif;">`;
-        threadHtml += `<div style="font-size:12px;color:#666;margin-bottom:8px;"><strong>${tmFrom}</strong> — ${tmDate}</div>`;
+        threadHtml += `<div style="font-size:12px;color:#666;margin-bottom:8px;"><strong>${tmFrom}</strong> - ${tmDate}</div>`;
         threadHtml += tmHtml;
         threadHtml += `</div>`;
       }
-      threadHtml += `<hr><p style="font-family:sans-serif;font-size:12px;color:#999;">Auto-forwarded by Coppice — reply directly to ${from} to join the conversation.</p>`;
+      threadHtml += `<hr><p style="font-family:sans-serif;font-size:12px;color:#999;">Auto-forwarded by Coppice - reply directly to ${from} to join the conversation.</p>`;
       await sendHtmlEmail({
         to: 'teo@zhan.capital',
-        subject: `[Coppice] Meeting request: ${subject} — ${fromName || from}`,
+        subject: `[Coppice] Meeting request: ${subject} - ${fromName || from}`,
         html: threadHtml,
         tenantId: resolvedTenant,
       });
@@ -985,7 +985,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
       // ─── Concurrent processing guard ───
       // Prevents overlapping poll cycles from double-processing the same message.
       if (currentlyProcessing.has(msg.id)) {
-        console.log(`[GmailPoll] [${label}] Skipping ${msg.id} — already being processed by another poll cycle`);
+        console.log(`[GmailPoll] [${label}] Skipping ${msg.id} - already being processed by another poll cycle`);
         continue;
       }
 
@@ -993,13 +993,13 @@ async function pollSingleInbox(gmail, tenantId, label) {
       // If this message has been retried MAX_RETRIES times, mark as permanently failed.
       const retryCount = getEmailRetryCount(msg.id);
       if (retryCount >= MAX_RETRIES) {
-        console.error(`[GmailPoll] [${label}] Message ${msg.id} failed after ${MAX_RETRIES} retries — giving up`);
+        console.error(`[GmailPoll] [${label}] Message ${msg.id} failed after ${MAX_RETRIES} retries - giving up`);
         markEmailProcessed({ messageId: msg.id, threadId: fullData.threadId, pipeline: 'send-failed-permanent', tenantId: tenantId || 'default' });
         insertActivity({
           tenantId: tenantId || 'default',
           type: 'in',
           title: `Auto-reply permanently failed (${MAX_RETRIES} retries exhausted)`,
-          subtitle: `Message ${msg.id} — manual follow-up required`,
+          subtitle: `Message ${msg.id} - manual follow-up required`,
           detailJson: JSON.stringify({ messageId: msg.id, threadId: fullData.threadId, retries: retryCount }),
           sourceType: 'email',
           sourceId: msg.id,
@@ -1035,7 +1035,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
 
       if (isCcOnly) {
         // Check if the sender explicitly addressed the agent in the body.
-        // Must be a DIRECT address to "Coppice" (not generic "agent") — e.g.,
+        // Must be a DIRECT address to "Coppice" (not generic "agent") - e.g.,
         // "Coppice, can you...", "Hey Coppice", "@Coppice", "Coppice please..."
         // The word "agent" alone is too ambiguous (common in construction/business).
         const coppiceDirectAddress = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
@@ -1043,12 +1043,12 @@ async function pollSingleInbox(gmail, tenantId, label) {
 
         if (!isExplicitlyAddressed) {
           const ccTenant = tenantId || 'default';
-          console.log(`[GmailPoll] [${label}] CC-only from ${senderEmail} — observing, not replying ("${subject}")`);
+          console.log(`[GmailPoll] [${label}] CC-only from ${senderEmail} - observing, not replying ("${subject}")`);
           insertActivity({
             tenantId: ccTenant,
             type: 'in',
             title: `CC'd email from ${senderName || senderEmail}`,
-            subtitle: `${subject} (observed — agent not directly addressed)`,
+            subtitle: `${subject} (observed - agent not directly addressed)`,
             detailJson: JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id, ccOnly: true }),
             sourceType: 'email',
             sourceId: msg.id,
@@ -1068,7 +1068,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
               JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id }),
               `cc-observe:${senderEmail}`
             );
-            // Process async — extract entities, summaries, enrich contacts
+            // Process async - extract entities, summaries, enrich contacts
             processKnowledgeEntry(knEntryId, ccTenant).catch(err => {
               console.warn(`[GmailPoll] CC knowledge processing failed: ${err.message}`);
             });
@@ -1082,7 +1082,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
             if (firefliesUrlMatch) {
               const meetingId = extractFirefliesMeetingId(firefliesUrlMatch[0]);
               if (meetingId) {
-                console.log(`[GmailPoll] Fireflies URL detected in CC email — fetching transcript for ${meetingId}`);
+                console.log(`[GmailPoll] Fireflies URL detected in CC email - fetching transcript for ${meetingId}`);
                 const transcript = await fetchFirefliesTranscript(ccTenant, meetingId);
                 if (transcript) {
                   // Store the full transcript as a separate knowledge entry
@@ -1198,7 +1198,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           newReplies++;
           continue;
         }
-        console.log(`[GmailPoll] [${label}] CC-only but explicitly addressed by ${senderEmail} — processing normally`);
+        console.log(`[GmailPoll] [${label}] CC-only but explicitly addressed by ${senderEmail} - processing normally`);
       }
 
       // ─── Owner/internal sender detection ───────────────────────────────
@@ -1210,17 +1210,17 @@ If you are missing critical context (like meeting notes or recordings mentioned 
       const isOwner = senderTrustRecord?.trust_level === 'owner';
 
       if (isOwner && !isCcOnly) {
-        // Owner sent email TO the agent — only respond if explicitly addressed
+        // Owner sent email TO the agent - only respond if explicitly addressed
         const coppiceDirectAddress = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
         const isExplicitlyAddressed = coppiceDirectAddress.test(body.slice(0, 2000));
 
         if (!isExplicitlyAddressed) {
-          console.log(`[GmailPoll] [${label}] Owner ${senderEmail} — observing, not replying ("${subject}")`);
+          console.log(`[GmailPoll] [${label}] Owner ${senderEmail} - observing, not replying ("${subject}")`);
           insertActivity({
             tenantId: ownerTenant,
             type: 'in',
             title: `Email from owner: ${senderName || senderEmail}`,
-            subtitle: `${subject} (observed — owner not explicitly requesting agent action)`,
+            subtitle: `${subject} (observed - owner not explicitly requesting agent action)`,
             detailJson: JSON.stringify({ from: senderEmail, fromName: senderName, subject, body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id, ownerObserve: true }),
             sourceType: 'email',
             sourceId: msg.id,
@@ -1260,7 +1260,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           newReplies++;
           continue;
         }
-        console.log(`[GmailPoll] [${label}] Owner ${senderEmail} explicitly addressed Coppice — processing task`);
+        console.log(`[GmailPoll] [${label}] Owner ${senderEmail} explicitly addressed Coppice - processing task`);
       }
 
       // ─── Thread-level dedup: skip if we already replied to this thread ───
@@ -1283,7 +1283,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
       if (isAutoReply || isOOO || isBounce) {
         const skipReason = isBounce ? 'bounce' : isOOO ? 'out-of-office' : 'auto-reply';
-        console.log(`[GmailPoll] [${label}] Skipping ${skipReason}: ${senderEmail} — "${subject}"`);
+        console.log(`[GmailPoll] [${label}] Skipping ${skipReason}: ${senderEmail} - "${subject}"`);
         insertActivity({
           tenantId: tenantId || 'default',
           type: 'in',
@@ -1313,7 +1313,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           tenantId: optOutTenant,
           type: 'in',
           title: `Opt-out: ${senderName || senderEmail}`,
-          subtitle: `Sender requested to stop receiving emails — auto-blocked`,
+          subtitle: `Sender requested to stop receiving emails - auto-blocked`,
           detailJson: JSON.stringify({ from: senderEmail, subject, body: body.slice(0, 500) }),
           sourceType: 'email',
           sourceId: msg.id,
@@ -1325,7 +1325,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         continue;
       }
 
-      // Check if this thread was already processed — handle multi-turn conversation
+      // Check if this thread was already processed - handle multi-turn conversation
       const priorThread = isThreadProcessed(msgThreadId);
       if (priorThread) {
         const followupTenant = priorThread.tenant_id || tenantId || 'default';
@@ -1340,9 +1340,9 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         }
 
         // If prior processing was cc-observe only, don't treat new messages as follow-ups
-        // to an active conversation — still apply CC detection fresh.
+        // to an active conversation - still apply CC detection fresh.
         if (priorThread.pipeline === 'cc-observe' || priorThread.pipeline === 'follow-up-cc-observe') {
-          console.log(`[GmailPoll] [${label}] Prior thread was CC-observe only — re-evaluating from scratch`);
+          console.log(`[GmailPoll] [${label}] Prior thread was CC-observe only - re-evaluating from scratch`);
           // Fall through to the main CC-detection + first-message processing below
           // (don't enter the follow-up handler)
         } else {
@@ -1363,7 +1363,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         if (fuIsCcOnly || (!fuIsInTo && !fuIsInCc)) {
           const coppiceDirectAddress = /(?:^|[\n,.!?])\s*(?:@?coppice|hey coppice|hi coppice)\s*[,:]?\s*\b(can you|could you|please|help|look|review|analyze|pull|prepare|draft|send|share|check|find|summarize|create|generate|put together|run|build|make)/im;
           if (!coppiceDirectAddress.test(body.slice(0, 2000))) {
-            console.log(`[GmailPoll] [${label}] Follow-up CC-only from ${senderEmail} — observing, not replying ("${subject}")`);
+            console.log(`[GmailPoll] [${label}] Follow-up CC-only from ${senderEmail} - observing, not replying ("${subject}")`);
             try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
             markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'follow-up-cc-observe', tenantId: followupTenant });
 
@@ -1468,11 +1468,11 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
           newReplies++;
         } catch (err) {
-          // generalEmailHandler threw — agent draft or send failed. Track retry.
+          // generalEmailHandler threw - agent draft or send failed. Track retry.
           const newRetry = retryCount + 1;
           console.warn(`[GmailPoll] [${label}] Follow-up handler failed (attempt ${newRetry}/${MAX_RETRIES}): ${err.message}`);
           markEmailRetry({ messageId: msg.id, threadId: msgThreadId, retryCount: newRetry, tenantId: followupTenant });
-          // Do NOT mark as read — let it be retried next poll cycle
+          // Do NOT mark as read - let it be retried next poll cycle
         }
         continue;
         } // close the else block for non-cc-observe prior threads
@@ -1497,12 +1497,12 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
       // SPOOFED → block completely, alert tenant
       if (classification.verdict === 'spoofed') {
-        console.warn(`[GmailPoll] [${label}] ⚠ SPOOFED email blocked: "${senderName}" <${senderEmail}> — ${classification.reason}`);
+        console.warn(`[GmailPoll] [${label}] ⚠ SPOOFED email blocked: "${senderName}" <${senderEmail}> - ${classification.reason}`);
         insertActivity({
           tenantId: resolvedTenant,
           type: 'in',
           title: `⚠ BLOCKED: Spoofed email from "${senderName}" <${senderEmail}>`,
-          subtitle: `${subject} — ${classification.reason}`,
+          subtitle: `${subject} - ${classification.reason}`,
           detailJson: JSON.stringify({
             from: senderEmail, fromName: senderName, subject,
             body: body.slice(0, 1000),
@@ -1531,7 +1531,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
       // SPAM → skip entirely, mark processed
       if (classification.verdict === 'spam') {
-        console.log(`[GmailPoll] [${label}] Spam filtered: ${senderEmail} — ${classification.reason}`);
+        console.log(`[GmailPoll] [${label}] Spam filtered: ${senderEmail} - ${classification.reason}`);
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'spam-filtered', tenantId: resolvedTenant });
         newReplies++;
@@ -1619,13 +1619,13 @@ If you are missing critical context (like meeting notes or recordings mentioned 
             console.error(`[GmailPoll] [${label}] RFQ pipeline error:`, err.message);
           }
         } else {
-          // Unknown sender sent an RFQ — log it but don't auto-respond
-          console.log(`[GmailPoll] [${label}] RFQ from unknown sender ${senderEmail} — logged, not auto-responded`);
+          // Unknown sender sent an RFQ - log it but don't auto-respond
+          console.log(`[GmailPoll] [${label}] RFQ from unknown sender ${senderEmail} - logged, not auto-responded`);
           insertActivity({
             tenantId: rfqTenant,
             type: 'in',
             title: `RFQ received from unknown sender: ${senderName || senderEmail}`,
-            subtitle: `${subject} (awaiting manual review — sender not verified)`,
+            subtitle: `${subject} (awaiting manual review - sender not verified)`,
             detailJson: JSON.stringify({
               from: senderEmail, fromName: senderName, subject,
               body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id,
@@ -1690,12 +1690,12 @@ If you are missing critical context (like meeting notes or recordings mentioned 
             console.error(`[GmailPoll] [${label}] IPP pipeline error:`, err.message);
           }
         } else {
-          console.log(`[GmailPoll] [${label}] IPP from unknown sender ${senderEmail} — logged, not auto-responded`);
+          console.log(`[GmailPoll] [${label}] IPP from unknown sender ${senderEmail} - logged, not auto-responded`);
           insertActivity({
             tenantId: ippTenant,
             type: 'in',
             title: `IPP inquiry from unknown sender: ${senderName || senderEmail}`,
-            subtitle: `${subject} (awaiting manual review — sender not verified)`,
+            subtitle: `${subject} (awaiting manual review - sender not verified)`,
             detailJson: JSON.stringify({
               from: senderEmail, fromName: senderName, subject,
               body: body.slice(0, 5000), threadId: msgThreadId, messageId: msg.id,
@@ -1751,11 +1751,11 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
           newReplies++;
         } catch (err) {
-          // generalEmailHandler threw — agent draft or send failed. Track retry.
+          // generalEmailHandler threw - agent draft or send failed. Track retry.
           const newRetry = retryCount + 1;
           console.warn(`[GmailPoll] [${label}] Contact handler failed (attempt ${newRetry}/${MAX_RETRIES}): ${err.message}`);
           markEmailRetry({ messageId: msg.id, threadId: msgThreadId, retryCount: newRetry, tenantId: contactTenant });
-          // Do NOT mark as read — let it be retried next poll cycle
+          // Do NOT mark as read - let it be retried next poll cycle
         }
 
         continue;
@@ -1802,11 +1802,11 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         newReplies++;
       } catch (err) {
-        // generalEmailHandler threw — agent draft or send failed. Track retry.
+        // generalEmailHandler threw - agent draft or send failed. Track retry.
         const newRetry = retryCount + 1;
         console.warn(`[GmailPoll] [${label}] General handler failed (attempt ${newRetry}/${MAX_RETRIES}): ${err.message}`);
         markEmailRetry({ messageId: msg.id, threadId: msgThreadId, retryCount: newRetry, tenantId: resolvedTenant });
-        // Do NOT mark as read — let it be retried next poll cycle
+        // Do NOT mark as read - let it be retried next poll cycle
       }
 
       } finally {
@@ -1849,7 +1849,7 @@ async function pollInbox() {
             console.log(`[GmailPoll] [${inbox.label}] Primary client failed, trying fallback client...`);
             const count = await runWithTenant(resolvedId, () => pollSingleInbox(fallbackGmail, inbox.tenantId, inbox.label));
             totalNew += count;
-            // Fallback worked — remember for future poll cycles
+            // Fallback worked - remember for future poll cycles
             useFallbackClient.add(inbox.label);
             continue;
           } catch (err2) {

@@ -1,12 +1,12 @@
 /**
- * Recall.ai Routes — Meeting bot management via Recall.ai
+ * Recall.ai Routes - Meeting bot management via Recall.ai
  *
- * POST   /api/v1/recall/join              — Send bot to join a meeting
- * DELETE /api/v1/recall/leave/:botId      — Remove bot from meeting
- * POST   /api/v1/recall/webhook           — Recall.ai status/transcript webhooks
- * GET    /api/v1/recall/status/:botId     — Get bot status
- * GET    /api/v1/recall/transcript/:botId — Get meeting transcript
- * GET    /api/v1/recall/bots              — List active bots
+ * POST   /api/v1/recall/join              - Send bot to join a meeting
+ * DELETE /api/v1/recall/leave/:botId      - Remove bot from meeting
+ * POST   /api/v1/recall/webhook           - Recall.ai status/transcript webhooks
+ * GET    /api/v1/recall/status/:botId     - Get bot status
+ * GET    /api/v1/recall/transcript/:botId - Get meeting transcript
+ * GET    /api/v1/recall/bots              - List active bots
  */
 
 import express from 'express';
@@ -41,11 +41,11 @@ const recallAudioUpload = multer({ dest: recallAudioDir, limits: { fileSize: 200
 
 const router = express.Router();
 
-// ── Unauthenticated routes — Recall.ai webhooks (called by Recall servers, not users) ──
+// ── Unauthenticated routes - Recall.ai webhooks (called by Recall servers, not users) ──
 
 /**
- * POST /webhook — Recall.ai webhooks for bot status changes
- * No auth — Recall.ai calls this directly.
+ * POST /webhook - Recall.ai webhooks for bot status changes
+ * No auth - Recall.ai calls this directly.
  */
 router.post('/webhook', (req, res) => {
   try {
@@ -97,8 +97,8 @@ router.post('/webhook', (req, res) => {
 });
 
 /**
- * POST /transcript-event — Real-time transcript webhook from Recall.ai
- * No auth — Recall.ai calls this directly.
+ * POST /transcript-event - Real-time transcript webhook from Recall.ai
+ * No auth - Recall.ai calls this directly.
  * Feeds both voice loop (audio response) and chat loop (text response).
  */
 router.post('/transcript-event', async (req, res) => {
@@ -144,8 +144,8 @@ router.post('/transcript-event', async (req, res) => {
 });
 
 /**
- * POST /start-voice-loop — Start voice loop for a manually-created bot (e.g. from menu bar app)
- * No auth — called by local menu bar app.
+ * POST /start-voice-loop - Start voice loop for a manually-created bot (e.g. from menu bar app)
+ * No auth - called by local menu bar app.
  * Body: { botId, tenantId?, meetingTitle? }
  */
 router.post('/start-voice-loop', (req, res) => {
@@ -165,8 +165,8 @@ router.post('/start-voice-loop', (req, res) => {
 });
 
 /**
- * POST /save-transcript — Save a locally-captured meeting transcript
- * No auth — called by local menu bar app.
+ * POST /save-transcript - Save a locally-captured meeting transcript
+ * No auth - called by local menu bar app.
  * Body: { tenantId, title, date, transcript, duration, source }
  */
 router.post('/save-transcript', async (req, res) => {
@@ -174,7 +174,7 @@ router.post('/save-transcript', async (req, res) => {
     const { tenantId = 'zhan-capital', title, date, transcript, duration, source, transcript_json, summary } = req.body;
     if (!transcript) return res.status(400).json({ error: 'transcript is required' });
 
-    // Save as a knowledge entry (meeting type) — processed=0 so AI pipeline picks it up
+    // Save as a knowledge entry (meeting type) - processed=0 so AI pipeline picks it up
     const { getTenantDb } = await import('../cache/database.js');
     const db = getTenantDb(tenantId);
     const id = `local-${Date.now()}`;
@@ -188,7 +188,7 @@ router.post('/save-transcript', async (req, res) => {
       db.prepare('UPDATE knowledge_entries SET summary = ? WHERE id = ?').run(summary, id);
     }
 
-    console.log(`[Recall] Saved local transcript: "${title}" (${transcript.split(/\s+/).length} words) — queued for AI processing`);
+    console.log(`[Recall] Saved local transcript: "${title}" (${transcript.split(/\s+/).length} words) - queued for AI processing`);
 
     // Trigger async AI processing (summarization, action items, entity extraction)
     try {
@@ -208,7 +208,7 @@ router.post('/save-transcript', async (req, res) => {
 });
 
 /**
- * POST /upload-audio — Upload meeting audio file (no auth, called by menubar)
+ * POST /upload-audio - Upload meeting audio file (no auth, called by menubar)
  * Body: multipart form with 'audio' field + entryId + tenantId
  */
 router.post('/upload-audio', recallAudioUpload.single('audio'), async (req, res) => {
@@ -241,8 +241,8 @@ router.post('/upload-audio', recallAudioUpload.single('audio'), async (req, res)
 });
 
 /**
- * POST /video-frame — Real-time video frame webhook from Recall.ai
- * No auth — Recall.ai calls this directly.
+ * POST /video-frame - Real-time video frame webhook from Recall.ai
+ * No auth - Recall.ai calls this directly.
  * Receives video frames and sends them to Gemini for analysis.
  */
 router.post('/video-frame', async (req, res) => {
@@ -252,7 +252,7 @@ router.post('/video-frame', async (req, res) => {
     const frameData = event.data?.data || event.data?.frame || event.data?.b64_data;
 
     if (botId && frameData && isVisionActive(botId)) {
-      // Don't await — process in background
+      // Don't await - process in background
       processFrame(botId, frameData).catch(err =>
         console.error(`[Vision] Frame processing error:`, err.message)
       );
@@ -269,7 +269,7 @@ router.post('/video-frame', async (req, res) => {
 router.use(authenticate);
 
 /**
- * POST /join — Send a Recall bot to join a meeting
+ * POST /join - Send a Recall bot to join a meeting
  *
  * Body: { meetingUrl, botName?, transcriptionProvider?, joinMessage? }
  * Returns: { botId, status, meetingUrl }
@@ -313,7 +313,7 @@ router.post('/join', async (req, res) => {
 });
 
 /**
- * DELETE /leave/:botId — Remove bot from meeting
+ * DELETE /leave/:botId - Remove bot from meeting
  */
 router.delete('/leave/:botId', async (req, res) => {
   try {
@@ -331,7 +331,7 @@ router.delete('/leave/:botId', async (req, res) => {
 });
 
 /**
- * GET /status/:botId — Get bot status (remote + local)
+ * GET /status/:botId - Get bot status (remote + local)
  */
 router.get('/status/:botId', async (req, res) => {
   try {
@@ -369,7 +369,7 @@ router.get('/status/:botId', async (req, res) => {
 });
 
 /**
- * GET /transcript/:botId — Get transcript for a meeting
+ * GET /transcript/:botId - Get transcript for a meeting
  *
  * Tries Recall API first, falls back to local in-memory transcript.
  */
@@ -401,14 +401,14 @@ router.get('/transcript/:botId', async (req, res) => {
 });
 
 /**
- * GET /bots — List all active bots
+ * GET /bots - List all active bots
  */
 router.get('/bots', (req, res) => {
   res.json({ bots: listActiveBots() });
 });
 
 /**
- * POST /chat/:botId — Send a chat message to the meeting
+ * POST /chat/:botId - Send a chat message to the meeting
  */
 router.post('/chat/:botId', async (req, res) => {
   try {
@@ -425,7 +425,7 @@ router.post('/chat/:botId', async (req, res) => {
 });
 
 /**
- * POST /vision/start/:botId — Enable vision (Gemini) for a bot in a meeting
+ * POST /vision/start/:botId - Enable vision (Gemini) for a bot in a meeting
  * Starts polling screenshots and analyzing with Gemini.
  */
 router.post('/vision/start/:botId', (req, res) => {
@@ -443,7 +443,7 @@ router.post('/vision/start/:botId', (req, res) => {
 });
 
 /**
- * POST /vision/stop/:botId — Disable vision for a bot
+ * POST /vision/stop/:botId - Disable vision for a bot
  */
 router.post('/vision/stop/:botId', (req, res) => {
   try {
@@ -456,7 +456,7 @@ router.post('/vision/stop/:botId', (req, res) => {
 });
 
 /**
- * GET /vision/:botId — Get current visual context for a bot
+ * GET /vision/:botId - Get current visual context for a bot
  */
 router.get('/vision/:botId', (req, res) => {
   try {
@@ -473,7 +473,7 @@ router.get('/vision/:botId', (req, res) => {
 });
 
 /**
- * GET /calendar-status — Calendar poll scheduler status + active meeting bots
+ * GET /calendar-status - Calendar poll scheduler status + active meeting bots
  */
 router.get('/calendar-status', async (req, res) => {
   try {

@@ -1,5 +1,5 @@
 /**
- * GPU Model Database & Fleet Config Routes — Phase 7
+ * GPU Model Database & Fleet Config Routes - Phase 7
  *
  * API endpoints for querying the GPU accelerator database,
  * managing GPU fleet configurations, and retrieving GPU spot pricing.
@@ -24,7 +24,7 @@ const router = express.Router();
 // ─── GPU Model Database ─────────────────────────────────────────────────────
 
 /**
- * GET /models — List all GPU models in the database
+ * GET /models - List all GPU models in the database
  */
 router.get('/models', (req, res) => {
   try {
@@ -42,7 +42,7 @@ router.get('/models', (req, res) => {
 });
 
 /**
- * GET /models/:id — Get a single GPU model by ID
+ * GET /models/:id - Get a single GPU model by ID
  */
 router.get('/models/:id', (req, res) => {
   try {
@@ -60,7 +60,7 @@ router.get('/models/:id', (req, res) => {
 // ─── GPU Fleet Configuration ────────────────────────────────────────────────
 
 /**
- * GET /fleet — Get saved GPU fleet configuration
+ * GET /fleet - Get saved GPU fleet configuration
  */
 router.get('/fleet', (req, res) => {
   try {
@@ -81,7 +81,7 @@ router.get('/fleet', (req, res) => {
 });
 
 /**
- * POST /fleet — Save GPU fleet configuration
+ * POST /fleet - Save GPU fleet configuration
  * Body: { entries: [{ gpuModelId, quantity, gpusPerServer, serverOverheadWatts, pue }] }
  */
 router.post('/fleet', (req, res) => {
@@ -124,7 +124,7 @@ router.post('/fleet', (req, res) => {
 // ─── GPU Spot Pricing ───────────────────────────────────────────────────────
 
 /**
- * GET /pricing/:model — Get latest spot prices for a GPU model
+ * GET /pricing/:model - Get latest spot prices for a GPU model
  */
 router.get('/pricing/:model', (req, res) => {
   try {
@@ -145,7 +145,7 @@ router.get('/pricing/:model', (req, res) => {
 });
 
 /**
- * GET /pricing/:model/history — Get historical spot prices for a GPU model
+ * GET /pricing/:model/history - Get historical spot prices for a GPU model
  * Query params: ?days=7
  */
 router.get('/pricing/:model/history', (req, res) => {

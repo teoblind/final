@@ -1,5 +1,5 @@
 /**
- * Gemini Vision Service — Real-time visual understanding for Coppice meetings
+ * Gemini Vision Service - Real-time visual understanding for Coppice meetings
  *
  * Architecture:
  *   Recall.ai bot in meeting → periodic screenshots → Gemini Vision → visual context
@@ -9,7 +9,7 @@
  *   1. Polling mode: periodically hits Recall's screenshot endpoint (simple, reliable)
  *   2. WebSocket mode: receives real-time video frames via Recall's media WebSocket (future)
  *
- * Currently uses polling mode — captures a screenshot every POLL_INTERVAL_MS and sends to Gemini.
+ * Currently uses polling mode - captures a screenshot every POLL_INTERVAL_MS and sends to Gemini.
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -77,7 +77,7 @@ export function stopVisionLoop(botId) {
 }
 
 /**
- * Get current visual context for a bot — used by chat/voice loops.
+ * Get current visual context for a bot - used by chat/voice loops.
  */
 export function getVisualContext(botId) {
   const state = visionStates.get(botId);
@@ -147,7 +147,7 @@ async function pollFrame(state) {
     }
     // Stop after too many consecutive errors
     if (state.errors > 30) {
-      console.error(`[Vision] Too many errors — stopping vision for bot ${state.botId}`);
+      console.error(`[Vision] Too many errors - stopping vision for bot ${state.botId}`);
       stopVisionLoop(state.botId);
     }
   }
@@ -167,7 +167,7 @@ async function captureScreenshot(botId) {
   });
 
   if (res.status === 404 || res.status === 405) {
-    // Screenshot endpoint might not be available — try alternative
+    // Screenshot endpoint might not be available - try alternative
     return await captureFromMediaEndpoint(botId);
   }
 

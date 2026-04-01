@@ -135,7 +135,7 @@ async function processTenant(tenantId) {
   for (const assignment of readyToExecute) {
     if (running.size >= MAX_CONCURRENT_PER_TENANT) break;
     running.add(assignment.id);
-    // Fire and forget — errors handled internally
+    // Fire and forget - errors handled internally
     executeAssignment(tenantId, assignment).catch(err => {
       console.error(`[AssignmentExecutor] Unhandled error executing ${assignment.id}:`, err.message);
       running.delete(assignment.id);
@@ -336,7 +336,7 @@ async function gatherContext(tenantId, assignment) {
     try {
       const entryIds = JSON.parse(assignment.knowledge_entry_ids_json);
       if (Array.isArray(entryIds) && entryIds.length > 0) {
-        // Search for each entry by ID — searchKnowledge doesn't take IDs,
+        // Search for each entry by ID - searchKnowledge doesn't take IDs,
         // so we search broadly and filter
         const allKnowledge = searchKnowledge(tenantId, '', { limit: 200 });
         const matched = allKnowledge.filter(k => entryIds.includes(k.id));
@@ -381,7 +381,7 @@ function formatInputValues(assignment) {
     // Include password fields as redacted references so agent knows they exist
     const passwordFields = fields.filter(f => f.type === 'password' && values[f.name]);
     for (const pf of passwordFields) {
-      lines.push(`- ${pf.label || pf.name}: [PROVIDED — available in context]`);
+      lines.push(`- ${pf.label || pf.name}: [PROVIDED - available in context]`);
     }
     if (!lines.length) return '';
     return `\n--- USER-PROVIDED INPUTS ---\nThe user provided the following inputs for this task:\n${lines.join('\n')}\n`;
@@ -411,8 +411,8 @@ CONTENT REQUIREMENTS:
 - A research report should be 3-10 pages of real content: detailed findings, specific data points, analysis, recommendations.
 - A scope analysis should cover every line item, risk, exclusion, and contract term in detail.
 - Use markdown headers (##), bullet points, tables, and bold text for structure. This formatting translates directly to the PDF.
-- Include specific numbers, dollar figures, dates, and references — not vague statements.
-- Do NOT write "here's a summary" or "the document covers..." — write the actual content itself.
+- Include specific numbers, dollar figures, dates, and references - not vague statements.
+- Do NOT write "here's a summary" or "the document covers..." - write the actual content itself.
 - Do NOT write a brief overview and link to a Google Doc. That defeats the purpose. The full content must be in your response.
 
 At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
@@ -421,6 +421,14 @@ IMPORTANT - EMAIL POLICY:
 Do NOT send any emails directly. Do NOT call send_email. Instead, if you want to notify the user or send outreach emails, draft the email and output it EXACTLY like this:
 <!--EMAIL_DRAFT{"to":"recipient@example.com","subject":"Subject line","body":"Full email body in HTML"}EMAIL_DRAFT-->
 The user will review and approve the email before it is sent. You may include multiple EMAIL_DRAFT tags if multiple emails need to be sent.
+
+IMPORTANT - FILE SEARCH ESCALATION:
+If the task requires finding a specific file, spreadsheet, or document:
+1. First search the internal knowledge base and synced files (search_knowledge tool).
+2. If not found internally, ALWAYS search the user's Google Drive using gws_drive_search or gws_workspace_command with a broad query.
+3. Try multiple search terms - the file may have a different name than expected. Search by content keywords, not just the exact name.
+4. If you find the file on Drive but it's not in Coppice's files section, proceed with it anyway - use gws_sheets_read or gws_workspace_command to access its contents directly.
+5. Only use INFO_REQUEST if you've exhausted BOTH internal files AND Google Drive search with multiple query variations.
 
 IMPORTANT - TOOL FAILURES:
 If a tool fails (Google Drive upload, sheet creation, etc.), DO NOT spend your session debugging the tool. Focus on producing the written deliverable in your response text. The system will automatically generate PDF/DOC from your written output. Your primary job is to produce high-quality content, not to troubleshoot infrastructure.
@@ -450,7 +458,7 @@ Continue executing the task with this additional information.
 
 CRITICAL - HOW TO DELIVER YOUR WORK:
 Your response text IS the deliverable. The system converts it into PDF and Word automatically. Do NOT create Google Docs. Write EVERYTHING here.
-- Write the COMPLETE report — every section, every finding, every table. 3-10 pages of real content.
+- Write the COMPLETE report - every section, every finding, every table. 3-10 pages of real content.
 - Use markdown headers (##), bullet points, tables, and bold text.
 - Do NOT summarize or link to external docs. Write the actual content in full.
 At the END of your response, include a JSON block: <!--ARTIFACTS[...]ARTIFACTS-->
@@ -488,7 +496,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
         info_requests_pending: currentPending + 1,
       });
 
-      console.log(`[AssignmentExecutor] Assignment ${assignment.id} paused — awaiting info: ${description}`);
+      console.log(`[AssignmentExecutor] Assignment ${assignment.id} paused - awaiting info: ${description}`);
       return; // Don't complete
     } catch (parseErr) {
       console.warn(`[AssignmentExecutor] Failed to parse INFO_REQUEST: ${parseErr.message}`);
@@ -527,7 +535,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     console.log(`[AssignmentExecutor] Captured ${emailDrafts.length} email draft(s) for user approval`);
   }
 
-  // Clean response — strip special tags and conversational preamble
+  // Clean response - strip special tags and conversational preamble
   const cleanResponse = response
     .replace(/<!--INFO_REQUEST\{[\s\S]*?\}INFO_REQUEST-->/g, '')
     .replace(/<!--ARTIFACTS\[[\s\S]*?\]ARTIFACTS-->/g, '')
@@ -535,6 +543,8 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     // Strip conversational preamble that agents add before the actual content
     .replace(/^(Done\.?|Complete\.?|Finished\.?|Here['']s|I['']ve|The document|The report|The analysis)[^\n]*\n+/i, '')
     .replace(/^(Created|Generated|Produced|Uploaded)[^\n]*\n+/i, '')
+    .replace(/^(Now I have|I now have|I have sufficient|Let me compile|Let me put)[^\n]*\n+/i, '')
+    .replace(/^(Got it|Understood|Sure|Alright|OK|Okay)[,.]?[^\n]*\n+/i, '')
     .trim();
 
   // Generate formatted documents for research/analysis/document tasks
@@ -553,7 +563,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       const assignedUser = assignment.user_id ? users.find(u => u.id === assignment.user_id) : null;
       const userEmail = assignedUser?.email && !assignedUser.email.includes('localhost') ? assignedUser.email : null;
 
-      // Determine agent display name — use DACP Agent unless it's specifically the estimating agent on an estimating task
+      // Determine agent display name - use DACP Agent unless it's specifically the estimating agent on an estimating task
       const agentId = assignment.agent_id || 'coppice';
       const isEstimatingTask = agentId === 'estimating' && ['estimate', 'outreach'].includes(assignment.category);
       const agentLabel = isEstimatingTask
@@ -577,7 +587,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       const generatedTypes = new Set(report.artifacts.map(a => a.type));
       const dedupedAgentArtifacts = (artifacts || []).filter(a => {
         if (a.url && generatedUrls.has(a.url)) return false;
-        // Skip agent pdf/docx if we generated our own (but keep gdoc — agent may have created one when documentService couldn't upload)
+        // Skip agent pdf/docx if we generated our own (but keep gdoc - agent may have created one when documentService couldn't upload)
         if (['pdf', 'docx'].includes(a.type) && generatedTypes.has(a.type)) return false;
         // Only skip agent gdoc/document if we actually generated a gdoc
         if (a.type === 'gdoc' && generatedTypes.has('gdoc')) return false;
@@ -594,7 +604,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
       console.log(`[AssignmentExecutor] Generated documents for ${assignment.id}: DOCX=${!!report.docxPath} PDF=${!!report.pdfPath} GDoc=${!!report.gdocUrl}`);
     } catch (docErr) {
       console.error(`[AssignmentExecutor] Document generation failed for ${assignment.id}: ${docErr.message}`);
-      // Continue — don't fail the task over doc generation
+      // Continue - don't fail the task over doc generation
     }
   }
 
@@ -613,7 +623,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     });
   }
 
-  // Complete the assignment — save full response for document regeneration
+  // Complete the assignment - save full response for document regeneration
   updateAgentAssignment(tenantId, assignment.id, {
     status: 'completed',
     result_summary: cleanResponse.slice(0, 4000),

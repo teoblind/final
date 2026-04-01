@@ -1,8 +1,8 @@
 /**
- * Landing Page Routes — Demo request form handler
+ * Landing Page Routes - Demo request form handler
  *
- * POST /api/v1/demo-request — Submit demo request from coppice.ai landing page
- * GET  /api/v1/demo-request — List demo requests (admin)
+ * POST /api/v1/demo-request - Submit demo request from coppice.ai landing page
+ * GET  /api/v1/demo-request - List demo requests (admin)
  */
 
 import express from 'express';
@@ -32,7 +32,7 @@ function getDb() {
 }
 
 /**
- * POST /demo-request — Submit a demo request
+ * POST /demo-request - Submit a demo request
  */
 router.post('/demo-request', (req, res) => {
   try {
@@ -68,7 +68,7 @@ router.post('/demo-request', (req, res) => {
 });
 
 /**
- * GET /demo-request — List all demo requests (admin use)
+ * GET /demo-request - List all demo requests (admin use)
  */
 router.get('/demo-request', authenticate, (req, res) => {
   try {
@@ -81,7 +81,7 @@ router.get('/demo-request', authenticate, (req, res) => {
 });
 
 /**
- * POST /auth/lookup-tenant — Find which tenant an email belongs to
+ * POST /auth/lookup-tenant - Find which tenant an email belongs to
  */
 router.post('/auth/lookup-tenant', (req, res) => {
   try {

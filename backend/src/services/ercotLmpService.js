@@ -1,5 +1,5 @@
 /**
- * ERCOT LMP Service — DuckDB Parquet Backend
+ * ERCOT LMP Service - DuckDB Parquet Backend
  *
  * Queries 200M+ rows of ERCOT settlement point price data stored as
  * Hive-partitioned Parquet files (year=YYYY/month=M/*.parquet).
@@ -48,7 +48,7 @@ function query(sql, params = []) {
   });
 }
 
-// Build glob path for a date range — only read necessary monthly partitions
+// Build glob path for a date range - only read necessary monthly partitions
 function buildGlob(startDate, endDate) {
   if (!startDate && !endDate) {
     return `'${DATA_PATH}/year=*/month=*/*.parquet'`;

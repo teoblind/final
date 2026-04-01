@@ -1,5 +1,5 @@
 /**
- * Sandbox Service — Execute code in isolated Docker containers
+ * Sandbox Service - Execute code in isolated Docker containers
  *
  * Runs user code (Python, JavaScript, bash) in a sandboxed Docker container
  * with no network access, memory limits, and a strict timeout.

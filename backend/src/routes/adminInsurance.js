@@ -1,5 +1,5 @@
 /**
- * Admin Insurance Routes — Phase 9 (Sangha Admin / Underwriter)
+ * Admin Insurance Routes - Phase 9 (Sangha Admin / Underwriter)
  *
  * Cross-tenant insurance administration endpoints for underwriting queue,
  * portfolio overview, claims management, calibration, and stress testing.
@@ -50,7 +50,7 @@ router.use(requireRole('sangha_admin', 'sangha_underwriter'));
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /queue — List all quote requests across tenants
+ * GET /queue - List all quote requests across tenants
  * Query: ?status=X to filter by status
  */
 router.get('/queue', async (req, res) => {
@@ -92,7 +92,7 @@ router.get('/queue', async (req, res) => {
 });
 
 /**
- * GET /queue/:id — Get specific quote request with full details
+ * GET /queue/:id - Get specific quote request with full details
  */
 router.get('/queue/:id', async (req, res) => {
   try {
@@ -153,7 +153,7 @@ router.get('/queue/:id', async (req, res) => {
 });
 
 /**
- * POST /queue/:id/quote — Issue formal quote for a request
+ * POST /queue/:id/quote - Issue formal quote for a request
  * Body: { monthlyPremium, upsideSharePct, floorPrice, termMonths, specialTerms, expiresInDays }
  */
 router.post('/queue/:id/quote', async (req, res) => {
@@ -246,7 +246,7 @@ router.post('/queue/:id/quote', async (req, res) => {
 });
 
 /**
- * POST /queue/:id/assess — Trigger risk assessment for a specific quote request's tenant
+ * POST /queue/:id/assess - Trigger risk assessment for a specific quote request's tenant
  */
 router.post('/queue/:id/assess', async (req, res) => {
   try {
@@ -294,14 +294,14 @@ router.post('/queue/:id/assess', async (req, res) => {
         modelVersion: result.modelVersion || 'v1.0',
       });
     } catch (modelError) {
-      // Model service unavailable — use mock assessment
+      // Model service unavailable - use mock assessment
       const mockResult = {
         riskScore: 45,
         probBelowBreakeven12m: 0.22,
         suggestedFloorModerate: 0.050,
         keyFindings: [
           'Assessment generated from available profile data',
-          'Full model service unavailable — mock values used',
+          'Full model service unavailable - mock values used',
         ],
         modelVersion: 'v1.0-mock',
       };
@@ -343,7 +343,7 @@ router.post('/queue/:id/assess', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /portfolio — Portfolio overview with metrics
+ * GET /portfolio - Portfolio overview with metrics
  */
 router.get('/portfolio', async (req, res) => {
   try {
@@ -392,7 +392,7 @@ router.get('/portfolio', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /claims — List all pending claims across tenants
+ * GET /claims - List all pending claims across tenants
  */
 router.get('/claims', async (req, res) => {
   try {
@@ -428,7 +428,7 @@ router.get('/claims', async (req, res) => {
 });
 
 /**
- * POST /claims/:id/verify — Manually verify a claim
+ * POST /claims/:id/verify - Manually verify a claim
  * Body: { status, adjustmentReason, recommendedPayout }
  */
 router.post('/claims/:id/verify', async (req, res) => {
@@ -511,7 +511,7 @@ router.post('/claims/:id/verify', async (req, res) => {
 });
 
 /**
- * POST /claims/:id/pay — Mark claim as paid
+ * POST /claims/:id/pay - Mark claim as paid
  * Body: { amount }
  */
 router.post('/claims/:id/pay', async (req, res) => {
@@ -584,7 +584,7 @@ router.post('/claims/:id/pay', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /calibration — Get calibration status (latest export, data quality)
+ * GET /calibration - Get calibration status (latest export, data quality)
  */
 router.get('/calibration', async (req, res) => {
   try {
@@ -633,7 +633,7 @@ router.get('/calibration', async (req, res) => {
 });
 
 /**
- * POST /calibration/export — Trigger manual calibration export
+ * POST /calibration/export - Trigger manual calibration export
  */
 router.post('/calibration/export', async (req, res) => {
   try {
@@ -645,7 +645,7 @@ router.post('/calibration/export', async (req, res) => {
       const { exportCalibrationData } = await import('../services/calibrationExporter.js');
       exportResult = await exportCalibrationData();
     } catch (serviceError) {
-      // Service unavailable — create a mock export record
+      // Service unavailable - create a mock export record
       exportResult = {
         exportVersion: 'v1.0',
         payloadHash: uuidv4().replace(/-/g, ''),
@@ -687,7 +687,7 @@ router.post('/calibration/export', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * POST /stress-test — Run stress test scenario via sanghaModelClient
+ * POST /stress-test - Run stress test scenario via sanghaModelClient
  * Body: { scenarioType, params }
  */
 router.post('/stress-test', async (req, res) => {
@@ -719,7 +719,7 @@ router.post('/stress-test', async (req, res) => {
       const { runScenario } = await import('../services/sanghaModelClient.js');
       scenarioResults = await runScenario({ scenarioType, params: params || {} });
     } catch (serviceError) {
-      // Model service unavailable — return mock stress test results
+      // Model service unavailable - return mock stress test results
       const portfolioMetrics = getPortfolioMetrics();
 
       scenarioResults = {
@@ -739,7 +739,7 @@ router.post('/stress-test', async (req, res) => {
           riskRating: scenarioType === 'hashprice_crash' ? 'high' : 'medium',
         },
         warnings: [
-          'Results generated from mock model — actual stress test service unavailable',
+          'Results generated from mock model - actual stress test service unavailable',
         ],
       };
     }
@@ -758,7 +758,7 @@ router.post('/stress-test', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * GET /lp-partners — List all balance sheet partners
+ * GET /lp-partners - List all balance sheet partners
  */
 router.get('/lp-partners', async (req, res) => {
   try {
@@ -785,7 +785,7 @@ router.get('/lp-partners', async (req, res) => {
 });
 
 /**
- * POST /lp-partners — Create a new balance sheet partner
+ * POST /lp-partners - Create a new balance sheet partner
  */
 router.post('/lp-partners', async (req, res) => {
   try {
@@ -821,7 +821,7 @@ router.post('/lp-partners', async (req, res) => {
 });
 
 /**
- * GET /lp-partners/:id — Get LP partner details
+ * GET /lp-partners/:id - Get LP partner details
  */
 router.get('/lp-partners/:id', async (req, res) => {
   try {
@@ -854,7 +854,7 @@ router.get('/lp-partners/:id', async (req, res) => {
 });
 
 /**
- * PATCH /lp-partners/:id — Update LP partner
+ * PATCH /lp-partners/:id - Update LP partner
  */
 router.patch('/lp-partners/:id', async (req, res) => {
   try {
@@ -888,7 +888,7 @@ router.patch('/lp-partners/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * POST /queue/:id/structure — Structure a quote request with terms and allocate to LP
+ * POST /queue/:id/structure - Structure a quote request with terms and allocate to LP
  * Body: { lpId, instrumentType, structuredTerms, riskSummary }
  * structuredTerms: { monthlyPremium, lpPremiumShare, structuringFee, managementFee, upsideSharePct, floorPrice, termMonths }
  */
@@ -954,7 +954,7 @@ router.post('/queue/:id/structure', async (req, res) => {
 });
 
 /**
- * GET /allocations — List all LP allocations (admin view)
+ * GET /allocations - List all LP allocations (admin view)
  */
 router.get('/allocations', async (req, res) => {
   try {
@@ -969,7 +969,7 @@ router.get('/allocations', async (req, res) => {
 });
 
 /**
- * GET /revenue — Sangha revenue breakdown
+ * GET /revenue - Sangha revenue breakdown
  */
 router.get('/revenue', async (req, res) => {
   try {
@@ -982,7 +982,7 @@ router.get('/revenue', async (req, res) => {
 });
 
 /**
- * GET /lp-exposure — Per-LP exposure for portfolio risk panel
+ * GET /lp-exposure - Per-LP exposure for portfolio risk panel
  */
 router.get('/lp-exposure', async (req, res) => {
   try {

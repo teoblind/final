@@ -1,5 +1,5 @@
 /**
- * Curtailment Optimizer Agent — Phase 6
+ * Curtailment Optimizer Agent - Phase 6
  *
  * The most valuable agent in the system. Automates curtailment decisions from
  * Phase 4 by continuously monitoring energy prices, fleet profitability, and
@@ -34,7 +34,7 @@ const AGENT_CATEGORY = 'curtailment';
 const AGENT_VERSION = '1.0.0';
 
 /**
- * CurtailmentAgent — automates mining/curtailment state transitions based on
+ * CurtailmentAgent - automates mining/curtailment state transitions based on
  * real-time energy pricing, fleet economics, and operational constraints.
  */
 export default class CurtailmentAgent {
@@ -343,7 +343,7 @@ export default class CurtailmentAgent {
       );
     }
     if (needsScheduleRegen) {
-      reasons.push('DAM prices expected — schedule regeneration flagged.');
+      reasons.push('DAM prices expected - schedule regeneration flagged.');
     }
 
     return {
@@ -451,7 +451,7 @@ export default class CurtailmentAgent {
         2
       )}/MWh) is $${margin} below breakeven ($${breakeven.toFixed(
         2
-      )}/MWh). Fleet is profitable — resuming mining.`;
+      )}/MWh). Fleet is profitable - resuming mining.`;
     } else {
       reasoning = analysis.reasoning;
     }

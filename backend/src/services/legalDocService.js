@@ -1,5 +1,5 @@
 /**
- * Legal Document Service — NDA and MSA template generation
+ * Legal Document Service - NDA and MSA template generation
  *
  * Generates well-formatted markdown legal documents from templates.
  * Returns content that can be saved to Google Docs via workspace tools.
@@ -31,19 +31,19 @@ export function generateLegalDoc(params) {
     case 'nda_mutual':
       return {
         content: buildMutualNDA({ party_a, party_b, effective_date, duration_months, governing_state, additional_terms }),
-        title: `Mutual NDA — ${stripState(party_a)} & ${stripState(party_b)}`,
+        title: `Mutual NDA - ${stripState(party_a)} & ${stripState(party_b)}`,
         template_used: 'nda_mutual',
       };
     case 'nda_one_way':
       return {
         content: buildOneWayNDA({ party_a, party_b, effective_date, duration_months, governing_state, additional_terms }),
-        title: `NDA — ${stripState(party_a)} (Disclosing) & ${stripState(party_b)} (Receiving)`,
+        title: `NDA - ${stripState(party_a)} (Disclosing) & ${stripState(party_b)} (Receiving)`,
         template_used: 'nda_one_way',
       };
     case 'msa':
       return {
         content: buildMSA({ party_a, party_b, effective_date, duration_months, governing_state, additional_terms, services_description, payment_terms }),
-        title: `Master Service Agreement — ${stripState(party_a)} & ${stripState(party_b)}`,
+        title: `Master Service Agreement - ${stripState(party_a)} & ${stripState(party_b)}`,
         template_used: 'msa',
       };
     default:

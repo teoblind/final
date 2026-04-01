@@ -1,5 +1,5 @@
 /**
- * ERCOT LMP Routes — Real Parquet Data
+ * ERCOT LMP Routes - Real Parquet Data
  *
  * Serves ERCOT settlement point price data from local Parquet files
  * via DuckDB. Replaces mock data with 200M+ rows of real 5-min data.
@@ -19,7 +19,7 @@ import {
 const router = express.Router();
 
 /**
- * GET /current — Most recent 5-min LMP for a node
+ * GET /current - Most recent 5-min LMP for a node
  * Query: ?node=HB_NORTH
  */
 router.get('/current', async (req, res) => {
@@ -37,7 +37,7 @@ router.get('/current', async (req, res) => {
 });
 
 /**
- * GET /intraday — All 5-min intervals for a date
+ * GET /intraday - All 5-min intervals for a date
  * Query: ?node=HB_NORTH&date=2026-03-05
  */
 router.get('/intraday', async (req, res) => {
@@ -71,7 +71,7 @@ router.get('/intraday', async (req, res) => {
 });
 
 /**
- * GET /heatmap — Hourly average LMPs for heatmap
+ * GET /heatmap - Hourly average LMPs for heatmap
  * Query: ?node=HB_NORTH&days=7
  */
 router.get('/heatmap', async (req, res) => {
@@ -94,7 +94,7 @@ router.get('/heatmap', async (req, res) => {
 });
 
 /**
- * GET /stats — Summary statistics for a node
+ * GET /stats - Summary statistics for a node
  * Query: ?node=HB_NORTH&days=30
  */
 router.get('/stats', async (req, res) => {
@@ -116,7 +116,7 @@ router.get('/stats', async (req, res) => {
 });
 
 /**
- * GET /nodes — List settlement points with current LMP
+ * GET /nodes - List settlement points with current LMP
  * Query: ?filter=hubs|load_zones
  */
 router.get('/nodes', async (req, res) => {
@@ -137,7 +137,7 @@ router.get('/nodes', async (req, res) => {
 });
 
 /**
- * GET /range — Available data range
+ * GET /range - Available data range
  */
 router.get('/range', async (req, res) => {
   try {

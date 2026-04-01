@@ -20,7 +20,7 @@ let timer = null;
 
 // ─── Context Gathering ───────────────────────────────────────────────────────
 
-/** Clean up GC name — replace email addresses or coppice.ai placeholders with from_name or project-derived name */
+/** Clean up GC name - replace email addresses or coppice.ai placeholders with from_name or project-derived name */
 function cleanGcName(bid) {
   const gc = bid.gc_name || '';
   // If gc_name looks like an email or contains coppice/agent, use from_name or derive from project
@@ -33,7 +33,7 @@ function cleanGcName(bid) {
 function extractGcFromSubject(subject) {
   if (!subject) return null;
   // Try to extract company name from common RFQ patterns
-  const match = subject.match(/(?:from|by|for)\s+([A-Z][A-Za-z\s&]+?)(?:\s*[-–—]|\s*$)/);
+  const match = subject.match(/(?:from|by|for)\s+([A-Z][A-Za-z\s&]+?)(?:\s*[-–-]|\s*$)/);
   return match ? match[1].trim() : null;
 }
 
@@ -48,7 +48,7 @@ function gatherDacpContext(tenantId) {
     b.status === 'new' && !estimates.some(e => e.bid_request_id === b.id)
   );
 
-  // Estimates in draft — haven't been sent
+  // Estimates in draft - haven't been sent
   const draftEstimates = estimates.filter(e => e.status === 'draft');
 
   // Bids due within 7 days
@@ -74,7 +74,7 @@ function gatherDacpContext(tenantId) {
     return sent < twoWeeksAgo;
   });
 
-  // GC names we've worked with (for relationship context) — cleaned
+  // GC names we've worked with (for relationship context) - cleaned
   const gcNames = [...new Set(bids.map(b => cleanGcName(b)).filter(n => n && n !== 'Unknown GC'))];
 
   return {
@@ -110,7 +110,7 @@ function gatherDacpContext(tenantId) {
 // ─── Assignment Generation ───────────────────────────────────────────────────
 
 function buildAnalysisPrompt(context) {
-  return `You are the overnight autonomous analyst for DACP Construction — a concrete and masonry subcontractor based in DFW (Dallas-Fort Worth), Texas.
+  return `You are the overnight autonomous analyst for DACP Construction - a concrete and masonry subcontractor based in DFW (Dallas-Fort Worth), Texas.
 
 DACP BUSINESS CONTEXT:
 - Core work: concrete foundations, flatwork, structural concrete, masonry, site work
@@ -119,7 +119,7 @@ DACP BUSINESS CONTEXT:
 - Revenue model: bid on projects, win work, execute with crews
 - Key metrics: win rate, margins, bid pipeline volume, GC relationships
 
-You have FULL ACCESS to Coppice's tool suite. Think big — you are not limited to emails. You can build anything.
+You have FULL ACCESS to Coppice's tool suite. Think big - you are not limited to emails. You can build anything.
 
 CURRENT BUSINESS STATE:
 ${JSON.stringify(context, null, 2)}
@@ -139,9 +139,9 @@ ASSIGNMENT CATEGORIES:
 - estimate: Finalize draft estimates, review pricing, prepare and send bid packages
 - outreach: Proactive emails to GCs about upcoming projects, relationship building
 - admin: Activate awarded jobs, update statuses, generate summaries
-- research: Investigate a GC, project, market trend, or competitor — produce a written report
+- research: Investigate a GC, project, market trend, or competitor - produce a written report
 - analysis: Financial modeling, cash flow projections, bid profitability, margin optimization
-- document: Create a deliverable — Excel model, PDF report, PowerPoint deck, proposal letter
+- document: Create a deliverable - Excel model, PDF report, PowerPoint deck, proposal letter
 
 THINK LIKE A BUSINESS STRATEGIST, not just a task manager. Ask yourself:
 - What intelligence would help DACP win more work?
@@ -154,16 +154,16 @@ THINK LIKE A BUSINESS STRATEGIST, not just a task manager. Ask yourself:
 Propose 3-10 specific assignments. Mix quick wins (emails, status updates) with high-value deliverables (reports, analysis, presentations).
 
 RULES:
-1. Every assignment must reference specific projects, GCs, or data from the business state — no generic tasks
+1. Every assignment must reference specific projects, GCs, or data from the business state - no generic tasks
 2. Prioritize: urgent bid deadlines > financial analysis on active projects > stale follow-ups > research > outreach
 3. High-value deliverables (Excel models, research reports, presentations) should be marked high priority when they would directly impact a bid decision or revenue
-4. Each task must be completable in one agent session — the action_prompt should be detailed enough for an agent to execute it fully
-5. Sign all emails as Coppice (the AI agent) — NEVER reference "David Castillo", "Marcel", or other employee names
+4. Each task must be completable in one agent session - the action_prompt should be detailed enough for an agent to execute it fully
+5. Sign all emails as Coppice (the AI agent) - NEVER reference "David Castillo", "Marcel", or other employee names
 6. If a GC name is "Unknown GC" or looks like a placeholder, focus on the PROJECT NAME instead
-7. Research tasks should produce a specific deliverable (PDF report, Excel sheet, summary doc) — not just "look into it"
+7. Research tasks should produce a specific deliverable (PDF report, Excel sheet, summary doc) - not just "look into it"
 8. For financial analysis, specify what numbers to model and what format to deliver (Excel, PDF, etc.)
 9. NEVER propose a task that duplicates an existing active/completed task listed in the business state under "existingTasks". Find different, fresh work to do.
-10. PITCH DECKS (category: "pitch_deck") should be RARE — only suggest one when there is an unmistakable signal: a major new client/GC relationship to formalize, a high-value bid that needs a capabilities presentation, or an explicit mention in emails/meetings that a pitch deck is needed. Do NOT suggest pitch decks as routine tasks.
+10. PITCH DECKS (category: "pitch_deck") should be RARE - only suggest one when there is an unmistakable signal: a major new client/GC relationship to formalize, a high-value bid that needs a capabilities presentation, or an explicit mention in emails/meetings that a pitch deck is needed. Do NOT suggest pitch decks as routine tasks.
 
 Return a JSON array. Each object:
 {
@@ -221,7 +221,7 @@ async function runOvernightAnalysis() {
         // Skip tenants without DACP data
         const stats = getDacpStats(tenant.id);
         if (!stats || (stats.totalBidRequests === 0 && stats.totalJobs === 0)) {
-          console.log(`[OvernightAnalysis] Skipping ${tenant.id} — no DACP data`);
+          console.log(`[OvernightAnalysis] Skipping ${tenant.id} - no DACP data`);
           return;
         }
 
@@ -245,7 +245,7 @@ async function runOvernightAnalysis() {
         const assignments = await generateAssignments(tenant.id, context);
         console.log(`[OvernightAnalysis] Generated ${assignments.length} assignments for ${tenant.id}`);
 
-        // Store assignments as shared (user_id = NULL) — visible to all users
+        // Store assignments as shared (user_id = NULL) - visible to all users
         // When a user confirms a task, they claim it (user_id gets set to theirs)
         for (const a of assignments) {
           insertAgentAssignment({
@@ -285,7 +285,7 @@ export function startOvernightAnalysisJob({ runAtHour = 3, intervalHours = 24 } 
   if (nextRun <= now) nextRun.setDate(nextRun.getDate() + 1);
   const delay = nextRun - now;
 
-  console.log(`[OvernightAnalysis] Scheduled — next run at ${nextRun.toISOString()} (in ${Math.round(delay / 60000)}m)`);
+  console.log(`[OvernightAnalysis] Scheduled - next run at ${nextRun.toISOString()} (in ${Math.round(delay / 60000)}m)`);
 
   // First run at scheduled time
   setTimeout(() => {

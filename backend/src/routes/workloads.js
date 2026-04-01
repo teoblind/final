@@ -1,5 +1,5 @@
 /**
- * Workload Management Routes — Phase 7
+ * Workload Management Routes - Phase 7
  *
  * API endpoints for the unified workload abstraction layer.
  * Manages BTC mining and HPC/AI compute workloads with
@@ -24,7 +24,7 @@ const router = express.Router();
 // ─── List All Workloads ─────────────────────────────────────────────────────
 
 /**
- * GET / — List all workloads with parsed JSON fields
+ * GET / - List all workloads with parsed JSON fields
  */
 router.get('/', (req, res) => {
   try {
@@ -45,7 +45,7 @@ router.get('/', (req, res) => {
 // ─── Side-by-Side Economics Comparison ──────────────────────────────────────
 
 /**
- * GET /comparison — Side-by-side economics comparison across workload types
+ * GET /comparison - Side-by-side economics comparison across workload types
  * Query params: ?days=30
  */
 router.get('/comparison', (req, res) => {
@@ -140,7 +140,7 @@ router.get('/comparison', (req, res) => {
 // ─── Site Overview ──────────────────────────────────────────────────────────
 
 /**
- * GET /site-overview — Unified site overview aggregating all active workloads
+ * GET /site-overview - Unified site overview aggregating all active workloads
  */
 router.get('/site-overview', (req, res) => {
   try {
@@ -226,7 +226,7 @@ router.get('/site-overview', (req, res) => {
 // ─── Create Workload ────────────────────────────────────────────────────────
 
 /**
- * POST / — Create a new workload
+ * POST / - Create a new workload
  */
 router.post('/', (req, res) => {
   try {
@@ -266,7 +266,7 @@ router.post('/', (req, res) => {
 // ─── Update Workload ────────────────────────────────────────────────────────
 
 /**
- * PUT /:id — Update an existing workload
+ * PUT /:id - Update an existing workload
  */
 router.put('/:id', (req, res) => {
   try {
@@ -287,7 +287,7 @@ router.put('/:id', (req, res) => {
 // ─── Delete Workload ────────────────────────────────────────────────────────
 
 /**
- * DELETE /:id — Delete a workload
+ * DELETE /:id - Delete a workload
  */
 router.delete('/:id', (req, res) => {
   try {
@@ -308,7 +308,7 @@ router.delete('/:id', (req, res) => {
 // ─── Workload Economics ─────────────────────────────────────────────────────
 
 /**
- * GET /:id/economics — Get economics for a single workload
+ * GET /:id/economics - Get economics for a single workload
  */
 router.get('/:id/economics', async (req, res) => {
   try {

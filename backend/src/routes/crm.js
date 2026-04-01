@@ -1,8 +1,8 @@
 /**
- * CRM Routes — Lightweight deal pipeline via Google Sheets
+ * CRM Routes - Lightweight deal pipeline via Google Sheets
  *
- * GET  /api/v1/crm/pipeline    — Read pipeline stages from connected sheet
- * POST /api/v1/crm/setup-sheet — Create a CRM Google Sheet and share with user
+ * GET  /api/v1/crm/pipeline    - Read pipeline stages from connected sheet
+ * POST /api/v1/crm/setup-sheet - Create a CRM Google Sheet and share with user
  */
 
 import express from 'express';
@@ -132,7 +132,7 @@ router.post('/setup-sheet', async (req, res) => {
     // Create the spreadsheet
     const createRes = await sheets.spreadsheets.create({
       requestBody: {
-        properties: { title: `${companyName} — Deal Pipeline` },
+        properties: { title: `${companyName} - Deal Pipeline` },
         sheets: [{
           properties: {
             title: 'Pipeline',
@@ -211,7 +211,7 @@ router.post('/setup-sheet', async (req, res) => {
   }
 });
 
-// ─── GET /calendar/events — Upcoming calendar events ────────────────────────
+// ─── GET /calendar/events - Upcoming calendar events ────────────────────────
 
 router.get('/calendar/events', async (req, res) => {
   try {
@@ -289,7 +289,7 @@ router.get('/calendar/events', async (req, res) => {
   }
 });
 
-// ─── POST /calendar/events/:id/invite — Invite Coppice agent to a meeting ───
+// ─── POST /calendar/events/:id/invite - Invite Coppice agent to a meeting ───
 
 router.post('/calendar/events/:id/invite', async (req, res) => {
   try {

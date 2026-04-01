@@ -1,5 +1,5 @@
 /**
- * Model Router — selects the optimal Claude model for each request
+ * Model Router - selects the optimal Claude model for each request
  *
  * Routes cheap/simple tasks to Haiku, complex tasks to Sonnet.
  * Reduces API cost by ~60% for routine operations.

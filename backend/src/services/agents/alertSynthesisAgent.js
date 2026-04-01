@@ -1,5 +1,5 @@
 /**
- * Alert Synthesis Agent — Phase 6
+ * Alert Synthesis Agent - Phase 6
  *
  * Aggregates, correlates, and deduplicates alerts from all system phases:
  *   - Energy price alerts (Phase 2)
@@ -15,7 +15,7 @@
  *   - Scoring alerts by financial impact for priority ranking
  *   - Generating periodic digest summaries
  *
- * This agent never executes operational changes — it purely synthesizes
+ * This agent never executes operational changes - it purely synthesizes
  * information to keep operators focused on what matters.
  */
 
@@ -37,7 +37,7 @@ const CORRELATION_WINDOW_MS = 300000; // 5 min correlation window
 const MAX_HISTORY_SIZE = 500;         // Max alert history entries retained
 
 /**
- * AlertSynthesisAgent — correlates, deduplicates, and summarizes alerts
+ * AlertSynthesisAgent - correlates, deduplicates, and summarizes alerts
  * from all system phases to reduce operator fatigue.
  */
 export default class AlertSynthesisAgent {
@@ -91,7 +91,7 @@ export default class AlertSynthesisAgent {
   getDefaultConfig() {
     return {
       enabled: true,
-      mode: 'autonomous', // informational only — no operational changes
+      mode: 'autonomous', // informational only - no operational changes
       parameters: {
         alertStormThreshold: ALERT_STORM_THRESHOLD,
         alertStormWindowMs: ALERT_STORM_WINDOW_MS,

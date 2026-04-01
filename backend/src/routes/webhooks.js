@@ -17,7 +17,7 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// GET / — List webhook configs
+// GET / - List webhook configs
 router.get('/', async (req, res) => {
   try {
     const webhooks = getWebhooks(req.tenantId);
@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST / — Register webhook
+// POST / - Register webhook
 router.post('/', requirePermission('manageSettings'), async (req, res) => {
   try {
     const { url, events } = req.body;
@@ -82,14 +82,14 @@ router.post('/', requirePermission('manageSettings'), async (req, res) => {
       events,
       secret, // Only shown once!
       status: 'active',
-      message: 'Save the secret — it will not be shown again.',
+      message: 'Save the secret - it will not be shown again.',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT /:id — Update webhook
+// PUT /:id - Update webhook
 router.put('/:id', requirePermission('manageSettings'), async (req, res) => {
   try {
     const wh = getWebhook(req.params.id);
@@ -115,7 +115,7 @@ router.put('/:id', requirePermission('manageSettings'), async (req, res) => {
   }
 });
 
-// DELETE /:id — Remove webhook
+// DELETE /:id - Remove webhook
 router.delete('/:id', requirePermission('manageSettings'), async (req, res) => {
   try {
     const wh = getWebhook(req.params.id);
@@ -140,7 +140,7 @@ router.delete('/:id', requirePermission('manageSettings'), async (req, res) => {
   }
 });
 
-// POST /test — Send test event
+// POST /test - Send test event
 router.post('/test', requirePermission('manageSettings'), async (req, res) => {
   try {
     const { webhookId } = req.body;

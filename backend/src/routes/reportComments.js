@@ -1,7 +1,7 @@
 /**
  * Report Comments Routes
  *
- * Comments on intelligence reports — async team discussion
+ * Comments on intelligence reports - async team discussion
  * scoped by tenant and report ID.
  */
 import express from 'express';
@@ -17,7 +17,7 @@ import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 
-/** GET /counts/batch — Get comment counts for multiple reports (must be before /:reportId) */
+/** GET /counts/batch - Get comment counts for multiple reports (must be before /:reportId) */
 router.get('/counts/batch', authenticate, (req, res) => {
   try {
     const tenantId = req.user.tenantId;
@@ -29,7 +29,7 @@ router.get('/counts/batch', authenticate, (req, res) => {
   }
 });
 
-/** GET /:reportId — Get comments for a report */
+/** GET /:reportId - Get comments for a report */
 router.get('/:reportId', authenticate, (req, res) => {
   try {
     const tenantId = req.user.tenantId;
@@ -45,7 +45,7 @@ router.get('/:reportId', authenticate, (req, res) => {
   }
 });
 
-/** POST /:reportId — Post a new comment */
+/** POST /:reportId - Post a new comment */
 router.post('/:reportId', authenticate, (req, res) => {
   try {
     const tenantId = req.user.tenantId;
@@ -102,7 +102,7 @@ router.post('/:reportId', authenticate, (req, res) => {
   }
 });
 
-/** POST /:reportId/:commentId/react — Toggle emoji reaction */
+/** POST /:reportId/:commentId/react - Toggle emoji reaction */
 router.post('/:reportId/:commentId/react', authenticate, (req, res) => {
   try {
     const { commentId } = req.params;
@@ -129,7 +129,7 @@ router.post('/:reportId/:commentId/react', authenticate, (req, res) => {
   }
 });
 
-/** GET /:reportId/users — Get tenant users for @mention autocomplete */
+/** GET /:reportId/users - Get tenant users for @mention autocomplete */
 router.get('/:reportId/users', authenticate, (req, res) => {
   try {
     const users = getUsersByTenant(req.user.tenantId);

@@ -1,5 +1,5 @@
 /**
- * Pool Connectors — Phase 5 Mining Pool Integration
+ * Pool Connectors - Phase 5 Mining Pool Integration
  *
  * Provides unified access to mining pool APIs (Foundry USA, Luxor, etc.)
  * with realistic mock data fallback for demo/development environments.
@@ -22,7 +22,7 @@ import { getCache, setCache } from '../cache/database.js';
 
 /**
  * Basic obfuscation for API keys stored at rest.
- * NOT cryptographic encryption — prevents casual plaintext exposure only.
+ * NOT cryptographic encryption - prevents casual plaintext exposure only.
  */
 function encodeCredential(value) {
   if (!value) return null;
@@ -62,7 +62,7 @@ function loadRegistry() {
 
 function persistRegistry() {
   try {
-    setCache('pool_config', poolRegistry, 525600); // 1 year TTL — effectively permanent
+    setCache('pool_config', poolRegistry, 525600); // 1 year TTL - effectively permanent
   } catch (e) {
     console.error('[PoolConnectors] Failed to persist pool registry:', e.message);
   }
@@ -78,7 +78,7 @@ const POOL_DEFINITIONS = {
     baseUrl: 'https://api.foundryusapool.com',
     authType: 'api_key',
     authHeader: 'X-API-Key',
-    description: 'Foundry USA Pool — largest North American Bitcoin mining pool',
+    description: 'Foundry USA Pool - largest North American Bitcoin mining pool',
     endpoints: {
       hashrate: '/hashrate',
       workers: '/workers',
@@ -93,7 +93,7 @@ const POOL_DEFINITIONS = {
     baseUrl: 'https://api.beta.luxor.tech/graphql',
     authType: 'api_key',
     authHeader: 'x-lux-api-key',
-    description: 'Luxor Technology — GraphQL-based mining pool with advanced analytics',
+    description: 'Luxor Technology - GraphQL-based mining pool with advanced analytics',
     endpoints: {
       graphql: '/graphql',
     },
@@ -617,7 +617,7 @@ async function dispatchHashrate(poolId) {
 }
 
 async function dispatchHashrateHistory(poolId, start, end, interval) {
-  // History is always mock for now — pool APIs rarely offer granular history
+  // History is always mock for now - pool APIs rarely offer granular history
   return { ...generateMockHashrateHistory(start, end, interval), isMock: true, source: `${poolId}-mock` };
 }
 
@@ -944,7 +944,7 @@ export async function getPoolPayouts(poolId, start, end) {
  * Get share and luck statistics from a pool.
  */
 export async function getPoolShares(poolId) {
-  // Share stats rarely have live API support — use mock with cache
+  // Share stats rarely have live API support - use mock with cache
   const cacheKey = `pool-shares-${poolId}`;
   const cached = getCache(cacheKey);
   if (cached && !cached.stale) return cached.data;

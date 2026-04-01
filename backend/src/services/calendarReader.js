@@ -1,5 +1,5 @@
 /**
- * Calendar Reader — Per-tenant calendar access via tenant_email_config tokens.
+ * Calendar Reader - Per-tenant calendar access via tenant_email_config tokens.
  *
  * Each tenant's agent has its own Google Workspace account with calendar access.
  * This reads the agent's own calendar (primary) using the token stored in
@@ -9,7 +9,7 @@
 import { google } from 'googleapis';
 import { getTenantDb } from '../cache/database.js';
 
-// OAuth app credentials — try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
+// OAuth app credentials - try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
 const CLIENT_PAIRS = [
   { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
   { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
@@ -41,14 +41,14 @@ async function getCalendarForTenant(tenantId) {
       refreshToken = row.gmail_refresh_token;
     }
   } catch {
-    // tenant_email_config may not exist — use fallback
+    // tenant_email_config may not exist - use fallback
   }
 
   if (!refreshToken || CLIENT_PAIRS.length === 0) {
     return null;
   }
 
-  // Try each OAuth client pair — token may have been issued by either
+  // Try each OAuth client pair - token may have been issued by either
   for (const pair of CLIENT_PAIRS) {
     try {
       const oauth2 = new google.auth.OAuth2(pair.id, pair.secret);

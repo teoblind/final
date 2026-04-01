@@ -234,7 +234,7 @@ router.get('/email/reauth/callback', async (req, res) => {
 router.use(authenticate);
 router.use(requireRole('sangha_admin', 'sangha_underwriter'));
 
-// ─── GET /tenants — List All Tenants with Summary Data ──────────────────────
+// ─── GET /tenants - List All Tenants with Summary Data ──────────────────────
 
 router.get('/tenants', (req, res) => {
   try {
@@ -278,7 +278,7 @@ router.get('/tenants', (req, res) => {
   }
 });
 
-// ─── GET /tenants/:id — Detailed Tenant View ────────────────────────────────
+// ─── GET /tenants/:id - Detailed Tenant View ────────────────────────────────
 
 router.get('/tenants/:id', (req, res) => {
   try {
@@ -323,7 +323,7 @@ router.get('/tenants/:id', (req, res) => {
   }
 });
 
-// ─── GET /tenants/:id/users — Users for a Tenant ────────────────────────────
+// ─── GET /tenants/:id/users - Users for a Tenant ────────────────────────────
 
 router.get('/tenants/:id/users', (req, res) => {
   try {
@@ -335,7 +335,7 @@ router.get('/tenants/:id/users', (req, res) => {
   }
 });
 
-// ─── DELETE /users/:id — Remove a User ───────────────────────────────────────
+// ─── DELETE /users/:id - Remove a User ───────────────────────────────────────
 
 router.delete('/users/:id', (req, res) => {
   try {
@@ -360,7 +360,7 @@ router.delete('/users/:id', (req, res) => {
   }
 });
 
-// ─── POST /users/:id/reset-password — Reset a User's Password ───────────────
+// ─── POST /users/:id/reset-password - Reset a User's Password ───────────────
 
 router.post('/users/:id/reset-password', (req, res) => {
   try {
@@ -377,7 +377,7 @@ router.post('/users/:id/reset-password', (req, res) => {
     const tempPassword = randomBytes(12).toString('base64url'); // 16 chars, URL-safe
     const passwordHash = bcryptPkg.hashSync(tempPassword, 12);
     updateUser(id, { passwordHash, mustChangePassword: 1 });
-    // Return password only this once — admin must relay it securely
+    // Return password only this once - admin must relay it securely
     res.json({ success: true, message: `Password reset for ${user.email}`, temporaryPassword: tempPassword, mustChangePassword: true });
   } catch (error) {
     console.error('Reset password error:', error);
@@ -385,7 +385,7 @@ router.post('/users/:id/reset-password', (req, res) => {
   }
 });
 
-// ─── GET /aggregate — Cross-Tenant Aggregate Metrics ────────────────────────
+// ─── GET /aggregate - Cross-Tenant Aggregate Metrics ────────────────────────
 
 router.get('/aggregate', (req, res) => {
   try {
@@ -471,7 +471,7 @@ router.get('/aggregate', (req, res) => {
   }
 });
 
-// ─── GET /underwriting/pipeline — Underwriting Pipeline ─────────────────────
+// ─── GET /underwriting/pipeline - Underwriting Pipeline ─────────────────────
 
 router.get('/underwriting/pipeline', (req, res) => {
   try {
@@ -538,7 +538,7 @@ router.get('/underwriting/pipeline', (req, res) => {
   }
 });
 
-// ─── POST /underwriting/export — Export Underwriting Data ───────────────────
+// ─── POST /underwriting/export - Export Underwriting Data ───────────────────
 
 router.post('/underwriting/export', (req, res) => {
   try {
@@ -598,7 +598,7 @@ router.post('/underwriting/export', (req, res) => {
   }
 });
 
-// ─── GET /audit — Cross-Tenant Audit Log ────────────────────────────────────
+// ─── GET /audit - Cross-Tenant Audit Log ────────────────────────────────────
 
 router.get('/audit', (req, res) => {
   try {
@@ -651,7 +651,7 @@ function parsePeriod(period) {
   };
 }
 
-// ─── GET /usage — Usage Stats (optionally filtered by tenant) ───────────────
+// ─── GET /usage - Usage Stats (optionally filtered by tenant) ───────────────
 
 router.get('/usage', (req, res) => {
   try {
@@ -694,7 +694,7 @@ router.get('/usage', (req, res) => {
   }
 });
 
-// ─── GET /usage/by-tenant — Per-Tenant Usage Breakdown ──────────────────────
+// ─── GET /usage/by-tenant - Per-Tenant Usage Breakdown ──────────────────────
 
 router.get('/usage/by-tenant', (req, res) => {
   try {
@@ -729,7 +729,7 @@ router.get('/usage/by-tenant', (req, res) => {
   }
 });
 
-// ─── GET /usage/recent-logs — Recent API Calls ─────────────────────────────
+// ─── GET /usage/recent-logs - Recent API Calls ─────────────────────────────
 
 router.get('/usage/recent-logs', (req, res) => {
   try {
@@ -749,7 +749,7 @@ router.get('/usage/recent-logs', (req, res) => {
   }
 });
 
-// ─── GET /usage/logs — Paginated, Filtered API Logs ─────────────────────────
+// ─── GET /usage/logs - Paginated, Filtered API Logs ─────────────────────────
 
 router.get('/usage/logs', (req, res) => {
   try {
@@ -779,7 +779,7 @@ router.get('/usage/logs', (req, res) => {
   }
 });
 
-// ─── GET /usage/spend — Enhanced Spend Analytics ────────────────────────────
+// ─── GET /usage/spend - Enhanced Spend Analytics ────────────────────────────
 
 router.get('/usage/spend', (req, res) => {
   try {
@@ -855,7 +855,7 @@ router.get('/usage/spend', (req, res) => {
   }
 });
 
-// ─── GET /system/health — Comprehensive System Health ────────────────────────
+// ─── GET /system/health - Comprehensive System Health ────────────────────────
 
 const __admin_filename = fileURLToPath(import.meta.url);
 const __admin_dirname = dirname(__admin_filename);
@@ -1080,7 +1080,7 @@ router.get('/system/health', async (req, res) => {
             // Mark tunnel as warning if token expires within 2 hours
             if (!oauthStatus.valid) {
               health.services.tunnel.status = 'down';
-              health.services.tunnel.oauth.message = 'OAuth token expired — tasks will fail';
+              health.services.tunnel.oauth.message = 'OAuth token expired - tasks will fail';
             } else if (remainingHrs < 2) {
               health.services.tunnel.status = 'warning';
               health.services.tunnel.oauth.message = `Token expires in ${Math.round(remainingHrs * 10) / 10}h`;
@@ -1118,7 +1118,7 @@ router.get('/system/health', async (req, res) => {
   }
 });
 
-// ─── POST /overnight-analysis — Manually trigger overnight analysis ──────────
+// ─── POST /overnight-analysis - Manually trigger overnight analysis ──────────
 
 router.post('/overnight-analysis', async (req, res) => {
   try {
@@ -1130,7 +1130,7 @@ router.post('/overnight-analysis', async (req, res) => {
   }
 });
 
-// ─── POST /daily-newsletter — Manually trigger daily newsletter ──────────────
+// ─── POST /daily-newsletter - Manually trigger daily newsletter ──────────────
 
 router.post('/daily-newsletter', async (req, res) => {
   try {
@@ -1142,7 +1142,7 @@ router.post('/daily-newsletter', async (req, res) => {
   }
 });
 
-// ─── GET /newsletters — List stored newsletters ─────────────────────────────
+// ─── GET /newsletters - List stored newsletters ─────────────────────────────
 
 router.get('/newsletters', (req, res) => {
   try {
@@ -1161,7 +1161,7 @@ router.get('/newsletters', (req, res) => {
   }
 });
 
-// ─── GET /usage/opus — Opus Report Usage Per Tenant ─────────────────────────
+// ─── GET /usage/opus - Opus Report Usage Per Tenant ─────────────────────────
 
 router.get('/usage/opus', (req, res) => {
   try {
@@ -1191,7 +1191,7 @@ router.get('/usage/opus', (req, res) => {
   }
 });
 
-// ─── GET/PUT /tenants/:id/opus-limit — Per-Tenant Opus Limit ────────────────
+// ─── GET/PUT /tenants/:id/opus-limit - Per-Tenant Opus Limit ────────────────
 
 router.get('/tenants/:id/opus-limit', (req, res) => {
   try {
@@ -1227,7 +1227,7 @@ router.put('/tenants/:id/opus-limit', (req, res) => {
   }
 });
 
-// ─── GET /email/health — Token Health for All Tenant Inboxes ────────────────
+// ─── GET /email/health - Token Health for All Tenant Inboxes ────────────────
 
 router.get('/email/health', async (req, res) => {
   try {
@@ -1246,7 +1246,7 @@ router.get('/email/health', async (req, res) => {
   }
 });
 
-// ─── POST /email/health/refresh — Force fresh token health check ────────────
+// ─── POST /email/health/refresh - Force fresh token health check ────────────
 
 router.post('/email/health/refresh', async (req, res) => {
   try {

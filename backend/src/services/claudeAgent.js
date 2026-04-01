@@ -1,9 +1,9 @@
 /**
- * Claude Agent Service — Routes complex agent queries through Claude Code CLI
+ * Claude Agent Service - Routes complex agent queries through Claude Code CLI
  *
  * Architecture (primary): VPS runs `claude -p` locally with OAuth credentials
  * stored at /root/.claude/.credentials.json (Claude Max subscription).
- * MCP bridge runs on same machine — no SSH needed.
+ * MCP bridge runs on same machine - no SSH needed.
  *
  * Architecture (legacy fallback): VPS → SSH tunnel (port 2222) → Mac → claude -p
  * Set CLAUDE_USE_TUNNEL=true to use the SSH tunnel path.
@@ -23,7 +23,7 @@ const MAC_WRAPPER = process.env.CLAUDE_MAC_WRAPPER || '/Users/teoblind/claude-co
 
 // Local fallback (if tunnel is down and VPS has its own claude auth)
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
-// Lazy — dotenv may not have loaded yet at ESM import time
+// Lazy - dotenv may not have loaded yet at ESM import time
 function useTunnelEnabled() {
   return process.env.CLAUDE_USE_TUNNEL !== 'false'; // default: true
 }
@@ -83,16 +83,16 @@ class RequestQueue {
 const cliQueue = new RequestQueue(CLI_CONCURRENCY);
 
 // ─── Per-Tenant System Prompts ──────────────────────────────────────────────
-// Condensed versions — Claude Code adds its own base prompt, so we just
+// Condensed versions - Claude Code adds its own base prompt, so we just
 // inject domain knowledge + tool guidance.
 
 const TENANT_PROMPTS = {
-  'default': `You are Coppice — the AI agent for Sangha Renewables, a Bitcoin mining + renewable energy company.
+  'default': `You are Coppice - the AI agent for Sangha Renewables, a Bitcoin mining + renewable energy company.
 Key facts: 8 years operating, co-locates mining behind-the-meter at 2.8-4.0¢/kWh, $14M raised, flagship 19.9 MW West Texas facility on TotalEnergies solar farm.
 Team: Spencer Marr (President), Colin Peirce (Partner), Marcel Pineda (BD), Teo Blind (quant modeling).
 You handle: ERCOT analysis, fleet ops, IPP evaluation, financial modeling, LP reporting, email, docs, research.`,
 
-  'dacp-construction-001': `You are Coppice — the AI agent for DACP Construction, a concrete subcontractor in Houston TX.
+  'dacp-construction-001': `You are Coppice - the AI agent for DACP Construction, a concrete subcontractor in Houston TX.
 Key facts: Foundations, slabs, curb & gutter, sidewalks, post-tension. Notable client: Riot Platforms.
 CEO: David Castillo. Standard pricing: SOG ~$14/SF, curb & gutter ~$26/LF, sidewalks ~$10-11/SF.
 You handle: estimating, bid management, GC relationships, field ops, email, docs, research.
@@ -103,7 +103,7 @@ UPCOMING INTEGRATIONS (not yet available on current plan):
 - HCSS HeavyBid: Heavy civil estimating import/export.
 If a user asks about PlanSwift, Procore, or other desktop/field software integrations, tell them it is on the roadmap and they should contact their admin about upgrading their plan to get early access when it launches.`,
 
-  'zhan-capital': `You are Coppice — the AI agent for Zhan Capital LLC, a thesis-driven investment firm.
+  'zhan-capital': `You are Coppice - the AI agent for Zhan Capital LLC, a thesis-driven investment firm.
 Focus: sovereign AI infrastructure, energy systems, digital monetary networks. Founded by Teo Blind.
 Portfolio: Sangha Renewables, Volt Charging. You handle research, comms, ops, docs.`,
 };
@@ -230,7 +230,7 @@ export async function queryClaudeAgent({ tenantId, agentId, message, history, ma
   if (useTunnel) {
     useTunnel = await isTunnelHealthy();
     if (!useTunnel) {
-      console.warn(`[ClaudeAgent] Tunnel down — falling back to local claude for ${agentId}@${resolvedTenantId}`);
+      console.warn(`[ClaudeAgent] Tunnel down - falling back to local claude for ${agentId}@${resolvedTenantId}`);
     }
   }
 
@@ -306,7 +306,7 @@ function queryViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage, 
         const durationMs = Date.now() - start;
         console.error(`[ClaudeAgent] ${agentId}@${resolvedTenantId} timed out via tunnel after ${durationMs}ms`);
         resolve({
-          response: stdout.trim() || `The task timed out after ${Math.round(timeout / 1000)}s. The research may be partially complete — try breaking it into smaller steps.`,
+          response: stdout.trim() || `The task timed out after ${Math.round(timeout / 1000)}s. The research may be partially complete - try breaking it into smaller steps.`,
           durationMs,
           timedOut: true,
           route: 'tunnel',
@@ -805,7 +805,7 @@ function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turn
         const durationMs = Date.now() - start;
         console.error(`[ClaudeAgent] ${agentId}@${resolvedTenantId} timed out locally after ${durationMs}ms`);
         resolve({
-          response: stdout.trim() || `The task timed out after ${Math.round(timeout / 1000)}s. The research may be partially complete — try breaking it into smaller steps.`,
+          response: stdout.trim() || `The task timed out after ${Math.round(timeout / 1000)}s. The research may be partially complete - try breaking it into smaller steps.`,
           durationMs,
           timedOut: true,
           route: 'local',
@@ -840,7 +840,7 @@ function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turn
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// Standard allowed tools for CLI agent — includes built-in tools + MCP bridge
+// Standard allowed tools for CLI agent - includes built-in tools + MCP bridge
 // The MCP bridge tools are auto-discovered from .mcp.json in the project dir
 // (claude-coppice.sh cds to /Users/teoblind/final before launching claude)
 const ALLOWED_TOOLS = [

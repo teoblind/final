@@ -1,5 +1,5 @@
 /**
- * Fleet Diagnostics Routes — Phase 5
+ * Fleet Diagnostics Routes - Phase 5
  *
  * Cross-references pool data with fleet config and curtailment events
  * to detect anomalies and reconcile operational state.
@@ -14,7 +14,7 @@ import {
 
 const router = express.Router();
 
-/** GET /reconciliation — Hashrate reconciliation report */
+/** GET /reconciliation - Hashrate reconciliation report */
 router.get('/reconciliation', async (req, res) => {
   try {
     const reconciliation = await getHashrateReconciliation();
@@ -28,7 +28,7 @@ router.get('/reconciliation', async (req, res) => {
   }
 });
 
-/** GET /curtailment — Curtailment execution reconciliation */
+/** GET /curtailment - Curtailment execution reconciliation */
 router.get('/curtailment', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 7;
@@ -43,7 +43,7 @@ router.get('/curtailment', async (req, res) => {
   }
 });
 
-/** GET /anomalies — Current worker/fleet anomalies */
+/** GET /anomalies - Current worker/fleet anomalies */
 router.get('/anomalies', async (req, res) => {
   try {
     const anomalies = await getWorkerAnomalies();
@@ -60,7 +60,7 @@ router.get('/anomalies', async (req, res) => {
   }
 });
 
-/** GET /summary — Overall diagnostic health status */
+/** GET /summary - Overall diagnostic health status */
 router.get('/summary', async (req, res) => {
   try {
     const summary = await getDiagnosticsSummary();

@@ -1,5 +1,5 @@
 /**
- * Recall Audio Bridge — Bridges Recall.ai meeting audio ↔ ElevenLabs Conversational AI
+ * Recall Audio Bridge - Bridges Recall.ai meeting audio ↔ ElevenLabs Conversational AI
  *
  * Flow:
  *   Meeting audio (PCM 16kHz via Recall WebSocket)
@@ -35,11 +35,11 @@ export class RecallAudioBridge {
   }
 
   /**
-   * Start the bridge — connect to ElevenLabs Conversational AI.
+   * Start the bridge - connect to ElevenLabs Conversational AI.
    */
   async start() {
     if (!this.agentId) {
-      throw new Error('ELEVENLABS_AGENT_ID not configured — cannot start audio bridge');
+      throw new Error('ELEVENLABS_AGENT_ID not configured - cannot start audio bridge');
     }
 
     this._running = true;
@@ -52,7 +52,7 @@ export class RecallAudioBridge {
 
     this._elWs.on('open', () => {
       console.log(`[AudioBridge] ElevenLabs connected for bot ${this.botId}`);
-      // Start PCM flush interval — forward buffered audio every 100ms
+      // Start PCM flush interval - forward buffered audio every 100ms
       this._pcmFlushInterval = setInterval(() => this._flushPcmBuffer(), 100);
     });
 
@@ -82,7 +82,7 @@ export class RecallAudioBridge {
     // During echo suppression (bot is speaking), don't forward audio
     if (this._speaking) return;
 
-    // Append to buffer — will be flushed to ElevenLabs on interval
+    // Append to buffer - will be flushed to ElevenLabs on interval
     this._pcmBuffer = Buffer.concat([this._pcmBuffer, pcmData]);
   }
 
@@ -112,7 +112,7 @@ export class RecallAudioBridge {
 
       switch (msg.type) {
         case 'audio':
-          // TTS audio chunk from ElevenLabs — collect and send to Recall
+          // TTS audio chunk from ElevenLabs - collect and send to Recall
           this._ttsChunks.push(Buffer.from(msg.audio, 'base64'));
           // Debounce: wait for end-of-speech or flush after 500ms of no new chunks
           clearTimeout(this._flushTimer);
@@ -120,12 +120,12 @@ export class RecallAudioBridge {
           break;
 
         case 'agent_response':
-          // Agent started speaking — enable echo suppression
+          // Agent started speaking - enable echo suppression
           this._speaking = true;
           break;
 
         case 'agent_response_end':
-          // Agent finished speaking — disable echo suppression after a short delay
+          // Agent finished speaking - disable echo suppression after a short delay
           setTimeout(() => { this._speaking = false; }, 300);
           break;
 
@@ -150,7 +150,7 @@ export class RecallAudioBridge {
           }
       }
     } catch (err) {
-      // Binary audio data — might be raw PCM from older API versions
+      // Binary audio data - might be raw PCM from older API versions
       if (Buffer.isBuffer(raw)) {
         this._ttsChunks.push(raw);
         clearTimeout(this._flushTimer);
@@ -216,7 +216,7 @@ export class RecallAudioBridge {
   }
 
   /**
-   * Stop the bridge — close ElevenLabs connection, cleanup.
+   * Stop the bridge - close ElevenLabs connection, cleanup.
    */
   stop() {
     console.log(`[AudioBridge] Stopping bridge for bot ${this.botId}`);

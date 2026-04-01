@@ -1,9 +1,9 @@
 /**
- * Chat Routes — Agent conversation endpoints
+ * Chat Routes - Agent conversation endpoints
  *
- * GET  /api/v1/chat/:agentId/messages  — Load conversation history
- * POST /api/v1/chat/:agentId/messages  — Send message, get AI response
- * DELETE /api/v1/chat/:agentId/messages — Clear conversation history
+ * GET  /api/v1/chat/:agentId/messages  - Load conversation history
+ * POST /api/v1/chat/:agentId/messages  - Send message, get AI response
+ * DELETE /api/v1/chat/:agentId/messages - Clear conversation history
  */
 
 import express from 'express';
@@ -81,7 +81,7 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
 
     const tenantId = req.resolvedTenant?.id || 'default';
     const visitorId = `visitor_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    // Help chat is ephemeral — no thread or message persistence
+    // Help chat is ephemeral - no thread or message persistence
     const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     // Set up SSE
@@ -110,7 +110,7 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
 });
 
 // ─── Serve uploaded files (images, etc.) ─────────────────────────────────────
-// Before general auth middleware — uses query param token for <img> tags
+// Before general auth middleware - uses query param token for <img> tags
 router.get('/uploads/:threadId/:filename', async (req, res) => {
   try {
     // Auth via query param (img tags can't send headers) or header
@@ -195,7 +195,7 @@ function generateAndEmitTitle(content, threadId, res) {
 // ─── Pinned Threads (cross-agent, for Command Dashboard) ────────────────────
 
 /**
- * GET /pinned-threads — Get all pinned threads for the tenant
+ * GET /pinned-threads - Get all pinned threads for the tenant
  */
 router.get('/pinned-threads', async (req, res) => {
   try {
@@ -212,7 +212,7 @@ router.get('/pinned-threads', async (req, res) => {
 // ─── Thread CRUD Endpoints ──────────────────────────────────────────────────
 
 /**
- * GET /:agentId/threads — List threads (visibility-filtered)
+ * GET /:agentId/threads - List threads (visibility-filtered)
  */
 router.get('/:agentId/threads', async (req, res) => {
   try {
@@ -254,7 +254,7 @@ router.get('/:agentId/threads', async (req, res) => {
 });
 
 /**
- * POST /:agentId/threads — Create a new thread
+ * POST /:agentId/threads - Create a new thread
  */
 router.post('/:agentId/threads', async (req, res) => {
   try {
@@ -284,7 +284,7 @@ router.post('/:agentId/threads', async (req, res) => {
 });
 
 /**
- * GET /:agentId/threads/:threadId/messages — Get thread messages
+ * GET /:agentId/threads/:threadId/messages - Get thread messages
  */
 router.get('/:agentId/threads/:threadId/messages', async (req, res) => {
   try {
@@ -330,7 +330,7 @@ router.get('/:agentId/threads/:threadId/messages', async (req, res) => {
 });
 
 /**
- * POST /:agentId/threads/:threadId/messages — Send message in thread
+ * POST /:agentId/threads/:threadId/messages - Send message in thread
  */
 router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
   try {
@@ -346,7 +346,7 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
     if (!thread) return res.status(404).json({ error: 'Thread not found' });
     if (thread.tenant_id !== tenantId) return res.status(404).json({ error: 'Thread not found' });
 
-    // Visibility check — private threads only writable by owner or admin
+    // Visibility check - private threads only writable by owner or admin
     if (thread.visibility === 'private' && thread.user_id !== userId && !isAdmin) {
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -402,7 +402,7 @@ router.post('/:agentId/threads/:threadId/messages', async (req, res) => {
 });
 
 /**
- * POST /:agentId/threads/:threadId/messages/upload — Send message with file attachments
+ * POST /:agentId/threads/:threadId/messages/upload - Send message with file attachments
  * Supports single or multiple files. Files persist on disk for RC agent access.
  */
 router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files', 20), async (req, res) => {
@@ -457,7 +457,7 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
         });
       } else {
         const preview = (parsed.text || '').length > 8000
-          ? parsed.text.slice(0, 8000) + '\n[... truncated — full file available on disk]'
+          ? parsed.text.slice(0, 8000) + '\n[... truncated - full file available on disk]'
           : (parsed.text || `[Uploaded file: ${file.originalname}]`);
         contentBlocks.push({
           type: 'text',
@@ -479,7 +479,7 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
       generateShortTitle(titleContext).then(t => updateThreadTitle(threadId, t)).catch(() => {});
     }
 
-    // Pass content blocks (multimodal) — chat() handles both string and array
+    // Pass content blocks (multimodal) - chat() handles both string and array
     const result = await chat(tenantId, agentId, userId, contentBlocks, threadId);
 
     const response = {
@@ -515,7 +515,7 @@ router.post('/:agentId/threads/:threadId/messages/upload', upload.array('files',
 });
 
 /**
- * PATCH /:agentId/threads/:threadId — Update title/visibility
+ * PATCH /:agentId/threads/:threadId - Update title/visibility
  */
 router.patch('/:agentId/threads/:threadId', async (req, res) => {
   try {
@@ -577,7 +577,7 @@ router.patch('/:agentId/threads/:threadId', async (req, res) => {
 });
 
 /**
- * DELETE /:agentId/threads/:threadId — Delete thread + messages
+ * DELETE /:agentId/threads/:threadId - Delete thread + messages
  */
 router.delete('/:agentId/threads/:threadId', async (req, res) => {
   try {
@@ -613,7 +613,7 @@ router.delete('/:agentId/threads/:threadId', async (req, res) => {
 // ─── Streaming Endpoints (SSE) ───────────────────────────────────────────────
 
 /**
- * POST /:agentId/threads/:threadId/messages/stream — Stream response via SSE
+ * POST /:agentId/threads/:threadId/messages/stream - Stream response via SSE
  */
 router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
   try {
@@ -638,7 +638,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    // helpMode on existing thread — lightweight path
+    // helpMode on existing thread - lightweight path
     if (helpMode && HELP_AGENTS.has(agentId)) {
       const text = content.trim().slice(0, 1000);
       res.setHeader('Content-Type', 'text/event-stream');
@@ -721,7 +721,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
 });
 
 /**
- * POST /:agentId/messages/stream — Stream response via SSE (auto-creates thread)
+ * POST /:agentId/messages/stream - Stream response via SSE (auto-creates thread)
  */
 router.post('/:agentId/messages/stream', async (req, res) => {
   try {
@@ -737,11 +737,11 @@ router.post('/:agentId/messages/stream', async (req, res) => {
       return res.status(400).json({ error: 'Message content is required' });
     }
 
-    // helpMode requests use the lightweight path (Haiku, no tools) — same as public help endpoint
+    // helpMode requests use the lightweight path (Haiku, no tools) - same as public help endpoint
     if (helpMode && HELP_AGENTS.has(agentId)) {
       const text = content.trim().slice(0, 1000);
       const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      // Help chat is ephemeral — no thread or message persistence
+      // Help chat is ephemeral - no thread or message persistence
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
@@ -820,7 +820,7 @@ router.post('/:agentId/messages/stream', async (req, res) => {
 
 // ─── Streaming File Upload ──────────────────────────────────────────────────
 /**
- * POST /:agentId/threads/:threadId/messages/upload-stream — Upload files with SSE streaming response
+ * POST /:agentId/threads/:threadId/messages/upload-stream - Upload files with SSE streaming response
  */
 router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('files', 5), async (req, res) => {
   const uploadedFiles = req.files || [];
@@ -919,7 +919,7 @@ router.post('/:agentId/threads/:threadId/messages/upload-stream', upload.array('
 // ─── Legacy Endpoints (backward compat) ─────────────────────────────────────
 
 /**
- * GET /:agentId/messages — Load conversation history
+ * GET /:agentId/messages - Load conversation history
  */
 router.get('/:agentId/messages', async (req, res) => {
   try {
@@ -950,7 +950,7 @@ router.get('/:agentId/messages', async (req, res) => {
 });
 
 /**
- * POST /:agentId/messages — Send message and get AI response
+ * POST /:agentId/messages - Send message and get AI response
  */
 router.post('/:agentId/messages', async (req, res) => {
   try {
@@ -1038,7 +1038,7 @@ router.post('/:agentId/messages', async (req, res) => {
 });
 
 /**
- * DELETE /:agentId/messages — Clear conversation history
+ * DELETE /:agentId/messages - Clear conversation history
  */
 router.delete('/:agentId/messages', async (req, res) => {
   try {
@@ -1064,7 +1064,7 @@ router.delete('/:agentId/messages', async (req, res) => {
 });
 
 /**
- * POST /generate-report — Generate a report using Opus (rate-limited)
+ * POST /generate-report - Generate a report using Opus (rate-limited)
  */
 router.post('/generate-report', async (req, res) => {
   try {
@@ -1075,7 +1075,7 @@ router.post('/generate-report', async (req, res) => {
     const limit = checkOpusLimit(tenantId);
     if (!limit.allowed) {
       return res.status(429).json({
-        error: 'Daily report limit reached — resets at midnight UTC',
+        error: 'Daily report limit reached - resets at midnight UTC',
         usage: { count: limit.count, limit: limit.limit, resetsAt: limit.resetsAt },
       });
     }
@@ -1129,7 +1129,7 @@ router.post('/generate-report', async (req, res) => {
 });
 
 /**
- * POST /send-reminder — Send a follow-up reminder email (DACP demo)
+ * POST /send-reminder - Send a follow-up reminder email (DACP demo)
  */
 router.post('/send-reminder', async (req, res) => {
   const { type } = req.body;
@@ -1137,7 +1137,7 @@ router.post('/send-reminder', async (req, res) => {
   const reminders = {
     geotech_followup: {
       to: 'teo@zhan.capital',
-      subject: 'Follow-up: Updated Boring Logs — Frisco Station Pier P-5',
+      subject: 'Follow-up: Updated Boring Logs - Frisco Station Pier P-5',
       body: 'Hi,\n\nThis is a follow-up regarding the updated boring logs we requested for the Frisco Station project, specifically the pier P-5 area where our field team encountered rock at 28\'.\n\nWe sent the initial request 3 days ago and haven\'t received a response yet. Our crew is scheduling the next pier installation and we need the updated geotech data to confirm drilling parameters.\n\nCould you provide an ETA on the revised boring logs?\n\nBest,\nDACP Construction\nestimating@dacpconstruction.com',
     },
   };
@@ -1153,12 +1153,12 @@ router.post('/send-reminder', async (req, res) => {
     res.json({ sent: true, messageId: result.messageId });
   } catch (err) {
     console.error('Send reminder error:', err.message);
-    res.json({ sent: true, note: 'Demo mode — email queued' });
+    res.json({ sent: true, note: 'Demo mode - email queued' });
   }
 });
 
 /**
- * POST /send-estimate — Send an estimate email from Estimating Bot chat (DACP demo)
+ * POST /send-estimate - Send an estimate email from Estimating Bot chat (DACP demo)
  * Body: { to, subject, body, attachment }
  */
 router.post('/send-estimate', async (req, res) => {
@@ -1211,14 +1211,14 @@ router.post('/send-estimate', async (req, res) => {
     res.json({ sent: true, messageId: result.messageId });
   } catch (err) {
     console.error('Chat send-estimate error:', err.message);
-    res.json({ sent: true, note: 'Demo mode — email queued' });
+    res.json({ sent: true, note: 'Demo mode - email queued' });
   }
 });
 
 // ─── Context Panel API ────────────────────────────────────────────────────────
 
 /**
- * GET /context/:threadId — Get aggregated context for a thread
+ * GET /context/:threadId - Get aggregated context for a thread
  */
 router.get('/context/:threadId', async (req, res) => {
   try {
@@ -1338,7 +1338,7 @@ router.get('/context/:threadId', async (req, res) => {
 });
 
 /**
- * POST /context/:threadId/pin — Pin an item to a thread
+ * POST /context/:threadId/pin - Pin an item to a thread
  */
 router.post('/context/:threadId/pin', async (req, res) => {
   try {
@@ -1363,7 +1363,7 @@ router.post('/context/:threadId/pin', async (req, res) => {
 });
 
 /**
- * DELETE /context/pin/:pinId — Remove a pin
+ * DELETE /context/pin/:pinId - Remove a pin
  */
 router.delete('/context/pin/:pinId', async (req, res) => {
   try {

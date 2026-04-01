@@ -1012,16 +1012,50 @@ export default function CommandDashboard({ onNavigate }) {
                         try {
                           const artifacts = JSON.parse(a.output_artifacts_json || '[]');
                           if (!artifacts.length) return null;
+                          const handleArtifactClick = async (art) => {
+                            // Email drafts - create approval item
+                            if (art.type === 'email_draft') {
+                              try {
+                                const r = await fetch(`${API_BASE}/v1/approvals`, {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                  body: JSON.stringify({
+                                    title: art.label || `Email to ${art.to}`,
+                                    description: `Email to ${art.to}: ${art.subject}`,
+                                    type: 'email_draft',
+                                    agent_id: a.agent_id || 'sangha',
+                                    payload: { to: art.to, subject: art.subject, body: art.body, assignmentId: a.id },
+                                  }),
+                                });
+                                if (r.ok) {
+                                  // Refresh approvals
+                                  setApprovals(prev => [...prev, { id: Date.now(), type: 'email_draft', agent: a.agent_id || 'sangha', agentLabel: 'Agent', desc: `Email to ${art.to} - ${art.subject}`, ts: new Date().toISOString(), payload: { to: art.to, subject: art.subject, body: art.body } }]);
+                                  alert('Email draft added to approval queue. Review it in the Approvals section above.');
+                                } else { alert('Failed to create approval'); }
+                              } catch (err) { console.error('Approval creation error:', err); }
+                              return;
+                            }
+                            // External URLs (Google Docs/Drive) - open directly
+                            if (art.url) { window.open(art.url, '_blank'); return; }
+                            // Local paths need auth - fetch as blob and open
+                            if (!art.path) return;
+                            try {
+                              const token = (() => { try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return s.tokens.accessToken; } catch {} return localStorage.getItem('auth_token'); })();
+                              const r = await fetch(`${API_BASE}${art.path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                              if (!r.ok) throw new Error('Download failed');
+                              const blob = await r.blob();
+                              const url = URL.createObjectURL(blob);
+                              window.open(url, '_blank');
+                            } catch (err) { console.error('Artifact download error:', err); }
+                          };
                           return (
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {artifacts.map((art, i) => {
-                                const href = art.url || (art.path ? `${API_BASE}${art.path}` : '#');
                                 const icon = art.type === 'gdoc' ? <ExternalLink size={10} />
                                   : art.type === 'pdf' ? <FileText size={10} />
                                   : art.type === 'docx' ? <Download size={10} />
                                   : <ExternalLink size={10} />;
                                 return (
-                                  <a key={i} href={href} target={art.type === 'gdoc' ? '_blank' : '_self'} rel="noopener noreferrer"
+                                  <button key={i} onClick={() => handleArtifactClick(art)}
                                     className={`inline-flex items-center gap-1 text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
                                       art.type === 'gdoc' ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
                                       : art.type === 'pdf' ? 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200'
@@ -1030,7 +1064,7 @@ export default function CommandDashboard({ onNavigate }) {
                                     }`}
                                   >
                                     {icon} {art.label || art.title || art.type}
-                                  </a>
+                                  </button>
                                 );
                               })}
                             </div>
@@ -1096,7 +1130,18 @@ export default function CommandDashboard({ onNavigate }) {
                                 <CheckCircle size={11} /> Done
                               </span>
                               <button
-                                onClick={() => { localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`); window.location.hash = 'hivemind-chat'; }}
+                                onClick={() => {
+                                  localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`);
+                                  // Store assignment context so chat can load report into context panel
+                                  try {
+                                    const arts = JSON.parse(a.output_artifacts_json || '[]');
+                                    const gdocArt = arts.find(x => x.type === 'gdoc' && x.url);
+                                    if (gdocArt?.fileId) {
+                                      localStorage.setItem('coppice_chat_context_file', JSON.stringify({ fileId: gdocArt.fileId, title: a.title, type: 'gdoc', url: gdocArt.url }));
+                                    }
+                                  } catch {}
+                                  window.location.hash = 'hivemind-chat';
+                                }}
                                 className="flex items-center gap-1 px-2 py-1 text-[11px] font-heading font-semibold bg-[#f0f0ec] text-[#6b6b65] rounded-md hover:bg-[#e8e6e1] hover:text-terminal-text transition-colors"
                               >
                                 <MessageSquare size={10} /> Chat

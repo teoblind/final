@@ -1,5 +1,5 @@
 /**
- * Meeting Processor — Post-meeting action item extraction + instruction execution
+ * Meeting Processor - Post-meeting action item extraction + instruction execution
  *
  * After MeetingBot transcribes a meeting, this service:
  * 1. Queries past meeting context (recent action items, past meetings)
@@ -14,7 +14,7 @@ import { tunnelPrompt, tunnelOrChat } from './cliTunnel.js';
 import { sendEmail } from './emailService.js';
 import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig, getAgentMode } from '../cache/database.js';
 
-// Lazy DB accessor — resolves to the current tenant's DB via AsyncLocalStorage context
+// Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
     const tenantId = getCurrentTenantId() || 'default';
@@ -112,7 +112,7 @@ Rules:
 - Use the email addresses provided in ATTENDEES as keys
 - If you can identify a person's name from the transcript, include it
 - If an attendee has no tasks, include them with an empty tasks array
-- Be specific — "Follow up with vendor" is too vague, "Send updated pricing proposal to Riot Platforms by Friday" is good
+- Be specific - "Follow up with vendor" is too vague, "Send updated pricing proposal to Riot Platforms by Friday" is good
 - Only include actionable tasks, not observations`;
 
   const text = await tunnelPrompt({
@@ -187,12 +187,12 @@ ${taskSection}
 
 These tasks have been added to your Coppice dashboard. Let me know if anything needs adjusting.
 
-— Coppice`;
+- Coppice`;
 
     try {
       await sendEmail({
         to: email,
-        subject: `Meeting Summary: ${meetingTitle} — Your Action Items`,
+        subject: `Meeting Summary: ${meetingTitle} - Your Action Items`,
         body,
         tenantId,
       });
@@ -281,7 +281,7 @@ export async function processMeetingComplete({
   insertActivity({
     tenantId, type: 'meet',
     title: `Transcribed: ${meetingTitle}`,
-    subtitle: `${attendees.length} attendees — ${itemCount} action items — ${instructionsExecuted} instructions executed`,
+    subtitle: `${attendees.length} attendees - ${itemCount} action items - ${instructionsExecuted} instructions executed`,
     detailJson: JSON.stringify({
       summary: result.meeting_summary,
       actionItems: Object.values(result.attendee_tasks || {}).flatMap(p => (p.tasks || []).map(t => t.task)),
@@ -329,12 +329,12 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
 
   console.log(`[MeetingProcessor] Found ${instructions.length} agent instruction(s) to execute`);
 
-  // 2. Check agent mode — copilot creates approval items, autonomous executes directly
+  // 2. Check agent mode - copilot creates approval items, autonomous executes directly
   const agentId = TENANT_AGENT_MAP[tenantId] || 'sangha';
   const agentMode = getAgentMode(agentId);
 
   if (agentMode === 'off') {
-    console.log(`[MeetingProcessor] Agent "${agentId}" is off — skipping instruction execution`);
+    console.log(`[MeetingProcessor] Agent "${agentId}" is off - skipping instruction execution`);
     return 0;
   }
 
@@ -347,25 +347,25 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
       `).run(
         tenantId, agentId,
         `Meeting instruction: ${instruction.task.slice(0, 80)}`,
-        `From "${meetingTitle}" — requested by ${instruction.requestedBy || 'participant'}. Approve to execute.`,
+        `From "${meetingTitle}" - requested by ${instruction.requestedBy || 'participant'}. Approve to execute.`,
         JSON.stringify({
           instruction, meetingTitle, summary, attendees,
           tenantId, agentId, userId: 'meeting-bot',
         }),
       );
     }
-    console.log(`[MeetingProcessor] Copilot mode — created ${instructions.length} approval item(s)`);
+    console.log(`[MeetingProcessor] Copilot mode - created ${instructions.length} approval item(s)`);
     insertActivity({
       tenantId, type: 'alert',
       title: `${instructions.length} meeting instruction(s) awaiting approval`,
-      subtitle: `From "${meetingTitle}" — review in Approvals queue`,
+      subtitle: `From "${meetingTitle}" - review in Approvals queue`,
       detailJson: JSON.stringify({ instructions, meetingTitle }),
       sourceType: 'meeting', agentId: 'meetings',
     });
     return instructions.length;
   }
 
-  // Autonomous mode — execute directly via CLI tunnel (with chat() fallback for tool use)
+  // Autonomous mode - execute directly via CLI tunnel (with chat() fallback for tool use)
   let executed = 0;
 
   for (const instruction of instructions) {
@@ -383,7 +383,7 @@ MEETING ATTENDEES: ${attendees.join(', ')}
 MEETING SUMMARY:
 ${summary}
 
-Execute this instruction now. If it involves sending an email, creating a document, updating a file, or any other action — do it using your available tools. Be concise and professional. If you cannot complete the instruction (missing information, ambiguous request), log what you attempted and what's needed.`;
+Execute this instruction now. If it involves sending an email, creating a document, updating a file, or any other action - do it using your available tools. Be concise and professional. If you cannot complete the instruction (missing information, ambiguous request), log what you attempted and what's needed.`;
 
       const result = await tunnelOrChat({
         tenantId, agentId, userId: 'meeting-bot', prompt,
@@ -395,7 +395,7 @@ Execute this instruction now. If it involves sending an email, creating a docume
         tenantId,
         type: 'out',
         title: `Meeting instruction executed: ${instruction.task.slice(0, 80)}`,
-        subtitle: `From "${meetingTitle}" — requested by ${instruction.requestedBy || 'participant'}`,
+        subtitle: `From "${meetingTitle}" - requested by ${instruction.requestedBy || 'participant'}`,
         detailJson: JSON.stringify({
           instruction,
           agentResponse: result.response?.slice(0, 2000),
@@ -408,7 +408,7 @@ Execute this instruction now. If it involves sending an email, creating a docume
       executed++;
       console.log(`[MeetingProcessor] ✓ Instruction executed: "${instruction.task.slice(0, 60)}"`);
     } catch (err) {
-      console.error(`[MeetingProcessor] Instruction failed: "${instruction.task}" — ${err.message}`);
+      console.error(`[MeetingProcessor] Instruction failed: "${instruction.task}" - ${err.message}`);
       insertActivity({
         tenantId,
         type: 'alert',

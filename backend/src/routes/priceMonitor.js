@@ -20,7 +20,7 @@ const router = Router();
 
 router.use(authenticate);
 
-// ─── GET /current — Live prices for monitored nodes ──────────────────────────
+// ─── GET /current - Live prices for monitored nodes ──────────────────────────
 
 router.get('/current', (req, res) => {
   try {
@@ -32,7 +32,7 @@ router.get('/current', (req, res) => {
   }
 });
 
-// ─── GET /history — Recent price history ─────────────────────────────────────
+// ─── GET /history - Recent price history ─────────────────────────────────────
 
 router.get('/history', (req, res) => {
   try {
@@ -48,7 +48,7 @@ router.get('/history', (req, res) => {
   }
 });
 
-// ─── GET /alerts — List alert rules ──────────────────────────────────────────
+// ─── GET /alerts - List alert rules ──────────────────────────────────────────
 
 router.get('/alerts', (req, res) => {
   try {
@@ -60,7 +60,7 @@ router.get('/alerts', (req, res) => {
   }
 });
 
-// ─── POST /alerts — Create alert rule ────────────────────────────────────────
+// ─── POST /alerts - Create alert rule ────────────────────────────────────────
 
 router.post('/alerts', (req, res) => {
   try {
@@ -93,7 +93,7 @@ router.post('/alerts', (req, res) => {
   }
 });
 
-// ─── PUT /alerts/:id — Update alert rule ─────────────────────────────────────
+// ─── PUT /alerts/:id - Update alert rule ─────────────────────────────────────
 
 router.put('/alerts/:id', (req, res) => {
   try {
@@ -116,7 +116,7 @@ router.put('/alerts/:id', (req, res) => {
   }
 });
 
-// ─── DELETE /alerts/:id — Delete alert rule ──────────────────────────────────
+// ─── DELETE /alerts/:id - Delete alert rule ──────────────────────────────────
 
 router.delete('/alerts/:id', (req, res) => {
   try {
@@ -128,7 +128,7 @@ router.delete('/alerts/:id', (req, res) => {
   }
 });
 
-// ─── GET /alerts/history — Triggered alerts timeline ─────────────────────────
+// ─── GET /alerts/history - Triggered alerts timeline ─────────────────────────
 
 router.get('/alerts/history', (req, res) => {
   try {

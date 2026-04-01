@@ -1,5 +1,5 @@
 /**
- * CLI Tunnel Helper — Routes prompts through Claude Max (SSH tunnel → Mac)
+ * CLI Tunnel Helper - Routes prompts through Claude Max (SSH tunnel → Mac)
  * with automatic fallback to the Anthropic API.
  *
  * Usage:

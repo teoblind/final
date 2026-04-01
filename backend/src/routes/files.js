@@ -1,11 +1,11 @@
 /**
- * Files Routes — Tenant file browser with Google Drive links
+ * Files Routes - Tenant file browser with Google Drive links
  *
- * GET    /api/v1/files            — List files (with category/search filters)
- * GET    /api/v1/files/categories — Get category list with counts
- * POST   /api/v1/files/upload     — Upload file to Google Drive
- * POST   /api/v1/files/sync-drive — Trigger Drive auto-scan
- * GET    /api/v1/files/sync-status — Get sync progress
+ * GET    /api/v1/files            - List files (with category/search filters)
+ * GET    /api/v1/files/categories - Get category list with counts
+ * POST   /api/v1/files/upload     - Upload file to Google Drive
+ * POST   /api/v1/files/sync-drive - Trigger Drive auto-scan
+ * GET    /api/v1/files/sync-status - Get sync progress
  */
 
 import express from 'express';
@@ -164,7 +164,7 @@ router.get('/categories', (req, res) => {
 });
 
 /**
- * POST /upload — Upload a file to the tenant's Google Drive
+ * POST /upload - Upload a file to the tenant's Google Drive
  */
 router.post('/upload', upload.single('file'), async (req, res) => {
   try {
@@ -233,7 +233,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 /**
- * POST /sync-drive — Trigger a full Drive sync (runs in background)
+ * POST /sync-drive - Trigger a full Drive sync (runs in background)
  */
 router.post('/sync-drive', async (req, res) => {
   try {
@@ -249,7 +249,7 @@ router.post('/sync-drive', async (req, res) => {
       }
     }
 
-    // Fire and forget — sync runs in background with tenant context
+    // Fire and forget - sync runs in background with tenant context
     const { syncDrive } = await import('../services/driveSync.js');
     runWithTenant(tenantId, () => syncDrive(tenantId)).catch(err => {
       console.error(`[DriveSync] Background sync failed for ${tenantId}:`, err.message);
@@ -263,7 +263,7 @@ router.post('/sync-drive', async (req, res) => {
 });
 
 /**
- * GET /sync-status — Get current Drive sync status
+ * GET /sync-status - Get current Drive sync status
  */
 router.get('/sync-status', (req, res) => {
   try {
@@ -276,7 +276,7 @@ router.get('/sync-status', (req, res) => {
 });
 
 /**
- * GET /drive-files — List all synced Drive files
+ * GET /drive-files - List all synced Drive files
  */
 router.get('/drive-files', (req, res) => {
   try {

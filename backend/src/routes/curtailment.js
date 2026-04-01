@@ -1,5 +1,5 @@
 /**
- * Curtailment Routes — Phase 4
+ * Curtailment Routes - Phase 4
  *
  * API endpoints for the curtailment optimization engine.
  * Provides real-time recommendations, schedule generation,
@@ -28,7 +28,7 @@ const router = express.Router();
 // ─── Real-Time Recommendation ──────────────────────────────────────────────
 
 /**
- * GET /recommendation — Get current curtailment recommendation
+ * GET /recommendation - Get current curtailment recommendation
  * Query params: ?energyPrice=50 (optional override in $/MWh)
  */
 router.get('/recommendation', async (req, res) => {
@@ -47,7 +47,7 @@ router.get('/recommendation', async (req, res) => {
 });
 
 /**
- * GET /schedule/generate — Force-regenerate the operating schedule
+ * GET /schedule/generate - Force-regenerate the operating schedule
  * Same as /schedule but signals explicit regeneration intent
  */
 router.get('/schedule/generate', async (req, res) => {
@@ -67,7 +67,7 @@ router.get('/schedule/generate', async (req, res) => {
 // ─── 24-Hour Schedule ──────────────────────────────────────────────────────
 
 /**
- * GET /schedule — Generate 24-hour operating schedule
+ * GET /schedule - Generate 24-hour operating schedule
  * Query params: ?node=HB_NORTH&date=2025-01-15
  */
 router.get('/schedule', async (req, res) => {
@@ -87,7 +87,7 @@ router.get('/schedule', async (req, res) => {
 // ─── Performance Analytics ─────────────────────────────────────────────────
 
 /**
- * GET /performance — Get curtailment performance metrics
+ * GET /performance - Get curtailment performance metrics
  * Query params: ?days=30
  */
 router.get('/performance', (req, res) => {
@@ -111,7 +111,7 @@ router.get('/performance', (req, res) => {
 });
 
 /**
- * GET /savings — Cumulative savings breakdown
+ * GET /savings - Cumulative savings breakdown
  * Query params: ?days=90
  */
 router.get('/savings', (req, res) => {
@@ -187,7 +187,7 @@ router.get('/savings', (req, res) => {
 // ─── Backtesting ───────────────────────────────────────────────────────────
 
 /**
- * POST /backtest — Run a curtailment backtest
+ * POST /backtest - Run a curtailment backtest
  * Body: { startDate, endDate, strategy, params, node }
  */
 router.post('/backtest', async (req, res) => {
@@ -229,7 +229,7 @@ router.post('/backtest', async (req, res) => {
 // ─── Event Logging ─────────────────────────────────────────────────────────
 
 /**
- * GET /events — Get curtailment event history
+ * GET /events - Get curtailment event history
  * Query params: ?days=30&type=price_spike
  */
 router.get('/events', (req, res) => {
@@ -255,7 +255,7 @@ router.get('/events', (req, res) => {
 });
 
 /**
- * POST /events — Log a new curtailment event
+ * POST /events - Log a new curtailment event
  * Body: { triggerType, startTime, endTime, machineClasses, energyPriceMWh,
  *         estimatedSavings, reason, acknowledged }
  */
@@ -307,7 +307,7 @@ router.post('/events', (req, res) => {
 });
 
 /**
- * PUT /events/:id/acknowledge — Acknowledge a curtailment event
+ * PUT /events/:id/acknowledge - Acknowledge a curtailment event
  */
 router.put('/events/:id/acknowledge', (req, res) => {
   try {
@@ -323,7 +323,7 @@ router.put('/events/:id/acknowledge', (req, res) => {
 // ─── Constraints / Settings ────────────────────────────────────────────────
 
 /**
- * GET /constraints — Get curtailment constraints
+ * GET /constraints - Get curtailment constraints
  */
 router.get('/constraints', (req, res) => {
   try {
@@ -336,7 +336,7 @@ router.get('/constraints', (req, res) => {
 });
 
 /**
- * POST /constraints — Save curtailment constraints
+ * POST /constraints - Save curtailment constraints
  */
 router.post('/constraints', (req, res) => {
   try {
@@ -358,7 +358,7 @@ router.post('/constraints', (req, res) => {
 });
 
 /**
- * PUT /constraints — Update curtailment constraints (same as POST)
+ * PUT /constraints - Update curtailment constraints (same as POST)
  */
 router.put('/constraints', (req, res) => {
   try {
@@ -379,7 +379,7 @@ router.put('/constraints', (req, res) => {
 });
 
 /**
- * GET /alerts — Curtailment-specific alerts
+ * GET /alerts - Curtailment-specific alerts
  */
 router.get('/alerts', async (req, res) => {
   try {
@@ -396,7 +396,7 @@ router.get('/alerts', async (req, res) => {
       alerts.push({
         type: 'full_curtailment',
         severity: 'critical',
-        message: `Full fleet curtailment recommended — energy at $${rec.energyPrice.current.toFixed(2)}/MWh exceeds all machine breakevens`,
+        message: `Full fleet curtailment recommended - energy at $${rec.energyPrice.current.toFixed(2)}/MWh exceeds all machine breakevens`,
         fleetState: rec.fleetState,
       });
     } else if (rec.fleetState === 'PARTIAL') {
@@ -404,7 +404,7 @@ router.get('/alerts', async (req, res) => {
       alerts.push({
         type: 'partial_curtailment',
         severity: 'warning',
-        message: `Partial curtailment recommended — ${curtailed} machines should be curtailed at current energy price`,
+        message: `Partial curtailment recommended - ${curtailed} machines should be curtailed at current energy price`,
         curtailedMachines: curtailed,
         fleetState: rec.fleetState,
       });
@@ -433,7 +433,7 @@ router.get('/alerts', async (req, res) => {
 });
 
 /**
- * GET /efficiency — Fleet efficiency waterfall data
+ * GET /efficiency - Fleet efficiency waterfall data
  * Returns machine classes ordered by efficiency with breakeven markers.
  */
 router.get('/efficiency', async (req, res) => {

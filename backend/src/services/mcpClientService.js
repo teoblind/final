@@ -1,5 +1,5 @@
 /**
- * MCP Client Manager — manages Model Context Protocol client connections per tenant.
+ * MCP Client Manager - manages Model Context Protocol client connections per tenant.
  *
  * Each tenant can configure external MCP servers (stdio or SSE transport).
  * This service maintains persistent connections and translates between
@@ -51,7 +51,7 @@ class McpClientManager {
     }
     this.connections.get(tenantId).set(id, { client, transport, tools, name });
 
-    console.log(`[MCP] Connected to "${name}" for tenant ${tenantId} — ${tools.length} tool(s)`);
+    console.log(`[MCP] Connected to "${name}" for tenant ${tenantId} - ${tools.length} tool(s)`);
     return tools;
   }
 

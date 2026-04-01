@@ -4,10 +4,10 @@
  * Multi-tenant notification system for agent events,
  * approvals, and operational alerts.
  *
- * GET  /                — List notifications for current tenant/user
- * POST /:id/read        — Mark notification as read
- * POST /read-all        — Mark all notifications as read
- * GET  /count           — Return unread count
+ * GET  /                - List notifications for current tenant/user
+ * POST /:id/read        - Mark notification as read
+ * POST /read-all        - Mark all notifications as read
+ * GET  /count           - Return unread count
  */
 import express from 'express';
 import db from '../cache/database.js';
@@ -31,13 +31,13 @@ function seedDemoNotifications(tenantId) {
 
   const demos = {
     'default': [
-      { agent_id: 'curtailment', title: 'Curtailment Agent recommends S19 shutdown', body: 'ERCOT prices negative for 4+ hours — S19 fleet idle saves $2,140/hr. Approve to execute.', type: 'action', link_tab: 'curtailment' },
+      { agent_id: 'curtailment', title: 'Curtailment Agent recommends S19 shutdown', body: 'ERCOT prices negative for 4+ hours - S19 fleet idle saves $2,140/hr. Approve to execute.', type: 'action', link_tab: 'curtailment' },
       { agent_id: 'sangha', title: 'Weekly Executive Briefing ready for review', body: 'Fleet hashrate 42.1 EH/s, uptime 97.3%, revenue $1.24M. Full report attached.', type: 'info', link_tab: 'reports' },
       { agent_id: 'pools', title: 'Pool routing detected 3.2% yield improvement on Foundry', body: 'Switching 15 EH/s from F2Pool to Foundry USA increases daily yield by ~$4,800.', type: 'success', link_tab: 'pools' },
     ],
     'dacp-construction-001': [
-      { agent_id: 'estimating', title: 'Turner Construction bid email ready to send', body: 'Estimate #EST-2026-041 for Midtown Tower foundations — $847K total. Review and approve.', type: 'action', link_tab: 'estimates' },
-      { agent_id: 'meetings', title: 'Meeting summary ready — McCarthy 2PM call', body: 'Key items: rebar pricing locked at $0.89/lb, pour schedule moved to March 20.', type: 'info', link_tab: 'meetings' },
+      { agent_id: 'estimating', title: 'Turner Construction bid email ready to send', body: 'Estimate #EST-2026-041 for Midtown Tower foundations - $847K total. Review and approve.', type: 'action', link_tab: 'estimates' },
+      { agent_id: 'meetings', title: 'Meeting summary ready - McCarthy 2PM call', body: 'Key items: rebar pricing locked at $0.89/lb, pour schedule moved to March 20.', type: 'info', link_tab: 'meetings' },
     ],
   };
 
@@ -54,7 +54,7 @@ function seedDemoNotifications(tenantId) {
   }
 }
 
-/** GET / — List notifications */
+/** GET / - List notifications */
 router.get('/', (req, res) => {
   try {
     const { tenantId, userId } = resolveIds(req);
@@ -74,7 +74,7 @@ router.get('/', (req, res) => {
   }
 });
 
-/** GET /count — Unread count */
+/** GET /count - Unread count */
 router.get('/count', (req, res) => {
   try {
     const { tenantId, userId } = resolveIds(req);
@@ -89,7 +89,7 @@ router.get('/count', (req, res) => {
   }
 });
 
-/** POST /:id/read — Mark single notification as read */
+/** POST /:id/read - Mark single notification as read */
 router.post('/:id/read', (req, res) => {
   try {
     const { tenantId } = resolveIds(req);
@@ -102,7 +102,7 @@ router.post('/:id/read', (req, res) => {
   }
 });
 
-/** POST /read-all — Mark all as read */
+/** POST /read-all - Mark all as read */
 router.post('/read-all', (req, res) => {
   try {
     const { tenantId, userId } = resolveIds(req);

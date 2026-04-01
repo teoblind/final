@@ -1,5 +1,5 @@
 /**
- * HubSpot CRM Service — Search, dedup, create, and sync contacts/companies/deals.
+ * HubSpot CRM Service - Search, dedup, create, and sync contacts/companies/deals.
  *
  * Used by: Sangha Hivemind chat (tools), Lead Engine (dedup + sync),
  * Command Dashboard (pipeline widget).

@@ -1,5 +1,5 @@
 /**
- * Fleet Hashprice Routes — Phase 3
+ * Fleet Hashprice Routes - Phase 3
  *
  * Endpoints for fleet configuration, profitability calculations,
  * scenario simulation, snapshots, and hashprice alerts.
@@ -28,7 +28,7 @@ const router = express.Router();
 // ─── ASIC Database ──────────────────────────────────────────────────────────
 
 /**
- * GET /asics — List all ASIC models from built-in database
+ * GET /asics - List all ASIC models from built-in database
  */
 router.get('/asics', (req, res) => {
   const { groupBy } = req.query;
@@ -41,7 +41,7 @@ router.get('/asics', (req, res) => {
 // ─── Fleet Configuration ────────────────────────────────────────────────────
 
 /**
- * GET /config — Get saved fleet configuration
+ * GET /config - Get saved fleet configuration
  */
 router.get('/config', (req, res) => {
   try {
@@ -57,7 +57,7 @@ router.get('/config', (req, res) => {
 });
 
 /**
- * POST /config — Save fleet configuration
+ * POST /config - Save fleet configuration
  */
 router.post('/config', (req, res) => {
   try {
@@ -95,7 +95,7 @@ router.post('/config', (req, res) => {
 // ─── Network Data ───────────────────────────────────────────────────────────
 
 /**
- * GET /network — Get current network data (hashrate, difficulty, fees, mempool)
+ * GET /network - Get current network data (hashrate, difficulty, fees, mempool)
  */
 router.get('/network', async (req, res) => {
   try {
@@ -120,7 +120,7 @@ router.get('/network', async (req, res) => {
 // ─── Fleet Profitability ────────────────────────────────────────────────────
 
 /**
- * GET /profitability — Calculate current fleet profitability
+ * GET /profitability - Calculate current fleet profitability
  * Query params: ?node=HB_NORTH (optional, for live ERCOT pricing)
  */
 router.get('/profitability', async (req, res) => {
@@ -147,7 +147,7 @@ router.get('/profitability', async (req, res) => {
       if (energyCache && energyCache.data) {
         nodePrices = energyCache.data;
       }
-    } catch (e) { /* No energy data available — that's fine */ }
+    } catch (e) { /* No energy data available - that's fine */ }
 
     const defaultEnergyCost = config.defaultEnergyCostKWh || 0.05;
     const fleetResult = calculateFleetHashprice(config.entries, defaultEnergyCost, networkHashprice, nodePrices);
@@ -199,7 +199,7 @@ router.get('/profitability', async (req, res) => {
 // ─── Machine-Level Breakeven ────────────────────────────────────────────────
 
 /**
- * GET /breakeven — Calculate breakeven electricity for all fleet models
+ * GET /breakeven - Calculate breakeven electricity for all fleet models
  */
 router.get('/breakeven', async (req, res) => {
   try {
@@ -247,7 +247,7 @@ router.get('/breakeven', async (req, res) => {
 // ─── Difficulty Adjustment ──────────────────────────────────────────────────
 
 /**
- * GET /difficulty — Get difficulty adjustment info with fleet impact
+ * GET /difficulty - Get difficulty adjustment info with fleet impact
  */
 router.get('/difficulty', async (req, res) => {
   try {
@@ -323,7 +323,7 @@ router.get('/difficulty', async (req, res) => {
 // ─── Scenario Simulation ────────────────────────────────────────────────────
 
 /**
- * POST /simulate — Run a scenario simulation
+ * POST /simulate - Run a scenario simulation
  */
 router.post('/simulate', async (req, res) => {
   try {
@@ -352,7 +352,7 @@ router.post('/simulate', async (req, res) => {
 // ─── Hashprice History / Trend ──────────────────────────────────────────────
 
 /**
- * GET /history — Get hashprice history with projections
+ * GET /history - Get hashprice history with projections
  * Query params: ?period=30d (default 90d)
  */
 router.get('/history', async (req, res) => {
@@ -411,7 +411,7 @@ router.get('/history', async (req, res) => {
 // ─── Fleet Snapshots ────────────────────────────────────────────────────────
 
 /**
- * POST /snapshot — Save a fleet profitability snapshot
+ * POST /snapshot - Save a fleet profitability snapshot
  */
 router.post('/snapshot', async (req, res) => {
   try {
@@ -450,7 +450,7 @@ router.post('/snapshot', async (req, res) => {
 });
 
 /**
- * GET /snapshots — Get historical fleet snapshots
+ * GET /snapshots - Get historical fleet snapshots
  * Query params: ?days=30 (default 30)
  */
 router.get('/snapshots', (req, res) => {
@@ -467,7 +467,7 @@ router.get('/snapshots', (req, res) => {
 // ─── Export ─────────────────────────────────────────────────────────────────
 
 /**
- * GET /export — Export fleet profitability data
+ * GET /export - Export fleet profitability data
  * Query params: ?format=csv|json (default json)
  */
 router.get('/export', async (req, res) => {
@@ -523,7 +523,7 @@ router.get('/export', async (req, res) => {
 // ─── Hashprice Alerts ───────────────────────────────────────────────────────
 
 /**
- * GET /alerts — Evaluate hashprice-specific alert conditions
+ * GET /alerts - Evaluate hashprice-specific alert conditions
  */
 router.get('/alerts', async (req, res) => {
   try {

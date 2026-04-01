@@ -1,5 +1,5 @@
 /**
- * Lead Engine Service — Discovery, enrichment, outreach, and follow-ups.
+ * Lead Engine Service - Discovery, enrichment, outreach, and follow-ups.
  *
  * Ported from ~/Charger-Bot/src/leadgen_bot.py to Node.js.
  * Uses Perplexity for discovery, Claude for parsing/email gen, DNS for MX validation.
@@ -363,7 +363,7 @@ Sign off as: ${senderName}`;
         db.prepare(`INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json) VALUES (?, 'outreach', ?, ?, 'email_draft', ?)`)
           .run(
             tenantId,
-            `Outreach draft: ${contact.name || 'contact'} — ${lead.venue_name}`,
+            `Outreach draft: ${contact.name || 'contact'} - ${lead.venue_name}`,
             `Subject: ${subject.trim()}`,
             JSON.stringify({
               to: contact.email,

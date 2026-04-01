@@ -1,9 +1,9 @@
 /**
  * Activity Feed Routes
  *
- * GET  /api/v1/activity          — List recent activities (paginated, filterable by type)
- * GET  /api/v1/activity/summary  — Dashboard summary (stats + recent activity)
- * GET  /api/v1/activity/:id      — Get single activity with full detail_json
+ * GET  /api/v1/activity          - List recent activities (paginated, filterable by type)
+ * GET  /api/v1/activity/summary  - Dashboard summary (stats + recent activity)
+ * GET  /api/v1/activity/:id      - Get single activity with full detail_json
  */
 
 import express from 'express';
@@ -27,7 +27,7 @@ function formatRelativeTime(dateStr) {
 }
 
 /**
- * GET / — List activities
+ * GET / - List activities
  * Query: limit (default 20), offset (default 0), type (optional filter)
  */
 router.get('/', (req, res) => {
@@ -60,7 +60,7 @@ router.get('/', (req, res) => {
 });
 
 /**
- * GET /summary — Dashboard summary (stats + recent activity)
+ * GET /summary - Dashboard summary (stats + recent activity)
  * Used by Command dashboard for live polling every 30s.
  */
 router.get('/summary', (req, res) => {
@@ -111,7 +111,7 @@ router.get('/summary', (req, res) => {
 });
 
 /**
- * GET /:id — Get single activity with full detail
+ * GET /:id - Get single activity with full detail
  */
 router.get('/:id', (req, res) => {
   try {

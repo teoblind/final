@@ -22,7 +22,7 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// ─── GET /invoices — List invoices ───────────────────────────────────────────
+// ─── GET /invoices - List invoices ───────────────────────────────────────────
 
 router.get('/invoices', (req, res) => {
   try {
@@ -40,7 +40,7 @@ router.get('/invoices', (req, res) => {
   }
 });
 
-// ─── GET /bills — List bills ─────────────────────────────────────────────────
+// ─── GET /bills - List bills ─────────────────────────────────────────────────
 
 router.get('/bills', (req, res) => {
   try {
@@ -58,7 +58,7 @@ router.get('/bills', (req, res) => {
   }
 });
 
-// ─── GET /payments — List payments ───────────────────────────────────────────
+// ─── GET /payments - List payments ───────────────────────────────────────────
 
 router.get('/payments', (req, res) => {
   try {
@@ -76,7 +76,7 @@ router.get('/payments', (req, res) => {
   }
 });
 
-// ─── GET /stats — Dashboard totals ──────────────────────────────────────────
+// ─── GET /stats - Dashboard totals ──────────────────────────────────────────
 
 router.get('/stats', (req, res) => {
   try {
@@ -97,7 +97,7 @@ router.get('/stats', (req, res) => {
   }
 });
 
-// ─── POST /sync — Trigger manual sync ────────────────────────────────────────
+// ─── POST /sync - Trigger manual sync ────────────────────────────────────────
 
 router.post('/sync', async (req, res) => {
   try {

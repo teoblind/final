@@ -1,5 +1,5 @@
 /**
- * Email Service — Multi-tenant Gmail API sender
+ * Email Service - Multi-tenant Gmail API sender
  *
  * Each tenant can have its own Gmail account (sender email + refresh token).
  * Falls back to the default agent@zhan.coppice.ai account from env vars.
@@ -41,7 +41,7 @@ async function getGmailClient(tenantId) {
         sender = `${config.senderName} <${config.senderEmail}>`;
       }
     } catch (e) {
-      // DB not initialized yet (startup) — use fallback
+      // DB not initialized yet (startup) - use fallback
     }
   }
 
@@ -126,7 +126,7 @@ export function markdownToEmailHtml(text) {
       continue;
     }
 
-    // Empty line — flush list, add spacing
+    // Empty line - flush list, add spacing
     if (!trimmed) {
       flushList();
       continue;
@@ -155,7 +155,7 @@ const SIGNATURES = {
     <a href="https://www.zhan.capital/portal" style="color:#1a73e8;text-decoration:none;">Investor Portal</a>
   </p>
 </div>`,
-    text: '\n\n—\nCoppice\nAI Agent, Zhan Capital\nzhan.capital | zhan.capital/portal',
+    text: '\n\n-\nCoppice\nAI Agent, Zhan Capital\nzhan.capital | zhan.capital/portal',
   },
   'dacp-construction-001': {
     html: `
@@ -168,7 +168,7 @@ const SIGNATURES = {
     <a href="https://dacp.coppice.ai" style="color:#1a73e8;text-decoration:none;">dacp.coppice.ai</a>
   </p>
 </div>`,
-    text: '\n\n—\nCoppice\nAI Agent, DACP Construction\ndacpconstruction.com | dacp.coppice.ai',
+    text: '\n\n-\nCoppice\nAI Agent, DACP Construction\ndacpconstruction.com | dacp.coppice.ai',
   },
   default: {
     html: `
@@ -181,7 +181,7 @@ const SIGNATURES = {
     <a href="https://sanghasystems.com" style="color:#1a73e8;text-decoration:none;">sanghasystems.com</a>
   </p>
 </div>`,
-    text: '\n\n—\nCoppice\nAI Agent, Sangha Renewables\nsangha.coppice.ai | sanghasystems.com',
+    text: '\n\n-\nCoppice\nAI Agent, Sangha Renewables\nsangha.coppice.ai | sanghasystems.com',
   },
 };
 

@@ -1,5 +1,5 @@
 /**
- * Email Guard — Spam filtering, trusted sender verification, and anti-spoofing.
+ * Email Guard - Spam filtering, trusted sender verification, and anti-spoofing.
  *
  * Every inbound email is classified before processing:
  *   trusted  → known sender, verified domain → auto-process
@@ -26,17 +26,17 @@ import {
 
 /**
  * Classification verdicts:
- *   'trusted'  — verified sender, safe to auto-process/auto-reply
- *   'known'    — recognized contact (le_contacts match), safe to process
- *   'unknown'  — unrecognized sender, log only
- *   'spam'     — bulk/marketing email, skip entirely
- *   'spoofed'  — impersonation attempt, block and alert
+ *   'trusted'  - verified sender, safe to auto-process/auto-reply
+ *   'known'    - recognized contact (le_contacts match), safe to process
+ *   'unknown'  - unrecognized sender, log only
+ *   'spam'     - bulk/marketing email, skip entirely
+ *   'spoofed'  - impersonation attempt, block and alert
  */
 
 // ─── Sender Rate Limiting ───────────────────────────────────────────────────
 // Two layers:
-//   1. In-memory burst protection (5 emails/hour) — auto-blocks spammers
-//   2. Persistent conversation caps (DB-backed) — prevents chatbot abuse
+//   1. In-memory burst protection (5 emails/hour) - auto-blocks spammers
+//   2. Persistent conversation caps (DB-backed) - prevents chatbot abuse
 //      Day: 10 replies, Week: 25 replies, Month: 50 replies
 
 // Layer 1: In-memory burst detection
@@ -50,7 +50,7 @@ const WEEKLY_LIMIT = 25;
 const MONTHLY_LIMIT = 50;
 
 /**
- * Check burst rate (in-memory) — catches rapid-fire spam.
+ * Check burst rate (in-memory) - catches rapid-fire spam.
  * Auto-blocks sender if they exceed 5 emails/hour.
  */
 function checkBurstRate(tenantId, senderEmail) {
@@ -85,7 +85,7 @@ function checkBurstRate(tenantId, senderEmail) {
           agentId: 'email-guard',
         });
       } catch (e) { /* non-critical */ }
-    } catch (e) { /* unique constraint — fine */ }
+    } catch (e) { /* unique constraint - fine */ }
     return `Burst rate exceeded: ${entry.count} emails in ${Math.round((now - entry.firstSeen) / 60000)} min`;
   }
 
@@ -95,7 +95,7 @@ function checkBurstRate(tenantId, senderEmail) {
 /**
  * Check persistent conversation limits (DB-backed).
  * Returns a reason string if over limit, null otherwise.
- * Does NOT auto-block — just silently stops replying.
+ * Does NOT auto-block - just silently stops replying.
  */
 function checkConversationLimits(tenantId, senderEmail) {
   const now = new Date();
@@ -276,12 +276,12 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
   const authResults = parseAuthResults(headers || []);
   const authDomain = extractAuthDomain(headers || []);
 
-  // 0. System/notification emails — skip entirely, never reply
+  // 0. System/notification emails - skip entirely, never reply
   if (SYSTEM_EMAIL_PATTERNS.some(p => p.test(lowerEmail))) {
     return { verdict: 'system', reason: `System notification: ${lowerEmail}`, trustLevel: 'system', authResults };
   }
 
-  // 1. Check trusted sender registry (exact email match) — before spoofing so
+  // 1. Check trusted sender registry (exact email match) - before spoofing so
   //    explicitly trusted emails aren't blocked by display-name mismatch
   const trustedByEmail = getTrustedSenderByEmail(tenantId, lowerEmail);
 
@@ -299,7 +299,7 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'trusted', reason: 'Registered trusted sender', trustLevel: trustedByEmail.trust_level, authResults };
   }
 
-  // 4. Check for spoofing — only for non-trusted senders
+  // 4. Check for spoofing - only for non-trusted senders
   const spoofCheck = checkSpoofing({ tenantId, senderEmail: lowerEmail, senderName, senderDomain, authResults, authDomain });
   if (spoofCheck) {
     logEmailSecurity({
@@ -309,7 +309,7 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'spoofed', reason: spoofCheck, trustLevel: null, authResults };
   }
 
-  // 5. Rate limit check — auto-block senders who send too many emails
+  // 5. Rate limit check - auto-block senders who send too many emails
   const rateBlock = checkSenderRateLimit(tenantId, lowerEmail);
   if (rateBlock) {
     logEmailSecurity({
@@ -340,16 +340,16 @@ export function classifyEmail({ tenantId, senderEmail, senderName, subject, body
     return { verdict: 'known', reason: 'Recognized contact in pipeline', trustLevel: null, authResults };
   }
 
-  // 8. Check DMARC — if it fails for an unknown sender, that's suspicious
+  // 8. Check DMARC - if it fails for an unknown sender, that's suspicious
   if (authResults.dmarc === 'fail') {
     logEmailSecurity({
       tenantId, messageId, senderEmail: lowerEmail, senderName, subject,
-      verdict: 'unknown', reason: 'DMARC failed — sender domain may be spoofed', authResults: JSON.stringify(authResults),
+      verdict: 'unknown', reason: 'DMARC failed - sender domain may be spoofed', authResults: JSON.stringify(authResults),
     });
-    return { verdict: 'unknown', reason: 'DMARC failed — treat with caution', trustLevel: null, authResults };
+    return { verdict: 'unknown', reason: 'DMARC failed - treat with caution', trustLevel: null, authResults };
   }
 
-  // 9. Unknown sender — log only, no auto-reply
+  // 9. Unknown sender - log only, no auto-reply
   return { verdict: 'unknown', reason: 'Unrecognized sender', trustLevel: null, authResults };
 }
 
@@ -396,17 +396,17 @@ function checkSpoofing({ tenantId, senderEmail, senderName, senderDomain, authRe
     // If domain matches the trusted domain, likely legitimate (same org, different person)
     if (trustedDomain && senderDomain === trustedDomain) continue;
 
-    // Name matches but email/domain doesn't — potential impersonation
+    // Name matches but email/domain doesn't - potential impersonation
     // Check DKIM alignment as additional signal
     if (authResults.dmarc === 'fail' || authResults.spf === 'fail') {
-      return `Display name "${senderName}" matches trusted contact "${trusted.display_name}" but email ${senderEmail} doesn't match expected ${trustedEmail || `@${trustedDomain}`}. DMARC/SPF also failed — high confidence impersonation.`;
+      return `Display name "${senderName}" matches trusted contact "${trusted.display_name}" but email ${senderEmail} doesn't match expected ${trustedEmail || `@${trustedDomain}`}. DMARC/SPF also failed - high confidence impersonation.`;
     }
 
     // Even with passing DMARC, flag if the domain is completely different
     if (trustedEmail && senderEmail !== trustedEmail) {
       const expectedDomain = trustedEmail.split('@')[1];
       if (expectedDomain && senderDomain !== expectedDomain) {
-        return `Display name "${senderName}" matches trusted contact "${trusted.display_name}" (${trustedEmail}) but sent from ${senderEmail} — different domain. Possible impersonation.`;
+        return `Display name "${senderName}" matches trusted contact "${trusted.display_name}" (${trustedEmail}) but sent from ${senderEmail} - different domain. Possible impersonation.`;
       }
     }
 

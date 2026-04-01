@@ -121,7 +121,7 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
 
   // 3. Check if already awarded (prevent duplicates)
   if (bidRequest?.status === 'awarded') {
-    console.log(`[AwardPipeline] Bid ${bidRequest.id} already awarded — logging activity only`);
+    console.log(`[AwardPipeline] Bid ${bidRequest.id} already awarded - logging activity only`);
     insertActivity({
       tenantId, type: 'in',
       title: `Duplicate award notice from ${gcName}`,
@@ -163,7 +163,7 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
   insertActivity({
     tenantId, type: 'in',
     title: `Job awarded by ${gcName}`,
-    subtitle: `${projectName} — ${estimate ? '$' + estimate.totalBid?.toLocaleString() : 'amount TBD'}`,
+    subtitle: `${projectName} - ${estimate ? '$' + estimate.totalBid?.toLocaleString() : 'amount TBD'}`,
     detailJson: JSON.stringify({
       from, fromName, subject, body: body.slice(0, 5000),
       jobId, bidId: bidRequest?.id, estimateId: estimate?.id,
@@ -186,8 +186,8 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
       `- Confirm readiness to proceed`,
       `- Mention you will provide updated insurance certificates`,
       `- Ask about pre-construction meeting scheduling if not already mentioned`,
-      `- Be concise and professional — 3-4 paragraphs max`,
-      `- Do NOT include any sign-off, signature block, or closing name — the email system will automatically append the correct Coppice signature`,
+      `- Be concise and professional - 3-4 paragraphs max`,
+      `- Do NOT include any sign-off, signature block, or closing name - the email system will automatically append the correct Coppice signature`,
       `\nReturn ONLY the email body text. No subject line, no headers, no signature.`,
     ].filter(Boolean).join('\n');
 
@@ -229,7 +229,7 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
       tenantId,
       agentId: 'estimating',
       title: `Confirm award: ${projectName} from ${gcName}`,
-      description: `Reply to award notice for "${projectName}" — Job ${jobId} created`,
+      description: `Reply to award notice for "${projectName}" - Job ${jobId} created`,
       type: 'email_draft',
       payloadJson: JSON.stringify(approvalPayload),
     });
@@ -237,12 +237,12 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
     insertActivity({
       tenantId, type: 'out',
       title: `Award confirmation drafted (pending approval)`,
-      subtitle: `${projectName} — Job ${jobId}`,
+      subtitle: `${projectName} - Job ${jobId}`,
       detailJson: JSON.stringify({ jobId, bidId: bidRequest?.id, to: from }),
       sourceType: 'email', agentId: 'estimating',
     });
 
-    console.log(`[AwardPipeline] Confirmation draft queued for approval — Job ${jobId}`);
+    console.log(`[AwardPipeline] Confirmation draft queued for approval - Job ${jobId}`);
   } else {
     // Auto-send
     try {
@@ -254,7 +254,7 @@ export async function processAwardNotice({ messageId, threadId, from, fromName, 
       insertActivity({
         tenantId, type: 'out',
         title: `Award confirmation sent to ${gcName}`,
-        subtitle: `${projectName} — Job ${jobId}`,
+        subtitle: `${projectName} - Job ${jobId}`,
         detailJson: JSON.stringify({ jobId, bidId: bidRequest?.id, to: from }),
         sourceType: 'email', agentId: 'estimating',
       });

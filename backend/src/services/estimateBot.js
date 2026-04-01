@@ -1,5 +1,5 @@
 /**
- * Estimating Bot Service — DACP Construction
+ * Estimating Bot Service - DACP Construction
  *
  * In-process service that processes bid requests, generates estimates,
  * and drafts emails. No external dependencies.
@@ -120,7 +120,7 @@ export function matchScopeToPricing(bidRequest, pricingTable) {
         });
       }
     } else if (qty > 0) {
-      // Unmatched item — use generic estimate
+      // Unmatched item - use generic estimate
       lineItems.push({
         description: item,
         pricingId: null,
@@ -277,7 +277,7 @@ export function processInboundRequest(bidRequest) {
 export function draftClarificationEmail(bidRequest, missingItems) {
   return {
     to: bidRequest.from_email,
-    subject: `RE: ${bidRequest.subject} — Clarification Needed`,
+    subject: `RE: ${bidRequest.subject} - Clarification Needed`,
     body: `Hi ${bidRequest.from_name},\n\nThank you for the opportunity to bid on this project. Before we can finalize our pricing, we need the following information:\n\n${missingItems.map((item, i) => `${i + 1}. ${item}`).join('\n')}\n\nPlease send these at your earliest convenience so we can meet the ${bidRequest.due_date} deadline.`,
   };
 }

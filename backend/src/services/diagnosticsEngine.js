@@ -1,5 +1,5 @@
 /**
- * Diagnostics Engine — Phase 5
+ * Diagnostics Engine - Phase 5
  *
  * Cross-references pool data with fleet config and curtailment events to
  * detect anomalies, reconcile hashrates, and verify curtailment compliance.

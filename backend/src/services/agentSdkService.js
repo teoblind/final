@@ -1,5 +1,5 @@
 /**
- * Agent SDK Service — Routes queries through Claude Agent SDK subprocesses
+ * Agent SDK Service - Routes queries through Claude Agent SDK subprocesses
  *
  * Instead of simulating Claude Code capabilities (tool loops, MCP, sandbox),
  * this service spawns real Claude Agent SDK instances per query. Each instance
@@ -26,7 +26,7 @@ import {
 } from '../cache/database.js';
 import { saveMessage, getThreadMessages } from './chatService.js';
 
-// Lazy DB accessor — mirrors chatService.js pattern
+// Lazy DB accessor - mirrors chatService.js pattern
 const db = new Proxy({}, {
   get(target, prop) {
     const tenantId = getCurrentTenantId() || 'default';
@@ -51,7 +51,7 @@ const MAX_HISTORY = 50;
 let _routeToolCall = null;
 async function getRouteToolCall() {
   if (!_routeToolCall) {
-    // routeToolCall isn't exported — we'll import the tool handler functions directly
+    // routeToolCall isn't exported - we'll import the tool handler functions directly
     const mod = await import('./chatService.js');
     _routeToolCall = mod.routeToolCall;
   }
@@ -205,10 +205,10 @@ async function buildSystemPrompt(agentId, tenantId, displayContent, threadId, us
 
   const basePrompt = (mod.SYSTEM_PROMPTS || {})[agentId] || (mod.SYSTEM_PROMPTS || {}).sangha || '';
 
-  const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists — no decorative formatting.`;
+  const FORMATTING_RULES = `\n\n═══ FORMATTING RULES ═══\n- NEVER use emojis in your responses. No checkmarks, no icons, no unicode symbols. Keep it clean text only.\n- Use clean, minimal formatting. Short paragraphs, simple lists with dashes, no excessive headers.\n- Be concise and direct. No filler phrases like "Great question!" or "Absolutely!".\n- When presenting data, use clean tables or simple lists - no decorative formatting.`;
 
   const HELP_MODE_GUARD = options.helpMode
-    ? `\n\nCRITICAL — HELP ASSISTANT MODE:\nYou are the Coppice Assistant, a product support chatbot embedded in the dashboard.\n- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.\n- Keep answers helpful, concise, and focused on the product features available in their dashboard.`
+    ? `\n\nCRITICAL - HELP ASSISTANT MODE:\nYou are the Coppice Assistant, a product support chatbot embedded in the dashboard.\n- You MUST ONLY discuss this tenant's business, data, and tools. NEVER mention other companies, tenants, or people outside this organization.\n- Keep answers helpful, concise, and focused on the product features available in their dashboard.`
     : '';
 
   // Conditional prompt addons per agent
@@ -410,7 +410,7 @@ export async function chatStreamSdk(tenantId, agentId, userId, userContent, thre
                 return { behavior: 'allow' };
               }
 
-              // Action tool — create approval item and deny
+              // Action tool - create approval item and deny
               try {
                 insertApprovalItem({
                   tenantId,
@@ -451,7 +451,7 @@ export async function chatStreamSdk(tenantId, agentId, userId, userContent, thre
         }
 
         case 'assistant': {
-          // Complete assistant message — extract text and tool use info
+          // Complete assistant message - extract text and tool use info
           const content = msg.message?.content || [];
           for (const block of content) {
             if (block.type === 'tool_use') {

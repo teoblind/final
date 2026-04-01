@@ -1269,7 +1269,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                     <div className="flex items-center gap-2 mb-1.5">
                                       <Mail size={12} className="text-amber-600" />
                                       <span className="text-[11px] font-semibold text-amber-800">
-                                        {draft.status === 'sent' ? 'Email Sent' : draft.status === 'rejected' ? 'Email Rejected' : 'Email Draft — Awaiting Approval'}
+                                        {draft.status === 'sent' ? 'Email Sent' : draft.status === 'rejected' ? 'Email Rejected' : 'Email Draft - Awaiting Approval'}
                                       </span>
                                     </div>
                                     <div className="text-[10px] text-amber-700 mb-1"><strong>To:</strong> {draft.to}</div>

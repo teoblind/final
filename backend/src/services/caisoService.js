@@ -2,7 +2,7 @@
  * CAISO OASIS API Service
  *
  * Fetches LMP data from CAISO's OASIS (Open Access Same-Time Information System).
- * CAISO returns zipped XML — needs adm-zip + fast-xml-parser for parsing.
+ * CAISO returns zipped XML - needs adm-zip + fast-xml-parser for parsing.
  * Falls back to mock data when OASIS is unavailable.
  */
 
@@ -90,7 +90,7 @@ function parseOasisResponse(buffer, nodes) {
     const text = Buffer.from(buffer).toString('utf-8');
 
     if (text.startsWith('PK') || text.charCodeAt(0) === 80) {
-      // It's a ZIP file — try dynamic import
+      // It's a ZIP file - try dynamic import
       try {
         // Simple ZIP extraction: look for CSV content after ZIP header
         const csvStart = text.indexOf('INTERVALSTARTTIME');

@@ -1,5 +1,5 @@
 /**
- * Hivemind CLI Service — Routes Hivemind agent through Claude Code CLI
+ * Hivemind CLI Service - Routes Hivemind agent through Claude Code CLI
  *
  * Spawns `claude -p` as a child process with full filesystem/shell access.
  * Feature-flagged via HIVEMIND_USE_CLI=true env var.
@@ -24,7 +24,7 @@ Domains: estimating, bid management, field ops, GC relationships`,
 
 function buildSystemPrompt(tenantId) {
   const tenantCtx = TENANT_CONTEXT[tenantId] || TENANT_CONTEXT.default;
-  return `You are Coppice Hivemind — AI ops agent with full system access.
+  return `You are Coppice Hivemind - AI ops agent with full system access.
 Rules: Be concise. Include real data. Use markdown. SQLite: sqlite3 /root/coppice/backend/data/cache.db "SQL". Never expose secrets.
 ${tenantCtx}`;
 }
@@ -70,7 +70,7 @@ export async function queryHivemindCli(userMessage, history, tenantId) {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Close stdin immediately — claude -p reads from args, not stdin
+    // Close stdin immediately - claude -p reads from args, not stdin
     proc.stdin.end();
 
     proc.stdout.on('data', (chunk) => { stdout += chunk; });

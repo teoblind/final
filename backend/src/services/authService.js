@@ -9,7 +9,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto, { randomUUID } from 'crypto';
 
-// JWT secrets MUST be set via environment variables — no hardcoded fallbacks.
+// JWT secrets MUST be set via environment variables - no hardcoded fallbacks.
 // In dev, auto-generate ephemeral secrets (tokens won't survive restarts).
 // In production, fail loud if not set.
 function requireJwtSecret(envVar, label) {
@@ -20,7 +20,7 @@ function requireJwtSecret(envVar, label) {
     process.exit(1);
   }
   const ephemeral = crypto.randomBytes(32).toString('hex');
-  console.warn(`[Auth] ${envVar} not set — using ephemeral secret (tokens will not survive restarts)`);
+  console.warn(`[Auth] ${envVar} not set - using ephemeral secret (tokens will not survive restarts)`);
   return ephemeral;
 }
 

@@ -1,5 +1,5 @@
 /**
- * Curtailment Engine — Phase 4
+ * Curtailment Engine - Phase 4
  *
  * Decision engine that determines optimal mining/curtailment state per machine
  * class based on real-time and day-ahead energy prices, fleet hashprice data,
@@ -63,7 +63,7 @@ export async function getCurrentRecommendation(opts = {}) {
   // Build merit order: sort machine classes by efficiency (worst first = first to curtail)
   const meritOrder = buildMeritOrder(config.entries, energyPriceKWh, networkHashprice);
 
-  // Determine optimal state for each class — all values per HOUR
+  // Determine optimal state for each class - all values per HOUR
   const decisions = [];
   let miningRevenuePerHr = 0;
   let miningCostPerHr = 0;
@@ -233,7 +233,7 @@ function evaluateMachineClass(entry, currentPriceMWh, constraints, hysteresis, d
     const lowerBand = effectiveBreakevenMWh - halfBand;  // mine threshold
 
     if (currentPriceMWh > upperBand) {
-      // Clearly unprofitable — curtail
+      // Clearly unprofitable - curtail
       action = 'CURTAIL';
       const hourlyLoss = Math.abs(machineResult.netRevenue) / 24;
       reason = `Energy price ($${currentPriceMWh.toFixed(2)}/MWh) exceeds breakeven ($${breakevenMWh.toFixed(2)}/MWh) + hysteresis. Mining would lose $${hourlyLoss.toFixed(2)}/unit/hr.`;
@@ -242,20 +242,20 @@ function evaluateMachineClass(entry, currentPriceMWh, constraints, hysteresis, d
       }
       confidence = 'high';
     } else if (currentPriceMWh < lowerBand) {
-      // Clearly profitable — mine
+      // Clearly profitable - mine
       action = 'MINE';
       const hourlyProfit = machineResult.netRevenue / 24;
       reason = `Energy price ($${currentPriceMWh.toFixed(2)}/MWh) is $${(breakevenMWh - currentPriceMWh).toFixed(2)} below breakeven ($${breakevenMWh.toFixed(2)}/MWh). Earning $${hourlyProfit.toFixed(2)}/unit/hr.`;
       confidence = 'high';
     } else {
-      // Inside hysteresis band — maintain current state (proxy: use profitability)
+      // Inside hysteresis band - maintain current state (proxy: use profitability)
       if (machineResult.isProfitable) {
         action = 'MINE';
-        reason = `Energy price ($${currentPriceMWh.toFixed(2)}/MWh) is near breakeven ($${breakevenMWh.toFixed(2)}/MWh) within hysteresis band (±$${halfBand.toFixed(1)}). Currently profitable — maintain mining.`;
+        reason = `Energy price ($${currentPriceMWh.toFixed(2)}/MWh) is near breakeven ($${breakevenMWh.toFixed(2)}/MWh) within hysteresis band (±$${halfBand.toFixed(1)}). Currently profitable - maintain mining.`;
         confidence = 'medium';
       } else {
         action = 'CURTAIL';
-        reason = `Energy price ($${currentPriceMWh.toFixed(2)}/MWh) is near breakeven ($${breakevenMWh.toFixed(2)}/MWh) within hysteresis band (±$${halfBand.toFixed(1)}). Currently unprofitable — recommend curtailment.`;
+        reason = `Energy price ($${currentPriceMWh.toFixed(2)}/MWh) is near breakeven ($${breakevenMWh.toFixed(2)}/MWh) within hysteresis band (±$${halfBand.toFixed(1)}). Currently unprofitable - recommend curtailment.`;
         confidence = 'medium';
       }
     }
@@ -513,7 +513,7 @@ function applyDurationConstraints(schedule, constraints) {
         if (j - i < minCurtailHours && j - i > 0) {
           for (let k = i; k < j; k++) {
             result[k].state = 'MINING';
-            result[k].note = `Below min curtailment duration (${constraints.minCurtailmentMinutes}min) — mining maintained`;
+            result[k].note = `Below min curtailment duration (${constraints.minCurtailmentMinutes}min) - mining maintained`;
           }
         }
         i = j;
@@ -531,10 +531,10 @@ function applyDurationConstraints(schedule, constraints) {
         let j = i;
         while (j < result.length && result[j].state === 'MINING') j++;
         if (j - i < effectiveMinRunHours && j - i > 0 && i > 0) {
-          // Short mining window surrounded by curtailment — stay curtailed
+          // Short mining window surrounded by curtailment - stay curtailed
           for (let k = i; k < j; k++) {
             result[k].state = 'CURTAILED';
-            result[k].note = `Below min run duration (${effectiveMinRunHours}h incl. ramp-up) — curtailment maintained`;
+            result[k].note = `Below min run duration (${effectiveMinRunHours}h incl. ramp-up) - curtailment maintained`;
           }
         }
         i = j;

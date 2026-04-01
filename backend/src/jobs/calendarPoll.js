@@ -1,5 +1,5 @@
 /**
- * Calendar Poll Job — Multi-tenant meeting auto-join via Recall.ai
+ * Calendar Poll Job - Multi-tenant meeting auto-join via Recall.ai
  *
  * Replaces the standalone ~/MeetingBot/bot.py with a multi-tenant Node.js job.
  *
@@ -12,7 +12,7 @@
  * 5. Retrieves transcript, summarizes with Claude, runs per-tenant
  *    post-meeting processing (action items + follow-up emails)
  *
- * Each tenant's agent only sees its own calendar — Sangha agent polls
+ * Each tenant's agent only sees its own calendar - Sangha agent polls
  * Sangha meetings, DACP agent polls DACP meetings, etc.
  */
 
@@ -39,7 +39,7 @@ import { processMeetingComplete } from '../services/meetingProcessor.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-// OAuth app credentials — lazy evaluation to avoid ESM ordering bug
+// OAuth app credentials - lazy evaluation to avoid ESM ordering bug
 // (office.js statically imports this module before dotenv.config() runs)
 let _clientPairs = null;
 function getClientPairs() {
@@ -65,7 +65,7 @@ const BOT_CHECK_SEC = 30;        // how often to check bot status
 // Track which tenant calendars need the fallback OAuth client (persists across poll cycles)
 const useFallbackClient = new Set();
 
-// eventKey = `${tenantId}:${eventId}` — prevents duplicate joins
+// eventKey = `${tenantId}:${eventId}` - prevents duplicate joins
 const joinedEvents = new Set();
 
 // Active bots: eventKey → { botId, tenantId, meetingName, link, attendees, startTime }
@@ -130,7 +130,7 @@ function extractMeetingLink(event) {
   // 2. Hangout link
   if (event.hangoutLink) return event.hangoutLink;
 
-  // 3. Regex from description/location — supports Meet, Zoom, and Teams
+  // 3. Regex from description/location - supports Meet, Zoom, and Teams
   const text = ((event.description || '') + ' ' + (event.location || '')).trim();
   const match = text.match(
     /https?:\/\/(?:meet\.google\.com\/[a-z\-]+|[\w.]*zoom\.us\/[jw]\/\d+[^\s]*|teams\.microsoft\.com\/(?:l\/meetup-join|meet)\/[^\s<"]+|teams\.live\.com\/meet\/[^\s<"]+)/
@@ -246,7 +246,7 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
 
         const link = extractMeetingLink(event);
         if (!link) {
-          console.log(`[CalendarPoll] [${agentEmail}] Skipping "${event.summary}" — no meeting link found`);
+          console.log(`[CalendarPoll] [${agentEmail}] Skipping "${event.summary}" - no meeting link found`);
           continue;
         }
 
@@ -263,7 +263,7 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
           const trusted = getTrustedSenderByEmail(tenantId, organizerEmail)
             || (orgDomain && getTrustedSenderByDomain(tenantId, orgDomain));
           if (!trusted) {
-            console.log(`[CalendarPoll] [${agentEmail}] Skipping "${event.summary}" — organizer ${organizerEmail} not trusted`);
+            console.log(`[CalendarPoll] [${agentEmail}] Skipping "${event.summary}" - organizer ${organizerEmail} not trusted`);
             continue;
           }
         }
@@ -283,16 +283,16 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
         err.message?.includes('Token has been expired or revoked');
       if (isAuthError) throw err; // Propagate to poll() for fallback client retry
-      // Calendar scope may not be available — fall through to Gmail
+      // Calendar scope may not be available - fall through to Gmail
       if (err.message?.includes('insufficient')) {
-        console.warn(`[CalendarPoll] ${agentEmail}: Calendar scope missing — using Gmail fallback`);
+        console.warn(`[CalendarPoll] ${agentEmail}: Calendar scope missing - using Gmail fallback`);
       } else {
         console.warn(`[CalendarPoll] ${agentEmail}: Calendar API error: ${err.message}`);
       }
     }
   }
 
-  // ── 2. Gmail fallback — scan inbox for meeting invite emails ──
+  // ── 2. Gmail fallback - scan inbox for meeting invite emails ──
   // Uses after: with epoch timestamp for precise time filtering (newer_than uses day granularity)
   if (gmailClient) {
     try {
@@ -348,7 +348,7 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         const alreadyJoined = [...activeBots.values()].some(b => b.link === link);
         if (alreadyJoined) continue;
 
-        // Determine who actually invited — for Google system emails, extract inviter from subject/body
+        // Determine who actually invited - for Google system emails, extract inviter from subject/body
         const fromEmail = fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader;
         let inviterEmail = fromEmail;
         if (/noreply@google\.com$/i.test(fromEmail) || /calendar-notification@google\.com$/i.test(fromEmail)) {
@@ -379,7 +379,7 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
           attendees: [inviterEmail].filter(Boolean),
         });
 
-        console.log(`[CalendarPoll] ${agentEmail}: Meeting invite in email: ${subject} — ${link} (inviter: ${inviterEmail})`);
+        console.log(`[CalendarPoll] ${agentEmail}: Meeting invite in email: ${subject} - ${link} (inviter: ${inviterEmail})`);
       }
     } catch (err) {
       const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
@@ -466,7 +466,7 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
         tenantId,
         type: 'meet',
         title: `Joined: ${summary}`,
-        subtitle: `${attendees.length} attendees — say "Coppice" to activate`,
+        subtitle: `${attendees.length} attendees - say "Coppice" to activate`,
         sourceType: 'meeting',
         sourceId: eventKey,
         agentId: 'meetings',
@@ -502,7 +502,7 @@ function monitorBot(eventKey) {
 
     // Max duration safety
     if (Date.now() - startMs > maxMs) {
-      console.log(`[CalendarPoll] Bot ${botId} hit max duration (${MAX_MEETING_HOURS}h) — processing`);
+      console.log(`[CalendarPoll] Bot ${botId} hit max duration (${MAX_MEETING_HOURS}h) - processing`);
       await handleMeetingEnd(eventKey);
       return;
     }
@@ -517,7 +517,7 @@ function monitorBot(eventKey) {
         return;
       }
     } catch {
-      // Transient API error — keep polling
+      // Transient API error - keep polling
     }
 
     // Schedule next check
@@ -743,7 +743,7 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
       });
     }
   } catch (err) {
-    // calendar.events scope may not be available — silent fail
+    // calendar.events scope may not be available - silent fail
     if (!err.message?.includes('insufficient')) {
       console.warn(`[CalendarPoll] Auto-accept error for ${agentEmail}: ${err.message}`);
     }
@@ -796,7 +796,7 @@ async function poll() {
           for (const meeting of meetings) {
             await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
           }
-          // Fallback worked — remember for future poll cycles
+          // Fallback worked - remember for future poll cycles
           if (cal.label) useFallbackClient.add(cal.label);
           console.log(`[CalendarPoll] [${cal.agentEmail}] Fallback client succeeded, will use it going forward`);
         } catch (err2) {

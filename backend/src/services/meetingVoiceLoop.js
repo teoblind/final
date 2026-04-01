@@ -1,5 +1,5 @@
 /**
- * Meeting Voice Loop — wake-word-gated voice assistant in Recall.ai meetings
+ * Meeting Voice Loop - wake-word-gated voice assistant in Recall.ai meetings
  *
  * Architecture: Recall.ai transcription webhook → wake word check → Claude → ElevenLabs TTS → Recall output_audio
  *
@@ -27,7 +27,7 @@ const ECHO_COOLDOWN_MS = 3000;      // ignore transcripts right after bot speaks
 const activeLoops = new Map();
 
 /**
- * Start a voice loop for a bot. No greeting — bot stays silent until addressed.
+ * Start a voice loop for a bot. No greeting - bot stays silent until addressed.
  */
 export async function startVoiceLoop(botId, tenantId = 'default') {
   if (activeLoops.has(botId)) return;
@@ -75,12 +75,12 @@ export async function startVoiceLoop(botId, tenantId = 'default') {
   };
 
   activeLoops.set(botId, state);
-  console.log(`[VoiceLoop] Started for bot ${botId} (tenant: ${tenantId}) — SILENT until wake word`);
+  console.log(`[VoiceLoop] Started for bot ${botId} (tenant: ${tenantId}) - SILENT until wake word`);
 }
 
 /**
  * Check if text contains the wake word "coppice" (with common misheard variants).
- * NOTE: "copper" removed — too many false positives in construction/business meetings.
+ * NOTE: "copper" removed - too many false positives in construction/business meetings.
  */
 function checkWakeWord(text) {
   if (!text) return false;
@@ -89,26 +89,26 @@ function checkWakeWord(text) {
 }
 
 /**
- * Activate the bot — it will respond to all speech for ACTIVE_DURATION_MS.
+ * Activate the bot - it will respond to all speech for ACTIVE_DURATION_MS.
  */
 function activateBot(state) {
   state.isActive = true;
-  console.log(`[VoiceLoop] *** ACTIVATED — responding to all speech for ${ACTIVE_DURATION_MS / 1000}s ***`);
+  console.log(`[VoiceLoop] *** ACTIVATED - responding to all speech for ${ACTIVE_DURATION_MS / 1000}s ***`);
   if (state.activeTimeout) clearTimeout(state.activeTimeout);
   state.activeTimeout = setTimeout(() => {
-    console.log(`[VoiceLoop] Auto-deactivating — timeout`);
+    console.log(`[VoiceLoop] Auto-deactivating - timeout`);
     state.isActive = false;
   }, ACTIVE_DURATION_MS);
 }
 
 /**
  * Handle a transcript event from Recall webhook.
- * This is called for EVERY utterance — we decide whether to respond based on wake word.
+ * This is called for EVERY utterance - we decide whether to respond based on wake word.
  */
 export function handleTranscriptEvent(botId, msg) {
   const state = activeLoops.get(botId);
   if (!state) {
-    // Don't auto-start — voice loop must be explicitly started via startVoiceLoop().
+    // Don't auto-start - voice loop must be explicitly started via startVoiceLoop().
     // Auto-starting caused the bot to respond in meetings where only chat loop was intended.
     return;
   }
@@ -136,7 +136,7 @@ export function handleTranscriptEvent(botId, msg) {
   const hasWakeWord = checkWakeWord(text);
 
   if (!hasWakeWord && !state.isActive) {
-    // Passive mode — ignore this utterance
+    // Passive mode - ignore this utterance
     return;
   }
 
@@ -197,7 +197,7 @@ async function respondToSpeech(state, userMessage, speaker) {
     if (isVisionActive(state.botId)) {
       const vision = getVisualContext(state.botId);
       if (vision && vision.description) {
-        visualNote = `\n\n[VISUAL CONTEXT — what's on screen right now]: ${vision.description}`;
+        visualNote = `\n\n[VISUAL CONTEXT - what's on screen right now]: ${vision.description}`;
         if (vision.screenShareDetected) {
           visualNote += ' [Screen share is active]';
         }
@@ -205,7 +205,7 @@ async function respondToSpeech(state, userMessage, speaker) {
     }
 
     const contextualMessage = recentContext
-      ? `[Meeting context — last few utterances]\n${recentContext}${visualNote}\n\n[${speaker} is now addressing you directly]: ${userMessage}`
+      ? `[Meeting context - last few utterances]\n${recentContext}${visualNote}\n\n[${speaker} is now addressing you directly]: ${userMessage}`
       : `${userMessage}${visualNote}`;
 
     state.conversationHistory.push({ role: 'user', content: contextualMessage });
@@ -237,7 +237,7 @@ async function respondToSpeech(state, userMessage, speaker) {
 
     await speakText(state, responseText);
 
-    // Do NOT reset active timer — let it expire naturally.
+    // Do NOT reset active timer - let it expire naturally.
     // Previously this created an infinite loop: respond → reset timer → respond → reset...
   } catch (err) {
     console.error(`[VoiceLoop] Error:`, err.message);
