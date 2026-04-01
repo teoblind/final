@@ -471,7 +471,7 @@ function AppContent() {
   } else {
     platformItems.push({ id: 'command', label: 'Command', icon: LayoutDashboard, count: 5 });
     platformItems.push({ id: 'office', label: 'Office', icon: Building, live: true });
-    platformItems.push({ id: 'audit-trail', label: 'Files', icon: FileText });
+    platformItems.push({ id: 'files', label: 'Files', icon: FolderOpen });
 
     agentItems.push({ id: 'hivemind-chat', label: 'Sangha Agent', icon: Bot, hivemind: true });
     agentItems.push({ id: 'bots', label: 'Lead Engine', icon: MessageSquare, count: 502 });

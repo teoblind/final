@@ -47,14 +47,20 @@ const TENANT_SEARCH_CONFIG = {
       'site:linkedin.com "concrete" OR "masonry" OR "foundations" Dallas Fort Worth project',
     ],
   },
-  // Default config for other tenants
+  // Sangha Systems - Bitcoin mining & energy
   default: {
-    name: 'Coppice',
-    region: '',
-    services: [],
+    name: 'Sangha Systems',
+    region: 'Texas ERCOT',
+    services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading'],
     searchQueries: [
-      'AI automation business news this week',
-      'construction technology industry trends 2026',
+      'bitcoin mining hashrate difficulty network news this week',
+      'ERCOT Texas electricity price wholesale market news',
+      'bitcoin mining profitability hashprice revenue 2026',
+      'data center power AI compute energy demand news',
+      'bitcoin mining company acquisition merger fund raise 2026',
+      'Texas renewable energy solar wind curtailment ERCOT',
+      'behind-the-meter bitcoin mining power purchase agreement',
+      'Luxor hashrate forward NDF mining derivatives market',
     ],
     linkedinQueries: [],
   },
