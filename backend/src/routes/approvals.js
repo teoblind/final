@@ -23,6 +23,21 @@ router.use(authenticate);
 // Helpers
 // ---------------------------------------------------------------------------
 
+function findFileRecursive(fs, path, dir, filename, depth = 0) {
+  if (depth > 3 || !fs.existsSync(dir)) return null;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name === filename) return path.join(dir, entry.name);
+      if (entry.isDirectory() && depth < 3) {
+        const found = findFileRecursive(fs, path, path.join(dir, entry.name), filename, depth + 1);
+        if (found) return found;
+      }
+    }
+  } catch {}
+  return null;
+}
+
 function resolveIds(req) {
   const tenantId = req.tenantId || req.resolvedTenant?.id || 'default';
   const userId = req.user.id; // auth middleware guarantees req.user exists
@@ -176,11 +191,90 @@ router.get('/:id/attachment/:index', async (req, res) => {
     if (idx < 0 || idx >= attachments.length) return res.status(404).json({ error: 'Attachment not found' });
 
     const att = attachments[idx];
-    const filePath = att.path;
-    if (!filePath) return res.status(404).json({ error: 'No file path for attachment' });
-
     const fs = await import('fs');
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
+    const path = await import('path');
+
+    // Resolve the file - try the stored path first, then search by filename in estimates dir
+    let filePath = att.path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      const { fileURLToPath } = await import('url');
+      const routeDir = path.dirname(fileURLToPath(import.meta.url));
+      const estimatesDir = path.join(routeDir, '../../data/estimates');
+      const fname = att.filename || att.name || '';
+      if (fname && fs.existsSync(estimatesDir)) {
+        const candidate = path.join(estimatesDir, fname);
+        if (fs.existsSync(candidate)) {
+          filePath = candidate;
+        } else {
+          // Search recursively in data directory
+          const dataDir = path.join(routeDir, '../../data');
+          const found = findFileRecursive(fs, path, dataDir, fname);
+          if (found) filePath = found;
+        }
+      }
+    }
+
+    // If file still not found, try to regenerate from estimate data
+    if (!filePath || !fs.existsSync(filePath)) {
+      if (payload.estimateId) {
+        try {
+          // First try loading from DB
+          const { getDacpEstimate } = await import('../cache/database.js');
+          const estimate = getDacpEstimate(tenantId, payload.estimateId);
+          if (estimate) {
+            const { generateEstimateExcelFromData } = await import('../services/estimatePipeline.js');
+            const result = await generateEstimateExcelFromData(estimate);
+            filePath = result.filepath;
+          }
+        } catch (genErr) {
+          console.error('Failed to regenerate estimate Excel from DB:', genErr.message);
+        }
+      }
+    }
+
+    // Last resort: generate a summary Excel from the payload data itself
+    if (!filePath || !fs.existsSync(filePath)) {
+      if (att.contentType?.includes('spreadsheet') || att.filename?.endsWith('.xlsx')) {
+        try {
+          const ExcelJS = (await import('exceljs')).default;
+          const { fileURLToPath: ftu } = await import('url');
+          const routeDir2 = path.dirname(ftu(import.meta.url));
+          const estDir = path.join(routeDir2, '../../data/estimates');
+          if (!fs.existsSync(estDir)) fs.mkdirSync(estDir, { recursive: true });
+
+          const wb = new ExcelJS.Workbook();
+          wb.creator = 'Coppice AI';
+          const ws = wb.addWorksheet('Estimate Summary');
+          const hFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } };
+          const hFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+
+          ws.columns = [
+            { header: 'Field', key: 'field', width: 25 },
+            { header: 'Value', key: 'value', width: 45 },
+          ];
+          const hr = ws.getRow(1);
+          hr.getCell(1).fill = hFill; hr.getCell(1).font = hFont;
+          hr.getCell(2).fill = hFill; hr.getCell(2).font = hFont;
+
+          const rows = [
+            ['Estimate ID', payload.estimateId || 'N/A'],
+            ['Bid ID', payload.bidId || 'N/A'],
+            ['To', payload.to || ''],
+            ['Subject', payload.subject || ''],
+            ['Total Bid', payload.totalBid ? `$${Number(payload.totalBid).toLocaleString()}` : 'N/A'],
+          ];
+          for (const [f, v] of rows) ws.addRow({ field: f, value: v });
+
+          const outPath = path.join(estDir, att.filename || `estimate_${payload.estimateId || 'unknown'}.xlsx`);
+          await wb.xlsx.writeFile(outPath);
+          filePath = outPath;
+        } catch (fallbackErr) {
+          console.error('Failed to generate fallback Excel:', fallbackErr.message);
+        }
+      }
+    }
+
+    if (!filePath || !fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on disk' });
 
     // Parse Excel with exceljs
     const ExcelJS = (await import('exceljs')).default;

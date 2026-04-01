@@ -275,6 +275,11 @@ async function generateEstimateExcel(estimate) {
   return { filename, filepath };
 }
 
+// Exported wrapper so other modules can regenerate an Excel from estimate data
+export async function generateEstimateExcelFromData(estimate) {
+  return generateEstimateExcel(estimate);
+}
+
 // ─── Full Pipeline ──────────────────────────────────────────────────────────
 
 export async function processRfqEmail({ messageId, threadId, from, fromName, subject, body, tenantId = DEFAULT_TENANT_ID }) {

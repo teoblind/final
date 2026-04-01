@@ -881,20 +881,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             <div className="flex items-center justify-between mb-1.5">
                               <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
                               <div className="flex items-center gap-1.5">
-                                {editingApproval === item.id ? (
-                                  <>
-                                    <button onClick={() => handleSaveEdit(item.id)} disabled={savingEdit} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-white bg-[#1a6b3c] hover:bg-[#155e33] disabled:opacity-50">
-                                      <Save size={10} /> {savingEdit ? 'Saving...' : 'Save'}
-                                    </button>
-                                    <button onClick={() => setEditingApproval(null)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] bg-[#e8e6e2] hover:bg-[#d5d3ce]">
-                                      Cancel
-                                    </button>
-                                  </>
-                                ) : (
-                                  <button onClick={() => { setEditBody(payload.body || ''); setEditingApproval(item.id); }} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[#6b6b65] hover:bg-[#e8e6e2]">
-                                    <Pencil size={10} /> Edit
-                                  </button>
-                                )}
+                                {savingEdit && editingApproval === item.id && <span className="text-[10px] text-terminal-muted italic">Saving...</span>}
+                                <Pencil size={10} className="text-terminal-muted" />
+                                <span className="text-[10px] text-terminal-muted">Click body to edit</span>
                               </div>
                             </div>
                             {payload.to && (
@@ -931,29 +920,33 @@ export default function DacpCommandDashboard({ onNavigate }) {
                             </div>
                           </div>
                         )}
-                        <div className="p-4">
-                          {editingApproval === item.id ? (
-                            <textarea
-                              value={editBody}
-                              onChange={(e) => setEditBody(e.target.value)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-full min-h-[200px] text-[12px] text-terminal-text leading-relaxed bg-white border border-[#e8e6e2] rounded-md p-3 resize-y focus:outline-none focus:border-[#1e3a5f]"
-                            />
-                          ) : payload.html ? (
-                            <div
-                              className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
-                              dangerouslySetInnerHTML={{ __html: payload.html }}
-                            />
-                          ) : payload.body ? (
-                            <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
-                              {payload.body}
-                            </div>
-                          ) : (
-                            <div className="text-[12px] text-terminal-muted">
-                              {item.description || 'No preview available'}
-                            </div>
-                          )}
-                        </div>
+                        <div
+                          className="p-4 text-[12px] text-terminal-text leading-relaxed cursor-text focus-within:ring-1 focus-within:ring-[#1e3a5f] focus-within:bg-white rounded-b-lg transition-colors [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
+                          contentEditable
+                          suppressContentEditableWarning
+                          onClick={(e) => e.stopPropagation()}
+                          onFocus={() => {
+                            if (editingApproval !== item.id) {
+                              setEditBody(payload.body || '');
+                              setEditingApproval(item.id);
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const newText = e.target.innerText;
+                            if (newText !== (payload.body || '')) {
+                              setEditBody(newText);
+                              // Auto-save on blur
+                              setSavingEdit(true);
+                              fetch(`${API_BASE}/v1/approvals/${item.id}/update-draft`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                body: JSON.stringify({ body: newText }),
+                              }).then(() => fetchApprovals()).catch(err => console.error('Auto-save failed:', err)).finally(() => setSavingEdit(false));
+                            }
+                            setEditingApproval(null);
+                          }}
+                          dangerouslySetInnerHTML={{ __html: payload.html || (payload.body ? payload.body.replace(/\n/g, '<br>') : (item.description || 'No preview available')) }}
+                        />
                       </div>
 
                       {/* Attachments */}
