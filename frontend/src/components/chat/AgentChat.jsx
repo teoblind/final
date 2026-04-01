@@ -485,7 +485,7 @@ function TaskReportModal({ assignmentId, title, onClose }) {
       .then(d => {
         const a = d.assignments?.find(x => x.id === assignmentId);
         if (a) {
-          setContent(a.result_summary || 'No report content available.');
+          setContent((a.result_summary || '').replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '').trim() || 'No report content available.');
           try {
             const arts = JSON.parse(a.output_artifacts_json || '[]');
             setArtifacts(arts);
@@ -586,7 +586,8 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         if (!data.assignment_id && a.id) data.assignment_id = a.id;
         if (a.status === 'completed') {
           setStatus('completed');
-          setResult(a.result_summary?.slice(0, 300) || null);
+          const rawSummary = (a.result_summary || '').replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '').trim();
+          setResult(rawSummary?.slice(0, 300) || null);
           try { setArtifacts(JSON.parse(a.output_artifacts_json || '[]')); } catch {}
         } else if (a.status === 'in_progress' || a.status === 'confirmed') {
           setStatus('running');
@@ -647,7 +648,8 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
           if (a?.status === 'completed') {
             clearInterval(poll);
             setStatus('completed');
-            setResult(a.result_summary?.slice(0, 300));
+            const rawS = (a.result_summary || '').replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '').trim();
+            setResult(rawS?.slice(0, 300));
             try { setArtifacts(JSON.parse(a.output_artifacts_json || '[]')); } catch {}
           } else if (a?.status === 'proposed' && a?.result_summary?.startsWith('Failed:')) {
             clearInterval(poll);

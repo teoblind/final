@@ -44,6 +44,11 @@ const INSIGHT_TYPE_STYLES = {
   insight: 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)]',
 };
 
+function cleanResultSummary(s) {
+  if (!s) return '';
+  return s.replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '').trim();
+}
+
 // ─── Structural Defaults ─────────────────────────────────────────────────────
 
 const DEFAULT_METRICS = [
@@ -1001,11 +1006,11 @@ export default function CommandDashboard({ onNavigate }) {
                       })()}
                       {assignmentExpanded === a.id && a.status === 'completed' && a.result_summary && (
                         <div className={`text-[11px] px-2 py-1.5 rounded leading-relaxed mt-1.5 ${
-                          /^(Failed|Error|Execution failed)/i.test(a.result_summary)
+                          /^(Failed|Error|Execution failed)/i.test(cleanResultSummary(a.result_summary))
                             ? 'text-red-600 bg-red-50'
                             : 'text-emerald-600 bg-emerald-50'
                         }`}>
-                          {a.result_summary.slice(0, 500)}{a.result_summary.length > 500 ? '...' : ''}
+                          {cleanResultSummary(a.result_summary).slice(0, 500)}{cleanResultSummary(a.result_summary).length > 500 ? '...' : ''}
                         </div>
                       )}
                       {assignmentExpanded === a.id && a.status === 'completed' && (() => {
@@ -1111,7 +1116,7 @@ export default function CommandDashboard({ onNavigate }) {
                       )}
                       {a.status === 'completed' && (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {/^(Failed|Error|Execution failed)/i.test(a.result_summary || '') ? (
+                          {/^(Failed|Error|Execution failed)/i.test(cleanResultSummary(a.result_summary)) ? (
                             <>
                               <button
                                 onClick={() => handleConfirmAssignment(a.id)}
@@ -1131,7 +1136,7 @@ export default function CommandDashboard({ onNavigate }) {
                               </span>
                               <button
                                 onClick={() => {
-                                  localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${(a.result_summary || '').slice(0, 1000)}`);
+                                  localStorage.setItem('coppice_chat_prefill', `Let's discuss the report: "${a.title}"\n\nHere's the summary:\n${cleanResultSummary(a.result_summary).slice(0, 1000)}`);
                                   // Store assignment context so chat can load report into context panel
                                   try {
                                     const arts = JSON.parse(a.output_artifacts_json || '[]');
@@ -2135,7 +2140,7 @@ export default function CommandDashboard({ onNavigate }) {
               ) : (
                 <div className="p-6 max-w-[700px] mx-auto">
                   <div className="text-[13px] leading-[1.7] text-[#333]">
-                    {(docPreview.assignment?.result_summary || '').split('\n').map((line, i) => {
+                    {cleanResultSummary(docPreview.assignment?.result_summary).split('\n').map((line, i) => {
                       if (line.startsWith('# ')) return <h1 key={i} className="text-[18px] font-bold text-[var(--t-ui-accent)] mt-6 mb-2 font-heading">{line.slice(2)}</h1>;
                       if (line.startsWith('## ')) return <h2 key={i} className="text-[15px] font-bold text-[var(--t-ui-accent)] mt-5 mb-1.5 font-heading">{line.slice(3)}</h2>;
                       if (line.startsWith('### ')) return <h3 key={i} className="text-[13px] font-bold text-[var(--t-ui-accent)] mt-4 mb-1 font-heading">{line.slice(4)}</h3>;

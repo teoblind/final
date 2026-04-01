@@ -540,6 +540,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     .replace(/<!--INFO_REQUEST\{[\s\S]*?\}INFO_REQUEST-->/g, '')
     .replace(/<!--ARTIFACTS\[[\s\S]*?\]ARTIFACTS-->/g, '')
     .replace(/<!--EMAIL_DRAFT\{[\s\S]*?\}EMAIL_DRAFT-->/g, '')
+    .replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '')
     // Strip conversational preamble that agents add before the actual content
     .replace(/^(Done\.?|Complete\.?|Finished\.?|Here['']s|I['']ve|The document|The report|The analysis)[^\n]*\n+/i, '')
     .replace(/^(Created|Generated|Produced|Uploaded)[^\n]*\n+/i, '')
