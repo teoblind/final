@@ -80,6 +80,7 @@ import priceMonitorRoutes from './routes/priceMonitor.js';
 import portfolioRoutes from './routes/portfolio.js';
 import schedulerRoutes from './routes/scheduler.js';
 import mcpConfigRoutes from './routes/mcpConfig.js';
+import ceoRoutes from './routes/ceo.js';
 import internalRoutes from './routes/internal.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
@@ -300,6 +301,14 @@ try {
   console.warn('Overnight analysis job not started:', err.message);
 }
 
+// Daily intelligence newsletter (6 AM CT)
+try {
+  const { startDailyNewsletter } = await import('./jobs/dailyNewsletter.js');
+  startDailyNewsletter({ runAtHour: 6, intervalHours: 24 });
+} catch (err) {
+  console.warn('Daily newsletter not started:', err.message);
+}
+
 // Assignment executor — polls confirmed assignments and executes via CLI tunnel
 try {
   const { startAssignmentExecutor } = await import('./jobs/assignmentExecutor.js');
@@ -518,6 +527,7 @@ app.use('/api/v1/price-monitor', priceMonitorRoutes);
 app.use('/api/v1/portfolio', portfolioRoutes);
 app.use('/api/v1/scheduler', schedulerRoutes);
 app.use('/api/v1/mcp-servers', mcpConfigRoutes);
+app.use('/api/v1/ceo', ceoRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) — redirect to /api/v1/

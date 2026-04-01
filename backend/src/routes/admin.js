@@ -1111,6 +1111,37 @@ router.post('/overnight-analysis', async (req, res) => {
   }
 });
 
+// ─── POST /daily-newsletter — Manually trigger daily newsletter ──────────────
+
+router.post('/daily-newsletter', async (req, res) => {
+  try {
+    const { runDailyNewsletter } = await import('../jobs/dailyNewsletter.js');
+    runDailyNewsletter().catch(err => console.error('[Admin] Manual newsletter error:', err.message));
+    res.json({ success: true, message: 'Daily newsletter triggered' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── GET /newsletters — List stored newsletters ─────────────────────────────
+
+router.get('/newsletters', (req, res) => {
+  try {
+    const tenantId = req.tenantId || req.query.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenantId required' });
+    const { getTenantDb } = require('../cache/database.js');
+    const db = getTenantDb(tenantId);
+    const newsletters = db.prepare(`
+      SELECT id, title, content, created_at FROM knowledge_entries
+      WHERE tenant_id = ? AND type = 'newsletter'
+      ORDER BY created_at DESC LIMIT 30
+    `).all(tenantId);
+    res.json({ newsletters });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── GET /usage/opus — Opus Report Usage Per Tenant ─────────────────────────
 
 router.get('/usage/opus', (req, res) => {

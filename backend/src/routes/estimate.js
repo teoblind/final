@@ -1726,4 +1726,23 @@ router.get('/assignments/:id/download/:format', (req, res) => {
   }
 });
 
+// ─── GET /newsletters — List daily intelligence newsletters for this tenant ──
+
+router.get('/newsletters', (req, res) => {
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenantId required' });
+    const { getTenantDb } = require('../cache/database.js');
+    const db = getTenantDb(tenantId);
+    const newsletters = db.prepare(`
+      SELECT id, title, content, created_at FROM knowledge_entries
+      WHERE tenant_id = ? AND type = 'newsletter'
+      ORDER BY created_at DESC LIMIT 30
+    `).all(tenantId);
+    res.json({ newsletters });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
