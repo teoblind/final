@@ -103,6 +103,26 @@ router.get('/activity', async (req, res) => {
   }
 });
 
+// Search contacts with classification filters
+router.get('/contacts/search-classified', async (req, res) => {
+  const tenantId = req.tenantId;
+  const hs = await import('../services/hubspotService.js');
+  if (!hs.isConfigured(tenantId)) return res.json({ contacts: [], configured: false });
+  try {
+    const { q, industry, reason, materials, classified, limit } = req.query;
+    const result = await hs.searchContactsWithClassification(q || '', {
+      industry: industry || undefined,
+      reason: reason || undefined,
+      materials: materials || undefined,
+      classified: classified === 'true' ? true : classified === 'false' ? false : undefined,
+      limit: parseInt(limit) || 50,
+    }, tenantId);
+    res.json({ ...result, configured: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List contacts with classification data
 router.get('/contacts', async (req, res) => {
   const tenantId = req.tenantId;

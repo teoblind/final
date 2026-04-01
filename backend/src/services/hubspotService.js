@@ -311,6 +311,32 @@ export async function bulkUpdateClassifications(updates, tenantId) {
   return results;
 }
 
+export async function searchContactsWithClassification(query, { industry, reason, materials, classified, limit = 50 } = {}, tenantId) {
+  const properties = [
+    'firstname', 'lastname', 'email', 'phone', 'company', 'jobtitle',
+    'hs_lead_status', 'lifecyclestage', 'createdate', 'lastmodifieddate',
+    'sangha_industry', 'sangha_reason_to_contact', 'sangha_email_type',
+  ];
+
+  const filters = [];
+  if (industry) filters.push({ propertyName: 'sangha_industry', operator: 'EQ', value: industry });
+  if (reason) filters.push({ propertyName: 'sangha_reason_to_contact', operator: 'EQ', value: reason });
+  if (materials) filters.push({ propertyName: 'sangha_email_type', operator: 'EQ', value: materials });
+  if (classified === true) filters.push({ propertyName: 'sangha_industry', operator: 'HAS_PROPERTY' });
+  if (classified === false) filters.push({ propertyName: 'sangha_industry', operator: 'NOT_HAS_PROPERTY' });
+
+  const body = { properties, limit: Math.min(limit, 100) };
+  if (query) body.query = query;
+  if (filters.length > 0) body.filterGroups = [{ filters }];
+
+  const data = await hubspotFetch('/crm/v3/objects/contacts/search', 'POST', body, tenantId);
+  return {
+    contacts: data.results.map(formatContactWithClassification),
+    total: data.total,
+    paging: data.paging,
+  };
+}
+
 export async function getClassificationStats(tenantId) {
   const [classifiedRes, unclassifiedRes] = await Promise.all([
     hubspotFetch('/crm/v3/objects/contacts/search', 'POST', {

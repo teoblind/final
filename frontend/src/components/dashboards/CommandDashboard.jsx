@@ -139,6 +139,9 @@ export default function CommandDashboard({ onNavigate }) {
   const [hsClassStats, setHsClassStats] = useState(null);
   const [hsPaging, setHsPaging] = useState(null);
   const [hsSearch, setHsSearch] = useState('');
+  const [hsIndustryFilter, setHsIndustryFilter] = useState('');
+  const [hsReasonFilter, setHsReasonFilter] = useState('');
+  const [hsMaterialsFilter, setHsMaterialsFilter] = useState('');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -292,15 +295,25 @@ export default function CommandDashboard({ onNavigate }) {
       }).catch(() => {});
   }, [fetchLeadsSheet]);
 
-  const fetchHsContacts = useCallback(async (filter, after) => {
+  const fetchHsContacts = useCallback(async (filter, after, { query, industry, reason, materials } = {}) => {
     setHsContactsLoading(true);
     try {
-      let url = `${API_BASE}/v1/hubspot/contacts?limit=50`;
-      if (filter && filter !== 'all') url += `&classified=${filter}`;
-      if (after) url += `&after=${after}`;
-      const r = await fetch(url, { headers: getAuthHeaders() });
+      const hasFilters = query || industry || reason || materials;
+      const params = new URLSearchParams({ limit: '50' });
+      if (filter && filter !== 'all') params.set('classified', filter);
+      if (after) params.set('after', after);
+      if (query) params.set('q', query);
+      if (industry) params.set('industry', industry);
+      if (reason) params.set('reason', reason);
+      if (materials) params.set('materials', materials);
+      const endpoint = hasFilters ? 'contacts/search-classified' : 'contacts';
+      const r = await fetch(`${API_BASE}/v1/hubspot/${endpoint}?${params}`, { headers: getAuthHeaders() });
       const d = await r.json();
-      setHsContacts(d.contacts || []);
+      if (after) {
+        setHsContacts(prev => [...prev, ...(d.contacts || [])]);
+      } else {
+        setHsContacts(d.contacts || []);
+      }
       setHsPaging(d.paging || null);
     } catch {} finally { setHsContactsLoading(false); }
   }, []);
@@ -1414,8 +1427,21 @@ export default function CommandDashboard({ onNavigate }) {
 
 
       {/* HubSpot CRM Contacts */}
-      {hubspotConnected && (
+      {hubspotConnected && (() => {
+        const HS_INDUSTRIES = ['Renewable Energy', 'Bitcoin mining', 'Bitcoin services', 'Insurance', 'Operations Management', 'SaaS - Web 2', 'SaaS Web 3', 'Real Estate', 'Legal', 'Engineering', 'Electrical Equipment', 'Construction', 'Investment/Finance', 'Other'];
+        const HS_REASONS = ['Investment - DevCo', 'Investment - ProjCo', 'Potential IPP Client', 'Advisor', 'Technical Support', 'Potential Ghost Client', 'Marketing Opportunities', 'Friend', 'Other'];
+        const HS_MATERIALS = ['General Newsletter', 'Project Update', 'Investment Teaser', 'Investment Deck', 'General Marketing', 'Site Marketing', 'Targeted Sales Email', 'General Question'];
+        const doSearch = (overrides = {}) => {
+          const q = overrides.query !== undefined ? overrides.query : hsSearch;
+          const ind = overrides.industry !== undefined ? overrides.industry : hsIndustryFilter;
+          const rea = overrides.reason !== undefined ? overrides.reason : hsReasonFilter;
+          const mat = overrides.materials !== undefined ? overrides.materials : hsMaterialsFilter;
+          const clf = overrides.classFilter !== undefined ? overrides.classFilter : hsClassFilter;
+          fetchHsContacts(clf, null, { query: q, industry: ind, reason: rea, materials: mat });
+        };
+        return (
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+          {/* Header */}
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
               <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">CRM Contacts</span>
@@ -1434,7 +1460,7 @@ export default function CommandDashboard({ onNavigate }) {
                 ].map(f => (
                   <button
                     key={f.id}
-                    onClick={() => { setHsClassFilter(f.id); fetchHsContacts(f.id); }}
+                    onClick={() => { setHsClassFilter(f.id); doSearch({ classFilter: f.id }); }}
                     className={`text-[10px] font-heading font-semibold px-2.5 py-1 rounded-md transition-colors ${
                       hsClassFilter === f.id
                         ? 'bg-white text-[var(--t-ui-accent)] shadow-sm'
@@ -1447,6 +1473,58 @@ export default function CommandDashboard({ onNavigate }) {
               </div>
             </div>
           </div>
+          {/* Search + Filters */}
+          <div className="px-[18px] py-2.5 border-b border-[#f0eeea] flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-1 min-w-[200px]">
+              <Search size={13} className="text-[#9a9a92] shrink-0" />
+              <input
+                type="text"
+                value={hsSearch}
+                onChange={e => setHsSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') doSearch(); }}
+                placeholder="Search name, email, company..."
+                className="flex-1 text-[11px] py-1 bg-transparent border-none outline-none placeholder:text-[#c5c5bc] text-terminal-text"
+              />
+              {hsSearch && (
+                <button onClick={() => { setHsSearch(''); doSearch({ query: '' }); }} className="text-[#9a9a92] hover:text-terminal-text">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <select
+              value={hsIndustryFilter}
+              onChange={e => { setHsIndustryFilter(e.target.value); doSearch({ industry: e.target.value }); }}
+              className="text-[10px] px-2 py-1 rounded-md border border-[#e8e6e1] bg-white text-terminal-text appearance-none cursor-pointer"
+            >
+              <option value="">All Industries</option>
+              {HS_INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+            </select>
+            <select
+              value={hsReasonFilter}
+              onChange={e => { setHsReasonFilter(e.target.value); doSearch({ reason: e.target.value }); }}
+              className="text-[10px] px-2 py-1 rounded-md border border-[#e8e6e1] bg-white text-terminal-text appearance-none cursor-pointer"
+            >
+              <option value="">All Reasons</option>
+              {HS_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <select
+              value={hsMaterialsFilter}
+              onChange={e => { setHsMaterialsFilter(e.target.value); doSearch({ materials: e.target.value }); }}
+              className="text-[10px] px-2 py-1 rounded-md border border-[#e8e6e1] bg-white text-terminal-text appearance-none cursor-pointer"
+            >
+              <option value="">All Materials</option>
+              {HS_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            {(hsIndustryFilter || hsReasonFilter || hsMaterialsFilter || hsSearch) && (
+              <button
+                onClick={() => { setHsSearch(''); setHsIndustryFilter(''); setHsReasonFilter(''); setHsMaterialsFilter(''); setHsClassFilter('all'); fetchHsContacts('all'); }}
+                className="text-[10px] font-heading font-semibold text-terminal-red hover:underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {/* Table */}
           <div className="max-h-[400px] overflow-y-auto">
             {hsContactsLoading ? (
               <div className="px-[18px] py-6 text-center text-[12px] text-[#9a9a92]">Loading contacts...</div>
@@ -1473,17 +1551,26 @@ export default function CommandDashboard({ onNavigate }) {
                       <td className="px-2 py-2 text-terminal-text">{c.company || '-'}</td>
                       <td className="px-2 py-2">
                         {c.classification?.industry ? (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">{c.classification.industry}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 cursor-pointer hover:bg-blue-100"
+                            onClick={() => { setHsIndustryFilter(c.classification.industry); doSearch({ industry: c.classification.industry }); }}>
+                            {c.classification.industry}
+                          </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
                       <td className="px-2 py-2">
                         {c.classification?.reason ? (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200">{c.classification.reason}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200 cursor-pointer hover:bg-purple-100"
+                            onClick={() => { setHsReasonFilter(c.classification.reason); doSearch({ reason: c.classification.reason }); }}>
+                            {c.classification.reason}
+                          </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
                       <td className="px-2 py-2">
                         {c.classification?.materials ? (
-                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200">{c.classification.materials}</span>
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
+                            onClick={() => { setHsMaterialsFilter(c.classification.materials); doSearch({ materials: c.classification.materials }); }}>
+                            {c.classification.materials}
+                          </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
                     </tr>
@@ -1495,7 +1582,7 @@ export default function CommandDashboard({ onNavigate }) {
           {hsPaging?.next?.after && (
             <div className="px-[18px] py-2 border-t border-[#f0eeea] flex justify-center">
               <button
-                onClick={() => fetchHsContacts(hsClassFilter, hsPaging.next.after)}
+                onClick={() => fetchHsContacts(hsClassFilter, hsPaging.next.after, { query: hsSearch, industry: hsIndustryFilter, reason: hsReasonFilter, materials: hsMaterialsFilter })}
                 className="text-[11px] font-heading font-semibold text-[var(--t-ui-accent)] hover:underline"
               >
                 Load more
@@ -1503,7 +1590,8 @@ export default function CommandDashboard({ onNavigate }) {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Insight Modal */}
       {insightModal && (
