@@ -14,8 +14,6 @@ const SPREADSHEET_ID = '10uNIqP2m0MV0Na_nXAO_tfhekyaadymzu6mpOj-BLNg';
 const KEY_FILE = path.join(process.env.HOME || '/root', 'google-service-account.json');
 
 const TENANT_SHEETS = {
-  'default': 'COPPICE — ENERGY',
-  'sangha': 'COPPICE — ENERGY',
   'dacp-construction-001': 'COPPICE — CONSTRUCTION',
 };
 
