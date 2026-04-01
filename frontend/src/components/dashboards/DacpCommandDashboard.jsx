@@ -951,62 +951,29 @@ export default function DacpCommandDashboard({ onNavigate }) {
 
                       {/* Attachments */}
                       {payload.attachments && payload.attachments.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap gap-2">
-                            {payload.attachments.map((att, i) => (
-                              <button
-                                key={i}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (excelPreview?.approvalId === item.id && excelPreview?.index === i) {
-                                    setExcelPreview(null);
-                                    return;
-                                  }
-                                  setLoadingExcel(true);
-                                  fetch(`${API_BASE}/v1/approvals/${item.id}/attachment/${i}`, { headers: getAuthHeaders() })
-                                    .then(r => r.json())
-                                    .then(data => {
-                                      if (data.sheets) setExcelPreview({ approvalId: item.id, index: i, data });
-                                      else setExcelPreview({ approvalId: item.id, index: i, data: null, error: data.error || 'Could not load' });
-                                    })
-                                    .catch(() => setExcelPreview({ approvalId: item.id, index: i, data: null, error: 'Could not load file' }))
-                                    .finally(() => setLoadingExcel(false));
-                                }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md hover:bg-[#eeedea] transition-colors cursor-pointer"
-                              >
-                                <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
-                                <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
-                                <ChevronDown size={10} className={`text-terminal-muted transition-transform ${excelPreview?.approvalId === item.id && excelPreview?.index === i ? 'rotate-180' : ''}`} />
-                              </button>
-                            ))}
-                          </div>
-                          {/* Excel preview table */}
-                          {excelPreview?.approvalId === item.id && excelPreview.data && (
-                            <div className="bg-white border border-[#e8e6e2] rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
-                              {excelPreview.data.sheets.map((sheet, si) => (
-                                <div key={si}>
-                                  <div className="px-3 py-1.5 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[10px] font-heading font-semibold text-terminal-muted uppercase">{sheet.name}</div>
-                                  <table className="w-full text-[11px]">
-                                    <tbody>
-                                      {sheet.rows.map((row, ri) => (
-                                        <tr key={ri} className={ri === 0 ? 'bg-[#1e3a5f] text-white font-semibold' : ri % 2 === 0 ? 'bg-[#fafaf8]' : ''}>
-                                          {row.map((cell, ci) => (
-                                            <td key={ci} className={`px-2 py-1 border-b border-[#f0eeea] ${ri === 0 ? 'border-[#2a4d73]' : ''}`}>{cell}</td>
-                                          ))}
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {excelPreview?.approvalId === item.id && excelPreview.error && (
-                            <div className="text-[11px] text-terminal-muted italic px-2">{excelPreview.error}</div>
-                          )}
-                          {loadingExcel && excelPreview?.approvalId === item.id && (
-                            <div className="text-[11px] text-terminal-muted italic px-2">Loading spreadsheet...</div>
-                          )}
+                        <div className="flex flex-wrap gap-2">
+                          {payload.attachments.map((att, i) => (
+                            <button
+                              key={i}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLoadingExcel(true);
+                                fetch(`${API_BASE}/v1/approvals/${item.id}/attachment/${i}`, { headers: getAuthHeaders() })
+                                  .then(r => r.json())
+                                  .then(data => {
+                                    if (data.sheets) setExcelPreview({ approvalId: item.id, index: i, data, filename: att.filename || att.name || 'Attachment' });
+                                    else setExcelPreview({ approvalId: item.id, index: i, data: null, error: data.error || 'Could not load', filename: att.filename || att.name });
+                                  })
+                                  .catch(() => setExcelPreview({ approvalId: item.id, index: i, data: null, error: 'Could not load file', filename: att.filename || att.name }))
+                                  .finally(() => setLoadingExcel(false));
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md hover:bg-[#eeedea] transition-colors cursor-pointer"
+                            >
+                              <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
+                              <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
+                              <ExternalLink size={10} className="text-terminal-muted" />
+                            </button>
+                          ))}
                         </div>
                       )}
 
@@ -2796,6 +2763,53 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 </>
               );
             })()}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Excel Preview Modal */}
+    {excelPreview && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setExcelPreview(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e6e1] bg-[#faf9f7]">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet size={16} className="text-[#1a6b3c]" />
+              <h3 className="text-[14px] font-bold text-[#111110] font-heading truncate max-w-[600px]">{excelPreview.filename || 'Spreadsheet Preview'}</h3>
+            </div>
+            <button onClick={() => setExcelPreview(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            {loadingExcel && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-[13px] text-terminal-muted">Loading spreadsheet...</div>
+              </div>
+            )}
+            {excelPreview.error && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-[13px] text-terminal-muted">{excelPreview.error}</div>
+              </div>
+            )}
+            {excelPreview.data?.sheets?.map((sheet, si) => (
+              <div key={si}>
+                {excelPreview.data.sheets.length > 1 && (
+                  <div className="px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[11px] font-heading font-semibold text-terminal-muted uppercase">{sheet.name}</div>
+                )}
+                <table className="w-full text-[12px]">
+                  <tbody>
+                    {sheet.rows.map((row, ri) => (
+                      <tr key={ri} className={ri === 0 ? 'bg-[#1e3a5f] text-white font-semibold sticky top-0' : ri % 2 === 0 ? 'bg-[#fafaf8]' : 'bg-white'}>
+                        {row.map((cell, ci) => (
+                          <td key={ci} className={`px-3 py-1.5 border-b border-[#f0eeea] whitespace-nowrap ${ri === 0 ? 'border-[#2a4d73] py-2' : ''}`}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
           </div>
         </div>
       </div>

@@ -276,8 +276,20 @@ async function generateEstimateExcel(estimate) {
 }
 
 // Exported wrapper so other modules can regenerate an Excel from estimate data
+// Normalizes DB snake_case fields to camelCase expected by generateEstimateExcel
 export async function generateEstimateExcelFromData(estimate) {
-  return generateEstimateExcel(estimate);
+  const normalized = {
+    ...estimate,
+    projectName: estimate.projectName || estimate.project_name || 'Unknown Project',
+    gcName: estimate.gcName || estimate.gc_name || 'Unknown GC',
+    totalBid: estimate.totalBid || estimate.total_bid || 0,
+    lineItems: estimate.lineItems || estimate.line_items || [],
+    subtotal: estimate.subtotal || estimate.sub_total || 0,
+    overheadPct: estimate.overheadPct || estimate.overhead_pct || 10,
+    profitPct: estimate.profitPct || estimate.profit_pct || 15,
+    mobilization: estimate.mobilization || 0,
+  };
+  return generateEstimateExcel(normalized);
 }
 
 // ─── Full Pipeline ──────────────────────────────────────────────────────────
