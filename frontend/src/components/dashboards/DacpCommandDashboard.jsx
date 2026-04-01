@@ -116,6 +116,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   // Context sources for task detail
   const [contextEntries, setContextEntries] = useState([]);
   const [contextLoading, setContextLoading] = useState(false);
+  // Team action items
+  const [actionItems, setActionItems] = useState([]);
 
   // Dynamic senders: Coppice (default) + currently logged-in user
   const SENDERS = (() => {
@@ -500,6 +502,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
         if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
       }).catch(console.error).finally(() => setLoading(false));
       fetchAssignments();
+      // Fetch action items
+      fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`)
+        .then(r => r.ok ? r.json() : []).then(items => setActionItems(items)).catch(() => setActionItems([]));
     };
 
     refreshDashboard();
@@ -550,6 +555,20 @@ export default function DacpCommandDashboard({ onNavigate }) {
     } catch (err) { console.error('Reject failed:', err); }
     finally { setProcessingApproval(null); }
   };
+
+  const handleToggleActionItem = useCallback(async (id) => {
+    const item = actionItems.find(a => a.id === id);
+    if (!item) return;
+    const newStatus = item.status === 'completed' ? 'open' : 'completed';
+    setActionItems(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
+    try {
+      await fetch(`${API_BASE}/v1/knowledge/action-items/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch {}
+  }, [actionItems]);
 
   const metrics = stats ? [
     { label: 'Open RFQs', value: stats.openRfqs, delta: `${stats.totalBidRequests} total`, type: 'up', bar: Math.min((stats.openRfqs / Math.max(stats.totalBidRequests, 1)) * 100, 100), icon: ClipboardList },
@@ -698,6 +717,140 @@ export default function DacpCommandDashboard({ onNavigate }) {
               {stats?.activeJobs > 0 ? 'Open the Workflow agent Jobs tab for details.' : 'No active jobs.'}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Team Action Items + Approval Queue */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
+        {/* Team Action Items */}
+        {(() => {
+          const openCount = actionItems.filter(a => a.status !== 'completed').length;
+          const ASSIGNEE_META = {
+            Danny: { full: 'Danny', role: 'CEO', color: '#1e3a5f' },
+            Marcel: { full: 'Marcel', role: 'COO', color: '#5b3a8c' },
+          };
+          const grouped = {};
+          const order = [];
+          for (const item of actionItems) {
+            const key = item.assignee || 'Unassigned';
+            if (!grouped[key]) { grouped[key] = []; order.push(key); }
+            grouped[key].push(item);
+          }
+          const getDuePillClass = (dueDate) => {
+            if (!dueDate) return 'text-terminal-muted bg-[#f5f4f0]';
+            const today = new Date(); today.setHours(0,0,0,0);
+            const due = new Date(dueDate + 'T00:00:00'); due.setHours(0,0,0,0);
+            const diff = (due - today) / 86400000;
+            if (diff < 0) return 'text-terminal-red bg-[#fdedf0] font-semibold';
+            if (diff === 0) return 'text-[#b8860b] bg-[#fdf6e8] font-semibold';
+            return 'text-terminal-muted bg-[#f5f4f0]';
+          };
+          const formatDue = (dueDate) => {
+            if (!dueDate) return '';
+            const d = new Date(dueDate + 'T00:00:00');
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          };
+          return (
+            <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+              <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Team Action Items</span>
+                  <span className="text-[10px] font-mono font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{openCount}</span>
+                </div>
+                <span className="text-[11px] text-terminal-muted">From leadership sync</span>
+              </div>
+              <div className="px-[18px] py-2">
+                {actionItems.length === 0 ? (
+                  <div className="py-5 text-center">
+                    <Users size={24} className="mx-auto text-[#d1d1cb] mb-2" />
+                    <div className="text-[12px] text-[#9a9a92] mb-1">No action items</div>
+                    <div className="text-[11px] text-terminal-muted">Action items from meetings and agents will appear here.</div>
+                  </div>
+                ) : order.map((assignee) => {
+                  const meta = ASSIGNEE_META[assignee] || { full: assignee, role: '', color: '#6b6b65' };
+                  return (
+                    <div key={assignee} className="mb-3 last:mb-1">
+                      <div className="flex items-center gap-2 mb-1.5 pt-1">
+                        <div className="w-[3px] h-4 rounded-full" style={{ background: meta.color }} />
+                        <span className="text-[12px] font-bold text-terminal-text">{meta.full}</span>
+                        {meta.role && <span className="text-[10px] text-terminal-muted">{meta.role}</span>}
+                      </div>
+                      {grouped[assignee].map((item) => {
+                        const done = item.status === 'completed';
+                        return (
+                          <div
+                            key={item.id}
+                            className="flex items-center gap-3 py-[7px] pl-3 pr-1 rounded-lg hover:bg-[#f5f4f0] transition-colors cursor-pointer group"
+                            onClick={() => handleToggleActionItem(item.id)}
+                          >
+                            <div className={`w-[18px] h-[18px] rounded-[5px] border-2 flex items-center justify-center shrink-0 transition-all ${
+                              done
+                                ? 'bg-[var(--t-ui-accent)] border-[var(--t-ui-accent)]'
+                                : 'border-[#d1d1cb] group-hover:border-[#a0a098]'
+                            }`}>
+                              {done && (
+                                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              )}
+                            </div>
+                            <span className={`flex-1 text-[13px] leading-[1.4] transition-all ${
+                              done ? 'line-through text-[#c5c5bc]' : 'text-terminal-text'
+                            }`}>
+                              {item.title}
+                            </span>
+                            <span className={`text-[10px] font-mono px-2 py-[2px] rounded-md shrink-0 tabular-nums ${getDuePillClass(item.due_date)}`}>
+                              {formatDue(item.due_date)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Approval Queue */}
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Approval Queue</span>
+              <span className="text-[10px] font-mono font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{approvals.length}</span>
+            </div>
+          </div>
+          <div>
+            {approvals.length === 0 ? (
+              <div className="py-5 text-center">
+                <CheckCircle size={24} className="mx-auto text-[#d1d1cb] mb-2" />
+                <div className="text-[12px] text-[#9a9a92] mb-1">No pending approvals</div>
+                <div className="text-[11px] text-terminal-muted">Agent actions requiring your review will appear here.</div>
+              </div>
+            ) : approvals.map((item) => (
+              <div key={item.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+                <span
+                  className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                  style={{ background: item.icon?.bg || '#f5f4f0', color: item.icon?.color || '#6b6b65' }}
+                >
+                  {item.icon?.letter || 'A'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                  <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
+                    <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
+                  <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
