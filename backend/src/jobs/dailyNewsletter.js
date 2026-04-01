@@ -330,7 +330,7 @@ ${sectionInstructions}
 FORMATTING RULES:
 - Use clean, professional HTML with inline styles
 - Use ${brandColor} as the primary brand color for ALL headings, borders, accents, and section dividers. Do NOT use navy (#1e3a5f) unless that IS the brand color.
-- Do NOT include a top-level header/banner/title block - the email wrapper already has one. Jump straight into the content sections.
+- START with a branded header banner: full-width block with background color ${brandColor}, white text, "${config.name} Daily Intelligence" as the title, and today's date below it. Use padding and rounded top corners to match the card container.
 ${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (Renewables) - a colored horizontal rule or banner' : ''}
 - Keep it scannable - short paragraphs, bullet points
 - Bold key names (companies, project names, dollar amounts, MW figures)
