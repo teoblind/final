@@ -1541,7 +1541,7 @@ export default function CommandDashboard({ onNavigate }) {
                 </thead>
                 <tbody>
                   {hsContacts.map(c => (
-                    <tr key={c.hubspot_id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors group">
+                    <tr key={c.hubspot_id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors">
                       <td className="px-[18px] py-2">
                         <div className="font-medium text-terminal-text">{c.name || 'Unknown'}</div>
                         <div className="text-[10px] text-terminal-muted">{c.email}</div>
@@ -1571,11 +1571,6 @@ export default function CommandDashboard({ onNavigate }) {
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
-                      {c.reasoning && (
-                        <td className="px-2 py-2 hidden group-hover:table-cell">
-                          <span className="text-[9px] text-terminal-muted italic">{c.reasoning}</span>
-                        </td>
-                      )}
                     </tr>
                   ))}
                 </tbody>
