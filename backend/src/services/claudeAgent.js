@@ -624,7 +624,7 @@ function streamLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, tur
     console.log(`[ClaudeAgent] Streaming ${agentId}@${resolvedTenantId} locally`);
 
     const proc = spawn(CLAUDE_BIN, args, {
-      env: { ...process.env, LANG: 'en_US.UTF-8', ANTHROPIC_API_KEY: '' },
+      env: { ...process.env, LANG: 'en_US.UTF-8', ANTHROPIC_API_KEY: '', MCP_BRIDGE_TENANT: resolvedTenantId },
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: '/root/coppice',
     });
@@ -788,6 +788,7 @@ function queryLocal({ resolvedTenantId, agentId, systemPrompt, fullMessage, turn
         ...process.env,
         LANG: 'en_US.UTF-8',
         ANTHROPIC_API_KEY: '',
+        MCP_BRIDGE_TENANT: resolvedTenantId,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: '/root/coppice',
