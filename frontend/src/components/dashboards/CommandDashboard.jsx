@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, Calendar, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users, ClipboardList, FileSpreadsheet, Link2, Search, Unlink, Mic, Video } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users, ClipboardList, FileSpreadsheet, Link2, Search, Unlink, Mic, Video, Pencil, Save } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
@@ -96,6 +96,13 @@ export default function CommandDashboard({ onNavigate }) {
   const [leadStats, setLeadStats] = useState(null);
   const [approvalsPage, setApprovalsPage] = useState(0);
   const [expandedApproval, setExpandedApproval] = useState(null);
+  const [excelPreview, setExcelPreview] = useState(null);
+  const [loadingExcel, setLoadingExcel] = useState(false);
+  const [editingApproval, setEditingApproval] = useState(null);
+  const [editBody, setEditBody] = useState('');
+  const [editSender, setEditSender] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const [meetingsPage, setMeetingsPage] = useState(0);
   // Meetings state (matches DACP pattern)
   const [meetings, setMeetings] = useState([]);
@@ -635,6 +642,53 @@ export default function CommandDashboard({ onNavigate }) {
     setApprovals(prev => prev.filter(a => a.id !== id));
   }, []);
 
+  const SENDERS = (() => {
+    const senders = [{ name: 'Coppice', label: 'Coppice (AI Agent)' }];
+    try {
+      const session = JSON.parse(sessionStorage.getItem('sangha_auth') || '{}');
+      const userName = session?.user?.name;
+      if (userName && userName !== 'Coppice') senders.push({ name: userName, label: userName });
+    } catch {}
+    return senders;
+  })();
+
+  const fetchApprovals = useCallback(() => {
+    fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setApprovals(d.items || []))
+      .catch(() => {});
+  }, []);
+
+  const handleSaveEdit = useCallback(async (approvalId) => {
+    setSavingEdit(true);
+    try {
+      await fetch(`${API_BASE}/v1/approvals/${approvalId}/update-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ body: editBody }),
+      });
+      setEditingApproval(null);
+      fetchApprovals();
+    } catch (err) { console.error('Save failed:', err); }
+    finally { setSavingEdit(false); }
+  }, [editBody, fetchApprovals]);
+
+  const handleRewriteForSender = useCallback(async (approvalId, senderName, currentBody) => {
+    setRewriting(true);
+    try {
+      const res = await fetch(`${API_BASE}/v1/approvals/${approvalId}/rewrite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ senderName, currentBody }),
+      });
+      const data = await res.json();
+      if (data.body) {
+        setEditBody(data.body);
+        setEditingApproval(approvalId);
+      }
+    } catch (err) { console.error('Rewrite failed:', err); }
+    finally { setRewriting(false); }
+  }, []);
 
   const handleInsightAction = async (insightId, action) => {
     if (action === 'Dismiss' || action === 'Snooze') {
@@ -848,7 +902,14 @@ export default function CommandDashboard({ onNavigate }) {
                           <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
                             {(payload.to || payload.subject) && (
                               <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
-                                <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase mb-1.5">Details</div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
+                                  <div className="flex items-center gap-1.5">
+                                    {savingEdit && editingApproval === item.id && <span className="text-[10px] text-terminal-muted italic">Saving...</span>}
+                                    <Pencil size={10} className="text-terminal-muted" />
+                                    <span className="text-[10px] text-terminal-muted">Click body to edit</span>
+                                  </div>
+                                </div>
                                 {payload.to && (
                                   <div className="text-[11px] text-[#6b6b65]">
                                     <span className="font-medium text-terminal-text">To:</span> {payload.to}
@@ -859,25 +920,86 @@ export default function CommandDashboard({ onNavigate }) {
                                     <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
                                   </div>
                                 )}
+                                {/* Sender dropdown */}
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  <span className="text-[11px] font-medium text-terminal-text">Sign as:</span>
+                                  <select
+                                    value={editSender || ''}
+                                    onChange={(e) => {
+                                      e.stopPropagation();
+                                      setEditSender(e.target.value);
+                                      if (e.target.value) {
+                                        handleRewriteForSender(item.id, e.target.value, payload.body || editBody);
+                                      }
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-[11px] px-2 py-0.5 rounded border border-[#e8e6e2] bg-white text-terminal-text"
+                                  >
+                                    <option value="">Select signer...</option>
+                                    {SENDERS.map(s => (
+                                      <option key={s.name} value={s.name}>{s.label}</option>
+                                    ))}
+                                  </select>
+                                  {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}
+                                </div>
                               </div>
                             )}
-                            <div className="p-4">
-                              {payload.html ? (
-                                <div
-                                  className="text-[12px] text-terminal-text leading-relaxed [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
-                                  dangerouslySetInnerHTML={{ __html: payload.html }}
-                                />
-                              ) : payload.body ? (
-                                <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
-                                  {payload.body}
-                                </div>
-                              ) : (
-                                <div className="text-[12px] text-terminal-text whitespace-pre-wrap leading-relaxed">
-                                  {item.description || 'No preview available'}
-                                </div>
-                              )}
-                            </div>
+                            <div
+                              className="p-4 text-[12px] text-terminal-text leading-relaxed cursor-text focus-within:ring-1 focus-within:ring-[#1e3a5f] focus-within:bg-white rounded-b-lg transition-colors [&_table]:w-full [&_table]:border-collapse [&_td]:p-1.5 [&_td]:text-[11px] [&_th]:p-1.5 [&_th]:text-[11px] [&_th]:text-left [&_th]:font-semibold [&_h2]:text-[13px] [&_h2]:font-bold [&_h2]:mb-2 [&_h3]:text-[12px] [&_h3]:font-semibold [&_h3]:mb-1 [&_p]:mb-2 [&_p]:text-[12px]"
+                              contentEditable
+                              suppressContentEditableWarning
+                              onClick={(e) => e.stopPropagation()}
+                              onFocus={() => {
+                                if (editingApproval !== item.id) {
+                                  setEditBody(payload.body || '');
+                                  setEditingApproval(item.id);
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const newText = e.target.innerText;
+                                if (newText !== (payload.body || '')) {
+                                  setEditBody(newText);
+                                  setSavingEdit(true);
+                                  fetch(`${API_BASE}/v1/approvals/${item.id}/update-draft`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                                    body: JSON.stringify({ body: newText }),
+                                  }).then(() => fetchApprovals()).catch(err => console.error('Auto-save failed:', err)).finally(() => setSavingEdit(false));
+                                }
+                                setEditingApproval(null);
+                              }}
+                              dangerouslySetInnerHTML={{ __html: payload.html || (payload.body ? payload.body.replace(/\n/g, '<br>') : (item.description || 'No preview available')) }}
+                            />
                           </div>
+
+                          {/* Attachments */}
+                          {payload.attachments && payload.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {payload.attachments.map((att, i) => (
+                                <button
+                                  key={i}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLoadingExcel(true);
+                                    fetch(`${API_BASE}/v1/approvals/${item.id}/attachment/${i}`, { headers: getAuthHeaders() })
+                                      .then(r => r.json())
+                                      .then(data => {
+                                        if (data.sheets) setExcelPreview({ approvalId: item.id, index: i, data, filename: att.filename || att.name || 'Attachment' });
+                                        else setExcelPreview({ approvalId: item.id, index: i, data: null, error: data.error || 'Could not load', filename: att.filename || att.name });
+                                      })
+                                      .catch(() => setExcelPreview({ approvalId: item.id, index: i, data: null, error: 'Could not load file', filename: att.filename || att.name }))
+                                      .finally(() => setLoadingExcel(false));
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f5f4f0] border border-[#e8e6e2] rounded-md hover:bg-[#eeedea] transition-colors cursor-pointer"
+                                >
+                                  <FileSpreadsheet size={12} className="text-[#1a6b3c]" />
+                                  <span className="text-[11px] font-medium text-terminal-text">{att.filename || att.name || 'Attachment'}</span>
+                                  <ExternalLink size={10} className="text-terminal-muted" />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -2151,6 +2273,53 @@ export default function CommandDashboard({ onNavigate }) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Preview Modal */}
+      {excelPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setExcelPreview(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e6e1] bg-[#faf9f7]">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={16} className="text-[#1a6b3c]" />
+                <h3 className="text-[14px] font-bold text-[#111110] font-heading truncate max-w-[600px]">{excelPreview.filename || 'Spreadsheet Preview'}</h3>
+              </div>
+              <button onClick={() => setExcelPreview(null)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {loadingExcel && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-[13px] text-terminal-muted">Loading spreadsheet...</div>
+                </div>
+              )}
+              {excelPreview.error && (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-[13px] text-terminal-muted">{excelPreview.error}</div>
+                </div>
+              )}
+              {excelPreview.data?.sheets?.map((sheet, si) => (
+                <div key={si}>
+                  {excelPreview.data.sheets.length > 1 && (
+                    <div className="px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e2] text-[11px] font-heading font-semibold text-terminal-muted uppercase">{sheet.name}</div>
+                  )}
+                  <table className="w-full text-[12px]">
+                    <tbody>
+                      {sheet.rows.map((row, ri) => (
+                        <tr key={ri} className={ri === 0 ? 'bg-[#1e3a5f] text-white font-semibold sticky top-0' : ri % 2 === 0 ? 'bg-[#fafaf8]' : 'bg-white'}>
+                          {row.map((cell, ci) => (
+                            <td key={ci} className={`px-3 py-1.5 border-b border-[#f0eeea] whitespace-nowrap ${ri === 0 ? 'border-[#2a4d73] py-2' : ''}`}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
             </div>
           </div>
         </div>
