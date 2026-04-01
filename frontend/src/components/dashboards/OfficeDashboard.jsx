@@ -75,12 +75,11 @@ export default function OfficeDashboard() {
 
   const tenantSlug = tenant?.slug;
   const tenantId = tenant?.id;
-  const isSuperAdmin = !tenantSlug || tenantSlug === 'default' || tenantSlug === 'sangha';
 
   const allAgents = data?.agents || [];
-  const filteredAgents = isSuperAdmin
-    ? allAgents
-    : allAgents.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === tenant?.name);
+  const filteredAgents = allAgents.filter(a =>
+    a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === tenant?.name
+  );
 
   // Transform Coppice agents into OpenClaw VisualAgent format
   const visualAgents = filteredAgents.map((agent) => ({
@@ -99,9 +98,9 @@ export default function OfficeDashboard() {
   }));
 
   const allActivities = data?.activities || [];
-  const activities = isSuperAdmin
-    ? allActivities
-    : allActivities.filter(a => a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === 'dacp');
+  const activities = allActivities.filter(a =>
+    a.tenant === tenantSlug || a.tenant === tenantId || a.tenant === tenant?.name
+  );
 
   const activeCount = filteredAgents.filter(a => a.status !== 'idle').length;
   const selectedAgent = filteredAgents.find(a => a.id === selectedAgentId);
