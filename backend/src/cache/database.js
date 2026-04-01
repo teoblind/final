@@ -4228,6 +4228,135 @@ function initDacpTablesSchema(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_ceo_reports_tenant ON ceo_department_reports(tenant_id, department, generated_at)'); } catch (e) {}
 
+  // ─── DACP Suppliers ─────────────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_suppliers (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      supplier_type TEXT NOT NULL,
+      contact_name TEXT,
+      contact_email TEXT,
+      contact_phone TEXT,
+      address TEXT,
+      city TEXT,
+      state TEXT,
+      zip TEXT,
+      lat REAL,
+      lng REAL,
+      website TEXT,
+      pricing_json TEXT,
+      delivery_radius_miles INTEGER,
+      response_rate REAL DEFAULT 0,
+      avg_lead_days INTEGER,
+      last_quote_date TEXT,
+      notes TEXT,
+      status TEXT DEFAULT 'active',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_suppliers_tenant ON dacp_suppliers(tenant_id, supplier_type)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_suppliers_region ON dacp_suppliers(tenant_id, state, city)'); } catch (e) {}
+
+  // ─── DACP RFIs ──────────────────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_rfis (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      bid_request_id TEXT,
+      job_id TEXT,
+      gc_name TEXT,
+      gc_email TEXT,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      category TEXT DEFAULT 'scope',
+      status TEXT DEFAULT 'draft',
+      sent_date TEXT,
+      response_body TEXT,
+      response_date TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_rfis_tenant ON dacp_rfis(tenant_id, status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_rfis_bid ON dacp_rfis(tenant_id, bid_request_id)'); } catch (e) {}
+
+  // ─── DACP Project Specs ─────────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_project_specs (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      bid_request_id TEXT,
+      job_id TEXT,
+      project_name TEXT,
+      tax_status TEXT,
+      tax_details TEXT,
+      labor_requirements_json TEXT,
+      bond_required INTEGER DEFAULT 0,
+      bond_type TEXT,
+      concrete_specs_json TEXT,
+      rebar_specs_json TEXT,
+      special_conditions_json TEXT,
+      vbe_sblvb_required INTEGER DEFAULT 0,
+      vbe_sblvb_details TEXT,
+      parsed_from_doc_id TEXT,
+      raw_extracted_text TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_specs_tenant ON dacp_project_specs(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_specs_bid ON dacp_project_specs(tenant_id, bid_request_id)'); } catch (e) {}
+
+  // ─── DACP Bid Distributions ─────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_bid_distributions (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      bid_request_id TEXT,
+      estimate_id TEXT,
+      project_name TEXT NOT NULL,
+      gc_name TEXT NOT NULL,
+      gc_email TEXT,
+      gc_contact TEXT,
+      gc_reputation TEXT,
+      adjusted_total REAL,
+      adjustment_reason TEXT,
+      bid_status TEXT DEFAULT 'draft',
+      sent_date TEXT,
+      response_date TEXT,
+      response_amount REAL,
+      award_status TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_distributions_tenant ON dacp_bid_distributions(tenant_id, bid_status)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_distributions_bid ON dacp_bid_distributions(tenant_id, bid_request_id)'); } catch (e) {}
+
+  // ─── DACP Bond Program ──────────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_bond_program (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      surety_company TEXT NOT NULL,
+      surety_contact TEXT,
+      surety_email TEXT,
+      surety_phone TEXT,
+      total_capacity REAL,
+      current_utilization REAL DEFAULT 0,
+      tiers_json TEXT,
+      current_rate_pct REAL,
+      market_benchmark_pct REAL,
+      rate_flag TEXT,
+      effective_date TEXT,
+      expiry_date TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bond_tenant ON dacp_bond_program(tenant_id)'); } catch (e) {}
+
   // Chat messages
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -5325,6 +5454,98 @@ export function getCeoDepartmentReports(tenantId, department, limit = 10) {
     return db.prepare('SELECT * FROM ceo_department_reports WHERE tenant_id = ? AND department = ? ORDER BY generated_at DESC LIMIT ?').all(tenantId, department, limit);
   }
   return db.prepare('SELECT * FROM ceo_department_reports WHERE tenant_id = ? ORDER BY generated_at DESC LIMIT ?').all(tenantId, limit);
+}
+
+// ─── DACP Suppliers ───
+export function getDacpSuppliers(tenantId, type = null) {
+  if (type) return db.prepare('SELECT * FROM dacp_suppliers WHERE tenant_id = ? AND supplier_type = ? AND status = ? ORDER BY name').all(tenantId, type, 'active');
+  return db.prepare('SELECT * FROM dacp_suppliers WHERE tenant_id = ? AND status = ? ORDER BY supplier_type, name').all(tenantId, 'active');
+}
+
+export function upsertDacpSupplier(supplier) {
+  return db.prepare(`
+    INSERT INTO dacp_suppliers (id, tenant_id, name, supplier_type, contact_name, contact_email, contact_phone, address, city, state, zip, lat, lng, website, pricing_json, delivery_radius_miles, notes, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name, contact_name=excluded.contact_name, contact_email=excluded.contact_email, contact_phone=excluded.contact_phone, address=excluded.address, city=excluded.city, state=excluded.state, zip=excluded.zip, lat=excluded.lat, lng=excluded.lng, website=excluded.website, pricing_json=excluded.pricing_json, delivery_radius_miles=excluded.delivery_radius_miles, notes=excluded.notes, updated_at=datetime('now')
+  `).run(supplier.id, supplier.tenantId, supplier.name, supplier.supplierType, supplier.contactName, supplier.contactEmail, supplier.contactPhone, supplier.address, supplier.city, supplier.state, supplier.zip, supplier.lat, supplier.lng, supplier.website, supplier.pricingJson, supplier.deliveryRadiusMiles, supplier.notes, supplier.status || 'active');
+}
+
+export function updateSupplierQuoteDate(tenantId, supplierId) {
+  return db.prepare('UPDATE dacp_suppliers SET last_quote_date = datetime(\'now\'), updated_at = datetime(\'now\') WHERE id = ? AND tenant_id = ?').run(supplierId, tenantId);
+}
+
+// ─── DACP RFIs ───
+export function getDacpRfis(tenantId, bidRequestId = null) {
+  if (bidRequestId) return db.prepare('SELECT * FROM dacp_rfis WHERE tenant_id = ? AND bid_request_id = ? ORDER BY created_at DESC').all(tenantId, bidRequestId);
+  return db.prepare('SELECT * FROM dacp_rfis WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function createDacpRfi(rfi) {
+  return db.prepare('INSERT INTO dacp_rfis (id, tenant_id, bid_request_id, job_id, gc_name, gc_email, subject, body, category, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(rfi.id, rfi.tenantId, rfi.bidRequestId, rfi.jobId, rfi.gcName, rfi.gcEmail, rfi.subject, rfi.body, rfi.category || 'scope', rfi.status || 'draft');
+}
+
+export function updateDacpRfi(tenantId, rfiId, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    const col = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+    fields.push(`${col} = ?`);
+    values.push(v);
+  }
+  values.push(rfiId, tenantId);
+  return db.prepare(`UPDATE dacp_rfis SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...values);
+}
+
+// ─── DACP Project Specs ───
+export function getDacpProjectSpecs(tenantId, bidRequestId) {
+  return db.prepare('SELECT * FROM dacp_project_specs WHERE tenant_id = ? AND bid_request_id = ?').get(tenantId, bidRequestId);
+}
+
+export function upsertDacpProjectSpecs(specs) {
+  return db.prepare(`
+    INSERT INTO dacp_project_specs (id, tenant_id, bid_request_id, job_id, project_name, tax_status, tax_details, labor_requirements_json, bond_required, bond_type, concrete_specs_json, rebar_specs_json, special_conditions_json, vbe_sblvb_required, vbe_sblvb_details, parsed_from_doc_id, raw_extracted_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET tax_status=excluded.tax_status, tax_details=excluded.tax_details, labor_requirements_json=excluded.labor_requirements_json, bond_required=excluded.bond_required, bond_type=excluded.bond_type, concrete_specs_json=excluded.concrete_specs_json, rebar_specs_json=excluded.rebar_specs_json, special_conditions_json=excluded.special_conditions_json, vbe_sblvb_required=excluded.vbe_sblvb_required, vbe_sblvb_details=excluded.vbe_sblvb_details, parsed_from_doc_id=excluded.parsed_from_doc_id, raw_extracted_text=excluded.raw_extracted_text
+  `).run(specs.id, specs.tenantId, specs.bidRequestId, specs.jobId, specs.projectName, specs.taxStatus, specs.taxDetails, specs.laborRequirementsJson, specs.bondRequired ? 1 : 0, specs.bondType, specs.concreteSpecsJson, specs.rebarSpecsJson, specs.specialConditionsJson, specs.vbeSblvbRequired ? 1 : 0, specs.vbeSblvbDetails, specs.parsedFromDocId, specs.rawExtractedText);
+}
+
+// ─── DACP Bid Distributions ───
+export function getDacpBidDistributions(tenantId, bidRequestId = null) {
+  if (bidRequestId) return db.prepare('SELECT * FROM dacp_bid_distributions WHERE tenant_id = ? AND bid_request_id = ? ORDER BY created_at DESC').all(tenantId, bidRequestId);
+  return db.prepare('SELECT * FROM dacp_bid_distributions WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function createDacpBidDistribution(dist) {
+  return db.prepare('INSERT INTO dacp_bid_distributions (id, tenant_id, bid_request_id, estimate_id, project_name, gc_name, gc_email, gc_contact, gc_reputation, adjusted_total, adjustment_reason, bid_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(dist.id, dist.tenantId, dist.bidRequestId, dist.estimateId, dist.projectName, dist.gcName, dist.gcEmail, dist.gcContact, dist.gcReputation, dist.adjustedTotal, dist.adjustmentReason, dist.bidStatus || 'draft');
+}
+
+export function updateDacpBidDistribution(tenantId, distId, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    const col = k.replace(/([A-Z])/g, '_$1').toLowerCase();
+    fields.push(`${col} = ?`);
+    values.push(v);
+  }
+  values.push(distId, tenantId);
+  return db.prepare(`UPDATE dacp_bid_distributions SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...values);
+}
+
+// ─── DACP Bond Program ───
+export function getDacpBondProgram(tenantId) {
+  return db.prepare('SELECT * FROM dacp_bond_program WHERE tenant_id = ? ORDER BY created_at DESC').all(tenantId);
+}
+
+export function upsertDacpBondProgram(bond) {
+  return db.prepare(`
+    INSERT INTO dacp_bond_program (id, tenant_id, surety_company, surety_contact, surety_email, surety_phone, total_capacity, current_utilization, tiers_json, current_rate_pct, market_benchmark_pct, rate_flag, effective_date, expiry_date, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET surety_company=excluded.surety_company, surety_contact=excluded.surety_contact, surety_email=excluded.surety_email, total_capacity=excluded.total_capacity, current_utilization=excluded.current_utilization, tiers_json=excluded.tiers_json, current_rate_pct=excluded.current_rate_pct, market_benchmark_pct=excluded.market_benchmark_pct, rate_flag=excluded.rate_flag, effective_date=excluded.effective_date, expiry_date=excluded.expiry_date, notes=excluded.notes, updated_at=datetime('now')
+  `).run(bond.id, bond.tenantId, bond.suretyCompany, bond.suretyContact, bond.suretyEmail, bond.suretyPhone, bond.totalCapacity, bond.currentUtilization, bond.tiersJson, bond.currentRatePct, bond.marketBenchmarkPct, bond.rateFlag, bond.effectiveDate, bond.expiryDate, bond.notes);
+}
+
+export function checkBondRateFlag(tenantId) {
+  return db.prepare('SELECT * FROM dacp_bond_program WHERE tenant_id = ? AND current_rate_pct > market_benchmark_pct * 1.2').all(tenantId);
 }
 
 // ─── Lead Engine CRUD Helpers ────────────────────────────────────────────────

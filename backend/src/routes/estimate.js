@@ -1766,4 +1766,188 @@ router.get('/newsletters', async (req, res) => {
   }
 });
 
+// ─── Supplier Outreach Routes ─────────────────────────────────────────────────
+
+import { findLocalSuppliers, generateSupplierOutreach, draftSupplierQuoteEmail } from '../services/supplierOutreach.js';
+import { getDacpSuppliers, upsertDacpSupplier } from '../cache/database.js';
+
+router.get('/suppliers', authenticate, async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { type } = req.query;
+    const suppliers = getDacpSuppliers(tenantId, type || null);
+    res.json({ suppliers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/suppliers/search', authenticate, async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { location, supplierType, radiusMinutes } = req.body;
+    const suppliers = await findLocalSuppliers(tenantId, { location, supplierType, radiusMinutes: radiusMinutes || 15 });
+    res.json({ suppliers });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/suppliers/outreach', authenticate, async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { projectName, projectLocation, bidRequestId, scope, dueDate, supplierTypes } = req.body;
+    const drafts = await generateSupplierOutreach(tenantId, { projectName, projectLocation, bidRequestId, scope, dueDate, supplierTypes });
+    res.json({ drafts, count: drafts.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Spec Parser Routes ───────────────────────────────────────────────────────
+
+import { parseAndSaveSpecs, extractSpecRequirements } from '../services/specParser.js';
+import { getDacpProjectSpecs } from '../cache/database.js';
+
+router.post('/specs/parse', authenticate, async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { bidRequestId, jobId, projectName, specText, docId } = req.body;
+    const result = await parseAndSaveSpecs(tenantId, { bidRequestId, jobId, projectName, specText, docId });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/specs/:bidRequestId', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const specs = getDacpProjectSpecs(tenantId, req.params.bidRequestId);
+    res.json({ specs: specs || null });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── RFI Routes ───────────────────────────────────────────────────────────────
+
+import { detectRfiNeeds, generateRfiDrafts, formatRfiEmail } from '../services/rfiGenerator.js';
+import { getDacpRfis, updateDacpRfi } from '../cache/database.js';
+
+router.get('/rfis', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { bidRequestId } = req.query;
+    const rfis = getDacpRfis(tenantId, bidRequestId || null);
+    res.json({ rfis });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/rfis/generate', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { bidRequestId, gcName, gcEmail, projectName, missingItems, itbAnalysis } = req.body;
+    const suggestions = detectRfiNeeds({ itbAnalysis, missingInfo: missingItems });
+    const rfis = generateRfiDrafts(tenantId, { bidRequestId, gcName, gcEmail, projectName, suggestions });
+    res.json({ rfis, count: rfis.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/rfis/:rfiId', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    updateDacpRfi(tenantId, req.params.rfiId, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Multi-GC Bid Distribution Routes ─────────────────────────────────────────
+
+import { createBidDistributions, getBidComparison, draftBidEmail, markBidSent, recordGcResponse } from '../services/bidDistribution.js';
+
+router.get('/bid-distributions', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { bidRequestId } = req.query;
+    const comparison = getBidComparison(tenantId, bidRequestId);
+    res.json(comparison);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bid-distributions', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { bidRequestId, estimateId, projectName, baseBidTotal, gcList } = req.body;
+    const distributions = createBidDistributions(tenantId, { bidRequestId, estimateId, projectName, baseBidTotal, gcList });
+    res.json({ distributions, count: distributions.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bid-distributions/:distId/send', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    markBidSent(tenantId, req.params.distId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bid-distributions/:distId/response', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    recordGcResponse(tenantId, req.params.distId, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Bond Rate Optimizer Routes ───────────────────────────────────────────────
+
+import { analyzeBondRate, setupBondProgram, addBondAnalysisToEstimate, MARKET_BENCHMARKS } from '../services/bondingOptimizer.js';
+import { getDacpBondProgram } from '../cache/database.js';
+
+router.get('/bonding', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const program = getDacpBondProgram(tenantId);
+    res.json({ program, benchmarks: MARKET_BENCHMARKS });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bonding/setup', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const result = setupBondProgram(tenantId, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bonding/analyze', authenticate, (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id;
+    const { estimateTotal, bondRatePct, projectType } = req.body;
+    const analysis = analyzeBondRate(tenantId, { estimateTotal, bondRatePct, projectType });
+    res.json(analysis);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
