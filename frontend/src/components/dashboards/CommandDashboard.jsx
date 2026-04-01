@@ -283,38 +283,36 @@ export default function CommandDashboard({ onNavigate }) {
           setHubspotLoading(true);
           Promise.all([
             fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
-            fetch(`${API_BASE}/v1/hubspot/classification-stats`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
-            fetch(`${API_BASE}/v1/hubspot/contacts?limit=50`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+            fetch(`${API_BASE}/v1/hubspot/local-stats`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+            fetch(`${API_BASE}/v1/hubspot/local-contacts?limit=50`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
           ]).then(([pipeline, classStats, contacts]) => {
             if (pipeline) setHubspotPipeline(pipeline);
             if (classStats) setHsClassStats(classStats);
-            if (contacts) { setHsContacts(contacts.contacts || []); setHsPaging(contacts.paging || null); }
+            if (contacts) { setHsContacts(contacts.classifications || []); setHsPaging({ total: contacts.total, offset: contacts.offset, limit: contacts.limit }); }
           }).finally(() => setHubspotLoading(false));
           if (!leadsSheet?.configured) setLeadsTab('hubspot');
         }
       }).catch(() => {});
   }, [fetchLeadsSheet]);
 
-  const fetchHsContacts = useCallback(async (filter, after, { query, industry, reason, materials } = {}) => {
+  const fetchHsContacts = useCallback(async (filter, afterOffset, { query, industry, reason, materials } = {}) => {
     setHsContactsLoading(true);
     try {
-      const hasFilters = query || industry || reason || materials;
       const params = new URLSearchParams({ limit: '50' });
       if (filter && filter !== 'all') params.set('classified', filter);
-      if (after) params.set('after', after);
+      if (afterOffset) params.set('offset', String(afterOffset));
       if (query) params.set('q', query);
       if (industry) params.set('industry', industry);
       if (reason) params.set('reason', reason);
       if (materials) params.set('materials', materials);
-      const endpoint = hasFilters ? 'contacts/search-classified' : 'contacts';
-      const r = await fetch(`${API_BASE}/v1/hubspot/${endpoint}?${params}`, { headers: getAuthHeaders() });
+      const r = await fetch(`${API_BASE}/v1/hubspot/local-contacts?${params}`, { headers: getAuthHeaders() });
       const d = await r.json();
-      if (after) {
-        setHsContacts(prev => [...prev, ...(d.contacts || [])]);
+      if (afterOffset) {
+        setHsContacts(prev => [...prev, ...(d.classifications || [])]);
       } else {
-        setHsContacts(d.contacts || []);
+        setHsContacts(d.classifications || []);
       }
-      setHsPaging(d.paging || null);
+      setHsPaging({ total: d.total, offset: d.offset, limit: d.limit });
     } catch {} finally { setHsContactsLoading(false); }
   }, []);
 
@@ -1543,49 +1541,54 @@ export default function CommandDashboard({ onNavigate }) {
                 </thead>
                 <tbody>
                   {hsContacts.map(c => (
-                    <tr key={c.id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors">
+                    <tr key={c.hubspot_id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors group">
                       <td className="px-[18px] py-2">
                         <div className="font-medium text-terminal-text">{c.name || 'Unknown'}</div>
                         <div className="text-[10px] text-terminal-muted">{c.email}</div>
                       </td>
                       <td className="px-2 py-2 text-terminal-text">{c.company || '-'}</td>
                       <td className="px-2 py-2">
-                        {c.classification?.industry ? (
+                        {c.industry ? (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 cursor-pointer hover:bg-blue-100"
-                            onClick={() => { setHsIndustryFilter(c.classification.industry); doSearch({ industry: c.classification.industry }); }}>
-                            {c.classification.industry}
+                            onClick={() => { setHsIndustryFilter(c.industry); doSearch({ industry: c.industry }); }}>
+                            {c.industry}
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
                       <td className="px-2 py-2">
-                        {c.classification?.reason ? (
+                        {c.reason ? (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200 cursor-pointer hover:bg-purple-100"
-                            onClick={() => { setHsReasonFilter(c.classification.reason); doSearch({ reason: c.classification.reason }); }}>
-                            {c.classification.reason}
+                            onClick={() => { setHsReasonFilter(c.reason); doSearch({ reason: c.reason }); }}>
+                            {c.reason}
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
                       <td className="px-2 py-2">
-                        {c.classification?.materials ? (
+                        {c.materials ? (
                           <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 cursor-pointer hover:bg-emerald-100"
-                            onClick={() => { setHsMaterialsFilter(c.classification.materials); doSearch({ materials: c.classification.materials }); }}>
-                            {c.classification.materials}
+                            onClick={() => { setHsMaterialsFilter(c.materials); doSearch({ materials: c.materials }); }}>
+                            {c.materials}
                           </span>
                         ) : <span className="text-[#c5c5bc]">-</span>}
                       </td>
+                      {c.reasoning && (
+                        <td className="px-2 py-2 hidden group-hover:table-cell">
+                          <span className="text-[9px] text-terminal-muted italic">{c.reasoning}</span>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
           </div>
-          {hsPaging?.next?.after && (
+          {hsPaging && (hsPaging.offset + hsPaging.limit) < hsPaging.total && (
             <div className="px-[18px] py-2 border-t border-[#f0eeea] flex justify-center">
               <button
-                onClick={() => fetchHsContacts(hsClassFilter, hsPaging.next.after, { query: hsSearch, industry: hsIndustryFilter, reason: hsReasonFilter, materials: hsMaterialsFilter })}
+                onClick={() => fetchHsContacts(hsClassFilter, (hsPaging.offset || 0) + (hsPaging.limit || 50), { query: hsSearch, industry: hsIndustryFilter, reason: hsReasonFilter, materials: hsMaterialsFilter })}
                 className="text-[11px] font-heading font-semibold text-[var(--t-ui-accent)] hover:underline"
               >
-                Load more
+                Load more ({hsContacts.length} / {hsPaging.total})
               </button>
             </div>
           )}

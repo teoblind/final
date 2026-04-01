@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { upsertKeyVaultEntry, getKeyVaultValue, deleteKeyVaultEntry, getKeyVaultEntries } from '../cache/database.js';
+import { upsertKeyVaultEntry, getKeyVaultValue, deleteKeyVaultEntry, getKeyVaultEntries, getHubspotClassifications, getHubspotClassificationStats, upsertHubspotClassification, bulkUpsertHubspotClassifications } from '../cache/database.js';
 
 const router = Router();
 router.use(authenticate);
@@ -103,7 +103,77 @@ router.get('/activity', async (req, res) => {
   }
 });
 
-// Search contacts with classification filters
+// ─── Local Classification Routes (stored in Coppice DB, NOT pushed to HubSpot) ───
+
+// List locally classified contacts with search + filters
+router.get('/local-contacts', (req, res) => {
+  const tenantId = req.tenantId;
+  try {
+    const { limit, offset, industry, reason, materials, classified, q } = req.query;
+    const result = getHubspotClassifications(tenantId, {
+      limit: parseInt(limit) || 50,
+      offset: parseInt(offset) || 0,
+      industry: industry || undefined,
+      reason: reason || undefined,
+      materials: materials || undefined,
+      classified: classified === 'true' ? true : classified === 'false' ? false : undefined,
+      search: q || undefined,
+    });
+    res.json({ ...result, configured: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Local classification stats
+router.get('/local-stats', (req, res) => {
+  const tenantId = req.tenantId;
+  try {
+    const stats = getHubspotClassificationStats(tenantId);
+    res.json({ ...stats, configured: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update single contact classification locally
+router.patch('/local-contacts/:id/classify', (req, res) => {
+  const tenantId = req.tenantId;
+  try {
+    const { industry, reason, materials, reasoning } = req.body;
+    upsertHubspotClassification(tenantId, {
+      hubspot_id: req.params.id,
+      name: req.body.name || null,
+      email: req.body.email || null,
+      company: req.body.company || null,
+      title: req.body.title || null,
+      domain: req.body.domain || null,
+      industry, reason, materials,
+      reasoning: reasoning || null,
+      confidence: req.body.confidence || 50,
+    });
+    res.json({ ok: true, id: req.params.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bulk upsert local classifications
+router.post('/local-contacts/bulk-classify', (req, res) => {
+  const tenantId = req.tenantId;
+  try {
+    const { contacts } = req.body;
+    if (!contacts?.length) return res.status(400).json({ error: 'No contacts provided' });
+    const result = bulkUpsertHubspotClassifications(tenantId, contacts);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── HubSpot API-backed routes (kept for search + pipeline) ───
+
+// Search contacts with classification filters (still reads from HubSpot API)
 router.get('/contacts/search-classified', async (req, res) => {
   const tenantId = req.tenantId;
   const hs = await import('../services/hubspotService.js');
@@ -123,7 +193,7 @@ router.get('/contacts/search-classified', async (req, res) => {
   }
 });
 
-// List contacts with classification data
+// List contacts with classification data (HubSpot API)
 router.get('/contacts', async (req, res) => {
   const tenantId = req.tenantId;
   const hs = await import('../services/hubspotService.js');
@@ -142,7 +212,7 @@ router.get('/contacts', async (req, res) => {
   }
 });
 
-// Classification stats
+// Classification stats (HubSpot API - kept for comparison)
 router.get('/classification-stats', async (req, res) => {
   const tenantId = req.tenantId;
   const hs = await import('../services/hubspotService.js');
@@ -155,7 +225,7 @@ router.get('/classification-stats', async (req, res) => {
   }
 });
 
-// Update single contact classification
+// Update single contact classification (HubSpot API)
 router.patch('/contacts/:id/classify', async (req, res) => {
   const tenantId = req.tenantId;
   const hs = await import('../services/hubspotService.js');
@@ -168,7 +238,7 @@ router.patch('/contacts/:id/classify', async (req, res) => {
   }
 });
 
-// Bulk classify contacts
+// Bulk classify contacts (HubSpot API)
 router.post('/contacts/bulk-classify', async (req, res) => {
   const tenantId = req.tenantId;
   const hs = await import('../services/hubspotService.js');

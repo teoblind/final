@@ -4394,6 +4394,27 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entry ON knowledge_links(entry_id)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_kn_links_entity ON knowledge_links(entity_id)'); } catch (e) {}
 
+  // HubSpot contact classifications (local - not pushed to HubSpot)
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS hubspot_classifications (
+      hubspot_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      name TEXT,
+      email TEXT,
+      company TEXT,
+      title TEXT,
+      domain TEXT,
+      industry TEXT,
+      reason TEXT,
+      materials TEXT,
+      reasoning TEXT,
+      confidence INTEGER DEFAULT 50,
+      classified_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (hubspot_id, tenant_id)
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_hs_class_tenant ON hubspot_classifications(tenant_id, industry)'); } catch (e) {}
+
   // Context pins — items pinned to chat threads (entities, files, notes, threads)
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS context_pins (
@@ -7222,6 +7243,77 @@ export function getThreadEntities(tenantId, threadId, limit = 10) {
     const text = allText.toLowerCase();
     return text.includes(name);
   });
+}
+
+// ─── HubSpot Local Classifications ────────────────────────────────────────
+
+export function upsertHubspotClassification(tenantId, data) {
+  const db = getTenantDb(tenantId);
+  const stmt = db.prepare(`
+    INSERT INTO hubspot_classifications (hubspot_id, tenant_id, name, email, company, title, domain, industry, reason, materials, reasoning, confidence, classified_at)
+    VALUES (@hubspot_id, @tenant_id, @name, @email, @company, @title, @domain, @industry, @reason, @materials, @reasoning, @confidence, datetime('now'))
+    ON CONFLICT(hubspot_id, tenant_id) DO UPDATE SET
+      name=@name, email=@email, company=@company, title=@title, domain=@domain,
+      industry=@industry, reason=@reason, materials=@materials, reasoning=@reasoning,
+      confidence=@confidence, classified_at=datetime('now')
+  `);
+  return stmt.run({ tenant_id: tenantId, ...data });
+}
+
+export function bulkUpsertHubspotClassifications(tenantId, rows) {
+  const db = getTenantDb(tenantId);
+  const stmt = db.prepare(`
+    INSERT INTO hubspot_classifications (hubspot_id, tenant_id, name, email, company, title, domain, industry, reason, materials, reasoning, confidence, classified_at)
+    VALUES (@hubspot_id, @tenant_id, @name, @email, @company, @title, @domain, @industry, @reason, @materials, @reasoning, @confidence, datetime('now'))
+    ON CONFLICT(hubspot_id, tenant_id) DO UPDATE SET
+      name=@name, email=@email, company=@company, title=@title, domain=@domain,
+      industry=@industry, reason=@reason, materials=@materials, reasoning=@reasoning,
+      confidence=@confidence, classified_at=datetime('now')
+  `);
+  const tx = db.transaction((items) => {
+    for (const item of items) {
+      stmt.run({ tenant_id: tenantId, ...item });
+    }
+  });
+  tx(rows);
+  return { inserted: rows.length };
+}
+
+export function getHubspotClassifications(tenantId, { limit = 50, offset = 0, industry, reason, materials, classified, search } = {}) {
+  const db = getTenantDb(tenantId);
+  const conditions = ['tenant_id = ?'];
+  const params = [tenantId];
+
+  if (industry) { conditions.push('industry = ?'); params.push(industry); }
+  if (reason) { conditions.push('reason = ?'); params.push(reason); }
+  if (materials) { conditions.push('materials = ?'); params.push(materials); }
+  if (classified === true) { conditions.push('industry IS NOT NULL'); }
+  if (classified === false) { conditions.push('industry IS NULL'); }
+  if (search) {
+    conditions.push('(name LIKE ? OR email LIKE ? OR company LIKE ? OR domain LIKE ?)');
+    const s = `%${search}%`;
+    params.push(s, s, s, s);
+  }
+
+  const where = conditions.join(' AND ');
+  const total = db.prepare(`SELECT COUNT(*) as cnt FROM hubspot_classifications WHERE ${where}`).get(...params).cnt;
+  params.push(limit, offset);
+  const rows = db.prepare(`SELECT * FROM hubspot_classifications WHERE ${where} ORDER BY classified_at DESC LIMIT ? OFFSET ?`).all(...params);
+  return { classifications: rows, total, limit, offset };
+}
+
+export function getHubspotClassificationStats(tenantId) {
+  const db = getTenantDb(tenantId);
+  const total = db.prepare('SELECT COUNT(*) as cnt FROM hubspot_classifications WHERE tenant_id = ?').get(tenantId).cnt;
+  const classified = db.prepare("SELECT COUNT(*) as cnt FROM hubspot_classifications WHERE tenant_id = ? AND industry IS NOT NULL AND industry != ''").get(tenantId).cnt;
+  const byIndustry = db.prepare("SELECT industry, COUNT(*) as cnt FROM hubspot_classifications WHERE tenant_id = ? AND industry IS NOT NULL AND industry != '' GROUP BY industry ORDER BY cnt DESC").all(tenantId);
+  const byReason = db.prepare("SELECT reason, COUNT(*) as cnt FROM hubspot_classifications WHERE tenant_id = ? AND reason IS NOT NULL AND reason != '' GROUP BY reason ORDER BY cnt DESC").all(tenantId);
+  return { total, classified, unclassified: total - classified, byIndustry, byReason };
+}
+
+export function getHubspotClassification(tenantId, hubspotId) {
+  const db = getTenantDb(tenantId);
+  return db.prepare('SELECT * FROM hubspot_classifications WHERE tenant_id = ? AND hubspot_id = ?').get(tenantId, hubspotId);
 }
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────
