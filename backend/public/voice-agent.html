@@ -611,6 +611,7 @@ async function getInstructions() {
 
   // Response tracking
   let isResponding = false;
+  let expectingResponse = false;  // true only when WE sent response.create
   let micChunkCount = 0;
 
   function checkWakeWord(text) {
@@ -738,13 +739,14 @@ async function getInstructions() {
         const hasWakeWord = checkWakeWord(text);
 
         if (hasWakeWord) {
-          // Wake word detected — respond to this utterance, then go back to passive
-          console.log('[Coppice] *** WAKE WORD — creating response ***');
+          // Wake word detected - respond to this utterance, then go back to passive
+          console.log('[Coppice] *** WAKE WORD - creating response ***');
+          expectingResponse = true;
           ws.send(JSON.stringify({ type: 'response.create' }));
-          // Stay passive — each question needs its own "hey Coppice"
+          // Stay passive - each question needs its own "hey Coppice"
         } else {
-          // No wake word — ignore & clean up regardless of state
-          console.log('[Coppice] No wake word — ignoring');
+          // No wake word - ignore & clean up regardless of state
+          console.log('[Coppice] No wake word - ignoring');
           if (msg.item_id) {
             ws.send(JSON.stringify({ type: 'conversation.item.delete', item_id: msg.item_id }));
           }
@@ -752,13 +754,25 @@ async function getInstructions() {
         break;
       }
 
+      // ── Guard against server-initiated responses ──
+      case 'response.created':
+        if (!expectingResponse) {
+          console.warn('[Coppice] AUTO-RESPONSE detected - canceling (we did not request this)');
+          ws.send(JSON.stringify({ type: 'response.cancel' }));
+          isResponding = false;
+        } else {
+          console.log('[Coppice] Response created (wake word triggered)');
+        }
+        break;
+
       // ── Audio playback ──
       case 'response.audio.delta':
-        if (msg.delta) {
+        if (msg.delta && expectingResponse) {
           isResponding = true;
           const pcmBuffer = base64ToArrayBuffer(msg.delta);
           wavStreamPlayer.add16BitPCM(pcmBuffer, msg.item_id || 'default');
         }
+        // Drop audio from auto-responses (expectingResponse === false)
         break;
 
       case 'response.audio.done':
@@ -767,6 +781,7 @@ async function getInstructions() {
 
       case 'response.done':
         isResponding = false;
+        expectingResponse = false;
         break;
 
       case 'response.audio_transcript.done':
@@ -779,7 +794,7 @@ async function getInstructions() {
         break;
 
       case 'session.created':
-        console.log('[Coppice] Session created — manual mode');
+        console.log('[Coppice] Session created - manual mode');
         break;
 
       case 'session.updated':

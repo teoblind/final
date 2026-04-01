@@ -1,15 +1,11 @@
 /**
- * Coppice Voice Relay v2 — Pure WebSocket proxy between voice-agent.html and OpenAI Realtime API
+ * Coppice Voice Relay v3 - Gated proxy between voice-agent.html and OpenAI Realtime API
  *
- * Previous version used @openai/realtime-api-beta SDK which:
- *   1. Dropped ALL non-audio events from the page (session.update, input_audio_buffer.commit,
- *      response.create, conversation.item.delete, etc.) — killing the page's manual VAD + wake word logic
- *   2. Configured its own server_vad session (threshold 0.5), overriding the page's manual mode
- *   3. Sent an unsolicited greeting before the page was ready
+ * Key fix over v2: holds ALL audio until session.updated confirms turn_detection: null.
+ * This prevents OpenAI's default server VAD from auto-committing audio and creating
+ * unwanted responses before manual mode is active.
  *
- * This version is a transparent bidirectional proxy. The page (voice-agent.html) controls
- * the entire session: instructions, turn detection, when to commit audio, when to respond.
- * The relay just forwards messages and logs them for debugging.
+ * Also cancels any server-initiated responses (defense-in-depth against VAD leaks).
  */
 
 import { WebSocketServer, WebSocket } from "ws";
@@ -36,8 +32,14 @@ wss.on("connection", (clientWs, req) => {
   let openaiWs = null;
   let clientClosed = false;
   let openaiClosed = false;
-  // Queue messages that arrive before OpenAI connection is ready
-  const pendingMessages = [];
+
+  // Gate: hold audio until session is configured with turn_detection: null
+  let sessionConfigured = false;
+  const audioQueue = [];       // audio chunks queued before session is configured
+  const controlQueue = [];     // non-audio messages queued before OpenAI connects
+
+  // Track client-initiated responses to detect server-initiated (auto) responses
+  let clientInitiatedResponse = false;
 
   // Connect to OpenAI Realtime API via raw WebSocket
   try {
@@ -53,53 +55,91 @@ wss.on("connection", (clientWs, req) => {
     return;
   }
 
-  // ── OpenAI → Client (forward everything) ──
+  // ── OpenAI -> Client (forward everything, with gating logic) ──
   openaiWs.on('message', (data) => {
     if (clientClosed) return;
     try {
-      // Forward raw message to client
-      clientWs.send(data);
-
-      // Log non-audio events for debugging
       const str = data.toString();
-      if (str.length < 5000) {
-        try {
-          const event = JSON.parse(str);
-          if (event.type === 'response.audio.delta') {
-            audioOutCount++;
+      let event = null;
+
+      if (str.length < 10000) {
+        try { event = JSON.parse(str); } catch {}
+      }
+
+      if (event) {
+        // ── Session lifecycle ──
+        if (event.type === 'session.created') {
+          console.log('[VoiceRelay] Session created - waiting for session.updated before forwarding audio');
+        }
+
+        if (event.type === 'session.updated') {
+          const td = event.session?.turn_detection;
+          console.log(`[VoiceRelay] Session configured: turn_detection=${JSON.stringify(td)}`);
+          if (!td || td === null) {
+            sessionConfigured = true;
+            console.log(`[VoiceRelay] Manual mode confirmed - flushing ${audioQueue.length} queued audio chunks`);
+            for (const msg of audioQueue) {
+              openaiWs.send(msg);
+            }
+            audioQueue.length = 0;
+          } else {
+            // OpenAI didn't apply null turn_detection - force it
+            console.warn('[VoiceRelay] turn_detection not null! Forcing override...');
+            openaiWs.send(JSON.stringify({
+              type: 'session.update',
+              session: { turn_detection: null },
+            }));
+          }
+        }
+
+        // ── Cancel server-initiated responses (VAD leak defense) ──
+        if (event.type === 'response.created') {
+          if (!clientInitiatedResponse) {
+            console.warn('[VoiceRelay] Server-initiated response detected - CANCELING');
+            openaiWs.send(JSON.stringify({ type: 'response.cancel' }));
+            // Don't forward this to client
+            return;
+          }
+        }
+
+        if (event.type === 'response.done') {
+          clientInitiatedResponse = false;
+          console.log(`[VoiceRelay] Response complete (${audioOutCount} audio chunks)`);
+          audioOutCount = 0;
+        }
+
+        // ── Cancel server VAD events (shouldn't happen in manual mode) ──
+        if (event.type === 'input_audio_buffer.speech_started') {
+          console.warn('[VoiceRelay] VAD speech_started in manual mode - suppressing');
+          // Don't forward VAD events to client - they confuse the page's manual VAD
+          return;
+        }
+        if (event.type === 'input_audio_buffer.speech_stopped') {
+          console.warn('[VoiceRelay] VAD speech_stopped in manual mode - suppressing');
+          return;
+        }
+
+        // ── Logging ──
+        if (event.type === 'response.audio.delta') {
+          audioOutCount++;
+        } else if (event.type !== 'response.audio.delta') {
+          if (event.type === 'conversation.item.input_audio_transcription.completed') {
+            console.log(`[VoiceRelay] Heard: "${event.transcript}"`);
+          } else if (event.type === 'response.audio_transcript.done') {
+            console.log(`[VoiceRelay] Said: "${event.transcript}"`);
+          } else if (event.type === 'input_audio_buffer.committed') {
+            console.log(`[VoiceRelay] Audio buffer committed: item=${event.item_id}`);
+          } else if (event.type === 'error') {
+            console.error(`[VoiceRelay] OpenAI error:`, str.slice(0, 1000));
           } else {
             console.log(`[VoiceRelay] OpenAI -> Client: ${event.type}`);
-            if (event.type === 'session.created') {
-              console.log('[VoiceRelay] Session created');
-            }
-            if (event.type === 'session.updated') {
-              console.log(`[VoiceRelay] Session config: modalities=${JSON.stringify(event.session?.modalities)}, turn_detection=${JSON.stringify(event.session?.turn_detection)}`);
-            }
-            if (event.type === 'conversation.item.input_audio_transcription.completed') {
-              console.log(`[VoiceRelay] Heard: "${event.transcript}"`);
-            }
-            if (event.type === 'response.audio_transcript.done') {
-              console.log(`[VoiceRelay] Said: "${event.transcript}"`);
-            }
-            if (event.type === 'response.done') {
-              console.log(`[VoiceRelay] Response complete (${audioOutCount} audio chunks sent)`);
-              audioOutCount = 0;
-            }
-            if (event.type === 'input_audio_buffer.speech_started') {
-              console.log('[VoiceRelay] VAD: speech started');
-            }
-            if (event.type === 'input_audio_buffer.speech_stopped') {
-              console.log('[VoiceRelay] VAD: speech stopped');
-            }
-            if (event.type === 'input_audio_buffer.committed') {
-              console.log(`[VoiceRelay] Audio buffer committed: item=${event.item_id}`);
-            }
-            if (event.type === 'error') {
-              console.error(`[VoiceRelay] OpenAI error:`, str.slice(0, 1000));
-            }
           }
-        } catch {} // Not JSON, forward anyway
+        }
       }
+
+      // Forward to client (unless suppressed by early return above)
+      clientWs.send(data);
+
     } catch (e) {
       console.error(`[VoiceRelay] Error forwarding to client: ${e.message}`);
     }
@@ -107,13 +147,13 @@ wss.on("connection", (clientWs, req) => {
 
   openaiWs.on('open', () => {
     console.log('[VoiceRelay] Connected to OpenAI Realtime API');
-    // Flush any messages queued during connection
-    if (pendingMessages.length > 0) {
-      console.log(`[VoiceRelay] Flushing ${pendingMessages.length} queued messages`);
-      for (const msg of pendingMessages) {
+    // Flush control messages (session.update etc) but NOT audio
+    if (controlQueue.length > 0) {
+      console.log(`[VoiceRelay] Flushing ${controlQueue.length} control messages`);
+      for (const msg of controlQueue) {
         openaiWs.send(msg);
       }
-      pendingMessages.length = 0;
+      controlQueue.length = 0;
     }
   });
 
@@ -127,17 +167,17 @@ wss.on("connection", (clientWs, req) => {
     console.error(`[VoiceRelay] OpenAI WS error: ${err.message}`);
   });
 
-  // ── Client → OpenAI (forward EVERYTHING) ──
+  // ── Client -> OpenAI (gated forwarding) ──
   clientWs.on("message", (data) => {
     if (openaiClosed) return;
     try {
       const str = data.toString();
       const event = JSON.parse(str);
 
-      // Log non-audio events
-      if (event.type === 'input_audio_buffer.append') {
+      const isAudio = event.type === 'input_audio_buffer.append';
+
+      if (isAudio) {
         audioInCount++;
-        // Check amplitude of first few audio chunks for debugging
         if (audioInCount <= 3 && event.audio) {
           try {
             const raw = Buffer.from(event.audio, 'base64');
@@ -149,15 +189,32 @@ wss.on("connection", (clientWs, req) => {
             console.log(`[VoiceRelay] Audio in #${audioInCount}: ${view.length} samples, maxAmp=${maxAmp}`);
           } catch {}
         }
+
+        // GATE: hold audio until session is configured
+        if (!sessionConfigured) {
+          audioQueue.push(str);
+          if (audioQueue.length === 1) {
+            console.log('[VoiceRelay] Queuing audio - session not yet configured');
+          }
+          return;
+        }
       } else {
         console.log(`[VoiceRelay] Client -> OpenAI: ${event.type}`);
+
+        // Track client-initiated responses
+        if (event.type === 'response.create') {
+          clientInitiatedResponse = true;
+        }
       }
 
-      // Forward to OpenAI (queue if not ready yet)
+      // Forward to OpenAI
       if (openaiWs.readyState === WebSocket.OPEN) {
         openaiWs.send(str);
       } else if (openaiWs.readyState === WebSocket.CONNECTING) {
-        pendingMessages.push(str);
+        // Queue control messages; audio goes to audioQueue (handled above)
+        if (!isAudio) {
+          controlQueue.push(str);
+        }
       }
     } catch (e) {
       console.error(`[VoiceRelay] Parse error: ${e.message}`);
@@ -177,5 +234,7 @@ wss.on("connection", (clientWs, req) => {
   });
 });
 
-console.log(`[VoiceRelay] v2 — pure proxy, port ${PORT}`);
+console.log(`[VoiceRelay] v3 - gated proxy, port ${PORT}`);
+console.log(`[VoiceRelay] Audio held until session.updated confirms turn_detection: null`);
+console.log(`[VoiceRelay] Server-initiated responses will be canceled`);
 console.log(`[VoiceRelay] OpenAI endpoint: ${OPENAI_REALTIME_URL}`);
