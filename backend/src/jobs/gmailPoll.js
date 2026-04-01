@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment, getAgentMemory } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment, getAgentMemory, insertApprovalItem } from '../cache/database.js';
 import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
@@ -270,6 +270,166 @@ function isAutoReplyEnabled(tenantId) {
   }
 }
 
+// ─── Suggested Draft Pipeline ─────────────────────────────────────────────
+// Classifies inbound emails and generates draft replies as approval_items
+// so the user can review, edit, and approve with one click.
+
+// Signals that indicate an email deserves a suggested draft reply
+const REPLY_WORTHY_SIGNALS = [
+  /\?/,                                    // contains a question
+  /\b(please|can you|could you|would you)\b/i,  // direct request
+  /\b(schedule|meeting|call|availability)\b/i,   // scheduling
+  /\b(quote|estimate|pricing|proposal|bid)\b/i,  // business inquiry
+  /\b(follow up|following up|checking in)\b/i,   // follow-up
+  /\b(urgent|asap|time.sensitive)\b/i,           // urgency
+  /\b(interested in|looking for|need help)\b/i,  // inbound interest
+  /\b(invoice|payment|contract|agreement)\b/i,   // business action
+];
+
+// Signals that an email should NOT get a suggested draft
+const NO_DRAFT_SIGNALS = [
+  /\b(unsubscribe|opt.out|manage preferences)\b/i,
+  /\b(do not reply|no.reply|noreply)\b/i,
+  /\b(automated message|auto.generated)\b/i,
+  /\bfyi\b/i,                              // informational only
+  /\b(out of office|ooo|vacation)\b/i,
+  /\bthank(s| you)\b.*$/im,                // just a "thanks" - no reply needed
+];
+
+/**
+ * Fast heuristic check: should we generate a suggested draft for this email?
+ * Runs before the tunnel call so we don't waste CLI time on newsletters.
+ */
+function shouldSuggestDraft({ from, subject, body, verdict }) {
+  // Only for trusted/known senders (unknown senders already get the review flow)
+  if (verdict !== 'trusted' && verdict !== 'known') return false;
+
+  const text = `${subject} ${body.slice(0, 2000)}`;
+
+  // Check disqualifiers first
+  if (NO_DRAFT_SIGNALS.some(p => p.test(text))) return false;
+
+  // Check for reply-worthy signals
+  const signalCount = REPLY_WORTHY_SIGNALS.filter(p => p.test(text)).length;
+
+  // At least 1 signal = suggest a draft
+  return signalCount >= 1;
+}
+
+/**
+ * Generate a suggested draft reply and create an approval_item for the user.
+ * Uses tunnelOrChat (CLI tunnel) - not API.
+ */
+async function createSuggestedDraft({ tenantId, from, fromName, subject, body, threadId, messageId, accessTier }) {
+  const agentMap = { 'default': 'sangha', 'zhan-capital': 'zhan' };
+  const agentId = agentMap[tenantId] || 'hivemind';
+
+  // Build context
+  let contactContext = '';
+  if (accessTier === 'internal') {
+    try {
+      const ck = getContactKnowledge(tenantId, from);
+      if (ck) {
+        const meta = ck.metadata || {};
+        contactContext = `\n\nCONTACT CONTEXT:`;
+        if (meta.observedTopics?.length > 0) {
+          contactContext += `\n- Topics: ${meta.observedTopics.join(', ')}`;
+        }
+        if (meta.recentContext?.length > 0) {
+          for (const rc of meta.recentContext.slice(-2)) {
+            contactContext += `\n- [${rc.date?.slice(0, 10) || ''}] ${rc.summary}`;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  let memoryContext = '';
+  if (accessTier === 'internal') {
+    try {
+      const memories = getAgentMemory(tenantId);
+      if (memories.length > 0) {
+        const lines = memories.slice(0, 10).map(m => `- ${m.key}: ${m.value}`).join('\n');
+        memoryContext = `\n\nAGENT MEMORY:\n${lines}`;
+      }
+    } catch {}
+  }
+
+  const externalGuard = accessTier === 'external' ? `\nEXTERNAL CONTACT - do NOT share internal business data, client names, or deal details.` : '';
+
+  const prompt = `You are drafting a SUGGESTED reply for the user to review. The user will edit and approve before it sends.
+
+Email from: ${fromName || from} (${from})
+Subject: ${subject}
+
+${body.slice(0, 4000)}${contactContext}${memoryContext}${externalGuard}
+
+Draft a reply. The user will review and edit before sending, so focus on capturing the right intent and tone.
+
+STYLE:
+- Greeting: "Hey [First Name],"
+- Short paragraphs, direct, no fluff
+- End with a specific question that bounces the ball back
+- Close with "Best,"
+- No emoji
+- Never fabricate facts you don't have
+
+Reply with ONLY the email body text.`;
+
+  let draftReply = '';
+  try {
+    const result = await tunnelOrChat({
+      tenantId,
+      agentId,
+      userId: 'system-suggested-draft',
+      prompt,
+      chatOptions: { accessTier },
+      maxTurns: 3,
+      timeoutMs: 60_000,
+      label: `Suggested Draft: ${subject?.slice(0, 40)}`,
+    });
+    draftReply = result.response || '';
+  } catch (err) {
+    console.warn(`[GmailPoll] Suggested draft generation failed (non-fatal): ${err.message}`);
+    return; // Don't create an approval item if draft failed
+  }
+
+  if (!draftReply) return;
+
+  // Create approval_item with type email_draft so the existing approve flow handles sending
+  const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
+  try {
+    const html = markdownToEmailHtml(draftReply);
+    insertApprovalItem({
+      tenantId,
+      agentId: 'email',
+      title: `Suggested reply to ${fromName || from}: "${subject.slice(0, 50)}"`,
+      description: `${fromName || from} sent an email that may need a response. Review the draft below, edit if needed, and approve to send.\n\n---\n**From:** ${fromName || ''} <${from}>\n**Subject:** ${subject}\n\n${body.slice(0, 1000)}${body.length > 1000 ? '\n\n[truncated]' : ''}`,
+      type: 'email_draft',
+      payloadJson: JSON.stringify({
+        to: from,
+        subject: replySubject,
+        body: draftReply,
+        html,
+        threadId,
+        inReplyTo: messageId,
+        references: messageId,
+        suggestedDraft: true,
+        originalEmail: {
+          from,
+          fromName,
+          subject,
+          body: body.slice(0, 3000),
+          receivedAt: new Date().toISOString(),
+        },
+      }),
+    });
+    console.log(`[GmailPoll] Created suggested draft for ${from} ("${subject}")`);
+  } catch (err) {
+    console.warn(`[GmailPoll] Failed to create suggested draft approval: ${err.message}`);
+  }
+}
+
 async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail, classification, originalTo, originalCc }) {
   const resolvedTenant = tenantId || 'default';
   const verdict = classification?.verdict || 'unknown';
@@ -405,6 +565,14 @@ EXTERNAL COMMUNICATION GUARDRAILS (highest priority):
       console.warn(`[GmailPoll] Knowledge save failed for general:`, err.message);
     }
 
+    // ─── Suggested draft pipeline ───
+    // Even with auto-reply disabled, suggest drafts for reply-worthy emails
+    // so the user can review and approve with one click.
+    if (shouldSuggestDraft({ from, subject, body, verdict })) {
+      createSuggestedDraft({ tenantId: resolvedTenant, from, fromName, subject, body, threadId, messageId, accessTier })
+        .catch(err => console.warn(`[GmailPoll] Suggested draft failed (non-fatal): ${err.message}`));
+    }
+
     return;
   }
 
@@ -487,6 +655,12 @@ EXTERNAL COMMUNICATION GUARDRAILS (highest priority):
         }), `not-addressed-observe:${from}`);
     } catch (err) {
       console.warn(`[GmailPoll] Knowledge save failed for not-addressed-observe:`, err.message);
+    }
+
+    // ─── Suggested draft for non-addressed emails from known senders ───
+    if (shouldSuggestDraft({ from, subject, body, verdict })) {
+      createSuggestedDraft({ tenantId: resolvedTenant, from, fromName, subject, body, threadId, messageId, accessTier })
+        .catch(err => console.warn(`[GmailPoll] Suggested draft failed (non-fatal): ${err.message}`));
     }
 
     return;

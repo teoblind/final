@@ -283,7 +283,10 @@ router.post('/:id/approve', async (req, res) => {
             to: recipient,
             subject: payload.subject,
             body: payload.body,
-            tenantId,
+            tenantId: payload.tenantId || tenantId,
+            threadId: payload.threadId,
+            inReplyTo: payload.inReplyTo,
+            references: payload.references,
           });
         }
         console.log(`Approval ${item.id}: email sent to ${recipient}`);
