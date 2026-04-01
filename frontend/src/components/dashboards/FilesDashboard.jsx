@@ -2136,7 +2136,14 @@ export default function FilesDashboard() {
         if (!cancelled && data.files && data.files.length > 0) {
           const grouped = buildFoldersFromApi(data.files, data.categories);
           if (Object.keys(grouped).length > 0) {
-            setFolders(grouped);
+            setFolders(prev => {
+              // Preserve special folders (Meetings, Daily Briefs) injected by other effects
+              const special = {};
+              for (const [k, v] of Object.entries(prev)) {
+                if (k === 'Meetings' || k === 'Daily Briefs') special[k] = v;
+              }
+              return { ...special, ...grouped };
+            });
             setExpandedFolders(new Set(Object.keys(grouped)));
             setSelectedFolder(Object.keys(grouped)[0]);
             setLiveMode(true);
@@ -2170,7 +2177,13 @@ export default function FilesDashboard() {
               });
             }
             if (Object.keys(grouped).length > 0) {
-              setFolders(grouped);
+              setFolders(prev => {
+                const special = {};
+                for (const [k, v] of Object.entries(prev)) {
+                  if (k === 'Meetings' || k === 'Daily Briefs') special[k] = v;
+                }
+                return { ...special, ...grouped };
+              });
               setExpandedFolders(new Set(Object.keys(grouped)));
               setSelectedFolder(Object.keys(grouped)[0]);
               setLiveMode(true);
