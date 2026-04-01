@@ -832,6 +832,20 @@ export default function DacpCommandDashboard({ onNavigate }) {
               const payload = item.payload || (item.payload_json ? JSON.parse(item.payload_json) : {});
               const isExpanded = expandedApproval === item.id;
               const isProcessing = processingApproval === item.id;
+              // Generate description from payload if none provided
+              let itemDesc = item.description || item.desc || '';
+              if (!itemDesc) {
+                if (item.type === 'email_draft' || payload.to) {
+                  itemDesc = payload.to ? `Email to ${payload.to}` : '';
+                  if (payload.subject) itemDesc += itemDesc ? ` - ${payload.subject}` : payload.subject;
+                } else if (payload.subject) {
+                  itemDesc = payload.subject;
+                } else if (item.type === 'estimate') {
+                  itemDesc = 'Estimate ready for review';
+                } else if (item.type === 'report') {
+                  itemDesc = 'Report ready for review';
+                }
+              }
               return (
                 <div key={item.id} className="border-b border-[#f0eeea] last:border-b-0">
                   <div
@@ -846,7 +860,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                      <div className="text-[11px] text-terminal-muted mt-0.5">{item.description || item.desc}</div>
+                      <div className="text-[11px] text-terminal-muted mt-0.5">{itemDesc}</div>
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel || (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1)}</span>
                         <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time || (item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</span>

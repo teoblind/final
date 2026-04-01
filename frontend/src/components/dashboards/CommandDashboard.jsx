@@ -326,18 +326,35 @@ export default function CommandDashboard({ onNavigate }) {
         const res = await fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
-        const mapped = (data.items || []).map(item => ({
-          id: item.id,
-          type: item.type,
-          agent: item.agentId,
-          agentLabel: (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1),
-          icon: AGENT_ICON_COLORS[item.agentId] || { letter: 'A', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
-          title: item.title,
-          description: item.description || '',
-          desc: item.description || '',
-          time: formatRelativeTime(item.createdAt),
-          payload: item.payload || {},
-        }));
+        const mapped = (data.items || []).map(item => {
+          const pl = item.payload || {};
+          // Generate a description from payload if none provided
+          let desc = item.description || '';
+          if (!desc) {
+            if (item.type === 'email_draft' || pl.to) {
+              desc = pl.to ? `Email to ${pl.to}` : '';
+              if (pl.subject) desc += desc ? ` - ${pl.subject}` : pl.subject;
+            } else if (pl.subject) {
+              desc = pl.subject;
+            } else if (item.type === 'estimate') {
+              desc = 'Estimate ready for review';
+            } else if (item.type === 'report') {
+              desc = 'Report ready for review';
+            }
+          }
+          return {
+            id: item.id,
+            type: item.type,
+            agent: item.agentId,
+            agentLabel: (item.agentId || 'agent').charAt(0).toUpperCase() + (item.agentId || 'agent').slice(1),
+            icon: AGENT_ICON_COLORS[item.agentId] || { letter: 'A', color: 'var(--t-ui-accent)', bg: 'var(--t-ui-accent-bg)' },
+            title: item.title,
+            description: item.description || '',
+            desc,
+            time: formatRelativeTime(item.createdAt),
+            payload: pl,
+          };
+        });
         setApprovals(mapped);
       } catch {}
     }
