@@ -678,7 +678,7 @@ router.post('/:id/rewrite', async (req, res) => {
 // Run seeds on import
 try {
   seedDemoApprovals();
-  seedDemoInsights();
+  // seedDemoInsights(); — removed, was fake demo data
 } catch (err) {
   // Table may not exist yet if initDatabase hasn't run — safe to ignore
   console.warn('Approval/insight seed skipped:', err.message);
