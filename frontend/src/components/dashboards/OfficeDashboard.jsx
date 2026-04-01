@@ -36,12 +36,23 @@ function mapStatus(status) {
   return mapping[status] || status;
 }
 
-// Assign zone based on role
-function assignZone(role) {
-  switch (role) {
-    case 'meeting': return 'meeting';
-    case 'research': return 'hotDesk';
-    default: return 'desk';
+// Assign zone based on what the agent is currently doing
+function assignZone(role, status) {
+  switch (status) {
+    case 'speaking':
+    case 'transcribing':
+      return 'meeting';
+    case 'thinking':
+    case 'processing':
+    case 'analyzing':
+    case 'tool_calling':
+    case 'running':
+      return 'desk';
+    case 'idle':
+    case 'observing':
+    case 'offline':
+    default:
+      return 'lounge';
   }
 }
 
@@ -87,7 +98,7 @@ export default function OfficeDashboard() {
     name: agent.name.replace(/ (Email|Chat|Meeting|Research) Agent/, ''),
     status: mapStatus(agent.status),
     originalStatus: agent.status,
-    zone: assignZone(agent.role),
+    zone: assignZone(agent.role, agent.status),
     role: agent.role,
     position: { x: 0, y: 0 }, // positioned by FloorPlan
     currentTool: agent.currentTask ? { name: agent.currentTask.name } : null,
