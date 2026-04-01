@@ -293,6 +293,42 @@ function SettingsTab({ qbConnected, billcomConnected, onConnectQB, onDisconnectQ
 
   return (
     <div className="p-6 space-y-5">
+      <Card title="QuickBooks Online" meta={qbConnected ? 'Connected' : 'Not connected'}>
+        <div className="px-[18px] py-4">
+          {qbConnected ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-[#dcfce7] rounded-lg">
+                <CheckCircle size={14} className="text-[#166534]" />
+                <span className="text-[13px] font-medium text-[#166534]">QuickBooks connected - syncing every 15 minutes</span>
+              </div>
+              <button
+                onClick={() => onDisconnectQB?.()}
+                className="px-4 py-2 rounded-lg text-[12px] font-semibold text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors"
+              >
+                Disconnect QuickBooks
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-[#fef3c7] rounded-lg">
+                <AlertCircle size={14} className="text-[#92400e]" />
+                <span className="text-[13px] font-medium text-[#92400e]">Not connected - click below to authorize QuickBooks access</span>
+              </div>
+              <p className="text-[12px] text-terminal-muted">
+                Clicking Connect will open Intuit's authorization page where you'll log in and select which QuickBooks company to link. Coppice will sync invoices, bills, and payments every 15 minutes.
+              </p>
+              <button
+                onClick={() => onConnectQB?.()}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-[#2ca01c] hover:bg-[#259016] transition-colors"
+              >
+                <span className="text-[16px]">QB</span>
+                Connect QuickBooks
+              </button>
+            </div>
+          )}
+        </div>
+      </Card>
+
       <Card title="Bill.com Integration" meta={billcomConnected ? 'Connected' : 'Not connected'}>
         <div className="px-[18px] py-4 space-y-4">
           {billcomConnected ? (
