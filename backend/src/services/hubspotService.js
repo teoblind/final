@@ -215,6 +215,120 @@ export async function logActivity(contactId, note) {
   });
 }
 
+// ─── CONTACTS LIST + CLASSIFICATION ────────────────────────────────────────
+
+export async function listContacts({ limit = 50, after, classified, tenantId } = {}) {
+  const properties = [
+    'firstname', 'lastname', 'email', 'phone', 'company', 'jobtitle',
+    'hs_lead_status', 'lifecyclestage', 'createdate', 'lastmodifieddate',
+    'sangha_industry', 'sangha_reason_to_contact', 'sangha_email_type',
+  ];
+
+  // If filtering by classified/unclassified, use search endpoint
+  if (classified === true || classified === false) {
+    const operator = classified ? 'HAS_PROPERTY' : 'NOT_HAS_PROPERTY';
+    const body = {
+      filterGroups: [{ filters: [{ propertyName: 'sangha_industry', operator }] }],
+      properties,
+      limit: Math.min(limit, 100),
+      sorts: [{ propertyName: 'lastmodifieddate', direction: 'DESCENDING' }],
+    };
+    if (after) body.after = after;
+    const data = await hubspotFetch('/crm/v3/objects/contacts/search', 'POST', body, tenantId);
+    return {
+      contacts: data.results.map(formatContactWithClassification),
+      total: data.total,
+      paging: data.paging,
+    };
+  }
+
+  // Default: list all contacts
+  let url = `/crm/v3/objects/contacts?limit=${Math.min(limit, 100)}&properties=${properties.join(',')}`;
+  if (after) url += `&after=${after}`;
+  const data = await hubspotFetch(url, 'GET', null, tenantId);
+  return {
+    contacts: data.results.map(formatContactWithClassification),
+    total: data.total,
+    paging: data.paging,
+  };
+}
+
+function formatContactWithClassification(c) {
+  return {
+    id: c.id,
+    name: `${c.properties.firstname || ''} ${c.properties.lastname || ''}`.trim(),
+    email: c.properties.email,
+    phone: c.properties.phone,
+    company: c.properties.company,
+    title: c.properties.jobtitle,
+    stage: c.properties.lifecyclestage,
+    lead_status: c.properties.hs_lead_status,
+    created: c.properties.createdate,
+    last_modified: c.properties.lastmodifieddate,
+    classification: {
+      industry: c.properties.sangha_industry || null,
+      reason: c.properties.sangha_reason_to_contact || null,
+      materials: c.properties.sangha_email_type || null,
+    },
+  };
+}
+
+export async function updateContactClassification(contactId, { industry, reason, materials } = {}, tenantId) {
+  const properties = {};
+  if (industry) properties.sangha_industry = industry;
+  if (reason) properties.sangha_reason_to_contact = reason;
+  if (materials) properties.sangha_email_type = materials;
+  if (Object.keys(properties).length === 0) throw new Error('No classification fields provided');
+  await hubspotFetch(`/crm/v3/objects/contacts/${contactId}`, 'PATCH', { properties }, tenantId);
+  return { id: contactId, updated: properties };
+}
+
+export async function bulkUpdateClassifications(updates, tenantId) {
+  // HubSpot batch update: max 100 per request
+  const results = { success: 0, failed: 0, errors: [] };
+  const batches = [];
+  for (let i = 0; i < updates.length; i += 100) {
+    batches.push(updates.slice(i, i + 100));
+  }
+  for (const batch of batches) {
+    try {
+      await hubspotFetch('/crm/v3/objects/contacts/batch/update', 'POST', {
+        inputs: batch.map(u => ({
+          id: u.id,
+          properties: {
+            ...(u.industry ? { sangha_industry: u.industry } : {}),
+            ...(u.reason ? { sangha_reason_to_contact: u.reason } : {}),
+            ...(u.materials ? { sangha_email_type: u.materials } : {}),
+          },
+        })),
+      }, tenantId);
+      results.success += batch.length;
+    } catch (e) {
+      results.failed += batch.length;
+      results.errors.push(e.message);
+    }
+  }
+  return results;
+}
+
+export async function getClassificationStats(tenantId) {
+  const [classifiedRes, unclassifiedRes] = await Promise.all([
+    hubspotFetch('/crm/v3/objects/contacts/search', 'POST', {
+      filterGroups: [{ filters: [{ propertyName: 'sangha_industry', operator: 'HAS_PROPERTY' }] }],
+      limit: 1,
+    }, tenantId),
+    hubspotFetch('/crm/v3/objects/contacts/search', 'POST', {
+      filterGroups: [{ filters: [{ propertyName: 'sangha_industry', operator: 'NOT_HAS_PROPERTY' }] }],
+      limit: 1,
+    }, tenantId),
+  ]);
+  return {
+    classified: classifiedRes.total || 0,
+    unclassified: unclassifiedRes.total || 0,
+    total: (classifiedRes.total || 0) + (unclassifiedRes.total || 0),
+  };
+}
+
 // ─── PIPELINE STATS ─────────────────────────────────────────────────────────
 
 export async function getPipelineStats(tenantId) {

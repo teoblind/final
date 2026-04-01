@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users, ClipboardList, FileSpreadsheet, Link2, Search, Unlink } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, XCircle, RotateCcw, Share2, Check, X, MessageSquare, ChevronDown, ChevronUp, FileText, Download, ExternalLink, Archive, Users, ClipboardList, FileSpreadsheet, Link2, Search, Unlink, Mic, Video } from 'lucide-react';
 import EmptyState from '../ui/EmptyState';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
@@ -73,157 +73,15 @@ function formatRelativeTime(dateStr) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ─── Component ──────────────────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────
 
-function UpcomingMeetingsPanel({ dateRange = '7d' }) {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('dismissed_meetings') || '[]'); } catch { return []; }
-  });
-  const [invitedIds, setInvitedIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('invited_meetings') || '[]'); } catch { return []; }
-  });
-  const [inviting, setInviting] = useState(null);
-
-  const days = dateRange === '90d' ? 90 : dateRange === '30d' ? 30 : 7;
-
-  useEffect(() => {
-    async function fetchEvents() {
-      try {
-        const res = await fetch(`${API_BASE}/v1/crm/calendar/events?days=${days}`, { headers: getAuthHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          setEvents(data.events || []);
-        }
-      } catch {}
-      setLoading(false);
-    }
-    fetchEvents();
-    const interval = setInterval(fetchEvents, 120000);
-    return () => clearInterval(interval);
-  }, [days]);
-
-  const handleDismiss = (id) => {
-    const next = [...dismissed, id];
-    setDismissed(next);
-    localStorage.setItem('dismissed_meetings', JSON.stringify(next));
-  };
-
-  const handleInvite = async (id) => {
-    setInviting(id);
-    try {
-      const res = await fetch(`${API_BASE}/v1/crm/calendar/events/${id}/invite`, { method: 'POST', headers: getAuthHeaders() });
-      if (res.ok) {
-        const next = [...invitedIds, id];
-        setInvitedIds(next);
-        localStorage.setItem('invited_meetings', JSON.stringify(next));
-      }
-    } catch {}
-    setInviting(null);
-  };
-
-  const now = new Date();
-  const cutoff = new Date(now.getTime() + days * 86400000);
-  const visibleEvents = events.filter(e => {
-    if (dismissed.includes(e.id)) return false;
-    if (!e.start) return true;
-    const d = new Date(e.start);
-    return d <= cutoff;
-  });
-
-  const formatTime = (isoStr, allDay) => {
-    if (!isoStr) return '';
-    if (allDay) return 'All day';
-    const d = new Date(isoStr);
-    const h = d.getHours();
-    const m = d.getMinutes().toString().padStart(2, '0');
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    return `${h % 12 || 12}:${m} ${ampm}`;
-  };
-
-  const formatDate = (isoStr) => {
-    if (!isoStr) return '';
-    const d = new Date(isoStr);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-    const eventDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    if (eventDate.getTime() === today.getTime()) return 'Today';
-    if (eventDate.getTime() === tomorrow.getTime()) return 'Tomorrow';
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  return (
-    <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-      <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-        <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Upcoming Meetings</span>
-        <span className="text-[11px] font-mono text-terminal-muted">{visibleEvents.length} in next {days}d</span>
-      </div>
-      <div>
-        {loading ? (
-          <div className="px-[18px] py-6 text-center">
-            <div className="spinner w-6 h-6 mx-auto mb-2" />
-            <p className="text-[11px] text-terminal-muted">Loading calendar...</p>
-          </div>
-        ) : visibleEvents.length === 0 ? (
-          <EmptyState icon="calendar" title="No upcoming meetings" subtitle={`Calendar events for the next ${days} days will appear here.`} compact />
-        ) : (
-          visibleEvents.map((event) => {
-            const isInvited = invitedIds.includes(event.id);
-            return (
-              <div key={event.id} className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-                <div className="shrink-0 text-center w-[46px]">
-                  <div className="text-[10px] text-terminal-muted font-medium">{formatDate(event.start)}</div>
-                  <div className="text-[12px] font-mono font-semibold text-terminal-text tabular-nums">{formatTime(event.start, event.allDay)}</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-terminal-text truncate">{event.title}</div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {event.attendees > 0 && (
-                      <span className="text-[10px] text-terminal-muted">{event.attendees} attendee{event.attendees !== 1 ? 's' : ''}</span>
-                    )}
-                    {event.location && (
-                      <span className="text-[10px] text-terminal-muted truncate max-w-[150px]">{event.location}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {event.meetLink && (isInvited ? (
-                    <span className="px-2 py-1 rounded-md text-[10px] font-medium text-terminal-muted">Invited</span>
-                  ) : (
-                    <button
-                      onClick={() => handleInvite(event.id)}
-                      disabled={inviting === event.id}
-                      className="px-2 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity disabled:opacity-50"
-                    >
-                      {inviting === event.id ? '...' : 'Invite Coppice'}
-                    </button>
-                  ))}
-                  {event.meetLink && (
-                    <a href={event.meetLink} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)] border border-[var(--t-ui-accent-border)] hover:opacity-80 transition-opacity">
-                      Join
-                    </a>
-                  )}
-                  <button
-                    onClick={() => handleDismiss(event.id)}
-                    className="px-1.5 py-1 rounded-md text-[10px] text-terminal-muted hover:text-terminal-text hover:bg-[#eee] transition-colors"
-                    title="Hide from dashboard"
-                  >
-                    &times;
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
+const MEETING_RANGES = [
+  { key: 'week', label: '7d' },
+  { key: 'month', label: '30d' },
+  { key: '90', label: '90d' },
+];
 
 export default function CommandDashboard({ onNavigate }) {
-  const [timeRange, setTimeRange] = useState('30D');
   const [approvals, setApprovals] = useState([]);
   const [insights, setInsights] = useState([]);
   const [toast, setToast] = useState(null);
@@ -231,7 +89,12 @@ export default function CommandDashboard({ onNavigate }) {
   const [insightModal, setInsightModal] = useState(null);
   const [threadModal, setThreadModal] = useState(null); // { thread, messages, loading }
   const [leadStats, setLeadStats] = useState(null);
-  const [meetingsRange, setMeetingsRange] = useState('7d');
+  const [approvalsPage, setApprovalsPage] = useState(0);
+  // Meetings state (matches DACP pattern)
+  const [meetings, setMeetings] = useState([]);
+  const [meetingRange, setMeetingRange] = useState('week');
+  const [invitedMeetings, setInvitedMeetings] = useState(new Set());
+  const [invitingId, setInvitingId] = useState(null);
   // Agent Assignments
   const [assignments, setAssignments] = useState([]);
   const [docPreview, setDocPreview] = useState(null);
@@ -269,6 +132,13 @@ export default function CommandDashboard({ onNavigate }) {
   const [hubspotPipeline, setHubspotPipeline] = useState(null);
   const [hubspotLoading, setHubspotLoading] = useState(false);
   const [leadsTab, setLeadsTab] = useState('sheet');
+  // HubSpot contacts + classification
+  const [hsContacts, setHsContacts] = useState([]);
+  const [hsContactsLoading, setHsContactsLoading] = useState(false);
+  const [hsClassFilter, setHsClassFilter] = useState('all'); // 'all' | 'true' | 'false'
+  const [hsClassStats, setHsClassStats] = useState(null);
+  const [hsPaging, setHsPaging] = useState(null);
+  const [hsSearch, setHsSearch] = useState('');
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
@@ -408,12 +278,32 @@ export default function CommandDashboard({ onNavigate }) {
         setHubspotConnected(!!d.configured);
         if (d.configured) {
           setHubspotLoading(true);
-          fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() })
-            .then(r => r.json()).then(p => setHubspotPipeline(p)).catch(() => {})
-            .finally(() => setHubspotLoading(false));
+          Promise.all([
+            fetch(`${API_BASE}/v1/hubspot/pipeline`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+            fetch(`${API_BASE}/v1/hubspot/classification-stats`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+            fetch(`${API_BASE}/v1/hubspot/contacts?limit=50`, { headers: getAuthHeaders() }).then(r => r.json()).catch(() => null),
+          ]).then(([pipeline, classStats, contacts]) => {
+            if (pipeline) setHubspotPipeline(pipeline);
+            if (classStats) setHsClassStats(classStats);
+            if (contacts) { setHsContacts(contacts.contacts || []); setHsPaging(contacts.paging || null); }
+          }).finally(() => setHubspotLoading(false));
+          if (!leadsSheet?.configured) setLeadsTab('hubspot');
         }
       }).catch(() => {});
   }, [fetchLeadsSheet]);
+
+  const fetchHsContacts = useCallback(async (filter, after) => {
+    setHsContactsLoading(true);
+    try {
+      let url = `${API_BASE}/v1/hubspot/contacts?limit=50`;
+      if (filter && filter !== 'all') url += `&classified=${filter}`;
+      if (after) url += `&after=${after}`;
+      const r = await fetch(url, { headers: getAuthHeaders() });
+      const d = await r.json();
+      setHsContacts(d.contacts || []);
+      setHsPaging(d.paging || null);
+    } catch {} finally { setHsContactsLoading(false); }
+  }, []);
 
   // Fetch real approvals and insights from API
   useEffect(() => {
@@ -496,6 +386,66 @@ export default function CommandDashboard({ onNavigate }) {
     }
     fetchActionItems();
   }, []);
+
+  // Fetch meetings from /v1/meetings (same endpoint as DACP)
+  useEffect(() => {
+    async function fetchMeetings() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/meetings?range=${meetingRange}`, { headers: getAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const mtgs = data.meetings || [];
+        setMeetings(mtgs);
+        // Auto-detect already-invited meetings
+        const alreadyInvited = new Set();
+        for (const m of mtgs) {
+          if (m.attendees?.some(a => a.email?.includes('coppice') || a.email?.includes('agent@'))) {
+            alreadyInvited.add(m.id);
+          }
+        }
+        if (alreadyInvited.size > 0) setInvitedMeetings(prev => new Set([...prev, ...alreadyInvited]));
+      } catch {}
+    }
+    fetchMeetings();
+    const interval = setInterval(fetchMeetings, 30000);
+    return () => clearInterval(interval);
+  }, [meetingRange]);
+
+  const handleInviteCoppice = async (meeting) => {
+    setInvitingId(meeting.id);
+    try {
+      const headers = { ...getAuthHeaders(), 'Content-Type': 'application/json' };
+      const res = await fetch(`${API_BASE}/v1/meetings/${encodeURIComponent(meeting.id)}/invite`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ meetLink: meeting.meetLink, title: meeting.title }),
+      });
+      if (res.ok) {
+        setInvitedMeetings(prev => new Set([...prev, meeting.id]));
+      }
+    } catch (err) {
+      console.error('Failed to invite Coppice:', err);
+    } finally {
+      setInvitingId(null);
+    }
+  };
+
+  const formatMeetingTime = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const formatMeetingDay = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
 
   const handleToggleActionItem = useCallback(async (id) => {
     const item = actionItems.find(a => a.id === id);
@@ -702,23 +652,6 @@ export default function CommandDashboard({ onNavigate }) {
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
-      {/* Time range pills */}
-      <div className="flex items-center justify-end gap-2 mb-5">
-        {['7D', '30D', '90D'].map(r => (
-          <button
-            key={r}
-            onClick={() => setTimeRange(r)}
-            className={`px-3 py-1.5 rounded-lg text-[11px] font-heading font-semibold border transition-all ${
-              timeRange === r
-                ? 'bg-terminal-text text-white border-terminal-text'
-                : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:bg-[#f5f4f0]'
-            }`}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
-
       {/* Metrics Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 border border-terminal-border rounded-[14px] overflow-hidden mb-5" style={{ gap: '1px', background: 'var(--t-border)' }}>
         {METRICS.map((m, i) => (
@@ -834,32 +767,52 @@ export default function CommandDashboard({ onNavigate }) {
               <span className="text-[10px] font-mono font-bold text-white bg-terminal-red px-1.5 py-[1px] rounded-full tabular-nums">{approvals.length}</span>
             </div>
           </div>
-          <div>
-            {approvals.length === 0 ? (
-              <EmptyState icon="shield" title="No pending approvals" subtitle="Agent actions requiring your review will appear here." compact />
-            ) : approvals.map((item) => (
-              <div key={item.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
-                <span
-                  className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
-                  style={{ background: item.icon.bg, color: item.icon.color }}
-                >
-                  {item.icon.letter}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                  <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
-                    <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
+          {(() => {
+            const APPROVALS_PER_PAGE = 5;
+            const totalApprovalPages = Math.max(1, Math.ceil(approvals.length / APPROVALS_PER_PAGE));
+            const safeApprovalPage = Math.min(approvalsPage, totalApprovalPages - 1);
+            const pagedApprovals = approvals.slice(safeApprovalPage * APPROVALS_PER_PAGE, (safeApprovalPage + 1) * APPROVALS_PER_PAGE);
+            return (
+              <div>
+                {approvals.length === 0 ? (
+                  <EmptyState icon="shield" title="No pending approvals" subtitle="Agent actions requiring your review will appear here." compact />
+                ) : pagedApprovals.map((item) => (
+                  <div key={item.id} className="flex items-start gap-3 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors">
+                    <span
+                      className="w-7 h-7 rounded-[7px] flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5"
+                      style={{ background: item.icon.bg, color: item.icon.color }}
+                    >
+                      {item.icon.letter}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
+                      <div className="text-[11px] text-terminal-muted mt-0.5">{item.desc}</div>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[9px] font-heading font-bold uppercase tracking-[0.5px] px-1.5 py-[1px] rounded border bg-[#f5f4f0] text-terminal-muted border-[#e5e5e0]">{item.agentLabel}</span>
+                        <span className="text-[10px] font-mono text-[#c5c5bc] tabular-nums">{item.time}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
+                      <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                  <button onClick={() => handleApprove(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-[var(--t-ui-accent)] text-white hover:opacity-90 transition-opacity">Approve</button>
-                  <button onClick={() => handleReject(item.id)} className="px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold bg-terminal-panel text-terminal-red border border-terminal-border hover:bg-red-50 transition-colors">Reject</button>
-                </div>
+                ))}
+                {totalApprovalPages > 1 && (
+                  <div className="px-[18px] py-2 flex items-center justify-between border-t border-[#f0eeea]">
+                    <span className="text-[10px] text-terminal-muted">{approvals.length} pending</span>
+                    <div className="flex items-center gap-2">
+                      <button disabled={safeApprovalPage <= 0} onClick={() => setApprovalsPage(p => p - 1)}
+                        className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">Prev</button>
+                      <span className="text-[10px] text-terminal-muted">{safeApprovalPage + 1} / {totalApprovalPages}</span>
+                      <button disabled={safeApprovalPage >= totalApprovalPages - 1} onClick={() => setApprovalsPage(p => p + 1)}
+                        className="px-2 py-0.5 text-[10px] font-heading font-semibold rounded border border-[#e0ddd8] disabled:opacity-30 hover:bg-[#f5f4f0]">Next</button>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -1113,24 +1066,96 @@ export default function CommandDashboard({ onNavigate }) {
         })()}
       </div>
 
-      {/* Row 2: Upcoming Meetings (full width) */}
-      <div className="mb-5">
-        <div className="flex items-center justify-end gap-1.5 mb-2">
-          {['7d', '30d', '90d'].map(r => (
-            <button
-              key={r}
-              onClick={() => setMeetingsRange(r)}
-              className={`px-2.5 py-1 rounded-lg text-[10px] font-heading font-semibold border transition-all ${
-                meetingsRange === r
-                  ? 'bg-terminal-text text-white border-terminal-text'
-                  : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:bg-[#f5f4f0]'
-              }`}
-            >
-              {r}
-            </button>
-          ))}
+      {/* Meetings (matches DACP pattern - inline with range pills in header) */}
+      <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+        <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-[var(--t-ui-accent)]" />
+            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Meetings</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-mono text-terminal-muted">{meetings.length} meeting{meetings.length !== 1 ? 's' : ''}</span>
+            <div className="flex rounded-lg border border-[#e0ddd8] overflow-hidden">
+              {MEETING_RANGES.map(r => (
+                <button
+                  key={r.key}
+                  onClick={() => setMeetingRange(r.key)}
+                  className={`px-2.5 py-1 text-[10px] font-heading font-semibold transition-colors ${meetingRange === r.key ? 'bg-[var(--t-ui-accent)] text-white' : 'bg-white text-[#6b6b65] hover:bg-[#f5f4f0]'}`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        <UpcomingMeetingsPanel dateRange={meetingsRange} />
+        {meetings.length === 0 ? (
+          <div className="px-[18px] py-8 text-center text-[13px] text-terminal-muted">No meetings scheduled</div>
+        ) : (
+          <div>
+            {meetings.map((m) => {
+              const isInvited = invitedMeetings.has(m.id);
+              const isInviting = invitingId === m.id;
+              const hasMeetLink = !!m.meetLink;
+              const isPast = new Date(m.end || m.start) < new Date();
+              return (
+                <div key={m.id} className={`flex items-center gap-4 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] transition-colors ${isPast ? 'opacity-60' : ''}`}>
+                  {/* Time */}
+                  <div className="w-[72px] shrink-0">
+                    <div className="text-[11px] font-heading font-semibold text-[var(--t-ui-accent)]">{formatMeetingDay(m.start)}</div>
+                    <div className="text-[11px] font-mono text-terminal-muted tabular-nums">
+                      {formatMeetingTime(m.start)}
+                    </div>
+                  </div>
+
+                  {/* Title + attendees */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-terminal-text truncate">{m.title}</div>
+                    {m.attendees && m.attendees.length > 0 && (
+                      <div className="text-[10px] text-terminal-muted truncate mt-px">
+                        {m.attendees.slice(0, 3).map(a => a.name || a.email.split('@')[0]).join(', ')}
+                        {m.attendees.length > 3 && ` +${m.attendees.length - 3}`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Meet link */}
+                  {hasMeetLink && (
+                    <a
+                      href={m.meetLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-heading font-semibold text-[#2c5282] bg-[#e8eef5] border border-[#c5d5e8] hover:bg-[#dce6f0] transition-colors shrink-0"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <Video size={10} /> Join
+                    </a>
+                  )}
+
+                  {/* Invite Coppice button */}
+                  {!isPast && (
+                    isInvited ? (
+                      <div className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-[#1a6b3c] bg-[#edf7f0] border border-[#d0e8d8] shrink-0">
+                        <Check size={10} /> Coppice Invited
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleInviteCoppice(m)}
+                        disabled={isInviting}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-heading font-semibold text-white bg-[var(--t-ui-accent)] hover:opacity-90 transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {isInviting ? (
+                          <><div className="spinner w-3 h-3 border-white" /> Inviting...</>
+                        ) : (
+                          <><Mic size={10} /> Invite Coppice</>
+                        )}
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Agent Insights */}
@@ -1239,7 +1264,7 @@ export default function CommandDashboard({ onNavigate }) {
               </button>
             )}
             {!hubspotConnected && (
-              <button onClick={() => { setShowHubspotModal(true); setHubspotError(''); setHubspotKey(''); }}
+              <button onClick={() => { setShowHubspotModal(true); setHubspotError(''); setHubspotKey(''); window.open('https://app.hubspot.com/api-key', '_blank'); }}
                 className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-[#ff7a59] px-3 py-1 rounded-md border border-[#ffcabc] bg-[#fff5f2] hover:bg-[#ffe8e2]">
                 <Link2 size={11} /> Link HubSpot
               </button>
@@ -1387,6 +1412,98 @@ export default function CommandDashboard({ onNavigate }) {
         )}
       </div>
 
+
+      {/* HubSpot CRM Contacts */}
+      {hubspotConnected && (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">CRM Contacts</span>
+              {hsClassStats && (
+                <span className="text-[10px] font-mono text-terminal-muted">
+                  {hsClassStats.classified}/{hsClassStats.total} classified
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-0.5 bg-[#f5f4f0] rounded-lg p-0.5">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'false', label: 'Unclassified' },
+                  { id: 'true', label: 'Classified' },
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => { setHsClassFilter(f.id); fetchHsContacts(f.id); }}
+                    className={`text-[10px] font-heading font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                      hsClassFilter === f.id
+                        ? 'bg-white text-[var(--t-ui-accent)] shadow-sm'
+                        : 'text-[#9a9a92] hover:text-[#6b6b65]'
+                    }`}
+                  >
+                    {f.label}{f.id === 'false' && hsClassStats ? ` (${hsClassStats.unclassified})` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="max-h-[400px] overflow-y-auto">
+            {hsContactsLoading ? (
+              <div className="px-[18px] py-6 text-center text-[12px] text-[#9a9a92]">Loading contacts...</div>
+            ) : hsContacts.length === 0 ? (
+              <div className="px-[18px] py-6 text-center text-[12px] text-[#9a9a92]">No contacts found.</div>
+            ) : (
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 bg-[#f9f8f6]">
+                  <tr className="text-left text-[10px] font-heading font-semibold text-terminal-muted uppercase tracking-[0.5px]">
+                    <th className="px-[18px] py-2">Name</th>
+                    <th className="px-2 py-2">Company</th>
+                    <th className="px-2 py-2">Industry</th>
+                    <th className="px-2 py-2">Reason</th>
+                    <th className="px-2 py-2">Materials</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hsContacts.map(c => (
+                    <tr key={c.id} className="border-t border-[#f0eeea] hover:bg-[#f5f4f0] transition-colors">
+                      <td className="px-[18px] py-2">
+                        <div className="font-medium text-terminal-text">{c.name || 'Unknown'}</div>
+                        <div className="text-[10px] text-terminal-muted">{c.email}</div>
+                      </td>
+                      <td className="px-2 py-2 text-terminal-text">{c.company || '-'}</td>
+                      <td className="px-2 py-2">
+                        {c.classification?.industry ? (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">{c.classification.industry}</span>
+                        ) : <span className="text-[#c5c5bc]">-</span>}
+                      </td>
+                      <td className="px-2 py-2">
+                        {c.classification?.reason ? (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200">{c.classification.reason}</span>
+                        ) : <span className="text-[#c5c5bc]">-</span>}
+                      </td>
+                      <td className="px-2 py-2">
+                        {c.classification?.materials ? (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200">{c.classification.materials}</span>
+                        ) : <span className="text-[#c5c5bc]">-</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          {hsPaging?.next?.after && (
+            <div className="px-[18px] py-2 border-t border-[#f0eeea] flex justify-center">
+              <button
+                onClick={() => fetchHsContacts(hsClassFilter, hsPaging.next.after)}
+                className="text-[11px] font-heading font-semibold text-[var(--t-ui-accent)] hover:underline"
+              >
+                Load more
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Insight Modal */}
       {insightModal && (

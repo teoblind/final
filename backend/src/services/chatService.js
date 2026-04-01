@@ -539,6 +539,61 @@ const HUBSPOT_TOOLS = [
       required: ['email'],
     },
   },
+  {
+    name: 'list_hubspot_contacts',
+    description: 'List HubSpot contacts with their Sangha classification data (industry, reason to contact, email materials). Can filter by classified/unclassified. Returns up to 50 contacts per page.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Number of contacts to return (max 100, default 50)' },
+        classified: { type: 'string', enum: ['true', 'false', 'all'], description: 'Filter: "true" = classified only, "false" = unclassified only, "all" = both (default)' },
+        after: { type: 'string', description: 'Pagination cursor from previous response' },
+      },
+    },
+  },
+  {
+    name: 'classify_hubspot_contact',
+    description: 'Set the Sangha classification for a HubSpot contact. Updates sangha_industry, sangha_reason_to_contact, and/or sangha_email_type properties.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        contact_id: { type: 'string', description: 'HubSpot contact ID' },
+        industry: { type: 'string', description: 'Sangha Industry classification', enum: ['Renewable Energy', 'Bitcoin mining', 'Bitcoin services', 'Insurance', 'Operations Management', 'SaaS - Web 2', 'SaaS Web 3', 'Real Estate', 'Legal', 'Engineering', 'Electrical Equipment', 'Construction', 'Investment/Finance', 'Other'] },
+        reason: { type: 'string', description: 'Reason to contact', enum: ['Investment - DevCo', 'Investment - ProjCo', 'Potential IPP Client', 'Advisor', 'Technical Support', 'Potential Ghost Client', 'Marketing Opportunities', 'Friend', 'Other'] },
+        materials: { type: 'string', description: 'Contact materials/email type', enum: ['General Newsletter', 'Project Update', 'Investment Teaser', 'Investment Deck', 'General Marketing', 'Site Marketing', 'Targeted Sales Email', 'General Question'] },
+      },
+      required: ['contact_id'],
+    },
+  },
+  {
+    name: 'bulk_classify_hubspot_contacts',
+    description: 'Bulk update Sangha classifications for multiple HubSpot contacts at once. Max 100 per call.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        updates: {
+          type: 'array',
+          description: 'Array of classification updates',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'HubSpot contact ID' },
+              industry: { type: 'string' },
+              reason: { type: 'string' },
+              materials: { type: 'string' },
+            },
+            required: ['id'],
+          },
+        },
+      },
+      required: ['updates'],
+    },
+  },
+  {
+    name: 'get_hubspot_classification_stats',
+    description: 'Get classification coverage stats - how many contacts are classified vs unclassified.',
+    input_schema: { type: 'object', properties: {} },
+  },
 ];
 
 async function callHubSpotTool(toolName, toolInput, tenantId) {
@@ -546,13 +601,13 @@ async function callHubSpotTool(toolName, toolInput, tenantId) {
 
   switch (toolName) {
     case 'search_hubspot_contacts':
-      return await hs.searchContacts(toolInput.query);
+      return await hs.searchContacts(toolInput.query, tenantId);
     case 'search_hubspot_companies':
-      return await hs.searchCompanies(toolInput.query);
+      return await hs.searchCompanies(toolInput.query, tenantId);
     case 'search_hubspot_deals':
       return await hs.searchDeals(toolInput.query);
     case 'get_hubspot_pipeline':
-      return await hs.getPipelineStats();
+      return await hs.getPipelineStats(tenantId);
     case 'create_hubspot_contact':
       return await hs.createContact({
         email: toolInput.email,
@@ -563,6 +618,23 @@ async function callHubSpotTool(toolName, toolInput, tenantId) {
         phone: toolInput.phone,
         source: 'Coppice Hivemind',
       });
+    case 'list_hubspot_contacts':
+      return await hs.listContacts({
+        limit: toolInput.limit,
+        after: toolInput.after,
+        classified: toolInput.classified === 'true' ? true : toolInput.classified === 'false' ? false : undefined,
+        tenantId,
+      });
+    case 'classify_hubspot_contact':
+      return await hs.updateContactClassification(toolInput.contact_id, {
+        industry: toolInput.industry,
+        reason: toolInput.reason,
+        materials: toolInput.materials,
+      }, tenantId);
+    case 'bulk_classify_hubspot_contacts':
+      return await hs.bulkUpdateClassifications(toolInput.updates, tenantId);
+    case 'get_hubspot_classification_stats':
+      return await hs.getClassificationStats(tenantId);
     default:
       throw new Error(`Unknown HubSpot tool: ${toolName}`);
   }
@@ -3895,14 +3967,46 @@ When the user asks about leads, pipeline, outreach, or prospecting, use these to
 
 const HUBSPOT_PROMPT_ADDON = `
 
-You also have access to HubSpot CRM integration:
+You have HubSpot CRM integration with contact classification capabilities:
+
+SEARCH & READ:
 - search_hubspot_contacts: Search contacts by name, email, or company
 - search_hubspot_companies: Search companies by name or domain
 - search_hubspot_deals: Search the deal pipeline
 - get_hubspot_pipeline: Get full pipeline summary (total deals, value by stage)
-- create_hubspot_contact: Add a new contact to HubSpot
+- list_hubspot_contacts: List contacts with classification data. Filter by classified=true/false/all.
+- get_hubspot_classification_stats: Get counts of classified vs unclassified contacts.
 
-When the user asks about CRM data, contacts, companies, deals, pipeline status, or wants to add someone to the CRM, use these tools. Always search HubSpot before saying you don't have information about a contact or company.`;
+CREATE & CLASSIFY:
+- create_hubspot_contact: Add a new contact to HubSpot
+- classify_hubspot_contact: Set Sangha classification for a single contact
+- bulk_classify_hubspot_contacts: Classify multiple contacts at once (max 100 per call)
+
+SANGHA CONTACT CLASSIFICATION SYSTEM:
+You can classify contacts into three dimensions. Use these EXACT values:
+
+INDUSTRY (sangha_industry):
+Renewable Energy, Bitcoin mining, Bitcoin services, Insurance, Operations Management, SaaS - Web 2, SaaS Web 3, Real Estate, Legal, Engineering, Electrical Equipment, Construction, Investment/Finance, Other
+
+REASON TO CONTACT (sangha_reason_to_contact):
+Investment - DevCo, Investment - ProjCo, Potential IPP Client, Advisor, Technical Support, Potential Ghost Client, Marketing Opportunities, Friend, Other
+
+CONTACT MATERIALS (sangha_email_type):
+General Newsletter, Project Update, Investment Teaser, Investment Deck, General Marketing, Site Marketing, Targeted Sales Email, General Question
+
+CLASSIFICATION RULES:
+- NEVER use "Unknown" - always use "Other" if unsure
+- Infer industry from company name, domain, email domain, and job title
+- Investment/Finance keywords: capital, ventures, fund, equity, asset, .vc domains
+- Energy keywords: energy, power, solar, wind, utility, electric, renewable
+- Legal keywords: law, legal, counsel, attorney
+- Mining keywords: mining, hash, bitcoin, BTC, crypto, blockchain
+- If someone works at an investment firm -> Investment/Finance industry, likely Investment - DevCo or ProjCo reason
+- If someone is at an energy/utility company -> Renewable Energy, likely Potential IPP Client
+- Default materials: "General Newsletter" when unsure
+- Site Marketing only for company domains with relevant reasons (not gmail/yahoo)
+
+When asked to classify contacts, fetch unclassified contacts with list_hubspot_contacts, analyze each one, and use bulk_classify_hubspot_contacts to update them.`;
 
 const WEB_TOOLS_PROMPT_ADDON = `
 
@@ -4016,7 +4120,7 @@ const TOOL_CATEGORIES = {
   calendar: ['create_meeting'],
   leadEngine: ['discover_leads', 'get_leads', 'get_lead_stats', 'generate_outreach', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'run_full_cycle', 'update_lead', 'update_discovery_config', 'get_discovery_config', 'setup_crm_sheet', 'link_leads_sheet', 'share_leads_sheet'],
   knowledge: ['search_knowledge'],
-  hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact'],
+  hubspot: ['search_hubspot_contacts', 'search_hubspot_companies', 'search_hubspot_deals', 'get_hubspot_pipeline', 'create_hubspot_contact', 'list_hubspot_contacts', 'classify_hubspot_contact', 'bulk_classify_hubspot_contacts', 'get_hubspot_classification_stats'],
   mining: ['generate_mine_specs'],
   web: ['browse_url', 'web_research'],
   legal: ['generate_legal_doc'],
@@ -4034,7 +4138,8 @@ const SAFE_TOOLS = new Set([
   'get_leads', 'get_lead_stats', 'list_emails', 'read_email',
   'browse_url', 'web_research', 'get_outreach_log', 'get_reply_inbox', 'get_followup_queue', 'get_discovery_config',
   'list_trusted_senders', 'search_hubspot_contacts', 'search_hubspot_companies',
-  'search_hubspot_deals', 'get_hubspot_pipeline', 'lookup_pricing', 'get_bid_requests',
+  'search_hubspot_deals', 'get_hubspot_pipeline', 'list_hubspot_contacts', 'get_hubspot_classification_stats',
+  'lookup_pricing', 'get_bid_requests',
   'get_estimates', 'get_jobs', 'get_dacp_stats', 'analyze_itb', 'compare_contract',
   'run_bid_checks', 'parse_supplier_quote',
   'gws_gmail_search', 'gws_gmail_read', 'gws_calendar_events', 'gws_drive_search', 'gws_sheets_read',

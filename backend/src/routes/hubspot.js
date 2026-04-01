@@ -103,4 +103,64 @@ router.get('/activity', async (req, res) => {
   }
 });
 
+// List contacts with classification data
+router.get('/contacts', async (req, res) => {
+  const tenantId = req.tenantId;
+  const hs = await import('../services/hubspotService.js');
+  if (!hs.isConfigured(tenantId)) return res.json({ contacts: [], configured: false });
+  try {
+    const { limit, after, classified } = req.query;
+    const result = await hs.listContacts({
+      limit: parseInt(limit) || 50,
+      after: after || undefined,
+      classified: classified === 'true' ? true : classified === 'false' ? false : undefined,
+      tenantId,
+    });
+    res.json({ ...result, configured: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Classification stats
+router.get('/classification-stats', async (req, res) => {
+  const tenantId = req.tenantId;
+  const hs = await import('../services/hubspotService.js');
+  if (!hs.isConfigured(tenantId)) return res.json({ classified: 0, unclassified: 0, total: 0, configured: false });
+  try {
+    const stats = await hs.getClassificationStats(tenantId);
+    res.json({ ...stats, configured: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update single contact classification
+router.patch('/contacts/:id/classify', async (req, res) => {
+  const tenantId = req.tenantId;
+  const hs = await import('../services/hubspotService.js');
+  if (!hs.isConfigured(tenantId)) return res.status(400).json({ error: 'HubSpot not configured' });
+  try {
+    const result = await hs.updateContactClassification(req.params.id, req.body, tenantId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bulk classify contacts
+router.post('/contacts/bulk-classify', async (req, res) => {
+  const tenantId = req.tenantId;
+  const hs = await import('../services/hubspotService.js');
+  if (!hs.isConfigured(tenantId)) return res.status(400).json({ error: 'HubSpot not configured' });
+  try {
+    const { updates } = req.body; // [{ id, industry, reason, materials }]
+    if (!updates?.length) return res.status(400).json({ error: 'No updates provided' });
+    const result = await hs.bulkUpdateClassifications(updates, tenantId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
