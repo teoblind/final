@@ -619,6 +619,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
   try {
     const { tenantId, userId, agentId } = resolveIds(req);
     const { threadId } = req.params;
+    console.log(`[ChatStream] POST /${agentId}/threads/${threadId}/messages/stream tenant=${tenantId} user=${userId}`);
     const isAdmin = ['owner', 'admin'].includes(req.user?.role);
 
     if (!VALID_AGENTS.has(agentId)) {
@@ -725,6 +726,7 @@ router.post('/:agentId/threads/:threadId/messages/stream', async (req, res) => {
 router.post('/:agentId/messages/stream', async (req, res) => {
   try {
     const { tenantId, userId, agentId } = resolveIds(req);
+    console.log(`[ChatStream] POST /${agentId}/messages/stream (no thread) tenant=${tenantId} user=${userId}`);
 
     if (!VALID_AGENTS.has(agentId)) {
       return res.status(400).json({ error: `Unknown agent: ${agentId}` });
