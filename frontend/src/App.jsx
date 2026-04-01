@@ -405,8 +405,8 @@ function AppContent() {
   useEffect(() => {
     if (!tenant) return;
     const tenantManifest = {
-      name: tenant?.name || (isConstruction ? 'DACP Construction' : isVenture ? 'Zhan Capital' : 'Sangha Renewables'),
-      short_name: tenant?.branding?.companyName || (isConstruction ? 'DACP' : isVenture ? 'Zhan' : 'Sangha'),
+      name: isConstruction ? (tenant?.name || 'DACP Construction') : isVenture ? (tenant?.name || 'Zhan Capital') : 'Sangha Renewables',
+      short_name: isConstruction ? (tenant?.branding?.companyName || 'DACP') : isVenture ? (tenant?.branding?.companyName || 'Zhan') : 'Sangha',
       description: isConstruction ? 'AI-powered construction operations platform' : isVenture ? 'AI-powered portfolio management platform' : 'AI-powered mining operations platform',
       start_url: window.location.origin + '/',
       display: 'standalone',

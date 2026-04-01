@@ -53,49 +53,6 @@ const DEFAULT_METRICS = [
   { label: 'Meetings', value: '-', delta: '', type: 'flat', bar: 0 },
 ];
 
-const AGENTS_TEMPLATE = [
-  { name: 'Lead Engine', status: 'on', mode: 'Auto', statKey: 'totalLeads', tabId: 'bots' },
-  { name: 'Meeting Capture', status: 'on', mode: 'Auto', statKey: 'meetingLeads', tabId: 'meetings' },
-  { name: 'Outreach', status: 'on', mode: 'Auto', statKey: 'totalEmailsSent', tabId: 'outreach' },
-  { name: 'Documents', status: 'on', mode: 'Auto', stat: '8', tabId: 'hivemind-chat' },
-  { name: 'Alert Synthesizer', status: 'on', mode: 'Auto', stat: '3', tabId: 'alerts' },
-  { name: 'Curtailment', status: 'standby', mode: 'Copilot', stat: '\u2014', tabId: 'curtailment-chat' },
-  { name: 'Pool Routing', status: 'standby', mode: 'Copilot', stat: '\u2014', tabId: 'pools-chat' },
-  { name: 'Reporting', status: 'off', mode: 'Off', stat: '\u2014', tabId: 'reporting' },
-];
-
-const DEFAULT_PIPELINE = [
-  { label: 'Discovered', value: 0, pct: 0 },
-  { label: 'Contacted', value: 0, pct: 0 },
-  { label: 'Replied', value: 0, pct: 0 },
-  { label: 'Scheduled', value: 0, pct: 0 },
-  { label: 'Active Deal', value: 0, pct: 0 },
-];
-
-const FOLLOWUPS = [];
-
-// ─── Indicator Colors ───────────────────────────────────────────────────────
-
-const DOT_COLORS = {
-  out: 'bg-[var(--t-ui-accent)]',
-  in: 'bg-terminal-amber',
-  meet: 'bg-terminal-text',
-  doc: 'bg-terminal-muted',
-  alert: 'bg-terminal-red',
-  lead: 'bg-[#5b3a8c]',
-};
-
-const STATUS_STYLES = {
-  on: 'bg-[var(--t-sidebar-accent)] shadow-[0_0_4px_rgba(var(--t-sidebar-accent-rgb),0.3)]',
-  standby: 'bg-terminal-amber',
-  off: 'bg-[#c5c5bc]',
-};
-
-const MODE_STYLES = {
-  Auto: 'bg-[var(--t-ui-accent-bg)] text-[var(--t-ui-accent)]',
-  Copilot: 'bg-[#fdf6e8] text-terminal-amber',
-  Off: 'bg-[#f5f4f0] text-terminal-muted',
-};
 
 const DELTA_COLORS = {
   up: 'text-[var(--t-ui-accent)]',
@@ -103,16 +60,6 @@ const DELTA_COLORS = {
   flat: 'text-terminal-muted',
 };
 
-const URGENCY_COLORS = {
-  danger: 'text-terminal-red font-semibold',
-  warn: 'text-terminal-amber font-semibold',
-  normal: 'text-terminal-text font-semibold',
-};
-
-const VALUE_COLORS = {
-  green: 'text-[var(--t-ui-accent)]',
-  warn: 'text-terminal-amber',
-};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -128,84 +75,7 @@ function formatRelativeTime(dateStr) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-function ActivityDetail({ detail, type }) {
-  if (!detail) return null;
-
-  if (type === 'out' || type === 'in') {
-    return (
-      <div className="space-y-2 text-[12px]">
-        {detail.to && <div><span className="text-terminal-muted">To:</span> <span className="text-terminal-text">{detail.to}</span></div>}
-        {detail.from && <div><span className="text-terminal-muted">From:</span> <span className="text-terminal-text">{detail.fromName || detail.from}</span></div>}
-        {detail.subject && <div><span className="text-terminal-muted">Subject:</span> <span className="text-terminal-text">{detail.subject}</span></div>}
-        {detail.body && <pre className="mt-2 text-[11px] text-terminal-text whitespace-pre-wrap font-sans leading-[1.5] bg-white/50 rounded-lg p-3 border border-[#f0eeea]">{detail.body}</pre>}
-      </div>
-    );
-  }
-
-  if (type === 'meet') {
-    return (
-      <div className="space-y-2 text-[12px]">
-        {detail.summary && <p className="text-terminal-text leading-[1.5]">{detail.summary}</p>}
-        {detail.attendees?.length > 0 && (
-          <div><span className="text-terminal-muted">Attendees:</span> <span className="text-terminal-text">{detail.attendees.join(', ')}</span></div>
-        )}
-        {detail.actionItems?.length > 0 && (
-          <div className="mt-1.5">
-            <span className="text-terminal-muted text-[11px] font-heading font-semibold uppercase tracking-[0.5px]">Action Items</span>
-            <ul className="mt-1 space-y-0.5">
-              {detail.actionItems.map((item, i) => (
-                <li key={i} className="text-[11px] text-terminal-text pl-3 relative before:content-['•'] before:absolute before:left-0 before:text-terminal-muted">{item}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (type === 'lead') {
-    return (
-      <div className="text-[12px]">
-        {detail.leads?.length > 0 && (
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="text-terminal-muted text-left">
-                <th className="font-semibold pb-1">Company</th>
-                <th className="font-semibold pb-1">Location</th>
-                <th className="font-semibold pb-1 text-right">Score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.leads.map((lead, i) => (
-                <tr key={i} className="border-t border-[#f0eeea]">
-                  <td className="py-1 text-terminal-text">{lead.company}</td>
-                  <td className="py-1 text-terminal-muted">{lead.location}</td>
-                  <td className="py-1 text-right font-mono font-semibold text-terminal-text">{lead.score}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {detail.queriesRun && <div className="mt-1 text-terminal-muted">Queries: {Array.isArray(detail.queriesRun) ? detail.queriesRun.join(', ') : detail.queriesRun}</div>}
-      </div>
-    );
-  }
-
-  if (type === 'doc') {
-    return (
-      <div className="space-y-1 text-[12px]">
-        {detail.type && <div><span className="text-terminal-muted">Type:</span> <span className="text-terminal-text">{detail.type}</span></div>}
-        {detail.source && <div><span className="text-terminal-muted">Source:</span> <span className="text-terminal-text">{detail.source}</span></div>}
-        {detail.summary && <p className="text-terminal-text leading-[1.5] mt-1">{detail.summary}</p>}
-      </div>
-    );
-  }
-
-  // Fallback: render raw JSON
-  return <pre className="text-[11px] text-terminal-muted whitespace-pre-wrap">{JSON.stringify(detail, null, 2)}</pre>;
-}
-
-function UpcomingMeetingsPanel() {
+function UpcomingMeetingsPanel({ dateRange = '7d' }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dismissed, setDismissed] = useState(() => {
@@ -216,10 +86,12 @@ function UpcomingMeetingsPanel() {
   });
   const [inviting, setInviting] = useState(null);
 
+  const days = dateRange === '90d' ? 90 : dateRange === '30d' ? 30 : 7;
+
   useEffect(() => {
     async function fetchEvents() {
       try {
-        const res = await fetch(`${API_BASE}/v1/crm/calendar/events`);
+        const res = await fetch(`${API_BASE}/v1/crm/calendar/events?days=${days}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setEvents(data.events || []);
@@ -230,7 +102,7 @@ function UpcomingMeetingsPanel() {
     fetchEvents();
     const interval = setInterval(fetchEvents, 120000);
     return () => clearInterval(interval);
-  }, []);
+  }, [days]);
 
   const handleDismiss = (id) => {
     const next = [...dismissed, id];
@@ -241,7 +113,7 @@ function UpcomingMeetingsPanel() {
   const handleInvite = async (id) => {
     setInviting(id);
     try {
-      const res = await fetch(`${API_BASE}/v1/crm/calendar/events/${id}/invite`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/v1/crm/calendar/events/${id}/invite`, { method: 'POST', headers: getAuthHeaders() });
       if (res.ok) {
         const next = [...invitedIds, id];
         setInvitedIds(next);
@@ -251,7 +123,14 @@ function UpcomingMeetingsPanel() {
     setInviting(null);
   };
 
-  const visibleEvents = events.filter(e => !dismissed.includes(e.id));
+  const now = new Date();
+  const cutoff = new Date(now.getTime() + days * 86400000);
+  const visibleEvents = events.filter(e => {
+    if (dismissed.includes(e.id)) return false;
+    if (!e.start) return true;
+    const d = new Date(e.start);
+    return d <= cutoff;
+  });
 
   const formatTime = (isoStr, allDay) => {
     if (!isoStr) return '';
@@ -279,7 +158,7 @@ function UpcomingMeetingsPanel() {
     <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
       <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
         <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Upcoming Meetings</span>
-        <span className="text-[11px] font-mono text-terminal-muted">{visibleEvents.length} this week</span>
+        <span className="text-[11px] font-mono text-terminal-muted">{visibleEvents.length} in next {days}d</span>
       </div>
       <div>
         {loading ? (
@@ -288,7 +167,7 @@ function UpcomingMeetingsPanel() {
             <p className="text-[11px] text-terminal-muted">Loading calendar...</p>
           </div>
         ) : visibleEvents.length === 0 ? (
-          <EmptyState icon="calendar" title="No upcoming meetings" subtitle="Calendar events for the next 7 days will appear here." compact />
+          <EmptyState icon="calendar" title="No upcoming meetings" subtitle={`Calendar events for the next ${days} days will appear here.`} compact />
         ) : (
           visibleEvents.map((event) => {
             const isInvited = invitedIds.includes(event.id);
@@ -349,12 +228,10 @@ export default function CommandDashboard({ onNavigate }) {
   const [insights, setInsights] = useState([]);
   const [toast, setToast] = useState(null);
   const [actionItems, setActionItems] = useState([]);
-  const [activities, setActivities] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
-  const [expandedDetail, setExpandedDetail] = useState(null);
   const [insightModal, setInsightModal] = useState(null);
   const [threadModal, setThreadModal] = useState(null); // { thread, messages, loading }
   const [leadStats, setLeadStats] = useState(null);
+  const [meetingsRange, setMeetingsRange] = useState('7d');
   // Agent Assignments
   const [assignments, setAssignments] = useState([]);
   const [docPreview, setDocPreview] = useState(null);
@@ -611,20 +488,6 @@ export default function CommandDashboard({ onNavigate }) {
     fetchInsights();
   }, []);
 
-  // Fetch live activity feed
-  useEffect(() => {
-    async function fetchActivities() {
-      try {
-        const res = await fetch(`${API_BASE}/v1/activity?limit=20`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setActivities(data.activities || []);
-      } catch {}
-    }
-    fetchActivities();
-    const interval = setInterval(fetchActivities, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Fetch action items
   useEffect(() => {
@@ -791,22 +654,6 @@ export default function CommandDashboard({ onNavigate }) {
     setApprovals(prev => prev.filter(a => a.id !== id));
   }, []);
 
-  const toggleExpand = useCallback(async (id) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-      setExpandedDetail(null);
-      return;
-    }
-    setExpandedId(id);
-    setExpandedDetail(null);
-    try {
-      const res = await fetch(`${API_BASE}/v1/activity/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setExpandedDetail(data.detail);
-      }
-    } catch {}
-  }, [expandedId]);
 
   const handleInsightAction = async (insightId, action) => {
     if (action === 'Dismiss' || action === 'Snooze') {
@@ -860,18 +707,6 @@ export default function CommandDashboard({ onNavigate }) {
     { label: 'Meetings', value: String(leadStats.meetingLeads || 0), delta: leadStats.meetingsThisWeek ? `${leadStats.meetingsThisWeek} this week` : '', type: leadStats.meetingLeads > 0 ? 'up' : 'flat', bar: Math.min(100, (leadStats.meetingLeads || 0) * 5) },
   ] : DEFAULT_METRICS;
 
-  const AGENTS = AGENTS_TEMPLATE.map(a => ({
-    ...a,
-    stat: a.statKey && leadStats ? String(leadStats[a.statKey] || 0) : (a.stat || '\u2014'),
-  }));
-
-  const PIPELINE = leadStats ? [
-    { label: 'Discovered', value: leadStats.totalLeads || 0, pct: 100 },
-    { label: 'Contacted', value: leadStats.contactedLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.contactedLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
-    { label: 'Replied', value: leadStats.respondedLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.respondedLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
-    { label: 'Scheduled', value: leadStats.meetingLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.meetingLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
-    { label: 'Active Deal', value: leadStats.qualifiedLeads || 0, pct: leadStats.totalLeads > 0 ? Math.round((leadStats.qualifiedLeads || 0) / leadStats.totalLeads * 100 * 10) / 10 : 0 },
-  ] : DEFAULT_PIPELINE;
 
   return (
     <div className="p-6 lg:px-7 lg:py-6">
@@ -1286,9 +1121,28 @@ export default function CommandDashboard({ onNavigate }) {
         })()}
       </div>
 
-      {/* Row 2: Upcoming Meetings + Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
-        <UpcomingMeetingsPanel />
+      {/* Row 2: Upcoming Meetings (full width) */}
+      <div className="mb-5">
+        <div className="flex items-center justify-end gap-1.5 mb-2">
+          {['7d', '30d', '90d'].map(r => (
+            <button
+              key={r}
+              onClick={() => setMeetingsRange(r)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-heading font-semibold border transition-all ${
+                meetingsRange === r
+                  ? 'bg-terminal-text text-white border-terminal-text'
+                  : 'bg-terminal-panel text-terminal-muted border-terminal-border hover:bg-[#f5f4f0]'
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <UpcomingMeetingsPanel dateRange={meetingsRange} />
+      </div>
+
+      {/* Agent Insights */}
+      <div className="mb-5">
         {insights.length > 0 && <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
             <div className="flex items-center gap-2">
@@ -1541,130 +1395,6 @@ export default function CommandDashboard({ onNavigate }) {
         )}
       </div>
 
-      {/* Row 3: Activity Feed (full width) */}
-      <div className="mb-4">
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Activity</span>
-              <span className="text-[9px] font-heading font-bold text-[var(--t-ui-accent)] bg-[var(--t-ui-accent-bg)] px-2 py-0.5 rounded-full uppercase tracking-[0.5px]">Live</span>
-            </div>
-            <span className="text-[11px] text-terminal-muted">All agents</span>
-          </div>
-          <div>
-            {activities.length === 0 ? (
-              <EmptyState icon="activity" title="No activity yet" subtitle="Agent actions and events will appear here as they happen." compact />
-            ) : (() => {
-              // Group consecutive activities with same title+subtitle
-              const grouped = [];
-              for (const item of activities) {
-                const key = `${item.title}|||${item.subtitle}`;
-                const last = grouped[grouped.length - 1];
-                if (last && last._key === key) {
-                  last.times.push(item.time);
-                } else {
-                  grouped.push({ ...item, _key: key, times: [item.time] });
-                }
-              }
-              return grouped.map((item) => (
-                <div key={item.id}>
-                  <div
-                    className={`flex items-start gap-3.5 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] transition-colors ${item.hasDetail ? 'cursor-pointer' : ''}`}
-                    onClick={() => item.hasDetail && toggleExpand(item.id)}
-                  >
-                    <div className={`w-1 h-1 rounded-full mt-[7px] shrink-0 ${DOT_COLORS[item.type] || 'bg-terminal-muted'}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-terminal-text leading-[1.4]">{item.title}</div>
-                      <div className="text-[11px] text-terminal-muted mt-0.5">{item.subtitle}</div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                      <span className="text-[10px] font-mono text-[#c5c5bc] font-medium tabular-nums">
-                        {item.times.length > 1
-                          ? item.times.join(', ')
-                          : item.time}
-                      </span>
-                      {item.hasDetail && (
-                        <span className={`text-[10px] text-[#c5c5bc] transition-transform ${expandedId === item.id ? 'rotate-90' : ''}`}>&rsaquo;</span>
-                      )}
-                    </div>
-                  </div>
-                  {expandedId === item.id && (
-                    <div className="px-[18px] py-3 bg-[#f9f8f5] border-b border-[#f0eeea]">
-                      {expandedDetail ? (
-                        <ActivityDetail detail={expandedDetail} type={item.type} />
-                      ) : (
-                        <div className="text-[11px] text-terminal-muted">Loading...</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ));
-            })()}
-          </div>
-        </div>
-      </div>
-
-      {/* Pipeline + Follow-Ups + Agents */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {/* Pipeline */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Pipeline</span>
-            <span className="text-[11px] font-mono text-terminal-muted">{leadStats ? `${leadStats.totalLeads || 0} total` : '-'}</span>
-          </div>
-          <div className="py-1">
-            {PIPELINE.map((row, i) => (
-              <div key={i} className="flex items-center gap-2.5 px-[18px] py-2 border-b border-[#f0eeea] last:border-b-0">
-                <span className="text-xs text-[#6b6b65] w-[100px] shrink-0">{row.label}</span>
-                <div className="flex-1 h-1.5 bg-[#f5f4f0] rounded-[3px] overflow-hidden">
-                  <div
-                    className="h-full bg-[var(--t-ui-accent)] rounded-[3px] transition-all duration-700"
-                    style={{ width: `${Math.max(row.pct, 1)}%` }}
-                  />
-                </div>
-                <span className="text-xs font-mono font-semibold text-terminal-text w-9 text-right tabular-nums">{row.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Follow-Ups */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Follow-Ups</span>
-            <span className="text-[11px] font-mono text-terminal-muted">{FOLLOWUPS.length} pending</span>
-          </div>
-          <div>
-            {FOLLOWUPS.map((item, i) => (
-              <div key={i} className="flex items-center justify-between px-[18px] py-[9px] border-b border-[#f0eeea] last:border-b-0 text-[13px]">
-                <span className="text-[#6b6b65]">{item.name}</span>
-                <span className={URGENCY_COLORS[item.urgency]}>{item.due}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Agents Table */}
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Agents</span>
-            <span className="text-[11px] font-mono text-terminal-muted">{AGENTS.filter(a => a.status === 'on').length} of {AGENTS.length} active</span>
-          </div>
-          <div>
-            {AGENTS.map((agent, i) => (
-              <div key={i} onClick={() => onNavigate?.(agent.tabId)} className="flex items-center gap-3 px-[18px] py-[11px] border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f5f4f0] cursor-pointer transition-colors">
-                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_STYLES[agent.status]}`} />
-                <div className="text-[13px] font-medium text-terminal-text flex-1">{agent.name}</div>
-                <span className={`text-[10px] font-heading font-semibold px-2.5 py-[3px] rounded-md uppercase tracking-[0.3px] ${MODE_STYLES[agent.mode]}`}>
-                  {agent.mode}
-                </span>
-                <span className="text-xs font-mono text-[#6b6b65] font-medium min-w-[56px] text-right tabular-nums">{agent.stat}</span>
-                <span className="text-[#c5c5bc] text-sm">&rsaquo;</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* Insight Modal */}
       {insightModal && (

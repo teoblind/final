@@ -232,7 +232,8 @@ router.get('/calendar/events', async (req, res) => {
     const calendar = google.calendar({ version: 'v3', auth });
 
     const now = new Date();
-    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const days = Math.min(parseInt(req.query.days) || 7, 90);
+    const weekFromNow = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
     // Fetch all visible calendars (agent's own + shared calendars)
     let calendarIds = ['primary'];
