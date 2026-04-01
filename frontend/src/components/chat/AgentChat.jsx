@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
-import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2 } from 'lucide-react';
+import { Paperclip, Send, ChevronRight, ChevronLeft, PanelRight, Volume2, VolumeX, Play, Square, Phone, PhoneOff, X, Mic, MicOff, MessageSquare, Plus, Lock, Users, Pin, Pencil, Trash2, File as FileIcon, FileText, Image as ImageIcon, Check, Copy, ClipboardCheck, Search, ExternalLink, User, Building2, FolderOpen, ClipboardList, RotateCcw, FileSpreadsheet, Mail as MailIcon, Share2, Download } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Lazy-load dashboard panels for Workflow agent tabs
@@ -457,6 +457,87 @@ function EmailCard({ data }) {
   );
 }
 
+// ─── Task Report Viewer Modal ───────────────────────────────────────────────────
+function TaskReportModal({ assignmentId, title, onClose }) {
+  const [content, setContent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [artifacts, setArtifacts] = useState([]);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  useEffect(() => {
+    if (!assignmentId) return;
+    const token = getAuthToken();
+    fetch(`${API_BASE}/v1/estimates/assignments?status=all`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(d => {
+        const a = d.assignments?.find(x => x.id === assignmentId);
+        if (a) {
+          setContent(a.result_summary || 'No report content available.');
+          try { setArtifacts(JSON.parse(a.output_artifacts_json || '[]')); } catch {}
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [assignmentId]);
+
+  const handleDownload = async (art) => {
+    if (art.url) { window.open(art.url, '_blank'); return; }
+    if (!art.path) return;
+    try {
+      const token = getAuthToken();
+      const r = await fetch(`${API_BASE}${art.path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!r.ok) throw new Error('Download failed');
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = art.filename || `${art.type}_report`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch (err) { console.error('Download error:', err); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e6e1]">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-terminal-text font-heading truncate">{title || 'Task Report'}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              {artifacts.filter(a => a.type !== 'email_draft').map((art, i) => (
+                <button key={i} onClick={() => handleDownload(art)}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border bg-[#f5f4f0] hover:bg-blue-50 text-[#1e3a5f] border-[#d0cec8]">
+                  <Download size={9} />
+                  {art.label || art.type}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f5f4f0] text-terminal-muted hover:text-terminal-text transition-colors ml-3">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-[13px] text-terminal-muted">Loading report...</div>
+          ) : (
+            <div className="prose-chat text-[13px] leading-relaxed text-terminal-text">{formatContent(content)}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Action Buttons ─────────────────────────────────────────────────────────────
 // ─── Task Proposal Card (inline in chat when agent proposes a background task) ─
 function TaskProposalCard({ data, onConfirm, onDismiss }) {
@@ -464,8 +545,36 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   const [result, setResult] = useState(null);
   const [artifacts, setArtifacts] = useState([]);
   const [expanded, setExpanded] = useState(false);
+  const [viewingReport, setViewingReport] = useState(false);
   const [contextSources, setContextSources] = useState(null);
   const [loadingContext, setLoadingContext] = useState(false);
+
+  // Check actual assignment status on mount (handles page reload / tab switch)
+  useEffect(() => {
+    const token = getAuthToken();
+    fetch(`${API_BASE}/v1/estimates/assignments?status=all`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(d => {
+        // Match by assignment_id first, fall back to title match (legacy messages without ID)
+        const a = d.assignments?.find(x => x.id === data.assignment_id) ||
+                  (!data.assignment_id && data.title && d.assignments?.find(x => x.title === data.title));
+        if (!a) return;
+        // Backfill assignment_id for legacy entries
+        if (!data.assignment_id && a.id) data.assignment_id = a.id;
+        if (a.status === 'completed') {
+          setStatus('completed');
+          setResult(a.result_summary?.slice(0, 300) || null);
+          try { setArtifacts(JSON.parse(a.output_artifacts_json || '[]')); } catch {}
+        } else if (a.status === 'in_progress' || a.status === 'confirmed') {
+          setStatus('running');
+        } else if (a.status === 'dismissed') {
+          setStatus('dismissed');
+        }
+      })
+      .catch(() => {});
+  }, [data?.assignment_id, data?.title]);
 
   const catColors = {
     follow_up: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -550,8 +659,8 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
     <div className="mt-2.5 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
       {/* Clickable header */}
       <div className="px-4 py-2.5 border-b border-[#f0eeea] flex items-center gap-2 cursor-pointer hover:bg-[#faf9f7] transition-colors" onClick={handleExpand}>
-        <ClipboardList size={14} className="text-[#1e3a5f]" />
-        <span className="text-[12px] font-bold text-[#1e3a5f] font-heading">Proposed Task</span>
+        <ClipboardList size={14} className="text-[var(--t-ui-accent,#1e3a5f)]" />
+        <span className="text-[12px] font-bold text-[var(--t-ui-accent,#1e3a5f)] font-heading">Proposed Task</span>
         {data.priority === 'high' && <span className="text-[9px] font-bold text-red-500 ml-1 font-mono">HIGH</span>}
         <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold uppercase ml-auto font-mono ${catColors[data.category] || catColors.admin}`}>
           {data.category?.replace('_', ' ')}
@@ -578,12 +687,12 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         )}
         {status === 'completed' && artifacts.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {artifacts.map((art, i) => (
-              <a key={i} href={art.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-blue-50 text-[#1e3a5f] border-[#d0cec8]">
-                {art.type === 'sheet' ? <FileSpreadsheet size={10} /> : art.type === 'email' ? <MailIcon size={10} /> : <ExternalLink size={10} />}
-                {art.title || art.type}
-              </a>
+            {artifacts.filter(art => art.type !== 'email_draft').map((art, i) => (
+              <button key={i} onClick={(e) => { e.stopPropagation(); if (art.url) window.open(art.url, '_blank'); else setViewingReport(true); }}
+                className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border bg-white hover:bg-[var(--t-ui-accent-bg,#eef3f9)] text-[var(--t-ui-accent,#1e3a5f)] border-[#d0cec8] cursor-pointer">
+                {art.type === 'gdoc' ? <ExternalLink size={10} /> : <FileText size={10} />}
+                {art.label || art.title || art.type}
+              </button>
             ))}
           </div>
         )}
@@ -631,7 +740,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
         {status === 'proposed' && (
           <>
             <button onClick={(e) => { e.stopPropagation(); handleRun(); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-[#1e3a5f] text-white rounded-md hover:bg-[#162d4a] font-heading">
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium bg-[var(--t-ui-accent,#1e3a5f)] text-white rounded-md hover:opacity-90 font-heading">
               <Check size={11} /> Run
             </button>
             <button onClick={(e) => { e.stopPropagation(); handleDismiss(); }}
@@ -639,23 +748,32 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
               <X size={13} />
             </button>
             <button onClick={(e) => { e.stopPropagation(); handleExpand(); }}
-              className="ml-auto flex items-center gap-1 text-[10px] text-[#6b6b65] hover:text-[#1e3a5f] cursor-pointer font-medium">
+              className="ml-auto flex items-center gap-1 text-[10px] text-[#6b6b65] hover:text-[var(--t-ui-accent,#1e3a5f)] cursor-pointer font-medium">
               <FolderOpen size={10} />
               {expanded ? 'Hide context' : 'View context'}
             </button>
           </>
         )}
         {status === 'running' && (
-          <span className="flex items-center gap-1.5 text-[11px] text-[#1e3a5f] font-medium font-mono">
+          <span className="flex items-center gap-1.5 text-[11px] text-[var(--t-ui-accent,#1e3a5f)] font-medium font-mono">
             <RotateCcw size={11} className="animate-spin" /> Working on it...
           </span>
         )}
         {status === 'completed' && (
-          <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium font-mono">
-            <Check size={11} /> Completed
-          </span>
+          <>
+            <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium font-mono">
+              <Check size={11} /> Completed
+            </span>
+            <button onClick={(e) => { e.stopPropagation(); setViewingReport(true); }}
+              className="ml-auto flex items-center gap-1 text-[10px] text-[#6b6b65] hover:text-[var(--t-ui-accent,#1e3a5f)] font-medium cursor-pointer">
+              <FileText size={10} /> View report
+            </button>
+          </>
         )}
       </div>
+      {viewingReport && (
+        <TaskReportModal assignmentId={data.assignment_id} title={data.title} onClose={() => setViewingReport(false)} />
+      )}
     </div>
   );
 }
@@ -2768,6 +2886,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [contextPanelWidth, setContextPanelWidth] = useState(340); // px, 0 = minimized
+  const [inputAreaHeight, setInputAreaHeight] = useState(null); // null = auto (default), px value when resized
   const [approvalCtx, setApprovalCtx] = useState(null); // approval context from "Edit in DACP Agent"
   const [contextData, setContextData] = useState(null); // dynamic context panel data
   const workspaceFilesRef = useRef([]); // workspace files created this session (survive API refreshes)
@@ -2800,6 +2919,30 @@ export default function AgentChat({ agentId = 'estimating' }) {
       document.body.style.userSelect = '';
     };
     document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
+
+  // ── Input area drag-to-resize ────────────────────────────────────────────
+  const handleInputDragStart = useCallback((e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const inputArea = e.target.closest('[data-chat-area]')?.querySelector('[data-input-area]');
+    const startHeight = inputArea ? inputArea.offsetHeight : 120;
+
+    const onMove = (moveE) => {
+      const delta = startY - moveE.clientY; // dragging up = positive delta = taller
+      const h = startHeight + delta;
+      setInputAreaHeight(Math.max(60, Math.min(window.innerHeight * 0.7, h)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -3019,12 +3162,32 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   : null,
               }));
             }
+            // Extract task proposal from metadata or parse from content (legacy CLI messages)
+            let taskProposal = meta?.taskProposal || null;
+            let content = m.content;
+            if (!taskProposal && content?.includes('<task_proposal>')) {
+              const tpMatch = content.match(/<task_proposal>\s*([\s\S]*?)\s*<\/task_proposal>/);
+              if (tpMatch) {
+                try {
+                  // Clean the JSON string: normalize whitespace, handle special chars
+                  const cleaned = tpMatch[1].trim().replace(/[\r\n]+/g, ' ');
+                  const p = JSON.parse(cleaned);
+                  taskProposal = { title: p.title, description: p.description, category: p.category, priority: p.priority, assignment_id: p.assignment_id };
+                } catch (e) {
+                  console.warn('[AgentChat] Failed to parse task_proposal from content:', e.message);
+                }
+              }
+            }
+            // Strip <task_proposal> tags from displayed content
+            if (content?.includes('<task_proposal>')) {
+              content = content.replace(/<task_proposal>[\s\S]*?<\/task_proposal>/g, '').trim();
+            }
             return {
               id: m.id,
               role: m.role === 'assistant' ? 'agent' : m.role,
-              content: m.content,
+              content,
               attachments,
-              taskProposal: meta?.taskProposal || null,
+              taskProposal,
               time: new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
             };
           }));
@@ -3774,6 +3937,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
 
         {/* Chat area */}
         <div
+          data-chat-area
           className={`flex-1 flex flex-col min-w-0 min-h-0 relative ${dragging ? 'ring-2 ring-inset' : ''}`}
           style={dragging ? { ringColor: agent.accentColor } : {}}
           onDragOver={handleDragOver}
@@ -3821,8 +3985,18 @@ export default function AgentChat({ agentId = 'estimating' }) {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Input area resize handle */}
+          <div
+            onMouseDown={handleInputDragStart}
+            onDoubleClick={() => setInputAreaHeight(null)}
+            className="h-2 shrink-0 cursor-row-resize flex items-center justify-center hover:bg-[#e8e7e3] transition-colors group border-t border-terminal-border bg-terminal-panel"
+            title="Drag to resize input area. Double-click to reset."
+          >
+            <div className="w-10 h-[3px] rounded-full bg-[#d5d3ce] group-hover:bg-[#b5b3ae] transition-colors" />
+          </div>
+
           {/* Input */}
-          <div className="px-5 py-3.5 border-t bg-terminal-panel shrink-0 border-terminal-border">
+          <div data-input-area className="px-5 py-3.5 bg-terminal-panel shrink-0 border-terminal-border flex flex-col" style={inputAreaHeight ? { height: inputAreaHeight } : {}}>
 
             <input
               ref={fileInputRef}
@@ -3843,8 +4017,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
                 ))}
               </div>
             )}
-            <div className="flex items-end gap-2.5">
-              <div className="flex-1 relative">
+            <div className={`flex items-end gap-2.5 ${inputAreaHeight ? 'flex-1 min-h-0' : ''}`}>
+              <div className={`flex-1 relative ${inputAreaHeight ? 'h-full' : ''}`}>
                 <textarea
                   ref={inputRef}
                   value={input}
@@ -3867,8 +4041,8 @@ export default function AgentChat({ agentId = 'estimating' }) {
                   }}
                   placeholder={pendingFiles.length > 0 ? 'Add a message about these files...' : agent.placeholder}
                   rows={1}
-                  className="w-full px-4 py-3 pr-11 border-[1.5px] border-terminal-border rounded-[14px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none resize-none min-h-[44px] max-h-[120px] focus:bg-terminal-panel transition-colors placeholder:text-[#c5c5bc]"
-                  style={{ '--tw-ring-color': agent.accentColor }}
+                  className={`w-full px-4 py-3 pr-11 border-[1.5px] border-terminal-border rounded-[14px] text-[13px] text-terminal-text bg-[#f5f4f0] outline-none resize-none min-h-[44px] focus:bg-terminal-panel transition-colors placeholder:text-[#c5c5bc] ${inputAreaHeight ? 'overflow-y-auto h-full' : ''}`}
+                  style={{ maxHeight: inputAreaHeight ? undefined : '120px', '--tw-ring-color': agent.accentColor }}
                   onFocus={e => e.target.style.borderColor = agent.accentColor}
                   onBlur={e => e.target.style.borderColor = ''}
                 />
