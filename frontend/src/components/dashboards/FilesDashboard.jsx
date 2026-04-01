@@ -1944,41 +1944,61 @@ function NewsletterViewerModal({ newsletter, onClose }) {
 
   useEffect(() => {
     if (!contentRef.current) return;
-    // Find ALL divs with a left border (any color) and inject task buttons
-    // on those that appear inside or after the RECOMMENDED ACTIONS section
-    const allDivs = contentRef.current.querySelectorAll('div');
-    const borderedDivs = Array.from(allDivs).filter(div => {
+    const el = contentRef.current;
+    const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--t-ui-accent').trim() || '#1a6b3c';
+
+    // Handle Claude-generated action buttons (class="action-btn")
+    el.querySelectorAll('a.action-btn, [data-action]').forEach(btn => {
+      btn.style.cursor = 'pointer';
+      btn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const title = btn.getAttribute('data-title') || btn.closest('div')?.textContent?.slice(0, 100) || '';
+        const actionType = btn.getAttribute('data-action') || 'draft-email';
+        const actionText = btn.closest('div')?.textContent?.replace(btn.textContent, '').replace(/^\d+\.\s*/, '').trim() || title;
+        if (actionType === 'draft-email') {
+          const prefill = `From today's intelligence brief, draft an email for this action:\n\n${actionText}\n\nGenerate the email draft immediately. Format it as:\nTo: [best contact email]\nSubject: [subject line]\n\n[email body]\n\nDo not explain - just write the draft.`;
+          localStorage.setItem('coppice_chat_prefill', prefill);
+          window.location.hash = 'hivemind-chat';
+        } else {
+          const prefill = `From today's intelligence brief:\n\n${actionText}\n\nBefore doing anything, explain what you would do for this task. I'll confirm before you execute.`;
+          localStorage.setItem('coppice_chat_prefill', prefill);
+          window.location.hash = 'hivemind-chat';
+        }
+        onClose();
+      };
+    });
+
+    // Fallback: find bordered action divs without buttons and inject "Draft Email" buttons
+    const headings = el.querySelectorAll('h2, h3, strong');
+    let actionsHeading = null;
+    headings.forEach(h => {
+      if (/recommended\s*actions|mining\s*actions|renewables\s*outreach/i.test(h.textContent)) actionsHeading = h;
+    });
+
+    const borderedDivs = Array.from(el.querySelectorAll('div')).filter(div => {
       const style = div.getAttribute('style') || '';
       return /border-left:\s*4px\s+solid\s+#/i.test(style);
     });
 
-    // Find the RECOMMENDED ACTIONS heading
-    const headings = contentRef.current.querySelectorAll('h2, h3, strong');
-    let actionsHeading = null;
-    headings.forEach(h => {
-      if (/recommended\s*actions/i.test(h.textContent)) actionsHeading = h;
-    });
-
     borderedDivs.forEach(div => {
-      if (div.querySelector('.newsletter-action-btn')) return; // already injected
-      // Only inject buttons after the RECOMMENDED ACTIONS heading
+      if (div.querySelector('.newsletter-action-btn') || div.querySelector('.action-btn') || div.querySelector('[data-action]')) return;
       if (actionsHeading) {
         const pos = actionsHeading.compareDocumentPosition(div);
-        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) return; // div must come AFTER the heading
+        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) return;
       }
       const text = div.textContent?.trim() || '';
       if (!text) return;
       const btn = document.createElement('button');
       btn.className = 'newsletter-action-btn';
-      btn.textContent = 'Start task in chat';
-      btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:6px 14px;background:#1e3a5f;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background 0.15s;';
-      btn.onmouseenter = () => { btn.style.background = '#2a4f7a'; };
-      btn.onmouseleave = () => { btn.style.background = '#1e3a5f'; };
+      btn.textContent = 'Draft Email';
+      btn.style.cssText = `display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:8px 18px;background:${accentColor};color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.15s;`;
+      btn.onmouseenter = () => { btn.style.opacity = '0.85'; };
+      btn.onmouseleave = () => { btn.style.opacity = '1'; };
       btn.onclick = (e) => {
         e.stopPropagation();
-        // Extract the action text and create a chat prefill
-        const actionText = text.replace(/^Start task in chat\s*/, '').replace(/^\d+\.\s*/, '').trim();
-        const prefill = `From today's daily brief:\n\n${actionText}\n\nBefore doing anything, explain what you would do for this task - what email you'd draft, who you'd contact, what you'd research, etc. I'll confirm before you execute.`;
+        const actionText = text.replace(/^Draft Email\s*/, '').replace(/^Start task in chat\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        const prefill = `From today's intelligence brief, draft an email for this action:\n\n${actionText}\n\nGenerate the email draft immediately. Format it as:\nTo: [best contact email]\nSubject: [subject line]\n\n[email body]\n\nDo not explain - just write the draft.`;
         localStorage.setItem('coppice_chat_prefill', prefill);
         window.location.hash = 'hivemind-chat';
         onClose();
@@ -2439,7 +2459,7 @@ export default function FilesDashboard() {
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-[#2c5282] border border-[#1e3a5f] hover:bg-[#1e3a5f] transition-colors disabled:opacity-50 font-heading"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white bg-[var(--t-ui-accent)] border border-[var(--t-ui-accent)] hover:opacity-90 transition-colors disabled:opacity-50 font-heading"
         >
           <Upload size={12} className={uploading ? 'animate-spin' : ''} />
           {uploading ? 'Uploading...' : 'Upload'}
@@ -2522,7 +2542,7 @@ export default function FilesDashboard() {
                     {name === 'Meetings'
                       ? <Mic size={14} className={`shrink-0 ${isSelected ? 'text-[#7c3aed]' : 'opacity-50'}`} />
                       : name === 'Daily Briefs'
-                      ? <Newspaper size={14} className={`shrink-0 ${isSelected ? 'text-[#1e3a5f]' : 'opacity-50'}`} />
+                      ? <Newspaper size={14} className={`shrink-0 ${isSelected ? 'text-[var(--t-ui-accent,#1e3a5f)]' : 'opacity-50'}`} />
                       : <FolderOpen size={14} className={`shrink-0 ${isSelected ? 'text-terminal-green' : 'opacity-50'}`} />
                     }
                     <span className="truncate">{name}</span>

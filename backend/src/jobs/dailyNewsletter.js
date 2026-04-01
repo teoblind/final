@@ -303,7 +303,12 @@ IMPORTANT RULES FOR CONTACTS:
     - Who to contact (name, company, role)
     - Why now (what triggered the outreach opportunity)
     - Suggested approach (e.g., "Propose BTM mining colocation at their new 200MW solar farm to monetize curtailment")
-    - Draft one-liner message if a verified contact is available`
+    - Draft one-liner message if a verified contact is available
+
+For each recommended action in sections 9 and 10, add a button styled as:
+<a href="#" class="action-btn" data-action="draft-email" data-title="ACTION_TITLE_HERE" style="display:inline-block;background:${config.color || '#1a6b3c'};color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin-top:8px;">Draft Email</a>
+
+Use "Draft Email" for outreach actions and "Start Task" for operations/research actions. Replace ACTION_TITLE_HERE with a short title for the action.`
     : `SECTIONS (include only sections with actual findings):
 
 1. **NEW PROJECT OPPORTUNITIES** - Projects where ${config.name} could bid. Include: project name, location, estimated value if known, GC(s) involved, why it's relevant. Flag if a GC is one they've worked with before.
@@ -314,7 +319,12 @@ IMPORTANT RULES FOR CONTACTS:
 
 4. **LINKEDIN HIGHLIGHTS** - Interesting posts or announcements from construction industry professionals (if any LinkedIn results were found).
 
-5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.`;
+5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
+
+For each recommended action, add a button styled as:
+<a href="#" class="action-btn" data-action="draft-email" data-title="ACTION_TITLE_HERE" style="display:inline-block;background:${config.color || '#1e3a5f'};color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin-top:8px;">Draft Email</a>
+
+Use "Draft Email" for outreach actions and "Start Task" for research/analysis actions. Replace ACTION_TITLE_HERE with a short title for the action.`;
 
   const targetLength = isSangha ? '1200-1800 words' : '500-800 words';
 
