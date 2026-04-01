@@ -532,6 +532,30 @@ router.get('/entities', async (req, res) => {
 });
 
 /**
+ * DELETE /entities/:id — Delete an entity
+ */
+router.delete('/entities/:id', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+
+    // Delete related links first
+    db.prepare('DELETE FROM knowledge_links WHERE entity_id = ?').run(id);
+    // Delete the entity
+    const result = db.prepare('DELETE FROM knowledge_entities WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Entity not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete entity error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * POST /meeting-complete — Process a completed meeting: extract per-person tasks + send emails
  *
  * Called by MeetingBot after transcription + summarization.

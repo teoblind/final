@@ -1605,7 +1605,7 @@ function ContextSection({ title, meta, children, defaultOpen = true, onAdd }) {
   );
 }
 
-function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin, onPin, onNavigateThread }) {
+function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin, onPin, onDeleteEntity, onNavigateThread }) {
   const [showPinSearch, setShowPinSearch] = useState(false);
   const [pinSearchQuery, setPinSearchQuery] = useState('');
   const [pinSearchResults, setPinSearchResults] = useState([]);
@@ -1826,15 +1826,13 @@ function ContextPanel({ agentId, approvalContext, threadId, contextData, onUnpin
                     <div className="text-[12px] font-semibold text-terminal-text truncate">{e.name}</div>
                     <div className="text-[10px] text-[#9a9a92] capitalize">{e.entity_type}</div>
                   </div>
-                  {e._pinId && (
-                    <button
-                      onClick={(ev) => { ev.stopPropagation(); onUnpin?.(e._pinId); }}
-                      className="opacity-0 group-hover/entity:opacity-100 transition-opacity p-0.5 hover:bg-[#e8e7e3] rounded shrink-0"
-                      title="Remove"
-                    >
-                      <X className="w-3 h-3 text-[#9a9a92]" />
-                    </button>
-                  )}
+                  <button
+                    onClick={(ev) => { ev.stopPropagation(); if (e._pinId) onUnpin?.(e._pinId); onDeleteEntity?.(e.id); }}
+                    className="opacity-0 group-hover/entity:opacity-100 transition-opacity p-0.5 hover:bg-red-50 rounded shrink-0"
+                    title="Delete entity"
+                  >
+                    <Trash2 className="w-3 h-3 text-[#9a9a92] hover:text-red-500" />
+                  </button>
                 </div>
                 {expandedEntity === e.id && e.metadata && Object.keys(e.metadata).length > 0 && (
                   <div className="mt-2 pt-2 border-t border-[#f0eeea]">
@@ -3026,6 +3024,7 @@ export default function AgentChat({ agentId = 'estimating' }) {
               role: m.role === 'assistant' ? 'agent' : m.role,
               content: m.content,
               attachments,
+              taskProposal: meta?.taskProposal || null,
               time: new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
             };
           }));
@@ -3943,6 +3942,14 @@ export default function AgentChat({ agentId = 'estimating' }) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
                     body: JSON.stringify({ pinType, refId, label, metadata }),
+                  });
+                  refreshContextData();
+                }}
+                onDeleteEntity={async (entityId) => {
+                  const token = getAuthToken();
+                  await fetch(`${API_BASE}/v1/knowledge/entities/${entityId}`, {
+                    method: 'DELETE',
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
                   });
                   refreshContextData();
                 }}
