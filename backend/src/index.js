@@ -627,6 +627,11 @@ app.get('/sitemap.xml', (req, res) => {
   res.sendFile(join(__dirname, '../../sitemap.xml'));
 });
 
+// Serve voice-agent.html for Recall.ai output_media bots
+app.get('/voice-agent', (req, res) => {
+  res.sendFile(join(__dirname, '../public/voice-agent.html'));
+});
+
 // Serve static frontend files in production
 const frontendPath = join(__dirname, '../../frontend/dist');
 app.use(express.static(frontendPath));

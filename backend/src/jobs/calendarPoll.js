@@ -250,6 +250,15 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
           continue;
         }
 
+        // Check if any existing bot (including recovered ones) is already in this meeting
+        const alreadyInMeeting = [...activeBots.values()].some(b =>
+          b.link && link.includes(b.link.split('?')[0]) || b.link?.split('?')[0] === link.split('?')[0]
+        );
+        if (alreadyInMeeting) {
+          joinedEvents.add(eventKey); // mark so we don't re-check every cycle
+          continue;
+        }
+
         // Skip declined events
         const selfAttendee = (event.attendees || []).find(
           a => a.self || a.email?.toLowerCase() === agentEmail.toLowerCase()
@@ -811,6 +820,47 @@ async function poll() {
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────
 
+/**
+ * On startup, check Recall.ai for bots already in calls.
+ * Pre-populate joinedEvents so we don't create duplicates after PM2 restart.
+ */
+async function recoverActiveBots() {
+  const RECALL_API_KEY = process.env.RECALL_API_KEY;
+  const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';
+  if (!RECALL_API_KEY) return;
+
+  try {
+    const res = await fetch(
+      `https://${RECALL_REGION}.recall.ai/api/v1/bot/?status_code__in=in_call_recording,in_call_not_recording,joining_call,in_waiting_room`,
+      { headers: { Authorization: `Token ${RECALL_API_KEY}` } }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const bots = data.results || data;
+    if (!Array.isArray(bots) || bots.length === 0) return;
+
+    for (const bot of bots) {
+      const meetingUrl = bot.meeting_url?.meeting_id
+        ? `recall:${bot.meeting_url.meeting_id}`
+        : bot.meeting_url?.business_meeting_id || bot.id;
+      // Use bot ID as event key since we can't recover the original eventKey
+      const eventKey = `recovered:${bot.id}`;
+      joinedEvents.add(eventKey);
+      activeBots.set(eventKey, {
+        botId: bot.id,
+        tenantId: 'unknown',
+        meetingName: bot.bot_name || 'Recovered',
+        link: meetingUrl,
+        attendees: [],
+        startTime: bot.join_at || new Date().toISOString(),
+      });
+    }
+    console.log(`[CalendarPoll] Recovered ${bots.length} active bot(s) from Recall.ai - will not duplicate`);
+  } catch (e) {
+    console.warn(`[CalendarPoll] Bot recovery failed (non-fatal): ${e.message}`);
+  }
+}
+
 export function startCalendarPollScheduler(intervalSec = POLL_INTERVAL_SEC) {
   if (pollTimer) {
     console.log('[CalendarPoll] Scheduler already running');
@@ -819,7 +869,10 @@ export function startCalendarPollScheduler(intervalSec = POLL_INTERVAL_SEC) {
 
   console.log(`[CalendarPoll] Starting scheduler (interval: ${intervalSec}s)`);
 
-  // Initial poll after short startup delay
+  // Recover active bots before first poll to prevent duplicates after restart
+  recoverActiveBots().catch(e => console.warn('[CalendarPoll] Recovery error:', e.message));
+
+  // Initial poll after short startup delay (gives recovery time to complete)
   setTimeout(() => {
     poll().catch(err => console.error('[CalendarPoll] Initial poll failed:', err.message));
   }, 10000);
