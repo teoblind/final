@@ -367,7 +367,7 @@ function SettingsTab({ qbConnected, billcomConnected, onConnectQB, onDisconnectQ
               </p>
               <button
                 onClick={() => {
-                  window.open('https://app.bill.com/BillSettings?action=index', '_blank', 'noopener,noreferrer');
+                  window.open('https://app.bill.com', '_blank', 'noopener,noreferrer');
                   setBcStep(1);
                 }}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-[13px] font-semibold text-white bg-[#00B9F1] hover:bg-[#00a5d8] transition-colors"
