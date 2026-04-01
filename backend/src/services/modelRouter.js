@@ -51,16 +51,32 @@ export function selectModel(agentId, messageContent, conversationLength = 0, has
 
 /**
  * Estimate API cost for a request (for audit trail logging).
- * Rough estimates based on Anthropic pricing.
+ * Cache-aware pricing based on Anthropic rates (per 1M tokens).
+ * Adapted from Claude Code's cost-tracker pattern.
  */
-export function estimateCost(inputTokens, outputTokens, model) {
-  const pricing = {
-    [HAIKU]: { input: 0.001, output: 0.005 },    // per 1K tokens
-    [SONNET]: { input: 0.003, output: 0.015 },
-    [OPUS]: { input: 0.015, output: 0.075 },
-  };
-  const rate = pricing[model] || pricing[SONNET];
-  return (inputTokens / 1000 * rate.input) + (outputTokens / 1000 * rate.output);
+const PRICING = {
+  [HAIKU]: {
+    input: 0.80, output: 4.0,
+    cacheWrite: 1.0, cacheRead: 0.08,
+  },
+  [SONNET]: {
+    input: 3.0, output: 15.0,
+    cacheWrite: 3.75, cacheRead: 0.30,
+  },
+  [OPUS]: {
+    input: 15.0, output: 75.0,
+    cacheWrite: 18.75, cacheRead: 1.50,
+  },
+};
+
+export function estimateCost(inputTokens, outputTokens, model, cacheReadTokens = 0, cacheWriteTokens = 0) {
+  const rate = PRICING[model] || PRICING[SONNET];
+  return (
+    (inputTokens / 1_000_000) * rate.input +
+    (outputTokens / 1_000_000) * rate.output +
+    (cacheReadTokens / 1_000_000) * rate.cacheRead +
+    (cacheWriteTokens / 1_000_000) * rate.cacheWrite
+  );
 }
 
 export function getOpusModel() { return OPUS; }

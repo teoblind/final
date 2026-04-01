@@ -37,6 +37,109 @@ const MODEL = process.env.CHAT_MODEL || 'claude-sonnet-4-20250514';
 const MAX_HISTORY = 50; // max messages to include in context
 const WORKSPACE_AGENT_URL = process.env.WORKSPACE_AGENT_URL || 'http://localhost:3010';
 
+// ─── Prompt Caching (adapted from Claude Code source) ────────────────────────
+// Adds cache_control breakpoints to the last N user messages so repeated
+// context (system prompt + early conversation) gets cached by the API.
+// Saves ~90% on input token costs for multi-turn conversations.
+const PROMPT_CACHING_ENABLED = process.env.DISABLE_PROMPT_CACHING !== 'true';
+const CACHE_BREAKPOINT_COUNT = 2; // Cache last 2 user messages
+
+function addCacheBreakpoints(messages) {
+  if (!PROMPT_CACHING_ENABLED) return messages;
+  const len = messages.length;
+  return messages.map((msg, i) => {
+    // Only add cache breakpoints to the last N user messages
+    if (msg.role !== 'user' || i < len - (CACHE_BREAKPOINT_COUNT * 2)) return msg;
+    const content = msg.content;
+    if (typeof content === 'string') {
+      return {
+        ...msg,
+        content: [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }],
+      };
+    }
+    if (Array.isArray(content) && content.length > 0) {
+      const last = content.length - 1;
+      return {
+        ...msg,
+        content: content.map((block, j) =>
+          j === last ? { ...block, cache_control: { type: 'ephemeral' } } : block
+        ),
+      };
+    }
+    return msg;
+  });
+}
+
+// ─── API Retry with Exponential Backoff (adapted from Claude Code source) ────
+// Respects retry-after headers, handles 429/5xx/connection errors.
+const MAX_API_RETRIES = 5;
+const BASE_RETRY_DELAY_MS = 500;
+
+function getRetryDelay(attempt, retryAfterHeader) {
+  if (retryAfterHeader) {
+    const seconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(seconds)) return seconds * 1000;
+  }
+  return Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1), 32000);
+}
+
+function shouldRetryError(error) {
+  if (error?.status === 429) return true;  // Rate limited
+  if (error?.status === 408) return true;  // Request timeout
+  if (error?.status === 409) return true;  // Lock timeout
+  if (error?.status === 529) return true;  // Overloaded
+  if (error?.status >= 500) return true;   // Server errors
+  if (error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT') return true;
+  return false;
+}
+
+async function withRetry(operation, label = 'API') {
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_API_RETRIES + 1; attempt++) {
+    try {
+      return await operation(attempt);
+    } catch (error) {
+      lastError = error;
+      if (attempt > MAX_API_RETRIES || !shouldRetryError(error)) throw error;
+      const retryAfter = error?.headers?.['retry-after'] ?? null;
+      const delayMs = getRetryDelay(attempt, retryAfter);
+      console.warn(`[${label}] ${error.status || error.code || 'error'} - retrying in ${Math.round(delayMs / 1000)}s (attempt ${attempt}/${MAX_API_RETRIES})`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError;
+}
+
+// ─── Concurrent Tool Execution (adapted from Claude Code source) ─────────────
+// Read-only tools run in parallel; any write tool forces serial execution.
+const READ_ONLY_TOOLS = new Set([
+  'search_knowledge', 'search_drive', 'get_open_action_items',
+  'search_leads', 'get_lead_details', 'get_thread_context',
+  'gws_sheets_read', 'gws_docs_read', 'gws_drive_list',
+  'pin_to_context', 'get_pinned_context',
+]);
+const MAX_TOOL_CONCURRENCY = 8;
+
+async function executeToolsConcurrently(toolBlocks, executeFn) {
+  const allReadOnly = toolBlocks.every(b => READ_ONLY_TOOLS.has(b.name));
+  if (allReadOnly && toolBlocks.length > 1) {
+    // Run read-only tools in parallel (batched)
+    const results = [];
+    for (let i = 0; i < toolBlocks.length; i += MAX_TOOL_CONCURRENCY) {
+      const batch = toolBlocks.slice(i, i + MAX_TOOL_CONCURRENCY);
+      const batchResults = await Promise.all(batch.map(executeFn));
+      results.push(...batchResults);
+    }
+    return results;
+  }
+  // Serial execution for write tools
+  const results = [];
+  for (const block of toolBlocks) {
+    results.push(await executeFn(block));
+  }
+  return results;
+}
+
 // ─── Workspace Tools (Anthropic tool-use format) ────────────────────────────
 
 const WORKSPACE_TOOLS = [
@@ -3172,6 +3275,9 @@ SUB-AGENTS YOU CAN DELEGATE TO (use the delegate_to_agent tool):
 - "sales" : Sales calls, follow-ups, CRM pipeline management
 - "workflow" : Job tracking, project management, scheduling
 - "pitch-deck" : Presentations and pitch decks with AI-generated slides, background images, and professional layouts
+- "pumping" : Concrete pumping operations - scheduling, dispatching, invoicing, equipment maintenance (2 boom pumps + 3 line pumps)
+- "marketing" : Business development - project discovery, GC outreach, lead management, campaign tracking
+- "compliance" : Licenses, permits, insurance, OSHA, certifications, safety incidents across all DACP entities
 
 IMPORTANT ROUTING RULES:
 1. When the user asks for complex multi-step work (research + report, analysis + PDF, competitive research + email), ALWAYS use the propose_task tool to create a task proposal the user can approve before execution.
@@ -3250,6 +3356,109 @@ You can help with:
 You can create Google Docs and Sheets for email templates, contact lists, and outreach tracking.
 
 When drafting emails, use a professional but conversational tone appropriate for construction industry communication. Include specific project names, numbers, and dates.`,
+
+  pumping: `You are the Concrete Pumping Operations Bot for DACP Holdings. You manage scheduling, dispatching, invoicing, and equipment maintenance for Danny's concrete pumping company.
+
+FLEET:
+- 2 boom pumps (Putzmeister 47Z, Schwing S43SX) - rates $250-275/hr
+- 3 line pumps (Putzmeister TK50, Schwing SP305, Reed C50HP) - rates $140-160/hr
+
+YOUR RESPONSIBILITIES:
+1. SCHEDULING - Manage pump bookings, prevent double-bookings, optimize routes between job sites
+2. DISPATCHING - Assign equipment to jobs based on requirements (boom for elevated pours, line for residential)
+3. INVOICING - Generate invoices after job completion, track payments, flag overdue accounts
+4. EQUIPMENT MAINTENANCE - Track service schedules, flag upcoming/overdue maintenance
+5. CUSTOMER COMMUNICATION - Handle booking requests, confirmations, and follow-ups
+
+RED FLAG MONITORING:
+- Flag any invoice >30 days outstanding
+- Flag completed jobs without invoices sent
+- Flag equipment past due for service
+- Flag scheduling conflicts or gaps
+- Flag customers with payment history issues
+
+Report weekly to the CEO dashboard with: total jobs completed, revenue collected, outstanding AR, equipment utilization rate, and any red flags.
+
+When discussing pricing, reference standard rates. Boom pumps: $250-275/hr or $2,000-2,200/day. Line pumps: $140-160/hr or $1,100-1,300/day. Minimum 4-hour call.
+
+Keep responses concise and focused on operations.`,
+
+  marketing: `You are the Marketing & Business Development Bot for DACP Construction. You find new construction projects and GC relationships to grow the bid pipeline.
+
+YOUR RESPONSIBILITIES:
+1. PROJECT DISCOVERY - Monitor news, LinkedIn, Twitter, and construction databases for new projects in Texas
+2. GC OUTREACH - Identify general contractors on new projects, find contact emails, send introduction emails
+3. LEAD MANAGEMENT - Track all leads from discovery to proposal to award
+4. CAMPAIGN TRACKING - Monitor outreach campaigns, response rates, and meetings booked
+5. FOLLOW-UP - Automated follow-up every 5 days on contacted leads until response
+
+TARGET MARKETS:
+- Data centers (primary - DACP has Riot Platforms experience)
+- Medical facilities
+- Municipal/public works
+- Highway/infrastructure (TXDOT, Harris County)
+- Commercial office/retail
+- Aviation/airport
+
+IDEAL PROJECT PROFILE:
+- Texas-based (Houston metro preferred, but statewide)
+- Concrete subcontract value >$500K
+- GC is a known relationship or top-50 contractor
+- Project type matches DACP's specialties (foundations, flatwork, structural concrete, masonry)
+
+RED FLAG MONITORING:
+- Leads going stale (>30 days no response)
+- Missed follow-up dates
+- Response rate dropping below 20%
+- Pipeline value declining month-over-month
+- No new leads discovered in 7+ days
+
+Report weekly to the CEO dashboard with: new leads found, outreach sent, responses received, meetings booked, pipeline value, and any red flags.
+
+When creating outreach emails, emphasize DACP's DBE certification, Riot Platforms track record, and concrete specialization.
+
+Keep responses concise and data-driven.`,
+
+  compliance: `You are the Compliance & Safety Bot for DACP Construction. You track licenses, permits, insurance, certifications, OSHA requirements, and safety incidents across all DACP entities.
+
+ENTITIES COVERED:
+- DACP Construction LLC (construction)
+- DACP Holdings concrete pumping company
+- Operations in Texas, Louisiana, and Florida
+
+YOUR RESPONSIBILITIES:
+1. LICENSE TRACKING - Monitor all state contractor licenses, renewal dates, and costs
+2. INSURANCE MANAGEMENT - Track GL, workers comp, auto, umbrella policies and renewal dates
+3. CERTIFICATION TRACKING - OSHA 10/30-hour cards, DBE certification, specialty certifications
+4. PERMIT MONITORING - City/county permits for active job sites
+5. SAFETY INCIDENTS - Log and track incidents, OSHA violations, corrective actions
+6. BONDING - Track surety bond capacity and renewals
+
+CRITICAL THRESHOLDS:
+- LICENSE/PERMIT: Flag 60 days before expiry (warning), 30 days (urgent), expired (critical)
+- INSURANCE: Flag 90 days before renewal (planning), 30 days (urgent)
+- OSHA CARDS: Flag 6 months before expiry, escalate if expired
+- INCIDENTS: All high/critical severity must have resolution within 14 days
+- BONDING: Flag if active job commitments exceed 80% of bonding capacity
+
+RED FLAG MONITORING:
+- Any expired license, permit, or certification
+- Insurance policies within 30 days of renewal without quote
+- Open OSHA violations without corrective action plan
+- Field crew members with expired safety certifications
+- Missed inspection dates on active jobs
+- Workers comp experience mod increasing above 1.0
+
+Report weekly to the CEO dashboard with: total active items, items expiring within 60 days, expired items, open incidents, resolved incidents, and any red flags.
+
+TEXAS-SPECIFIC REQUIREMENTS:
+- General Contractor Registration (annual, $800)
+- TCEQ permits for concrete washout
+- Harris County building permits
+- TXDOT prequalification for highway work
+- City of Houston concrete contractor permit
+
+Keep responses precise. Always include specific dates, costs, and responsible parties when discussing compliance items.`,
 
   sangha: `You are the Sangha Agent, the AI assistant for Sangha Renewables (fka Sangha Systems) — a Bitcoin mining and renewable energy company that co-locates mining data centers with renewable energy sites.
 
@@ -4293,14 +4502,14 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
     const useThinking = !!thinkingParams.thinking;
     const maxTokens = useThinking ? 16384 : 4096;
 
-    const completion = await getAnthropic().messages.create({
+    const completion = await withRetry(() => getAnthropic().messages.create({
       model: selectedModel,
       max_tokens: maxTokens,
       system: systemPrompt,
-      messages,
+      messages: addCacheBreakpoints(messages),
       tools,
       ...thinkingParams,
-    });
+    }), 'Chat');
 
     // Handle tool use — agent wants to invoke a workspace tool
     if (completion.stop_reason === 'tool_use') {
@@ -4430,14 +4639,14 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
 
       const maxTurns = getMaxTurns(agentId);
       const loopStartTime = Date.now();
-      let currentResponse = await getAnthropic().messages.create({
+      let currentResponse = await withRetry(() => getAnthropic().messages.create({
         model: selectedModel,
         max_tokens: maxTokens,
         system: systemPrompt,
-        messages: loopMessages,
+        messages: addCacheBreakpoints(loopMessages),
         tools,
         ...thinkingParams,
-      });
+      }), 'ChatLoop');
       totalInputTokens += currentResponse.usage?.input_tokens || 0;
       totalOutputTokens += currentResponse.usage?.output_tokens || 0;
 
@@ -4519,14 +4728,14 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
         // Dynamic max_tokens: increase after first tool round for longer reasoning
         const loopMaxTokens = useThinking ? 16384 : EXPANDED_MAX_TOKENS;
 
-        currentResponse = await getAnthropic().messages.create({
+        currentResponse = await withRetry(() => getAnthropic().messages.create({
           model: selectedModel,
           max_tokens: loopMaxTokens,
           system: systemPrompt,
-          messages: loopMessages,
+          messages: addCacheBreakpoints(loopMessages),
           tools,
           ...thinkingParams,
-        });
+        }), 'ChatLoop');
         totalInputTokens += currentResponse.usage?.input_tokens || 0;
         totalOutputTokens += currentResponse.usage?.output_tokens || 0;
       }
@@ -4546,12 +4755,12 @@ You are the Coppice Assistant, a product support chatbot embedded in the dashboa
             content: `[System: You have reached the ${reason} for this request. Please provide your best response with the information gathered so far. Do not make any more tool calls.]`,
           },
         ];
-        currentResponse = await getAnthropic().messages.create({
+        currentResponse = await withRetry(() => getAnthropic().messages.create({
           model: selectedModel,
           max_tokens: EXPANDED_MAX_TOKENS,
           system: systemPrompt,
-          messages: wrapUpMessages,
-        });
+          messages: addCacheBreakpoints(wrapUpMessages),
+        }), 'ChatWrapUp');
         totalInputTokens += currentResponse.usage?.input_tokens || 0;
         totalOutputTokens += currentResponse.usage?.output_tokens || 0;
       }
@@ -4960,11 +5169,14 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
 
     // ─── Helper: run one streaming API call, collecting text + tool_use blocks ─
     async function streamOneRound(roundMessages, roundMaxTokens) {
+      // Note: messages.stream() returns synchronously; errors surface on consumption.
+      // Retry is not practical for streaming (partial text already sent to client).
+      // Prompt caching still applies for cost savings.
       const stream = getAnthropic().messages.stream({
         model: selectedModel,
         max_tokens: roundMaxTokens || maxTokens,
         system: systemPrompt,
-        messages: roundMessages,
+        messages: addCacheBreakpoints(roundMessages),
         tools,
       });
 
@@ -5034,53 +5246,47 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
         onChunk(JSON.stringify({ _type: 'progress', iteration, maxTurns, tools: toolNames }));
 
         // Build tool_result messages for all requested tools
+        // Uses concurrent execution for read-only tools (adapted from Claude Code)
         const toolResultContents = [];
 
-        for (const toolBlock of toolBlocks) {
+        const executeOne = async (toolBlock) => {
           const { id: toolUseId, name: toolName, input: toolInput } = toolBlock;
-
-          // Send open tag to frontend — shows spinner widget
           onChunk(`\n<${toolName}>`);
-
           const { toolResult, toolIsError } = await executeToolWithRetry(toolName, toolInput, tenantId);
           _toolsUsed.push(toolName);
-
-          // Send close tag to frontend — shows checkmark widget
           onChunk(`</${toolName}>\n`);
 
+          // Emit workspace file created event
+          if (toolName.startsWith('workspace_create_') && toolResult && !toolIsError) {
+            const wsTypeMap = { workspace_create_doc: 'doc', workspace_create_sheet: 'sheet', workspace_create_slides: 'slides' };
+            onChunk(JSON.stringify({
+              _type: 'workspace', action: 'created',
+              wsType: wsTypeMap[toolName] || 'doc',
+              fileId: toolResult.file_id, url: toolResult.url,
+              title: toolInput?.title || 'Untitled', folder: toolInput?.folder || '',
+            }));
+          }
+
+          // Emit task proposal event
+          if (toolName === 'propose_task' && toolResult?._task_proposal) {
+            onChunk(JSON.stringify({
+              _type: 'task_proposal',
+              assignment_id: toolResult.assignment_id, title: toolResult.title,
+              description: toolResult.description, category: toolResult.category,
+              priority: toolResult.priority, sources: toolResult.sources || [],
+            }));
+          }
+
+          return { toolUseId, toolName, toolInput, toolResult, toolIsError };
+        };
+
+        const toolResults = await executeToolsConcurrently(toolBlocks, executeOne);
+
+        for (const { toolUseId, toolName, toolInput, toolResult, toolIsError } of toolResults) {
           allToolResults.push({ tool_used: toolName, tool_input: toolInput, tool_result: toolResult, is_error: toolIsError });
           lastToolName = toolName;
           lastToolInput = toolInput;
           lastToolResult = toolResult;
-
-          // Emit workspace file created event so frontend can show inline Drive card
-          if (toolName.startsWith('workspace_create_') && toolResult && !toolIsError) {
-            const wsTypeMap = { workspace_create_doc: 'doc', workspace_create_sheet: 'sheet', workspace_create_slides: 'slides' };
-            onChunk(JSON.stringify({
-              _type: 'workspace',
-              action: 'created',
-              wsType: wsTypeMap[toolName] || 'doc',
-              fileId: toolResult.file_id,
-              url: toolResult.url,
-              title: toolInput?.title || 'Untitled',
-              folder: toolInput?.folder || '',
-            }));
-          }
-
-          // Emit task proposal as a special SSE event so frontend can render an inline card
-          if (toolName === 'propose_task' && toolResult?._task_proposal) {
-            onChunk(JSON.stringify({
-              _type: 'task_proposal',
-              assignment_id: toolResult.assignment_id,
-              title: toolResult.title,
-              description: toolResult.description,
-              category: toolResult.category,
-              priority: toolResult.priority,
-              sources: toolResult.sources || [],
-            }));
-          }
-
-          // Append the tool result to the tool_result content array
           toolResultContents.push({
             type: 'tool_result',
             tool_use_id: toolUseId,
