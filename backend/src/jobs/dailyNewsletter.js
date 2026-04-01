@@ -35,11 +35,14 @@ const TENANT_SEARCH_CONFIG = {
       '{region} construction bid opportunities concrete masonry',
       'general contractor awarded new project Texas commercial industrial',
       'construction industry news Texas DFW infrastructure',
+      'hyperscale data center construction Texas concrete subcontractor needed',
+      'semiconductor factory construction Texas groundbreaking 2026',
     ],
     linkedinQueries: [
       'site:linkedin.com construction project awarded Texas this week',
       'site:linkedin.com general contractor new project DFW concrete',
       'site:linkedin.com data center construction Texas groundbreaking',
+      'site:linkedin.com "concrete" OR "masonry" OR "foundations" Dallas Fort Worth project',
     ],
   },
   // Default config for other tenants
