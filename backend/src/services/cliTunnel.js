@@ -55,7 +55,7 @@ export async function tunnelPrompt({ tenantId, agentId, prompt, maxTurns = 5, ti
  * @param {string} [opts.label]
  * @returns {Promise<{response: string, route: string}>}
  */
-export async function tunnelOrChat({ tenantId, agentId, userId, prompt, threadId = null, chatOptions = {}, maxTurns = 10, timeoutMs = 180_000, label = 'task' }) {
+export async function tunnelOrChat({ tenantId, agentId, userId, prompt, threadId = null, chatOptions = {}, maxTurns = 10, timeoutMs = 180_000, label = 'task', isExecution = false }) {
   try {
     const result = await queryClaudeAgent({
       tenantId,
@@ -63,6 +63,7 @@ export async function tunnelOrChat({ tenantId, agentId, userId, prompt, threadId
       message: prompt,
       maxTurns,
       timeoutMs,
+      isExecution,
     });
     console.log(`[CLITunnel] ${label} completed via ${result.route || 'cli'} in ${(result.durationMs / 1000).toFixed(1)}s`);
     return { response: result.response || '', route: result.route || 'tunnel' };

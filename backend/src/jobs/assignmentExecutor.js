@@ -204,6 +204,7 @@ async function executeAssignment(tenantId, assignment) {
       maxTurns: isResearch ? 200 : 50,
       timeoutMs: isResearch ? 1_800_000 : 600_000,
       label: `Assignment: ${assignment.title}`,
+      isExecution: true,
     });
 
     // 7. Handle the response
@@ -276,6 +277,7 @@ async function resumeAssignment(tenantId, assignment) {
       maxTurns: isResearchResume ? 200 : 50,
       timeoutMs: isResearchResume ? 1_800_000 : 600_000,
       label: `Assignment (resumed): ${assignment.title}`,
+      isExecution: true,
     });
 
     // Decrement info_requests_pending

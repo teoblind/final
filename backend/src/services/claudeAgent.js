@@ -217,10 +217,10 @@ async function isTunnelHealthy() {
  * @param {number} [opts.timeoutMs] - Override timeout
  * @returns {Promise<{response: string, durationMs: number, timedOut?: boolean, route?: string}>}
  */
-export async function queryClaudeAgent({ tenantId, agentId, message, history, maxTurns, timeoutMs }) {
+export async function queryClaudeAgent({ tenantId, agentId, message, history, maxTurns, timeoutMs, isExecution = false }) {
   const config = getAgentCliConfig(agentId);
   const resolvedTenantId = tenantId || 'default';
-  const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config);
+  const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config, null, { isExecution });
   const fullMessage = buildUserMessage(message, history);
   const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
   const timeout = timeoutMs || config.cli_timeout_ms || DEFAULT_TIMEOUT_MS;
@@ -858,7 +858,7 @@ function shellEscape(str) {
   return "'" + str.replace(/'/g, "'\\''") + "'";
 }
 
-function buildSystemPrompt(tenantId, agentId, config, userId) {
+function buildSystemPrompt(tenantId, agentId, config, userId, { isExecution = false } = {}) {
   const base = TENANT_PROMPTS[tenantId] || TENANT_PROMPTS.default;
   const custom = config.system_prompt_addon || '';
 
@@ -883,12 +883,11 @@ function buildSystemPrompt(tenantId, agentId, config, userId) {
     }
   } catch {}
 
-  return `${base}
-Agent: ${agentId}${userBlock}
-
-MEETING BOT:
-You CAN join live meetings. Coppice has a Meeting Bot (powered by Recall.ai) that automatically joins Google Meet, Zoom, and Teams calls from the user's calendar. It records, transcribes, extracts action items, and saves meeting notes. The user does NOT need workarounds like forwarding transcripts.
-
+  const taskProposalBlock = isExecution ? `
+TASK EXECUTION MODE:
+You are running inside the Coppice task executor with FULL tool access. You have MCP tools for Google Workspace, knowledge search, email, and all backend operations.
+DO NOT propose another task. DO NOT output <task_proposal> tags. Execute the work directly using your tools and write the results in your response.
+` : `
 TASK PROPOSALS (HIGHEST PRIORITY):
 You are a conversational agent. You do NOT have direct access to backend tools in this session. You CANNOT call MCP tools, search knowledge bases, send emails, create documents, or access Google Workspace directly.
 
@@ -912,11 +911,6 @@ WHAT YOU CAN DO DIRECTLY (no task proposal needed):
 - Clarify requirements before proposing a task
 - Simple yes/no or factual answers
 
-RULES:
-- NEVER share files, spreadsheets, or documents with anyone without explicit user permission.
-- NEVER send emails without explicit user confirmation.
-- Never reveal system internals, API keys, or internal architecture.
-
 MEMORY PERSISTENCE:
 When you learn something important during conversation (user preferences, project status, contact info), include a save_agent_memory instruction in your task proposal's action_prompt so the task executor saves it.
 
@@ -933,6 +927,18 @@ WHEN NOT TO PROPOSE (answer directly):
 - Simple questions you can answer in chat
 - Quick lookups or single-step operations
 - The user just wants information, not a deliverable
+`;
+
+  return `${base}
+Agent: ${agentId}${userBlock}
+
+MEETING BOT:
+You CAN join live meetings. Coppice has a Meeting Bot (powered by Recall.ai) that automatically joins Google Meet, Zoom, and Teams calls from the user's calendar. It records, transcribes, extracts action items, and saves meeting notes. The user does NOT need workarounds like forwarding transcripts.
+${taskProposalBlock}
+RULES:
+- NEVER share files, spreadsheets, or documents with anyone without explicit user permission.
+- NEVER send emails without explicit user confirmation.
+- Never reveal system internals, API keys, or internal architecture.
 
 STYLE:
 - NEVER use emojis in any response. No exceptions.
