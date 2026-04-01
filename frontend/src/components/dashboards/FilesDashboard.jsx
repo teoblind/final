@@ -1944,23 +1944,28 @@ function NewsletterViewerModal({ newsletter, onClose }) {
 
   useEffect(() => {
     if (!contentRef.current) return;
-    // Find recommended action items (left-bordered divs in brand colors) and inject task buttons
-    // Match both Sangha green (#2d7a2d, #1a6b3c) and DACP navy (#1e3a5f) border colors
-    const actionDivs = contentRef.current.querySelectorAll(
-      'div[style*="border-left: 4px solid #2d7a2d"], div[style*="border-left:4px solid #2d7a2d"],' +
-      'div[style*="border-left: 4px solid #1e3a5f"], div[style*="border-left:4px solid #1e3a5f"],' +
-      'div[style*="border-left: 4px solid #1a6b3c"], div[style*="border-left:4px solid #1a6b3c"]'
-    );
-    // Only inject on action items inside the RECOMMENDED ACTIONS section
-    const headings = contentRef.current.querySelectorAll('h2, h3');
-    let actionsSection = null;
-    headings.forEach(h => {
-      if (/recommended\s*actions/i.test(h.textContent)) actionsSection = h;
+    // Find ALL divs with a left border (any color) and inject task buttons
+    // on those that appear inside or after the RECOMMENDED ACTIONS section
+    const allDivs = contentRef.current.querySelectorAll('div');
+    const borderedDivs = Array.from(allDivs).filter(div => {
+      const style = div.getAttribute('style') || '';
+      return /border-left:\s*4px\s+solid\s+#/i.test(style);
     });
-    actionDivs.forEach(div => {
+
+    // Find the RECOMMENDED ACTIONS heading
+    const headings = contentRef.current.querySelectorAll('h2, h3, strong');
+    let actionsHeading = null;
+    headings.forEach(h => {
+      if (/recommended\s*actions/i.test(h.textContent)) actionsHeading = h;
+    });
+
+    borderedDivs.forEach(div => {
       if (div.querySelector('.newsletter-action-btn')) return; // already injected
-      // Only inject buttons for items that appear after the RECOMMENDED ACTIONS heading
-      if (actionsSection && actionsSection.compareDocumentPosition(div) & Node.DOCUMENT_POSITION_PRECEDING) return;
+      // Only inject buttons after the RECOMMENDED ACTIONS heading
+      if (actionsHeading) {
+        const pos = actionsHeading.compareDocumentPosition(div);
+        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) return; // div must come AFTER the heading
+      }
       const text = div.textContent?.trim() || '';
       if (!text) return;
       const btn = document.createElement('button');
