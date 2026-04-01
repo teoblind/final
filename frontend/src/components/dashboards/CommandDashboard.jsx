@@ -387,15 +387,8 @@ export default function CommandDashboard({ onNavigate }) {
   useEffect(() => {
     async function fetchLeadStats() {
       try {
-        // Token is in sessionStorage under sangha_auth
-        let token = null;
-        try {
-          const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
-          token = session?.tokens?.accessToken;
-        } catch {}
-        if (!token) return;
         const res = await fetch(`${API_BASE}/v1/lead-engine/stats`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: getAuthHeaders(),
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -426,7 +419,7 @@ export default function CommandDashboard({ onNavigate }) {
   useEffect(() => {
     async function fetchApprovals() {
       try {
-        const res = await fetch(`${API_BASE}/v1/approvals?status=pending`);
+        const res = await fetch(`${API_BASE}/v1/approvals?status=pending`, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
         const mapped = (data.items || []).map(item => ({
@@ -444,7 +437,7 @@ export default function CommandDashboard({ onNavigate }) {
     }
     async function fetchInsights() {
       try {
-        const res = await fetch(`${API_BASE}/v1/approvals/insights?status=active`);
+        const res = await fetch(`${API_BASE}/v1/approvals/insights?status=active`, { headers: getAuthHeaders() });
         if (!res.ok) return;
         const data = await res.json();
         const mapped = (data.items || []).map(item => ({
@@ -460,7 +453,7 @@ export default function CommandDashboard({ onNavigate }) {
 
         // Also fetch pinned threads and merge into insights
         try {
-          const pinnedRes = await fetch(`${API_BASE}/v1/chat/pinned-threads`);
+          const pinnedRes = await fetch(`${API_BASE}/v1/chat/pinned-threads`, { headers: getAuthHeaders() });
           if (pinnedRes.ok) {
             const pinnedData = await pinnedRes.json();
             const pinnedInsights = (pinnedData.threads || []).map(thread => ({
@@ -493,7 +486,7 @@ export default function CommandDashboard({ onNavigate }) {
   useEffect(() => {
     async function fetchActionItems() {
       try {
-        const res = await fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`);
+        const res = await fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`, { headers: getAuthHeaders() });
         if (!res.ok) throw new Error();
         const items = await res.json();
         setActionItems(items);
@@ -513,7 +506,7 @@ export default function CommandDashboard({ onNavigate }) {
     try {
       await fetch(`${API_BASE}/v1/knowledge/action-items/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: newStatus }),
       });
     } catch {}
@@ -635,7 +628,7 @@ export default function CommandDashboard({ onNavigate }) {
   const handleApprove = useCallback(async (id) => {
     const item = approvals.find(a => a.id === id);
     try {
-      await fetch(`${API_BASE}/v1/approvals/${id}/approve`, { method: 'POST' });
+      await fetch(`${API_BASE}/v1/approvals/${id}/approve`, { method: 'POST', headers: getAuthHeaders() });
       const toastMap = { email_draft: 'Approved - email sent', tool_action: 'Approved - executing action', meeting_instruction: 'Approved - executing instruction' };
       showToast(toastMap[item?.type] || 'Approved');
     } catch {
@@ -646,7 +639,7 @@ export default function CommandDashboard({ onNavigate }) {
 
   const handleReject = useCallback(async (id) => {
     try {
-      await fetch(`${API_BASE}/v1/approvals/${id}/reject`, { method: 'POST' });
+      await fetch(`${API_BASE}/v1/approvals/${id}/reject`, { method: 'POST', headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Rejected by operator' }) });
       showToast('Rejected');
     } catch {
       showToast('Reject failed');
@@ -658,13 +651,13 @@ export default function CommandDashboard({ onNavigate }) {
   const handleInsightAction = async (insightId, action) => {
     if (action === 'Dismiss' || action === 'Snooze') {
       try {
-        await fetch(`${API_BASE}/v1/approvals/insights/${insightId}/dismiss`, { method: 'POST' });
+        await fetch(`${API_BASE}/v1/approvals/insights/${insightId}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
       } catch {}
       setInsights(prev => prev.filter(i => i.id !== insightId));
       showToast(action === 'Dismiss' ? 'Insight dismissed' : 'Snoozed for 24 hours');
     } else if (action === 'Mark Done') {
       try {
-        await fetch(`${API_BASE}/v1/approvals/insights/${insightId}/dismiss`, { method: 'POST' });
+        await fetch(`${API_BASE}/v1/approvals/insights/${insightId}/dismiss`, { method: 'POST', headers: getAuthHeaders() });
       } catch {}
       setInsights(prev => prev.filter(i => i.id !== insightId));
       showToast('Marked as done');
@@ -674,9 +667,8 @@ export default function CommandDashboard({ onNavigate }) {
         // Open thread modal for real threads
         setThreadModal({ threadId: insight._threadId, agentId: insight._agentId, title: insight.title, agentLabel: insight.agentLabel, type: insight.type, time: insight.time, messages: [], loading: true });
         try {
-          const token = localStorage.getItem('auth_token');
           const res = await fetch(`${API_BASE}/v1/chat/${insight._agentId}/threads/${insight._threadId}/messages`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: getAuthHeaders(),
           });
           if (res.ok) {
             const data = await res.json();

@@ -503,7 +503,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
       }).catch(console.error).finally(() => setLoading(false));
       fetchAssignments();
       // Fetch action items
-      fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`)
+      fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`, { headers })
         .then(r => r.ok ? r.json() : []).then(items => setActionItems(items)).catch(() => setActionItems([]));
     };
 
@@ -564,7 +564,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
     try {
       await fetch(`${API_BASE}/v1/knowledge/action-items/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ status: newStatus }),
       });
     } catch {}
