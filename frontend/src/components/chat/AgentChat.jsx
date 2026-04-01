@@ -547,7 +547,7 @@ function TaskProposalCard({ data, onConfirm, onDismiss }) {
   if (status === 'dismissed') return null;
 
   return (
-    <div className="mt-1.5 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
+    <div className="mt-2.5 border border-[#d0cec8] rounded-xl bg-white overflow-hidden max-w-[480px]">
       {/* Clickable header */}
       <div className="px-4 py-2.5 border-b border-[#f0eeea] flex items-center gap-2 cursor-pointer hover:bg-[#faf9f7] transition-colors" onClick={handleExpand}>
         <ClipboardList size={14} className="text-[#1e3a5f]" />

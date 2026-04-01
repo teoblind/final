@@ -4,7 +4,7 @@ import {
   DollarSign, Settings, Hammer, BarChart3, LogOut, User, Shield, Umbrella, Bot,
   Zap, ChevronLeft, LayoutDashboard, MessageSquare, Mic, Mail, FileIcon,
   HardHat, ClipboardList, FileCheck, Search, FolderOpen, ListChecks, Presentation, Phone, Building2,
-  ChevronsUpDown, Check, Building, Truck, Megaphone
+  ChevronsUpDown, Check, Building
 } from 'lucide-react';
 
 // Auth
@@ -90,7 +90,7 @@ const PoolRoutingDashboard = lazy(() => import('./components/dashboards/PoolRout
 const ReportingDashboard = lazy(() => import('./components/dashboards/ReportingDashboard'));
 const MeetingsDashboard = lazy(() => import('./components/dashboards/MeetingsDashboard'));
 const DacpCommandDashboard = lazy(() => import('./components/dashboards/DacpCommandDashboard'));
-const CeoDashboard = lazy(() => import('./components/dashboards/CeoDashboard'));
+// CeoDashboard will be a separate app/interface - not loaded here
 const DacpEstimatingDashboard = lazy(() => import('./components/dashboards/DacpEstimatingDashboard'));
 const DacpPricingDashboard = lazy(() => import('./components/dashboards/DacpPricingDashboard'));
 const DacpJobsDashboard = lazy(() => import('./components/dashboards/DacpJobsDashboard'));
@@ -442,16 +442,12 @@ function AppContent() {
   if (isConstruction) {
     platformItems = [
       { id: 'command', label: 'Command', icon: LayoutDashboard },
-      { id: 'ceo', label: 'CEO Dashboard', icon: BarChart3 },
       { id: 'office', label: 'Office', icon: Building },
       { id: 'files', label: 'Files', icon: FolderOpen },
     ];
     agentItems = [
       { id: 'hivemind-chat', label: 'DACP Agent', icon: Bot, hivemind: true },
       { id: 'workflow-chat', label: 'Workflow', icon: ClipboardList },
-      { id: 'pumping-chat', label: 'Pumping Ops', icon: Truck },
-      { id: 'marketing-chat', label: 'Marketing', icon: Megaphone },
-      { id: 'compliance-chat', label: 'Compliance', icon: Shield },
       { id: 'comms-chat', label: 'Comms', icon: Mail },
     ];
     infraItems = [
@@ -533,7 +529,6 @@ function AppContent() {
     'office': 'Office',
     'files': 'Files',
     'accounting': 'Accounting',
-    'ceo': 'CEO Dashboard',
     'portfolio': 'Portfolio Companies',
   };
 
@@ -686,8 +681,7 @@ function AppContent() {
     switch (activeTab) {
       case 'command':
         return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
-      case 'ceo':
-        return <CeoDashboard onNavigate={handleSetActiveTab} />;
+      // CEO Dashboard will be a separate interface, not embedded here
       case 'agent-tasks':
         return <TaskTrackerDashboard />;
       case 'field-reports':
@@ -764,9 +758,6 @@ function AppContent() {
       case 'sales-chat':
       case 'workflow-chat':
       case 'comms-chat':
-      case 'pumping-chat':
-      case 'marketing-chat':
-      case 'compliance-chat':
         return <AgentChat agentId={activeTab.replace('-chat', '')} />;
       default:
         return <CommandDashboard onNavigate={handleSetActiveTab} />;
