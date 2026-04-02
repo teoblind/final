@@ -254,6 +254,19 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
   const vs = voiceSessions.get(sessionId);
   if (vs) vs.botId = bot.id;
 
+  // Register bot ID with voice relay for output_audio
+  try {
+    const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
+    await fetch(`${relayUrl}/set-bot-id`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ botId: bot.id, sessionId }),
+    });
+    console.log(`[Recall] Registered bot ${bot.id} with relay (session: ${sessionId})`);
+  } catch (e) {
+    console.warn(`[Recall] Failed to register bot with relay: ${e.message}`);
+  }
+
   activeBots.set(bot.id, {
     id: bot.id,
     meetingUrl,

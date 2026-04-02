@@ -83,9 +83,51 @@ async function sendAudioToRecall(botId, mp3Buffer) {
   }
 }
 
-const wss = new WebSocketServer({ port: PORT });
+import { createServer } from "http";
 
-const BACKEND_BASE = process.env.APP_BASE_URL || 'http://localhost:3002';
+// Pending bot IDs - set by HTTP POST /set-bot-id, consumed by WebSocket connections
+const pendingBotIds = new Map(); // sessionId -> botId
+
+// HTTP server handles /set-bot-id endpoint + serves as WebSocket transport
+const httpServer = createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/set-bot-id') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { botId, sessionId } = JSON.parse(body);
+        if (botId && sessionId) {
+          pendingBotIds.set(sessionId, botId);
+          // Also push to any active WebSocket connection waiting for this session
+          for (const [sid, resolve] of botIdWaiters) {
+            if (sid === sessionId) {
+              resolve(botId);
+              botIdWaiters.delete(sid);
+            }
+          }
+          console.log(`[VoiceRelay] Bot ID registered: ${sessionId} -> ${botId}`);
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        } else {
+          res.writeHead(400);
+          res.end('botId and sessionId required');
+        }
+      } catch (e) {
+        res.writeHead(400);
+        res.end(e.message);
+      }
+    });
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
+
+// Waiters for bot IDs (WebSocket connections waiting for their bot ID)
+const botIdWaiters = new Map(); // sessionId -> resolve function
+
+const wss = new WebSocketServer({ server: httpServer });
+httpServer.listen(PORT);
 
 wss.on("connection", (clientWs, req) => {
   console.log(`[VoiceRelay] Client connected from ${req.socket.remoteAddress}, url=${req.url}`);
@@ -110,31 +152,37 @@ wss.on("connection", (clientWs, req) => {
   let audioFlushTimer = null;
   let totalAudioBytesSent = 0;
 
-  // Extract session ID from WebSocket URL and fetch bot ID from backend
+  // Check for bot ID from pending registrations or wait for it
+  // The backend POSTs to /set-bot-id after creating the bot
+  // The page may also send it via coppice.set_bot_id WebSocket message
   const connUrl = new URL(req.url, 'http://localhost');
   const sessionId = connUrl.searchParams.get('sid');
   if (sessionId && RECALL_API_KEY) {
-    // Fetch bot ID from backend with retries (bot creation may still be in progress)
-    const fetchBotId = async (attempt = 0) => {
-      try {
-        const res = await fetch(`${BACKEND_BASE}/api/v1/voice-session/${sessionId}`);
-        const data = await res.json();
-        if (data.botId) {
-          recallBotId = data.botId;
-          console.log(`[VoiceRelay] Bot ID from session ${sessionId}: ${recallBotId}`);
-        } else if (attempt < 5) {
-          console.log(`[VoiceRelay] No botId yet (attempt ${attempt + 1}), retrying in 2s...`);
-          setTimeout(() => fetchBotId(attempt + 1), 2000);
+    if (pendingBotIds.has(sessionId)) {
+      recallBotId = pendingBotIds.get(sessionId);
+      pendingBotIds.delete(sessionId);
+      console.log(`[VoiceRelay] Bot ID from pending: ${recallBotId}`);
+    } else {
+      // Wait for bot ID to be registered (up to 15 seconds)
+      console.log(`[VoiceRelay] Waiting for bot ID for session ${sessionId}...`);
+      const waitPromise = new Promise((resolve) => {
+        botIdWaiters.set(sessionId, resolve);
+        setTimeout(() => {
+          if (botIdWaiters.has(sessionId)) {
+            botIdWaiters.delete(sessionId);
+            resolve(null);
+          }
+        }, 15000);
+      });
+      waitPromise.then(botId => {
+        if (botId) {
+          recallBotId = botId;
+          console.log(`[VoiceRelay] Bot ID received: ${recallBotId}`);
         } else {
-          console.warn(`[VoiceRelay] Failed to get botId after ${attempt + 1} attempts`);
+          console.warn(`[VoiceRelay] Timed out waiting for bot ID`);
         }
-      } catch (e) {
-        console.warn(`[VoiceRelay] Session fetch error: ${e.message}`);
-        if (attempt < 3) setTimeout(() => fetchBotId(attempt + 1), 2000);
-      }
-    };
-    // Start fetching after 1s delay (give bot creation time to complete)
-    setTimeout(() => fetchBotId(), 1000);
+      });
+    }
   }
 
   async function flushAudioToRecall() {
