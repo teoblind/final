@@ -90,7 +90,7 @@ const PoolRoutingDashboard = lazy(() => import('./components/dashboards/PoolRout
 const ReportingDashboard = lazy(() => import('./components/dashboards/ReportingDashboard'));
 const MeetingsDashboard = lazy(() => import('./components/dashboards/MeetingsDashboard'));
 const DacpCommandDashboard = lazy(() => import('./components/dashboards/DacpCommandDashboard'));
-// CeoDashboard will be a separate app/interface - not loaded here
+const CeoDashboard = lazy(() => import('./components/dashboards/CeoDashboard'));
 const DacpEstimatingDashboard = lazy(() => import('./components/dashboards/DacpEstimatingDashboard'));
 const DacpPricingDashboard = lazy(() => import('./components/dashboards/DacpPricingDashboard'));
 const DacpJobsDashboard = lazy(() => import('./components/dashboards/DacpJobsDashboard'));
@@ -339,7 +339,13 @@ function AppContent() {
   const { tenant } = useTenant();
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    return hash || 'command';
+    if (hash) return hash;
+    // CEO default landing page
+    try {
+      const sess = JSON.parse(sessionStorage.getItem('sangha_auth'));
+      if (sess?.user?.role === 'ceo' || sess?.user?.email === 'dcruz@dacpholdings.com') return 'ceo';
+    } catch {}
+    return 'command';
   });
   const handleSetActiveTab = (tab) => {
     if (tab !== 'portfolio') setSelectedCompanyId(null);
@@ -439,8 +445,10 @@ function AppContent() {
   let agentItems = [];
   let infraItems = [];
 
+  const isCeo = user?.role === 'ceo' || user?.email === 'dcruz@dacpholdings.com';
   if (isConstruction) {
     platformItems = [
+      ...(isCeo ? [{ id: 'ceo', label: 'CEO', icon: BarChart3 }] : []),
       { id: 'command', label: 'Command', icon: LayoutDashboard },
       { id: 'office', label: 'Office', icon: Building },
       { id: 'files', label: 'Files', icon: FolderOpen },
@@ -679,7 +687,8 @@ function AppContent() {
     switch (activeTab) {
       case 'command':
         return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
-      // CEO Dashboard will be a separate interface, not embedded here
+      case 'ceo':
+        return <CeoDashboard />;
       case 'agent-tasks':
         return <TaskTrackerDashboard />;
       case 'field-reports':
