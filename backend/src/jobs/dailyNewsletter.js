@@ -355,7 +355,7 @@ Use "Draft Email" for outreach actions and "Start Task" for operations/research 
 
 3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
 
-4. **SOCIAL MEDIA HIGHLIGHTS** - ONLY include this section if a "SOCIAL MEDIA POSTS" data block was provided above with real posts. This section MUST include BOTH X/Twitter posts AND LinkedIn posts if both are provided. Organize as two sub-sections: "From X/Twitter" and "From LinkedIn". For each post include the author, a brief summary, and a clickable link ("View on X" or "View on LinkedIn"). Include at least 3-5 LinkedIn posts and 3-5 X posts. Use ONLY the posts and URLs from the data block. Do NOT invent posts, authors, dates, or URLs. If no social media data block was provided, SKIP THIS SECTION COMPLETELY.
+4. **SOCIAL MEDIA HIGHLIGHTS** - THIS SECTION IS MANDATORY when a "SOCIAL MEDIA POSTS" data block exists above. Do NOT skip or omit this section if social data was provided. Structure it with two sub-headers: "From X/Twitter" (pick the 5 most relevant X posts) and "From LinkedIn" (pick the 5 most relevant LinkedIn posts). For each post: show the author name, a one-line summary, the date, and a clickable link formatted as <a href="URL">View on X</a> or <a href="URL">View on LinkedIn</a>. Use ONLY real posts and URLs from the data block above. If no social media data block was provided, skip this section entirely.
 
 5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the primary region (${config.region}) that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
 
@@ -366,7 +366,7 @@ For each recommended action, add a button styled as:
 
 Use "Draft Email" for outreach actions and "Start Task" for research/analysis actions. Replace ACTION_TITLE_HERE with a short title for the action.`;
 
-  const targetLength = isSangha ? '1200-1800 words' : '500-800 words';
+  const targetLength = isSangha ? '1200-1800 words' : '800-1200 words';
 
   const prompt = `You are writing a daily intelligence newsletter for ${config.name}, specializing in ${config.services.join(', ')} in ${config.region}.
 
