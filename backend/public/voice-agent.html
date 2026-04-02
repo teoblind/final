@@ -609,7 +609,10 @@ async function getSessionData() {
     return;
   }
 
-  const ws = new WebSocket(wssUrl);
+  // Append session ID to relay URL so relay can fetch botId from backend directly
+  const sid = params.get('sid');
+  const relayUrlWithSid = sid ? `${wssUrl}${wssUrl.includes('?') ? '&' : '?'}sid=${sid}` : wssUrl;
+  const ws = new WebSocket(relayUrlWithSid);
 
   // ── Wake word gating ──
   // Bot only responds when "Coppice" is in the utterance. No active window.

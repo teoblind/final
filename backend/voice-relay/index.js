@@ -85,8 +85,10 @@ async function sendAudioToRecall(botId, mp3Buffer) {
 
 const wss = new WebSocketServer({ port: PORT });
 
+const BACKEND_BASE = process.env.APP_BASE_URL || 'http://localhost:3002';
+
 wss.on("connection", (clientWs, req) => {
-  console.log(`[VoiceRelay] Client connected from ${req.socket.remoteAddress}`);
+  console.log(`[VoiceRelay] Client connected from ${req.socket.remoteAddress}, url=${req.url}`);
 
   let audioInCount = 0;
   let audioOutCount = 0;
@@ -107,6 +109,33 @@ wss.on("connection", (clientWs, req) => {
   let audioOutputBuffer = Buffer.alloc(0);
   let audioFlushTimer = null;
   let totalAudioBytesSent = 0;
+
+  // Extract session ID from WebSocket URL and fetch bot ID from backend
+  const connUrl = new URL(req.url, 'http://localhost');
+  const sessionId = connUrl.searchParams.get('sid');
+  if (sessionId && RECALL_API_KEY) {
+    // Fetch bot ID from backend with retries (bot creation may still be in progress)
+    const fetchBotId = async (attempt = 0) => {
+      try {
+        const res = await fetch(`${BACKEND_BASE}/api/v1/voice-session/${sessionId}`);
+        const data = await res.json();
+        if (data.botId) {
+          recallBotId = data.botId;
+          console.log(`[VoiceRelay] Bot ID from session ${sessionId}: ${recallBotId}`);
+        } else if (attempt < 5) {
+          console.log(`[VoiceRelay] No botId yet (attempt ${attempt + 1}), retrying in 2s...`);
+          setTimeout(() => fetchBotId(attempt + 1), 2000);
+        } else {
+          console.warn(`[VoiceRelay] Failed to get botId after ${attempt + 1} attempts`);
+        }
+      } catch (e) {
+        console.warn(`[VoiceRelay] Session fetch error: ${e.message}`);
+        if (attempt < 3) setTimeout(() => fetchBotId(attempt + 1), 2000);
+      }
+    };
+    // Start fetching after 1s delay (give bot creation time to complete)
+    setTimeout(() => fetchBotId(), 1000);
+  }
 
   async function flushAudioToRecall() {
     if (audioOutputBuffer.length === 0 || !recallBotId || !RECALL_API_KEY) return;
