@@ -35,20 +35,20 @@ const TENANT_SEARCH_CONFIG = {
     services: ['concrete', 'masonry', 'foundations', 'flatwork', 'structural concrete', 'site work', 'asphalt', 'paving'],
     color: '#1e3a5f', // navy
     searchQueries: [
-      'new commercial construction projects awarded {region} past 7 days',
-      'data center construction projects Texas general contractor awarded this week',
-      '{region} construction bid opportunities closing this week concrete masonry',
-      'large commercial construction projects breaking ground {region} this month',
-      'general contractor awarded new project Texas this week commercial industrial',
-      'construction industry news Texas DFW infrastructure this week',
-      'hyperscale data center construction Texas concrete subcontractor 2026',
-      'semiconductor factory construction Texas groundbreaking update this month',
-      '{region} municipal government construction bid invitation this week',
+      'new commercial construction projects awarded {region} today OR yesterday',
+      'data center construction projects Texas general contractor awarded today',
+      '{region} construction bid opportunities closing soon concrete masonry',
+      'large commercial construction projects breaking ground {region} today OR yesterday',
+      'general contractor awarded new project Texas today commercial industrial',
+      'construction industry news Texas DFW infrastructure today',
+      'hyperscale data center construction Texas update today OR yesterday',
+      'semiconductor factory construction Texas update today',
+      '{region} municipal government construction bid invitation new today',
     ],
     linkedinQueries: [
-      'site:linkedin.com construction project awarded Texas this week',
-      'site:linkedin.com general contractor new project DFW concrete this week',
-      'site:linkedin.com data center construction Texas groundbreaking 2026',
+      'site:linkedin.com construction project awarded Texas today',
+      'site:linkedin.com general contractor new project DFW concrete',
+      'site:linkedin.com data center construction Texas groundbreaking',
     ],
   },
   // Sangha Systems - Bitcoin mining & energy + renewables (weekly)
@@ -107,7 +107,7 @@ async function searchWeb(query, focus = 'news') {
           { role: 'user', content: query },
         ],
         max_tokens: 1500,
-        search_recency_filter: 'week',
+        search_recency_filter: 'day',
       }),
     });
 
@@ -333,9 +333,9 @@ Use "Draft Email" for outreach actions and "Start Task" for research/analysis ac
 
   const prompt = `You are writing a daily intelligence newsletter for ${config.name}, specializing in ${config.services.join(', ')} in ${config.region}.
 
-IMPORTANT: This is a DAILY newsletter. Only include information from the past 7 days. Do NOT recycle old news or restate well-known projects unless there is a NEW development this week. Every item must have a clear "what's new" angle. If research results contain older information, note the date it was reported.
+IMPORTANT: This is a DAILY newsletter. Only include information from the past 24 hours. Do NOT recycle old news or restate projects from previous newsletters. Every item must have a clear "what's new TODAY" angle. If research results contain information older than 24 hours, skip it or clearly note it as background context. The goal is that each day's newsletter contains ONLY new information the reader hasn't seen before.
 
-WEB RESEARCH RESULTS (gathered this morning, filtered to past week):
+WEB RESEARCH RESULTS (gathered this morning, filtered to past 24 hours):
 ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
 
 CURRENT BUSINESS STATE:

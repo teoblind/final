@@ -2,18 +2,18 @@
  * Social Media Scraper for Daily Newsletter
  *
  * Two sources:
- *  1. X/Twitter - Groq compound-beta (has built-in web search) with site:x.com queries
- *  2. LinkedIn - Puppeteer scraping of public LinkedIn search results
+ *  1. X/Twitter - xAI Grok API with x_search tool (searches real X posts)
+ *  2. LinkedIn - Puppeteer scraping via Google cache of LinkedIn posts
  *
  * Returns structured results with direct post URLs for newsletter citations.
  */
 
-// ── X/Twitter via Groq compound-beta ─────────────────────────────────────────
+// ── X/Twitter via xAI Grok API with x_search tool ───────────────────────────
 
 async function searchX(queries) {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) {
-    console.log('[SocialScraper] No GROQ_API_KEY - skipping X search');
+    console.log('[SocialScraper] No XAI_API_KEY - skipping X search');
     return [];
   }
 
@@ -21,35 +21,57 @@ async function searchX(queries) {
 
   for (const query of queries) {
     try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      // Use xAI /v1/responses endpoint with x_search tool
+      const res = await fetch('https://api.x.ai/v1/responses', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'compound-beta',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a social media research assistant. Search X/Twitter for the most recent posts matching the query. For each relevant post found, return the author name, their X handle, a brief summary of what they posted, and the direct URL to the post. Focus on posts from the past 7 days. Return results as a JSON array.',
-            },
+          model: 'grok-3-mini',
+          tools: [{ type: 'x_search' }],
+          input: [
             {
               role: 'user',
-              content: `Search X/Twitter for: ${query}\n\nReturn a JSON array of posts. Each object: { "author": "Name", "handle": "@handle", "summary": "what they said", "url": "https://x.com/...", "date": "YYYY-MM-DD if known" }. Only include real posts with real URLs. If no results, return [].`,
+              content: `Search X for posts from the past 24 hours about: ${query}
+
+For each relevant post, return a JSON array. Each object must have:
+- "author": full name
+- "handle": @username
+- "summary": 1-2 sentence summary of what they posted
+- "url": direct link to the post (https://x.com/username/status/ID)
+- "date": YYYY-MM-DD
+
+Only include REAL posts with REAL URLs. Return ONLY the JSON array, no other text. If nothing found, return [].`,
             },
           ],
-          max_tokens: 2000,
         }),
       });
 
       if (!res.ok) {
-        console.warn(`[SocialScraper] Groq X search error ${res.status} for: ${query.slice(0, 50)}`);
+        const errText = await res.text().catch(() => '');
+        console.warn(`[SocialScraper] xAI X search error ${res.status} for: ${query.slice(0, 50)}`, errText.slice(0, 200));
         continue;
       }
 
       const data = await res.json();
-      const content = data.choices?.[0]?.message?.content || '';
+
+      // xAI responses API returns output array with message items
+      let content = '';
+      if (data.output) {
+        for (const item of data.output) {
+          if (item.type === 'message' && item.content) {
+            for (const block of item.content) {
+              if (block.type === 'text') content += block.text;
+            }
+          }
+        }
+      }
+      // Fallback for chat completions format
+      if (!content && data.choices?.[0]?.message?.content) {
+        content = data.choices[0].message.content;
+      }
 
       // Extract JSON array from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
@@ -59,11 +81,13 @@ async function searchX(queries) {
           if (Array.isArray(posts)) {
             results.push(...posts.filter(p => p.url && p.summary));
           }
-        } catch {}
+        } catch (e) {
+          console.warn(`[SocialScraper] Failed to parse X results JSON for: ${query.slice(0, 50)}`);
+        }
       }
 
       // Rate limit between queries
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 1500));
     } catch (err) {
       console.warn(`[SocialScraper] X search failed for: ${query.slice(0, 50)}`, err.message);
     }
@@ -202,19 +226,19 @@ export async function gatherSocialIntelligence(config) {
   const region = config.region || 'DFW Texas';
   const services = config.services || ['construction'];
 
-  // X queries
+  // X queries - focused on last 24h
   const xQueries = [
-    `${region} construction project awarded this week`,
-    `${region} general contractor new project concrete`,
-    `data center construction Texas groundbreaking`,
-    `${services[0]} subcontractor Texas opportunity`,
+    `${region} construction project awarded today`,
+    `${region} general contractor new project concrete bid`,
+    `data center construction Texas groundbreaking OR awarded`,
+    `${services[0]} subcontractor Texas opportunity OR hiring`,
   ];
 
-  // LinkedIn queries
+  // LinkedIn queries - focused on recent posts
   const linkedinQueries = [
-    `${region} construction project awarded`,
-    `general contractor ${region} new project`,
-    `data center Texas construction groundbreaking`,
+    `${region} construction project awarded 2026`,
+    `general contractor ${region} new project groundbreaking`,
+    `data center Texas construction concrete`,
   ];
 
   console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)...`);
