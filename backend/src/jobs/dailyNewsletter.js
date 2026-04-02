@@ -355,9 +355,11 @@ Use "Draft Email" for outreach actions and "Start Task" for operations/research 
 
 3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
 
-4. **SOCIAL MEDIA HIGHLIGHTS** - Posts from X/Twitter and LinkedIn about construction projects, GC activity, or industry news in ${config.region}. For EACH post, include a clickable link to the original post (View on X / View on LinkedIn). Use the REAL URLs from the social media data provided above. If no social media posts were found, omit this section entirely.
+4. **SOCIAL MEDIA HIGHLIGHTS** - ONLY include this section if a "SOCIAL MEDIA POSTS" data block was provided above with real posts. Use ONLY the posts and URLs from that data block. Do NOT invent posts, authors, dates, or URLs. If no social media data block was provided, SKIP THIS SECTION COMPLETELY - do not generate it at all.
 
-5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
+5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the primary region (${config.region}) that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
+
+6. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
 
 For each recommended action, add a button styled as:
 <a href="#" class="action-btn" data-action="draft-email" data-title="ACTION_TITLE_HERE" style="display:inline-block;background:${config.color || '#1e3a5f'};color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin-top:8px;">Draft Email</a>
@@ -378,13 +380,14 @@ ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answ
 CURRENT BUSINESS STATE:
 ${JSON.stringify(businessContext, null, 2)}${verificationBlock}
 ${socialResults && (socialResults.xPosts?.length || socialResults.linkedinPosts?.length) ? `
-SOCIAL MEDIA POSTS (real posts with direct URLs - include these in the LinkedIn/X Highlights section):
+SOCIAL MEDIA POSTS (real posts with direct URLs - include these in a "Social Media Highlights" section):
 
-${socialResults.xPosts?.length ? 'X/TWITTER POSTS:\n' + socialResults.xPosts.map(p => `- @${p.handle || 'unknown'} (${p.author || ''}): ${p.summary} | URL: ${p.url}${p.date ? ' | Date: ' + p.date : ''}`).join('\n') : 'No X posts found.'}
+${socialResults.xPosts?.length ? 'X/TWITTER POSTS:\n' + socialResults.xPosts.map(p => `- @${p.handle || 'unknown'} (${p.author || ''}): ${p.summary} | URL: ${p.url}${p.date ? ' | Date: ' + p.date : ''}`).join('\n') : ''}
 
-${socialResults.linkedinPosts?.length ? 'LINKEDIN POSTS:\n' + socialResults.linkedinPosts.map(p => `- ${p.author || 'Unknown'}: ${p.summary} | URL: ${p.url}`).join('\n') : 'No LinkedIn posts found.'}
+${socialResults.linkedinPosts?.length ? 'LINKEDIN POSTS:\n' + socialResults.linkedinPosts.map(p => `- ${p.author || 'Unknown'}: ${p.summary} | URL: ${p.url}`).join('\n') : ''}
 
-IMPORTANT: For X posts, link directly to the tweet URL. For LinkedIn posts, link directly to the post URL. These are REAL URLs that have been scraped - always include them as clickable links.` : ''}
+IMPORTANT: For X posts, link directly to the tweet URL. For LinkedIn posts, link directly to the post URL. These are REAL URLs that have been scraped - always include them as clickable links.` : `
+NO SOCIAL MEDIA DATA WAS COLLECTED TODAY. Do NOT create a "Social Media Highlights" section. Do NOT invent or fabricate any LinkedIn posts, X/Twitter posts, or social media URLs. Only include social media content when real scraped data is provided above. If no social media data block appears above this line, there is NO social media content to include.`}
 
 Write a morning intelligence briefing newsletter. Structure it as clean HTML (no <html>/<body> tags, just the content).
 
@@ -405,7 +408,8 @@ ${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (R
 - Do NOT use em dashes, use regular hyphens
 - For verified contacts, add a small "VERIFIED" badge next to their name using the brand color
 - CITATIONS: For every project, news item, or claim, include the source URL as a small linked citation at the end of that paragraph. Use format: <a href="URL" style="color:${brandColor};font-size:11px;text-decoration:underline;">Source</a>. If multiple sources support a claim, include all of them. The Sources URLs are provided after each research block - use them. This is critical for credibility.
-- LINKEDIN/X LINKS: When citing LinkedIn posts or X/Twitter posts, link directly to the post or profile. Format as: <a href="URL" style="color:${brandColor};font-size:12px;">View on LinkedIn</a> or <a href="URL" style="color:${brandColor};font-size:12px;">View on X</a>
+- NEVER FABRICATE URLs: Only use URLs that appear in the research results or social media data above. Do NOT invent LinkedIn post URLs, X/Twitter URLs, or any other links. If a source URL is not provided in the data, do not create one. Readers WILL click these links - broken/fake links destroy credibility instantly.
+- LINKEDIN/X LINKS: ONLY include LinkedIn/X links if real social media data was provided in the SOCIAL MEDIA POSTS block above. If no social media data was provided, do NOT create a social media section and do NOT fabricate any social post URLs.
 - At the very end of the newsletter, include a "Sources" section listing all URLs referenced, as a numbered list with small font (11px)
 ${isSangha ? '- For IPP/developer targets, use a card-style layout with company name, type, and opportunity summary\n- For "Sangha opportunity" callouts, use a highlighted box with a left border in the brand color' : ''}
 
