@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import {
   SVG_WIDTH, SVG_HEIGHT, OFFICE, ZONES, ZONE_COLORS,
 } from './constants';
-import { calculateDeskSlots, calculateMeetingSeatsSvg } from './position-allocator';
+import { calculateDeskSlots, calculateMeetingSeatsSvg, calculateLoungePositions } from './position-allocator';
 import { AgentAvatar } from './AgentAvatar';
 import { DeskUnit } from './DeskUnit';
 import { MeetingTable, Sofa, Plant, CoffeeCup, Chair } from './furniture';
@@ -182,15 +182,21 @@ export function FloorPlan({ agents, selectedAgentId, onSelectAgent, tenantName }
         {/* Lounge decor */}
         <LoungeDecor tenantName={tenantName} />
 
-        {/* Lounge agents */}
-        {loungeAgents.map((agent) => (
-          <AgentAvatar
-            key={`lounge-${agent.id}`}
-            agent={agent}
-            selected={agent.id === selectedAgentId}
-            onSelect={onSelectAgent}
-          />
-        ))}
+        {/* Lounge agents - idle/offline agents hang out here */}
+        {(() => {
+          const positions = calculateLoungePositions(Math.max(loungeAgents.length, 4));
+          return loungeAgents.map((agent, i) => {
+            const pos = positions[i] || { x: ZONES.lounge.x + 60 + i * 80, y: ZONES.lounge.y + 60 };
+            return (
+              <AgentAvatar
+                key={`lounge-${agent.id}`}
+                agent={{ ...agent, position: pos }}
+                selected={agent.id === selectedAgentId}
+                onSelect={onSelectAgent}
+              />
+            );
+          });
+        })()}
 
         {/* Main entrance */}
         <EntranceDoor />
