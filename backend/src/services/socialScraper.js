@@ -227,23 +227,25 @@ export async function gatherSocialIntelligence(config) {
   const region = config.region || 'DFW Texas';
   const services = config.services || ['construction'];
 
-  // X queries - broader to catch more posts, Grok filters by recency
+  // X queries - broad construction intel across DFW and Texas
   const xQueries = [
     `construction project Dallas OR "Fort Worth" OR DFW`,
     `Texas construction awarded OR groundbreaking OR "broke ground"`,
-    `data center Texas construction OR building`,
     `general contractor Texas new project OR hiring OR bid`,
     `commercial construction Dallas OR Houston OR Austin OR Texas`,
     `concrete OR foundation OR "site work" Texas construction`,
+    `Texas construction bid OR permit OR "project awarded" OR warehouse`,
   ];
 
-  // LinkedIn queries - focused on construction project intel, GC awards, data centers
+  // LinkedIn queries - broad construction intel, not just data centers
   const linkedinQueries = [
     `${region} construction project awarded groundbreaking`,
     `general contractor Texas new project awarded bid`,
-    `data center Texas construction update million billion`,
-    `Texas construction "broke ground" OR "under construction" OR "project update"`,
-    `concrete subcontractor Texas commercial industrial hiring`,
+    `concrete masonry foundation Texas commercial construction`,
+    `Texas construction "broke ground" OR "under construction" OR "topping out"`,
+    `commercial industrial warehouse construction Texas DFW`,
+    `municipal infrastructure Texas construction water sewer road`,
+    `multifamily apartment construction Texas groundbreaking`,
   ];
 
   console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)...`);
