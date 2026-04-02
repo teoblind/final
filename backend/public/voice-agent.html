@@ -517,13 +517,14 @@ const SAMPLE_RATE = 24000;
 // Default fallback instructions (used if tenant fetch fails)
 const DEFAULT_INSTRUCTIONS = `You are Coppice, an AI meeting assistant. Be professional, concise, and helpful. Keep responses brief. No emojis or filler phrases.`;
 
-// Get instructions — try session ID (pre-built server-side), then tenant fetch, then default
-async function getInstructions() {
+// Get instructions + botId — try session ID (pre-built server-side), then tenant fetch, then default
+// Returns { instructions, botId }
+async function getSessionData() {
   const params = new URLSearchParams(location.search);
   const sid = params.get('sid');
   const tenantId = params.get('tenant') || 'default';
 
-  // 1. Session ID — instructions pre-built by createVoiceBot (most reliable)
+  // 1. Session ID — instructions + botId pre-built by createVoiceBot (most reliable)
   if (sid) {
     const urls = [
       `https://coppice.ai/api/v1/voice-session/${sid}`,
@@ -531,12 +532,12 @@ async function getInstructions() {
     ];
     for (const url of urls) {
       try {
-        console.log(`[Coppice] Fetching session instructions: ${sid}`);
+        console.log(`[Coppice] Fetching session data: ${sid}`);
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         const data = await res.json();
         if (data.instructions && data.instructions.length > 100) {
-          console.log(`[Coppice] Loaded session instructions (${data.instructions.length} chars)`);
-          return data.instructions;
+          console.log(`[Coppice] Loaded session: ${data.instructions.length} chars, botId=${data.botId || 'none'}`);
+          return { instructions: data.instructions, botId: data.botId || null };
         }
       } catch (e) {
         console.warn(`[Coppice] Session fetch failed:`, e.message);
@@ -544,7 +545,7 @@ async function getInstructions() {
     }
   }
 
-  // 2. Fallback — fetch by tenant ID
+  // 2. Fallback — fetch by tenant ID (no botId available)
   const urls = [
     `https://coppice.ai/api/v1/voice-context/${tenantId}`,
     `${location.origin}/api/v1/voice-context/${tenantId}`,
@@ -555,15 +556,15 @@ async function getInstructions() {
       const data = await res.json();
       if (data.instructions && data.instructions.length > 100) {
         console.log(`[Coppice] Fetched tenant instructions (${data.instructions.length} chars)`);
-        return data.instructions;
+        return { instructions: data.instructions, botId: null };
       }
     } catch (e) {
       console.warn(`[Coppice] Tenant fetch failed:`, e.message);
     }
   }
 
-  console.error('[Coppice] All instruction sources failed — using default');
-  return DEFAULT_INSTRUCTIONS;
+  console.error('[Coppice] All instruction sources failed - using default');
+  return { instructions: DEFAULT_INSTRUCTIONS, botId: null };
 }
 
 (async function main() {
@@ -575,7 +576,9 @@ async function getInstructions() {
   }
   console.log('[Coppice] Relay URL:', wssUrl);
 
-  const INSTRUCTIONS = await getInstructions();
+  const sessionData = await getSessionData();
+  const INSTRUCTIONS = sessionData.instructions;
+  const SESSION_BOT_ID = sessionData.botId;
 
   const wavRecorder = new WavRecorder({ sampleRate: SAMPLE_RATE });
   const wavStreamPlayer = new WavStreamPlayer({ sampleRate: SAMPLE_RATE });
@@ -657,6 +660,14 @@ async function getInstructions() {
 
   ws.onopen = () => {
     console.log('[Coppice] Connected to relay');
+
+    // Send bot ID to relay so it can inject audio via Recall.ai output_audio API
+    if (SESSION_BOT_ID) {
+      ws.send(JSON.stringify({ type: 'coppice.set_bot_id', bot_id: SESSION_BOT_ID }));
+      console.log('[Coppice] Sent bot ID to relay:', SESSION_BOT_ID);
+    } else {
+      console.warn('[Coppice] No bot ID available - relay audio output disabled');
+    }
 
     // MANUAL MODE — turn_detection: null means NO auto-responses
     // We commit audio manually and decide when to create responses

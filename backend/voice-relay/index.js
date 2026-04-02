@@ -1,17 +1,22 @@
 /**
- * Coppice Voice Relay v3 - Gated proxy between voice-agent.html and OpenAI Realtime API
+ * Coppice Voice Relay v4 - Gated proxy + Recall.ai output_audio
  *
- * Key fix over v2: holds ALL audio until session.updated confirms turn_detection: null.
- * This prevents OpenAI's default server VAD from auto-committing audio and creating
- * unwanted responses before manual mode is active.
- *
- * Also cancels any server-initiated responses (defense-in-depth against VAD leaks).
+ * v3: holds audio until session.updated confirms turn_detection: null.
+ * v4: intercepts response.audio.delta, converts PCM->MP3 via ffmpeg,
+ *     and POSTs to Recall.ai output_audio endpoint so meeting participants
+ *     actually hear the bot. The output_media webpage tab audio capture
+ *     in headless Chrome is unreliable.
  */
 
 import { WebSocketServer, WebSocket } from "ws";
+import { spawn } from "child_process";
 import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
 
-dotenv.config();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config(); // try CWD
+dotenv.config({ path: resolve(__dirname, '../.env') }); // try parent (backend root)
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 if (!OPENAI_API_KEY) {
@@ -19,8 +24,64 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
+const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
+const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';
+const RECALL_BASE = `https://${RECALL_REGION}.recall.ai/api/v1`;
+
+if (!RECALL_API_KEY) {
+  console.warn('[VoiceRelay] RECALL_API_KEY not set - output_audio disabled');
+}
+
 const PORT = parseInt(process.env.PORT || '3003', 10);
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview';
+
+/**
+ * Convert PCM16 (24kHz mono) to MP3 via ffmpeg.
+ */
+function pcmToMp3(pcmBuffer) {
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-f', 's16le',
+      '-ar', '24000',
+      '-ac', '1',
+      '-i', 'pipe:0',
+      '-codec:a', 'libmp3lame',
+      '-b:a', '64k',
+      '-f', 'mp3',
+      'pipe:1',
+    ], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const chunks = [];
+    ffmpeg.stdout.on('data', (chunk) => chunks.push(chunk));
+    ffmpeg.on('close', (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg exited with code ${code}`));
+    });
+    ffmpeg.on('error', reject);
+    ffmpeg.stdin.write(pcmBuffer);
+    ffmpeg.stdin.end();
+  });
+}
+
+/**
+ * Send MP3 audio to Recall.ai output_audio endpoint.
+ */
+async function sendAudioToRecall(botId, mp3Buffer) {
+  const res = await fetch(`${RECALL_BASE}/bot/${botId}/output_audio/`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${RECALL_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      kind: 'mp3',
+      b64_data: mp3Buffer.toString('base64'),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`${res.status}: ${body}`);
+  }
+}
 
 const wss = new WebSocketServer({ port: PORT });
 
@@ -40,6 +101,26 @@ wss.on("connection", (clientWs, req) => {
 
   // Track client-initiated responses to detect server-initiated (auto) responses
   let clientInitiatedResponse = false;
+
+  // ── Recall.ai output_audio: buffer PCM from OpenAI, flush as MP3 ──
+  let recallBotId = null;
+  let audioOutputBuffer = Buffer.alloc(0);
+  let audioFlushTimer = null;
+  let totalAudioBytesSent = 0;
+
+  async function flushAudioToRecall() {
+    if (audioOutputBuffer.length === 0 || !recallBotId || !RECALL_API_KEY) return;
+    const pcm = audioOutputBuffer;
+    audioOutputBuffer = Buffer.alloc(0);
+    try {
+      const mp3 = await pcmToMp3(pcm);
+      await sendAudioToRecall(recallBotId, mp3);
+      totalAudioBytesSent += mp3.length;
+      console.log(`[VoiceRelay] output_audio: sent ${mp3.length}B MP3 (${totalAudioBytesSent}B total)`);
+    } catch (err) {
+      console.error(`[VoiceRelay] output_audio error: ${err.message}`);
+    }
+  }
 
   // Connect to OpenAI Realtime API via raw WebSocket
   try {
@@ -106,6 +187,9 @@ wss.on("connection", (clientWs, req) => {
           clientInitiatedResponse = false;
           console.log(`[VoiceRelay] Response complete (${audioOutCount} audio chunks)`);
           audioOutCount = 0;
+          // Flush any remaining buffered audio
+          clearTimeout(audioFlushTimer);
+          flushAudioToRecall();
         }
 
         // ── Cancel server VAD events (shouldn't happen in manual mode) ──
@@ -119,9 +203,21 @@ wss.on("connection", (clientWs, req) => {
           return;
         }
 
-        // ── Logging ──
+        // ── Intercept audio for Recall.ai output_audio ──
         if (event.type === 'response.audio.delta') {
           audioOutCount++;
+          // Buffer PCM for output_audio API (the real audio path)
+          if (event.delta && recallBotId && RECALL_API_KEY) {
+            const pcm = Buffer.from(event.delta, 'base64');
+            audioOutputBuffer = Buffer.concat([audioOutputBuffer, pcm]);
+            clearTimeout(audioFlushTimer);
+            audioFlushTimer = setTimeout(() => flushAudioToRecall(), 300);
+          }
+        }
+
+        // ── Logging ──
+        if (event.type === 'response.audio.delta') {
+          // Already counted above
         } else if (event.type !== 'response.audio.delta') {
           if (event.type === 'conversation.item.input_audio_transcription.completed') {
             console.log(`[VoiceRelay] Heard: "${event.transcript}"`);
@@ -174,6 +270,13 @@ wss.on("connection", (clientWs, req) => {
       const str = data.toString();
       const event = JSON.parse(str);
 
+      // Handle bot ID from voice-agent page (for output_audio)
+      if (event.type === 'coppice.set_bot_id') {
+        recallBotId = event.bot_id;
+        console.log(`[VoiceRelay] Bot ID set: ${recallBotId} - output_audio enabled`);
+        return; // Don't forward to OpenAI
+      }
+
       const isAudio = event.type === 'input_audio_buffer.append';
 
       if (isAudio) {
@@ -223,7 +326,10 @@ wss.on("connection", (clientWs, req) => {
 
   clientWs.on("close", () => {
     clientClosed = true;
-    console.log(`[VoiceRelay] Client disconnected (audio in: ${audioInCount}, audio out: ${audioOutCount})`);
+    clearTimeout(audioFlushTimer);
+    // Flush any remaining audio before closing
+    flushAudioToRecall();
+    console.log(`[VoiceRelay] Client disconnected (audio in: ${audioInCount}, audio out: ${audioOutCount}, recall bytes: ${totalAudioBytesSent})`);
     if (!openaiClosed && openaiWs.readyState === WebSocket.OPEN) {
       openaiWs.close();
     }
@@ -234,7 +340,8 @@ wss.on("connection", (clientWs, req) => {
   });
 });
 
-console.log(`[VoiceRelay] v3 - gated proxy, port ${PORT}`);
+console.log(`[VoiceRelay] v4 - gated proxy + output_audio, port ${PORT}`);
 console.log(`[VoiceRelay] Audio held until session.updated confirms turn_detection: null`);
 console.log(`[VoiceRelay] Server-initiated responses will be canceled`);
 console.log(`[VoiceRelay] OpenAI endpoint: ${OPENAI_REALTIME_URL}`);
+console.log(`[VoiceRelay] Recall output_audio: ${RECALL_API_KEY ? 'ENABLED' : 'DISABLED (no RECALL_API_KEY)'}`);

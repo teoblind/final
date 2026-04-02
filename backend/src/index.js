@@ -121,23 +121,23 @@ app.get('/api/v1/voice-session/:sessionId', (req, res) => {
     const { voiceSessions } = require('./services/recallService.js');
     const session = voiceSessions.get(req.params.sessionId);
     if (session) {
-      res.json({ instructions: session.instructions });
-      // Clean up after fetch (one-time use)
-      voiceSessions.delete(req.params.sessionId);
+      res.json({ instructions: session.instructions, botId: session.botId || null });
+      // Expire after 10 min (relay may also need botId)
+      setTimeout(() => voiceSessions.delete(req.params.sessionId), 600000);
     } else {
-      res.json({ instructions: '' });
+      res.json({ instructions: '', botId: null });
     }
   } catch (e) {
     // ESM import fallback
     import('./services/recallService.js').then(mod => {
       const session = mod.voiceSessions.get(req.params.sessionId);
       if (session) {
-        res.json({ instructions: session.instructions });
-        mod.voiceSessions.delete(req.params.sessionId);
+        res.json({ instructions: session.instructions, botId: session.botId || null });
+        setTimeout(() => mod.voiceSessions.delete(req.params.sessionId), 600000);
       } else {
-        res.json({ instructions: '' });
+        res.json({ instructions: '', botId: null });
       }
-    }).catch(() => res.json({ instructions: '' }));
+    }).catch(() => res.json({ instructions: '', botId: null }));
   }
 });
 

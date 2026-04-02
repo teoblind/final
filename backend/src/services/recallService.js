@@ -250,6 +250,10 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
 
   const bot = await recallFetch('/bot/', { method: 'POST', body: JSON.stringify(body) });
 
+  // Store bot ID in voice session so relay can send audio via output_audio API
+  const vs = voiceSessions.get(sessionId);
+  if (vs) vs.botId = bot.id;
+
   activeBots.set(bot.id, {
     id: bot.id,
     meetingUrl,
