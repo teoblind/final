@@ -355,7 +355,7 @@ Use "Draft Email" for outreach actions and "Start Task" for operations/research 
 
 3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
 
-4. **SOCIAL MEDIA HIGHLIGHTS** - THIS SECTION IS MANDATORY when a "SOCIAL MEDIA POSTS" data block exists above. Do NOT skip or omit this section if social data was provided. Structure it with two sub-headers: "From X/Twitter" (pick the 5 most relevant X posts) and "From LinkedIn" (pick the 5 most relevant LinkedIn posts). For each post: show the author name, a one-line summary, the date, and a clickable link formatted as <a href="URL">View on X</a> or <a href="URL">View on LinkedIn</a>. Use ONLY real posts and URLs from the data block above. If no social media data block was provided, skip this section entirely.
+4. **SOCIAL MEDIA HIGHLIGHTS** - DO NOT generate this section. It will be injected automatically after your output. You may reference social media posts inline within other sections (e.g., "According to @handle on X...") but do NOT create a standalone Social Media Highlights section.
 
 5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the primary region (${config.region}) that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
 
@@ -439,6 +439,64 @@ Return ONLY the HTML content, no markdown wrapping.`;
 
   // Strip any Claude-generated header banner (background-color + h1 inside a div at the start)
   html = html.replace(/^<div[^>]*style="[^"]*background[^"]*"[^>]*>[\s\S]*?<\/h1>[\s\S]*?<\/div>\s*/i, '');
+
+  // ─── Hardcoded social media section guarantee ───
+  // Claude frequently drops the Social Media Highlights section even when told it's
+  // mandatory. We build the HTML ourselves and inject it so it always appears.
+  if (socialResults && (socialResults.xPosts?.length || socialResults.linkedinPosts?.length)) {
+    // Check if Claude already included a social media section - if so, don't duplicate
+    const hasSocialSection = /social\s*media\s*highlights/i.test(html);
+    if (!hasSocialSection) {
+      let socialHtml = `<div style="margin-top:28px; border-top:2px solid ${brandColor}; padding-top:20px;">
+  <h2 style="color:${brandColor}; font-size:18px; font-weight:700; margin:0 0 16px 0;">Social Media Highlights</h2>`;
+
+      if (socialResults.xPosts?.length) {
+        socialHtml += `\n  <h3 style="color:${brandColor}; font-size:14px; font-weight:600; margin:16px 0 10px 0;">From X/Twitter</h3>\n  <ul style="list-style:none; padding:0; margin:0;">`;
+        for (const post of socialResults.xPosts.slice(0, 5)) {
+          const author = post.handle ? `@${post.handle}` : (post.author || 'Unknown');
+          const date = post.date ? ` - ${post.date}` : '';
+          socialHtml += `\n    <li style="margin-bottom:10px; padding:10px 14px; background:#f8f9fa; border-radius:6px; border-left:3px solid ${brandColor};">
+      <strong style="font-size:13px;">${author}</strong><span style="color:#666; font-size:11px;">${date}</span><br/>
+      <span style="font-size:13px;">${(post.summary || '').substring(0, 180)}</span><br/>
+      <a href="${post.url}" style="color:${brandColor}; font-size:11px; text-decoration:underline;">View on X</a>
+    </li>`;
+        }
+        socialHtml += `\n  </ul>`;
+      }
+
+      if (socialResults.linkedinPosts?.length) {
+        socialHtml += `\n  <h3 style="color:${brandColor}; font-size:14px; font-weight:600; margin:16px 0 10px 0;">From LinkedIn</h3>\n  <ul style="list-style:none; padding:0; margin:0;">`;
+        for (const post of socialResults.linkedinPosts.slice(0, 5)) {
+          const author = post.author || 'Unknown';
+          const date = post.date ? ` - ${post.date}` : '';
+          socialHtml += `\n    <li style="margin-bottom:10px; padding:10px 14px; background:#f8f9fa; border-radius:6px; border-left:3px solid #0077b5;">
+      <strong style="font-size:13px;">${author}</strong><span style="color:#666; font-size:11px;">${date}</span><br/>
+      <span style="font-size:13px;">${(post.summary || '').substring(0, 180)}</span><br/>
+      <a href="${post.url}" style="color:#0077b5; font-size:11px; text-decoration:underline;">View on LinkedIn</a>
+    </li>`;
+        }
+        socialHtml += `\n  </ul>`;
+      }
+
+      socialHtml += `\n</div>`;
+
+      // Inject before "Recommended Actions" or "Sources" section, or at the end
+      const recActionsMatch = html.match(/<h2[^>]*>.*?recommended\s*actions/i);
+      const sourcesMatch = html.match(/<h2[^>]*>.*?sources/i);
+      if (recActionsMatch) {
+        const idx = html.indexOf(recActionsMatch[0]);
+        html = html.slice(0, idx) + socialHtml + '\n' + html.slice(idx);
+      } else if (sourcesMatch) {
+        const idx = html.indexOf(sourcesMatch[0]);
+        html = html.slice(0, idx) + socialHtml + '\n' + html.slice(idx);
+      } else {
+        // Append before the closing div
+        html += '\n' + socialHtml;
+      }
+
+      console.log(`[Newsletter] Injected social media section: ${socialResults.xPosts?.length || 0} X + ${socialResults.linkedinPosts?.length || 0} LinkedIn posts`);
+    }
+  }
 
   // Ensure body content is wrapped in padding div
   if (!html.startsWith('<div') || !html.includes('padding: 28px')) {
