@@ -34,6 +34,18 @@ const TENANT_SEARCH_CONFIG = {
     region: 'Dallas-Fort Worth Texas',
     services: ['concrete', 'masonry', 'foundations', 'flatwork', 'structural concrete', 'site work', 'asphalt', 'paving'],
     color: '#1e3a5f', // navy
+    markets: [
+      { name: 'Texas', region: 'Dallas-Fort Worth Texas', primary: true },
+      { name: 'Louisiana', region: 'Louisiana' },
+      { name: 'Florida', region: 'Florida' },
+    ],
+    knownGCs: [
+      'Turner Construction', 'Renegade', 'JE Dunn', 'Hensel Phelps',
+      'McCarthy Building Companies', 'Skanska', 'Balfour Beatty',
+      'Rogers-O\'Brien', 'Manhattan Construction', 'Austin Commercial',
+      'Whiting-Turner', 'Brasfield & Gorrie', 'Granite Construction',
+      'DPR Construction', 'Primoris', 'Zachry Group',
+    ],
     // Expansion regions - searched if primary region returns < MIN_RESULTS
     expansionRegions: [
       'Houston Texas',
@@ -161,11 +173,32 @@ async function gatherIntelligence(tenantId) {
   ];
   const results = await runSearchBatch(primaryQueries);
 
+  // Tag primary results with market name
+  const primaryMarket = config.markets?.find(m => m.primary);
+  if (primaryMarket) {
+    for (const r of results) r.market = primaryMarket.name;
+  }
+
   // Count results with actual content (not empty answers)
   const substantiveResults = results.filter(r => r.answer && r.answer.length > 100);
   console.log(`[Newsletter] Primary region (${config.region}): ${substantiveResults.length} substantive results`);
 
-  // Phase 2: Progressive region expansion if primary is thin
+  // Phase 1b: Non-primary markets - run reduced set of queries (top 4)
+  if (config.markets?.length > 1) {
+    const secondaryMarkets = config.markets.filter(m => !m.primary);
+    for (const market of secondaryMarkets) {
+      console.log(`[Newsletter] Searching secondary market: ${market.name} (${market.region})`);
+      const marketQueries = config.searchQueries.slice(0, 4).map(q => q.replace(/\{region\}/g, market.region));
+      const marketResults = await runSearchBatch(marketQueries);
+      // Tag each result with market name
+      for (const r of marketResults) r.market = market.name;
+      const marketSubstantive = marketResults.filter(r => r.answer && r.answer.length > 100);
+      results.push(...marketResults.filter(Boolean));
+      console.log(`[Newsletter] ${market.name}: +${marketSubstantive.length} substantive results`);
+    }
+  }
+
+  // Phase 2: Progressive region expansion if primary is thin (primary market only)
   if (substantiveResults.length < minResults && config.expansionRegions?.length) {
     for (const expandRegion of config.expansionRegions) {
       console.log(`[Newsletter] Expanding search to: ${expandRegion}`);
@@ -174,6 +207,11 @@ async function gatherIntelligence(tenantId) {
       const expandQueries = config.searchQueries.slice(0, 4).map(q => q.replace(/\{region\}/g, expandRegion));
       const expandResults = await runSearchBatch(expandQueries);
       const expandSubstantive = expandResults.filter(r => r.answer && r.answer.length > 100);
+
+      // Tag expansion results with primary market
+      if (primaryMarket) {
+        for (const r of expandResults) r.market = primaryMarket.name;
+      }
 
       results.push(...expandResults.filter(Boolean));
       console.log(`[Newsletter] ${expandRegion}: +${expandSubstantive.length} results (total: ${results.filter(r => r.answer?.length > 100).length})`);
@@ -349,17 +387,21 @@ For each recommended action in sections 9 and 10, add a button styled as:
 Use "Draft Email" for outreach actions and "Start Task" for operations/research actions. Replace ACTION_TITLE_HERE with a short title for the action.`
     : `SECTIONS (include only sections with actual findings):
 
-1. **NEW PROJECT OPPORTUNITIES** - Projects where ${config.name} could bid. Include: project name, location, estimated value if known, GC(s) involved, why it's relevant. Flag if a GC is one they've worked with before.
+1. **NEW PROJECT OPPORTUNITIES** - Projects where ${config.name} could bid. Organize by state/market as sub-sections:
+${config.markets?.length ? config.markets.map(m => `   - **${m.name} Projects** - Results tagged [MARKET: ${m.name}]`).join('\n') : `   Organize by region if multiple regions appear in results.`}
+   Include for each: project name, location, estimated value if known, GC(s) involved, why it's relevant. Flag if a GC is one they've worked with before.
 
-2. **GC ACTIVITY** - News about general contractors active in ${config.region}. New hires, project awards, expansions. Focus on GCs relevant to ${config.name}'s services.
+${config.knownGCs?.length ? `KNOWN GC WATCHLIST: ${config.knownGCs.join(', ')}. If ANY of these GCs appear in the research results, add a bold **[KNOWN GC]** tag next to their name and prioritize those items. If a known GC is awarded a project and DACP hasn't been contacted, flag it as **URGENT**.
+
+` : ''}2. **GC ACTIVITY** - News about general contractors active in ${config.markets?.length ? config.markets.map(m => m.region).join(', ') : config.region}. New hires, project awards, expansions. Focus on GCs relevant to ${config.name}'s services.${config.knownGCs?.length ? ' Highlight any Known GC Watchlist companies with a bold **[KNOWN GC]** tag.' : ''}
 
 3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
 
 4. **SOCIAL MEDIA HIGHLIGHTS** - DO NOT generate this section. It will be injected automatically after your output. You may reference social media posts inline within other sections (e.g., "According to @handle on X...") but do NOT create a standalone Social Media Highlights section.
 
-5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the primary region (${config.region}) that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
+5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the tracked markets that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
 
-6. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
+6. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.${config.knownGCs?.length ? ' Prioritize actions related to Known GC Watchlist companies.' : ''}
 
 For each recommended action, add a button styled as:
 <a href="#" class="action-btn" data-action="draft-email" data-title="ACTION_TITLE_HERE" style="display:inline-block;background:${config.color || '#1e3a5f'};color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin-top:8px;">Draft Email</a>
@@ -375,7 +417,7 @@ IMPORTANT: This is a DAILY newsletter. Only include information from the past 24
 NOTE: If results include projects outside the primary region (${config.region}), organize them in a separate "NATIONAL / REGIONAL OPPORTUNITIES" section after the primary region content. Clearly label the location for each out-of-region project and note travel distance or strategic relevance.
 
 WEB RESEARCH RESULTS (gathered this morning, filtered to past 24 hours):
-${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
+${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}"${r.market ? ' [MARKET: ' + r.market + ']' : ''} ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
 
 CURRENT BUSINESS STATE:
 ${JSON.stringify(businessContext, null, 2)}${verificationBlock}
@@ -432,7 +474,7 @@ Return ONLY the HTML content, no markdown wrapping.`;
   // header and always prepend the correct one so the newsletter never ships broken.
   const freq = config.frequency === 'weekly' ? 'Weekly' : 'Daily';
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-  const headerHtml = `<div style="background-color:${brandColor}; padding:28px 32px; border-radius:6px 6px 0 0;">
+  const headerHtml = `<div class="newsletter-header" style="background-color:${brandColor}; padding:28px 32px; border-radius:6px 6px 0 0;">
   <h1 style="color:#ffffff; margin:0; font-size:22px; font-weight:700; letter-spacing:0.3px;">${config.name} | ${isSangha ? 'Weekly' : 'Morning'} Intelligence Briefing</h1>
   <p style="color:${isSangha ? '#a8e0c4' : '#a8c4e0'}; margin:6px 0 0 0; font-size:14px;">${dateStr} | ${config.region}</p>
 </div>`;
@@ -529,10 +571,13 @@ Return ONLY the HTML content, no markdown wrapping.`;
 
   // Ensure body content is wrapped in padding div
   if (!html.startsWith('<div') || !html.includes('padding: 28px')) {
-    html = `<div style="padding: 28px 40px;">\n${html}\n</div>`;
+    html = `<div class="newsletter-body" style="padding: 28px 40px;">\n${html}\n</div>`;
+  } else if (!html.includes('newsletter-body')) {
+    // Claude included its own padding div - inject the class for mobile media queries
+    html = html.replace(/^<div\s+style="/, '<div class="newsletter-body" style="');
   }
 
-  return `<div style="max-width:680px; margin:0 auto; font-family: 'Helvetica Neue', Arial, sans-serif; color:#222; line-height:1.6;">\n${headerHtml}\n${html}\n</div>`;
+  return `<div class="newsletter-container" style="max-width:680px; margin:0 auto; font-family: 'Helvetica Neue', Arial, sans-serif; color:#222; line-height:1.6;">\n${headerHtml}\n${html}\n</div>`;
 }
 
 // ── Email Delivery ────────────────────────────────────────────────────────────
@@ -540,10 +585,34 @@ Return ONLY the HTML content, no markdown wrapping.`;
 function buildEmailHtml(newsletterHtml, tenantName, date, brandColor = '#1e3a5f') {
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  @media only screen and (max-width: 600px) {
+    .newsletter-wrapper { padding: 8px !important; }
+    .newsletter-card { border-radius: 0 !important; }
+    .newsletter-container { max-width: 100% !important; }
+    .newsletter-header { padding: 20px 16px !important; }
+    .newsletter-header h1 { font-size: 18px !important; }
+    .newsletter-header p { font-size: 12px !important; }
+    .newsletter-body { padding: 16px !important; }
+    .newsletter-body h2 { font-size: 16px !important; }
+    .newsletter-body h3 { font-size: 14px !important; }
+    .newsletter-body img { max-width: 100% !important; height: auto !important; }
+    .newsletter-body a[style*="display:inline-block"],
+    .newsletter-body a[style*="display: inline-block"] {
+      display: block !important;
+      width: 100% !important;
+      text-align: center !important;
+      box-sizing: border-box !important;
+    }
+  }
+</style>
+</head>
 <body style="margin:0;padding:0;background:#f5f4f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<div style="max-width:700px;margin:0 auto;padding:24px;">
-  <div style="background:white;border:1px solid #e8e6e1;border-radius:12px;overflow:hidden;font-size:14px;line-height:1.7;color:#2d2d2d;">
+<div class="newsletter-wrapper" style="max-width:700px;margin:0 auto;padding:24px;">
+  <div class="newsletter-card" style="background:white;border:1px solid #e8e6e1;border-radius:12px;overflow:hidden;font-size:14px;line-height:1.7;color:#2d2d2d;">
     ${newsletterHtml}
   </div>
   <div style="text-align:center;padding:16px;font-size:11px;color:#9a9a92;">
@@ -627,23 +696,33 @@ async function generateTasksFromNewsletter(tenantId, newsletterHtml) {
     const config = getTenantConfig(tenantId);
     const plainText = stripHtmlToText(newsletterHtml);
 
-    const prompt = `You just generated the following intelligence newsletter for ${config.name}:
+    const prompt = `You just generated the following intelligence newsletter for ${config.name} (a concrete and masonry subcontractor):
 
 ---
 ${plainText.substring(0, 6000)}
 ---
 
-Based on the newsletter findings, extract 3-5 specific, actionable tasks that the team should execute this week. For each task, return a JSON object with these fields:
+Extract ALL projects and opportunities mentioned in this newsletter. For EVERY project, create an "outreach" task so the team can get on the bid list for concrete sub work. Also create 1-2 "research" tasks for items that need more investigation before outreach. Cap at 15 tasks maximum.
+
+For each task, return a JSON object with these fields:
 - title: Short task title (under 60 chars)
 - description: 1-2 sentence description of what to do
-- category: One of "outreach", "research", "analysis", "operations"
+- category: One of "outreach" or "research"
 - priority: "high", "medium", or "low"
 - action_prompt: Detailed instructions for an AI agent to execute this task (include specific company names, contacts, data points from the newsletter)
 
-IMPORTANT: For any "outreach" category task, also include an "email_draft" object with:
-- to: The email address to contact (use a realistic placeholder like "biddesk@companyname.com" if unknown)
-- subject: A professional email subject line
-- body: A short, professional HTML email body (2-3 paragraphs, include specific project details from the newsletter, written from ${config.name}'s perspective expressing interest or requesting information). Use <p> tags for paragraphs. Keep it concise and action-oriented.
+CRITICAL: For EVERY "outreach" task, you MUST include an "email_draft" object with:
+- to: Best guess email for the GC or project owner (e.g. "estimating@companyname.com", "preconstruction@gcname.com", or a specific contact email if mentioned in the newsletter)
+- subject: Professional subject line referencing the specific project name and concrete/masonry subcontracting
+- body: A short HTML email (2-3 paragraphs using <p> tags) written from ${config.name}'s perspective. The email should:
+  1. Reference the specific project by name and location
+  2. Express interest in bidding on the concrete and masonry scope
+  3. Briefly mention ${config.name}'s capabilities in concrete, masonry, foundations, flatwork, and structural concrete
+  4. Ask about bidding opportunities, pre-qualification requirements, or how to get on the bid list
+  5. Be professional and direct - no fluff, no filler
+  6. Sign off with "${config.name} Estimating Team"
+
+KNOWN GC PRIORITY: If the tenant config has a knownGCs list, any task involving a known GC should be set to priority "high" automatically. Known GCs for this tenant: ${config.knownGCs?.length ? config.knownGCs.join(', ') : 'none configured'}.
 
 Return ONLY a JSON array of task objects. No markdown, no explanation.`;
 
@@ -662,8 +741,21 @@ Return ONLY a JSON array of task objects. No markdown, no explanation.`;
 
     if (!Array.isArray(tasks)) return;
 
-    for (const task of tasks.slice(0, 5)) {
+    // Build known GC set for priority boosting
+    const knownGCsLower = (config.knownGCs || []).map(gc => gc.toLowerCase());
+
+    for (const task of tasks.slice(0, 15)) {
       const id = `TASK-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+      // Auto-boost priority to high if task mentions a known GC
+      if (knownGCsLower.length > 0) {
+        const taskText = ((task.title || '') + ' ' + (task.description || '') + ' ' + (task.action_prompt || '')).toLowerCase();
+        const mentionsKnownGC = knownGCsLower.some(gc => taskText.includes(gc));
+        if (mentionsKnownGC && task.priority !== 'high') {
+          console.log(`[Newsletter] Boosting task priority to high (known GC match): ${task.title}`);
+          task.priority = 'high';
+        }
+      }
 
       // For outreach tasks with email drafts, pre-populate artifacts
       let outputArtifacts = null;
@@ -697,7 +789,7 @@ Return ONLY a JSON array of task objects. No markdown, no explanation.`;
 
       console.log(`[Newsletter] Created task: ${id} "${task.title}"${outputArtifacts ? ' (with email draft)' : ''}`);
     }
-    console.log(`[Newsletter] Generated ${Math.min(tasks.length, 5)} tasks for ${tenantId}`);
+    console.log(`[Newsletter] Generated ${Math.min(tasks.length, 15)} tasks for ${tenantId}`);
   } catch (err) {
     console.warn(`[Newsletter] Task generation failed (non-fatal):`, err.message);
   }

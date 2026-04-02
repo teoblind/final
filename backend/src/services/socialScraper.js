@@ -226,6 +226,8 @@ async function searchLinkedIn(queries) {
 export async function gatherSocialIntelligence(config) {
   const region = config.region || 'DFW Texas';
   const services = config.services || ['construction'];
+  const markets = config.markets || [];
+  const hasMultipleMarkets = markets.length > 1;
 
   // X queries - broad construction intel across DFW and Texas
   const xQueries = [
@@ -248,7 +250,26 @@ export async function gatherSocialIntelligence(config) {
     `multifamily apartment construction Texas groundbreaking`,
   ];
 
-  console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)...`);
+  // Add queries for secondary markets (Louisiana, Florida, etc.)
+  if (hasMultipleMarkets) {
+    const secondaryMarkets = markets.filter(m => !m.primary);
+    for (const market of secondaryMarkets) {
+      const mName = market.name;
+      const mRegion = market.region;
+      // Add 2 X queries per secondary market
+      xQueries.push(
+        `construction project awarded ${mName} OR "${mRegion}"`,
+        `general contractor ${mName} new project OR concrete OR masonry`,
+      );
+      // Add 2 LinkedIn queries per secondary market
+      linkedinQueries.push(
+        `${mRegion} construction project awarded groundbreaking concrete`,
+        `general contractor ${mName} new project awarded bid commercial`,
+      );
+    }
+  }
+
+  console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)${hasMultipleMarkets ? ` across ${markets.length} markets` : ''}...`);
 
   const [xResults, linkedinResults] = await Promise.all([
     searchX(xQueries),
