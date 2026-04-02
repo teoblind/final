@@ -355,6 +355,9 @@ ${isSangha ? '- Use a clear visual divider between Part 1 (Mining) and Part 2 (R
 - Target length: ${targetLength}
 - Do NOT use em dashes, use regular hyphens
 - For verified contacts, add a small "VERIFIED" badge next to their name using the brand color
+- CITATIONS: For every project, news item, or claim, include the source URL as a small linked citation at the end of that paragraph. Use format: <a href="URL" style="color:${brandColor};font-size:11px;text-decoration:underline;">Source</a>. If multiple sources support a claim, include all of them. The Sources URLs are provided after each research block - use them. This is critical for credibility.
+- LINKEDIN/X LINKS: When citing LinkedIn posts or X/Twitter posts, link directly to the post or profile. Format as: <a href="URL" style="color:${brandColor};font-size:12px;">View on LinkedIn</a> or <a href="URL" style="color:${brandColor};font-size:12px;">View on X</a>
+- At the very end of the newsletter, include a "Sources" section listing all URLs referenced, as a numbered list with small font (11px)
 ${isSangha ? '- For IPP/developer targets, use a card-style layout with company name, type, and opportunity summary\n- For "Sangha opportunity" callouts, use a highlighted box with a left border in the brand color' : ''}
 
 Return ONLY the HTML content, no markdown wrapping.`;
