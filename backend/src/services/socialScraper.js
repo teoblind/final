@@ -29,7 +29,7 @@ async function searchX(queries) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'grok-3-mini',
+          model: 'grok-4-mini',
           tools: [{ type: 'x_search' }],
           input: [
             {
