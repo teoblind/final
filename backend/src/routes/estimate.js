@@ -42,6 +42,9 @@ import {
   getLeadsSheetShares,
   updateLeadsShareStatus,
   getLeadsShareById,
+  getAgentMode,
+  insertApprovalItem,
+  insertActivity,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -158,16 +161,58 @@ router.post('/estimates/:id/send', async (req, res) => {
 
     // ── Auto-create bid distributions if GC list provided ──
     let distributions = [];
+    let distributionsCopilotPending = false;
     if (req.body.gcList?.length > 0) {
       try {
         const { createBidDistributions } = await import('../services/bidDistribution.js');
+        const projectName = estimate.project_name || estimate.gc_name || 'Project';
+        const baseBidTotal = estimate.total_bid || estimate.subtotal || 0;
         distributions = createBidDistributions(req.user.tenantId, {
           bidRequestId: estimate.bid_request_id,
           estimateId: req.params.id,
-          projectName: estimate.project_name || estimate.gc_name || 'Project',
-          baseBidTotal: estimate.total_bid || estimate.subtotal || 0,
+          projectName,
+          baseBidTotal,
           gcList: req.body.gcList,
         });
+
+        // In copilot mode, queue bid distributions for approval
+        const agentMode = getAgentMode('estimating');
+        if (agentMode === 'copilot' && distributions.length > 0) {
+          insertApprovalItem({
+            tenantId: req.user.tenantId,
+            agentId: 'estimating',
+            title: `Distribute bid to ${distributions.length} GC${distributions.length > 1 ? 's' : ''} for ${projectName}`,
+            description: `Base bid $${baseBidTotal.toLocaleString()} with reputation-adjusted pricing to: ${distributions.map(d => `${d.gcName} ($${d.adjustedTotal.toLocaleString()})`).join(', ')}`,
+            type: 'tool_action',
+            payloadJson: JSON.stringify({
+              action: 'distribute_bids',
+              bidRequestId: estimate.bid_request_id,
+              estimateId: req.params.id,
+              projectName,
+              baseBidTotal,
+              distributions: distributions.map(d => ({
+                id: d.id,
+                gcName: d.gcName,
+                gcEmail: d.gcEmail,
+                gcReputation: d.gcReputation,
+                adjustedTotal: d.adjustedTotal,
+                adjustmentReason: d.adjustmentReason,
+              })),
+            }),
+          });
+
+          insertActivity({
+            tenantId: req.user.tenantId,
+            type: 'agent',
+            title: `${distributions.length} bid distributions pending approval for ${projectName}`,
+            subtitle: `Base: $${baseBidTotal.toLocaleString()} | GCs: ${distributions.map(d => d.gcName).join(', ')} - review in Approvals`,
+            detailJson: JSON.stringify({ estimateId: req.params.id, distributionCount: distributions.length, copilotPending: true }),
+            sourceType: 'estimate',
+            sourceId: `dist-pending-${req.params.id}`,
+            agentId: 'estimating',
+          });
+          distributionsCopilotPending = true;
+        }
       } catch (distErr) {
         console.error('[BidDistribution] Auto-create failed (non-fatal):', distErr.message);
       }
@@ -189,8 +234,8 @@ router.post('/estimates/:id/send', async (req, res) => {
     }
 
     res.json({
-      estimate, emailDraft, distributions, bondAnalysis,
-      message: `Estimate marked as sent${distributions.length ? ` with ${distributions.length} GC distributions` : ''}`,
+      estimate, emailDraft, distributions, bondAnalysis, distributionsCopilotPending,
+      message: `Estimate marked as sent${distributions.length ? ` with ${distributions.length} GC distributions${distributionsCopilotPending ? ' (pending approval)' : ''}` : ''}`,
     });
   } catch (error) {
     console.error('Send estimate error:', error);
@@ -394,14 +439,49 @@ router.post('/inbox/:id/analyze', async (req, res) => {
           missingInfo: bidReq.missing_info || bidReq.missing_info_json,
         });
         if (suggestions.length > 0) {
+          const gcName = bidReq.gc_name || bidReq.from_name || 'GC';
+          const gcEmail = bidReq.gc_email || bidReq.from_email || '';
+          const projectName = bidReq.subject || bidReq.project_name || 'Unknown';
           const rfis = generateRfiDrafts(req.user.tenantId, {
             bidRequestId: req.params.id,
-            gcName: bidReq.gc_name || bidReq.from_name || 'GC',
-            gcEmail: bidReq.gc_email || bidReq.from_email || '',
-            projectName: bidReq.subject || bidReq.project_name || 'Unknown',
+            gcName,
+            gcEmail,
+            projectName,
             suggestions,
           });
           analysis._rfiDrafts = rfis.length;
+
+          // In copilot mode, queue RFI sends for approval instead of auto-firing
+          const agentMode = getAgentMode('estimating');
+          if (agentMode === 'copilot' && rfis.length > 0) {
+            insertApprovalItem({
+              tenantId: req.user.tenantId,
+              agentId: 'estimating',
+              title: `Send ${rfis.length} RFI draft${rfis.length > 1 ? 's' : ''} for ${projectName} to ${gcName}`,
+              description: `${rfis.length} RFI(s) generated from ITB analysis - categories: ${rfis.map(r => r.category).join(', ')}`,
+              type: 'tool_action',
+              payloadJson: JSON.stringify({
+                action: 'send_rfis',
+                bidRequestId: req.params.id,
+                gcName,
+                gcEmail,
+                projectName,
+                rfis: rfis.map(r => ({ id: r.id, subject: r.subject, body: r.body, category: r.category })),
+              }),
+            });
+
+            insertActivity({
+              tenantId: req.user.tenantId,
+              type: 'agent',
+              title: `${rfis.length} RFI drafts pending approval for ${projectName}`,
+              subtitle: `To: ${gcName} - review in Approvals`,
+              detailJson: JSON.stringify({ bidRequestId: req.params.id, rfiCount: rfis.length, copilotPending: true }),
+              sourceType: 'estimate',
+              sourceId: `rfi-pending-${req.params.id}`,
+              agentId: 'estimating',
+            });
+            analysis._rfiCopilotPending = true;
+          }
         }
       } catch (rfiErr) {
         console.error('[RFIGenerator] Auto-detect failed (non-fatal):', rfiErr.message);

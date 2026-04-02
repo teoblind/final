@@ -1248,12 +1248,54 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           // Extract feedback from owner emails
           try {
             const { extractEmailFeedback, hasFeedbackSignals } = await import('../services/memoryExtractor.js');
-            if (hasFeedbackSignals(body || snippet)) {
-              extractEmailFeedback(ownerTenant, senderEmail, subject, body || snippet).catch(err => {
+            if (hasFeedbackSignals(body || fullData.snippet)) {
+              extractEmailFeedback(ownerTenant, senderEmail, subject, body || fullData.snippet).catch(err => {
                 console.warn(`[GmailPoll] Feedback extraction failed: ${err.message}`);
               });
             }
           } catch {}
+
+          // ─── Owner attachment ingestion ─────────────────────────────────
+          // Download and parse document attachments from owner emails so they
+          // enter the knowledge system even when the agent doesn't reply.
+          try {
+            const ownerAttachments = await extractAttachments(gmail, msg.id, fullData.payload);
+            const docTypes = /\.(docx|pdf|xlsx|csv|txt)$/i;
+            const docAttachments = ownerAttachments.filter(a => docTypes.test(a.filename));
+            if (docAttachments.length > 0) {
+              console.log(`[GmailPoll] [${label}] Owner ${senderEmail} - ingesting ${docAttachments.length} attachment(s)`);
+              await saveAttachmentKnowledge(docAttachments, {
+                tenantId: ownerTenant,
+                senderEmail,
+                subject,
+                threadId: msgThreadId,
+                messageId: msg.id,
+              });
+              for (const att of docAttachments) {
+                insertActivity({
+                  tenantId: ownerTenant,
+                  type: 'in',
+                  title: `Ingested attachment: ${att.filename} from ${senderName || senderEmail}`,
+                  subtitle: `${subject} (owner-observe)`,
+                  detailJson: JSON.stringify({
+                    filename: att.filename,
+                    mimeType: att.mimeType,
+                    sizeBytes: att.buffer?.length || 0,
+                    from: senderEmail,
+                    fromName: senderName,
+                    subject,
+                    threadId: msgThreadId,
+                    messageId: msg.id,
+                  }),
+                  sourceType: 'email-attachment',
+                  sourceId: `${msg.id}:${att.filename}`,
+                  agentId: 'gmail-poll',
+                });
+              }
+            }
+          } catch (attErr) {
+            console.warn(`[GmailPoll] Owner attachment ingestion failed (non-fatal): ${attErr.message}`);
+          }
 
           try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
           markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'owner-observe', tenantId: ownerTenant });
