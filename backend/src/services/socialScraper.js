@@ -63,7 +63,8 @@ Important: cast a wide net. Include posts from companies, journalists, industry 
         for (const item of data.output) {
           if (item.type === 'message' && item.content) {
             for (const block of item.content) {
-              if (block.type === 'text') content += block.text;
+              if (block.type === 'output_text') content += block.text;
+              else if (block.type === 'text') content += block.text;
             }
           }
         }
@@ -72,6 +73,9 @@ Important: cast a wide net. Include posts from companies, journalists, industry 
       if (!content && data.choices?.[0]?.message?.content) {
         content = data.choices[0].message.content;
       }
+
+      console.log(`[SocialScraper] X query "${query.slice(0, 40)}": got ${content.length} chars of content`);
+      if (content.length < 200) console.log(`[SocialScraper] X raw: ${content}`);
 
       // Extract JSON array from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
