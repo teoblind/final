@@ -751,21 +751,20 @@ ${transcript}`,
           `).run(entryId, tid, meetingName, (transcript || '').length, recordedAt);
         } catch { /* tenant_files may not exist */ }
 
-        // Extract per-person tasks + send follow-up emails (only for inviting tenant to avoid duplicate emails)
-        if (tid === tenantId) {
-          try {
-            const result = await processMeetingComplete({
-              tenantId: tid,
-              entryId,
-              meetingTitle: meetingName,
-              transcript,
-              summary,
-              attendees,
-            });
-            console.log(`[CalendarPoll] Post-processing done for ${tid}: ${result.actionItemsInserted || 0} items, ${result.instructionsExecuted || 0} instructions`);
-          } catch (err) {
-            console.error(`[CalendarPoll] processMeetingComplete failed for ${tid}:`, err.message);
-          }
+        // Extract action items for ALL tenants; emails + agent instructions only for inviting tenant
+        try {
+          const result = await processMeetingComplete({
+            tenantId: tid,
+            entryId,
+            meetingTitle: meetingName,
+            transcript,
+            summary,
+            attendees,
+            actionItemsOnly: tid !== tenantId,
+          });
+          console.log(`[CalendarPoll] Post-processing done for ${tid}: ${result.actionItemsInserted || 0} items, ${result.instructionsExecuted || 0} instructions`);
+        } catch (err) {
+          console.error(`[CalendarPoll] processMeetingComplete failed for ${tid}:`, err.message);
         }
       });
     }

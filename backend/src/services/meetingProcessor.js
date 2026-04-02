@@ -242,8 +242,9 @@ export async function processMeetingComplete({
   transcript,
   summary,
   attendees,
+  actionItemsOnly = false,
 }) {
-  console.log(`[MeetingProcessor] Processing meeting: ${meetingTitle}`);
+  console.log(`[MeetingProcessor] Processing meeting: ${meetingTitle}${actionItemsOnly ? ' (action items only)' : ''}`);
   console.log(`[MeetingProcessor] Attendees: ${attendees.join(', ')}`);
 
   // 1. Get past context
@@ -264,18 +265,20 @@ export async function processMeetingComplete({
   const itemCount = insertActionItems({ tenantId, entryId, result });
   console.log(`[MeetingProcessor] Inserted ${itemCount} action items`);
 
-  // 4. Extract and execute agent-directed instructions from the transcript
+  // 4. Extract and execute agent-directed instructions (skip for non-inviting tenants)
   let instructionsExecuted = 0;
-  try {
-    instructionsExecuted = await executeAgentInstructions({
-      tenantId,
-      meetingTitle,
-      transcript,
-      summary: result.meeting_summary || summary,
-      attendees,
-    });
-  } catch (err) {
-    console.error(`[MeetingProcessor] Instruction execution failed:`, err.message);
+  if (!actionItemsOnly) {
+    try {
+      instructionsExecuted = await executeAgentInstructions({
+        tenantId,
+        meetingTitle,
+        transcript,
+        summary: result.meeting_summary || summary,
+        attendees,
+      });
+    } catch (err) {
+      console.error(`[MeetingProcessor] Instruction execution failed:`, err.message);
+    }
   }
 
   insertActivity({
