@@ -256,7 +256,7 @@ router.post('/import', async (req, res) => {
           attendees ? `Attendees: ${attendees}\n\n${plainTranscript}` : plainTranscript,
           summary,
           `fireflies-${tx.id}`,
-          tx.duration || null,
+          tx.duration ? Math.round(tx.duration * 60) : null, // Fireflies returns minutes, store as seconds
           recordedAt,
           transcriptJson.length > 0 ? JSON.stringify(transcriptJson) : null,
         );

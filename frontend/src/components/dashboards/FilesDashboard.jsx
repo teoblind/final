@@ -2529,13 +2529,14 @@ export default function FilesDashboard() {
         // Plain transcript fallback (for meetings without diarization)
         const plainTranscript = m.transcript || '';
 
-        // Parse content/notes into sections
-        const contentLines = (m.content || '').split('\n');
+        // Use summary (rich Fireflies format) if available, otherwise fall back to content
+        const notesSource = m.summary || m.content || '';
+        const contentLines = notesSource.split('\n');
         const sections = [];
         let cur = { title: null, lines: [] };
         for (const line of contentLines) {
           if (/^attendees:/i.test(line.trim())) continue;
-          const isHeader = /^[A-Z][A-Z\s/&()-]+:/.test(line.trim()) || /^#{1,3}\s/.test(line);
+          const isHeader = /^#{1,3}\s/.test(line) || /^[A-Z][A-Z\s/&()-]+:/.test(line.trim());
           if (isHeader) {
             if (cur.title || cur.lines.length) sections.push(cur);
             cur = { title: line.replace(/^#+\s*/, '').replace(/:$/, '').trim(), lines: [] };
@@ -2546,8 +2547,11 @@ export default function FilesDashboard() {
         const fmtTime = (s) => { const mn = Math.floor(s / 60); const sc = Math.floor(s % 60); return `${String(mn).padStart(2, '0')}:${String(sc).padStart(2, '0')}`; };
         const fmtDur = (s) => { if (!s) return ''; const h = Math.floor(s / 3600); const mn = Math.floor((s % 3600) / 60); return h > 0 ? `${h}h ${mn}m` : `${mn}m`; };
 
-        const attLine = contentLines.find(l => /^attendees:/i.test(l.trim()));
-        const attendees = attLine ? attLine.replace(/^attendees:\s*/i, '').split(',').map(a => a.trim()).filter(Boolean) : [];
+        // Extract attendees from content (even if summary is shown in notes panel)
+        const contentForAttendees = (m.content || '').split('\n');
+        const attLine = contentForAttendees.find(l => /^attendees:/i.test(l.trim()));
+        const attendees = attLine ? attLine.replace(/^attendees:\s*/i, '').split(',').map(a => a.trim()).filter(Boolean) : speakers.slice(0, 6);
+        const hasSummary = !!(m.summary && m.summary.trim());
 
         const handleShare = async () => {
           setShareLoading(true);
@@ -2641,28 +2645,53 @@ export default function FilesDashboard() {
               {/* LEFT: Notes */}
               <div className="flex-1 min-w-0 flex flex-col border-r border-[#e8e8e3]">
                 <div className="px-6 py-2 border-b border-[#e8e8e3] shrink-0" style={{ background: '#fff' }}>
-                  <span className="text-[12px] font-semibold" style={{ color: accent }}>Notes</span>
+                  <span className="text-[12px] font-semibold" style={{ color: accent }}>{hasSummary ? 'Summary' : 'Notes'}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                   <div className="space-y-5">
                     {sections.length > 0 ? sections.map((sec, si) => {
                       const cLines = sec.lines.filter(l => l.trim());
                       if (!cLines.length && !sec.title) return null;
+                      // Render inline markdown (bold, timestamps)
+                      const renderInline = (text) => {
+                        const parts = [];
+                        let remaining = text;
+                        let key = 0;
+                        while (remaining) {
+                          // Match **bold** or (MM:SS) timestamps
+                          const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+                          const timeMatch = remaining.match(/\((\d{1,2}:\d{2}(?:\s*-\s*\d{1,2}:\d{2})?)\)/);
+                          let nextMatch = null;
+                          let nextIdx = remaining.length;
+                          if (boldMatch && boldMatch.index < nextIdx) { nextMatch = 'bold'; nextIdx = boldMatch.index; }
+                          if (timeMatch && timeMatch.index < nextIdx) { nextMatch = 'time'; nextIdx = timeMatch.index; }
+                          if (!nextMatch) { parts.push(remaining); break; }
+                          if (nextIdx > 0) parts.push(remaining.slice(0, nextIdx));
+                          if (nextMatch === 'bold') {
+                            parts.push(<strong key={key++} style={{ fontWeight: 700, color: '#1a1a1a' }}>{boldMatch[1]}</strong>);
+                            remaining = remaining.slice(nextIdx + boldMatch[0].length);
+                          } else {
+                            parts.push(<span key={key++} style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: accent, fontWeight: 600 }}>({timeMatch[1]})</span>);
+                            remaining = remaining.slice(nextIdx + timeMatch[0].length);
+                          }
+                        }
+                        return parts;
+                      };
                       return (
                         <div key={si}>
-                          {sec.title && <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '8px' }}>{sec.title}</h3>}
+                          {sec.title && <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '8px', borderBottom: '1px solid #e8e8e3', paddingBottom: '6px' }}>{sec.title}</h3>}
                           <div className="space-y-1">
                             {cLines.map((line, li) => {
                               const t = line.trim();
                               const nm = t.match(/^(\d+)\.\s+(.*)/);
-                              if (nm) return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, paddingLeft: '4px' }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: accent, marginRight: '8px' }}>{nm[1]}.</span>{nm[2]}</p>;
+                              if (nm) return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, paddingLeft: '4px' }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: accent, marginRight: '8px' }}>{nm[1]}.</span>{renderInline(nm[2])}</p>;
                               if (t.startsWith('- ') || t.startsWith('* ')) return (
                                 <div key={li} className="flex gap-2 py-0.5">
                                   <span style={{ color: accent, fontSize: '8px', marginTop: '7px' }}>&#9679;</span>
-                                  <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, margin: 0 }}>{t.slice(2)}</p>
+                                  <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, margin: 0 }}>{renderInline(t.slice(2))}</p>
                                 </div>
                               );
-                              return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7 }}>{t}</p>;
+                              return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7 }}>{renderInline(t)}</p>;
                             })}
                           </div>
                         </div>
@@ -2938,7 +2967,7 @@ export default function FilesDashboard() {
                             .then(d => {
                               if (d.content || d.transcript || d.summary || d.transcript_json) {
                                 setMeetingAudioTime(0);
-                                setViewingFileContent({ id: d.id || file.id, title: d.title || file.name, content: d.content || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at });
+                                setViewingFileContent({ id: d.id || file.id, title: d.title || file.name, content: d.content || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at, summary: d.summary || '' });
                               } else showToast('No content available for this file');
                             })
                             .catch(() => showToast('Failed to load file content'));
@@ -3039,7 +3068,7 @@ export default function FilesDashboard() {
                                   if (d.content || d.transcript || d.summary || d.transcript_json) {
                                     setMeetingTab('summary');
                                     setMeetingAudioTime(0);
-                                    setViewingFileContent({ id: d.id || file.id, title: d.title || file.name, content: d.content || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at });
+                                    setViewingFileContent({ id: d.id || file.id, title: d.title || file.name, content: d.content || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at, summary: d.summary || '' });
                                   } else showToast('No content available for this file');
                                 })
                                 .catch(() => showToast('Failed to load file content'));
