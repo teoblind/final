@@ -3,7 +3,7 @@
  *
  * Two sources:
  *  1. X/Twitter - xAI Grok API with x_search tool (searches real X posts)
- *  2. LinkedIn - Puppeteer scraping via Google cache of LinkedIn posts
+ *  2. LinkedIn - Apify LinkedIn Post Search Scraper (no cookies needed)
  *
  * Returns structured results with direct post URLs for newsletter citations.
  */
@@ -75,7 +75,6 @@ Important: cast a wide net. Include posts from companies, journalists, industry 
       }
 
       console.log(`[SocialScraper] X query "${query.slice(0, 40)}": got ${content.length} chars of content`);
-      if (content.length < 200) console.log(`[SocialScraper] X raw: ${content}`);
 
       // Extract JSON array from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
@@ -106,122 +105,76 @@ Important: cast a wide net. Include posts from companies, journalists, industry 
   });
 }
 
-// ── LinkedIn via Puppeteer ───────────────────────────────────────────────────
+// ── LinkedIn via Apify Post Search Scraper ───────────────────────────────────
 
 async function searchLinkedIn(queries) {
-  let browser;
-  try {
-    const puppeteer = await import('puppeteer-core');
+  const apiToken = process.env.APIFY_API_TOKEN;
+  if (!apiToken) {
+    console.log('[SocialScraper] No APIFY_API_TOKEN - skipping LinkedIn search');
+    return [];
+  }
 
-    // Find Chrome binary
-    const chromePaths = [
-      '/usr/bin/chromium-browser',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium',
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    ];
+  const results = [];
 
-    let executablePath;
-    const fs = await import('fs');
-    for (const cp of chromePaths) {
-      if (fs.existsSync(cp)) { executablePath = cp; break; }
-    }
-    if (!executablePath) {
-      console.warn('[SocialScraper] No Chrome binary found - skipping LinkedIn');
-      return [];
-    }
+  for (const query of queries) {
+    try {
+      // Build LinkedIn search URL with keyword and date filter (past week)
+      const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(query)}&datePosted=%22past-week%22&sortBy=%22date_posted%22`;
 
-    browser = await puppeteer.default.launch({
-      executablePath,
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    });
+      // Run Apify actor synchronously (returns dataset items directly)
+      // Actor: harvestapi/linkedin-post-search (no cookies needed)
+      const res = await fetch(
+        `https://api.apify.com/v2/acts/harvestapi~linkedin-post-search/run-sync-get-dataset-items?token=${apiToken}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            urls: [searchUrl],
+            maxResults: 10,
+          }),
+        }
+      );
 
-    const results = [];
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[SocialScraper] Apify LinkedIn error ${res.status} for: ${query.slice(0, 50)}`, errText.slice(0, 200));
+        continue;
+      }
 
-    for (const query of queries) {
-      try {
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      const posts = await res.json();
+      console.log(`[SocialScraper] LinkedIn query "${query.slice(0, 40)}": got ${posts.length} posts`);
 
-        // LinkedIn public search (no login required for some results)
-        const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(query)}&datePosted=%22past-week%22&sortBy=%22date_posted%22`;
-        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+      if (Array.isArray(posts)) {
+        for (const post of posts) {
+          // Apify returns various field names depending on the actor version
+          const author = post.authorName || post.author || post.profileName || 'Unknown';
+          const text = post.text || post.postText || post.content || '';
+          const url = post.postUrl || post.url || post.linkedinUrl || '';
+          const date = post.postedDate || post.date || post.publishedAt || '';
 
-        // Wait for content or auth wall
-        await page.waitForSelector('body', { timeout: 5000 });
-
-        // Check if we hit the auth wall
-        const isAuthWall = await page.evaluate(() => {
-          return document.querySelector('.join-form') !== null ||
-                 document.querySelector('[data-tracking-control-name="auth_wall"]') !== null ||
-                 document.body.innerText.includes('Sign in to view');
-        });
-
-        if (isAuthWall) {
-          console.log('[SocialScraper] LinkedIn auth wall - trying Google cache approach');
-          // Fallback: use Google to find LinkedIn posts
-          const googleUrl = `https://www.google.com/search?q=site:linkedin.com/posts+${encodeURIComponent(query)}&tbs=qdr:w`;
-          await page.goto(googleUrl, { waitUntil: 'networkidle2', timeout: 15000 });
-
-          const googleResults = await page.evaluate(() => {
-            const links = [];
-            document.querySelectorAll('a[href*="linkedin.com/posts"], a[href*="linkedin.com/feed/update"]').forEach(a => {
-              const title = a.closest('.g')?.querySelector('h3')?.textContent || a.textContent || '';
-              const snippet = a.closest('.g')?.querySelector('.VwiC3b')?.textContent || '';
-              const href = a.href;
-              if (href && title) {
-                links.push({ title: title.trim(), snippet: snippet.trim(), url: href });
-              }
-            });
-            return links.slice(0, 5);
-          });
-
-          for (const gr of googleResults) {
+          if (url && text) {
             results.push({
-              author: gr.title.split(' - ')[0] || 'Unknown',
-              summary: gr.snippet || gr.title,
-              url: gr.url,
+              author,
+              summary: text.substring(0, 200),
+              url,
+              date,
               platform: 'linkedin',
             });
           }
-        } else {
-          // Scrape LinkedIn search results directly
-          const posts = await page.evaluate(() => {
-            const items = [];
-            document.querySelectorAll('[data-urn]').forEach(el => {
-              const authorEl = el.querySelector('.update-components-actor__name');
-              const contentEl = el.querySelector('.update-components-text');
-              const linkEl = el.querySelector('a[href*="/feed/update/"]');
-              if (authorEl && contentEl) {
-                items.push({
-                  author: authorEl.textContent?.trim() || '',
-                  summary: contentEl.textContent?.trim().substring(0, 200) || '',
-                  url: linkEl?.href || '',
-                  platform: 'linkedin',
-                });
-              }
-            });
-            return items.slice(0, 5);
-          });
-          results.push(...posts);
         }
-
-        await page.close();
-        // Rate limit
-        await new Promise(r => setTimeout(r, 2000));
-      } catch (err) {
-        console.warn(`[SocialScraper] LinkedIn search failed for: ${query.slice(0, 50)}`, err.message);
       }
+    } catch (err) {
+      console.warn(`[SocialScraper] LinkedIn search failed for: ${query.slice(0, 50)}`, err.message);
     }
-
-    return results;
-  } catch (err) {
-    console.error('[SocialScraper] LinkedIn scraper error:', err.message);
-    return [];
-  } finally {
-    if (browser) await browser.close().catch(() => {});
   }
+
+  // Deduplicate by URL
+  const seen = new Set();
+  return results.filter(p => {
+    if (seen.has(p.url)) return false;
+    seen.add(p.url);
+    return true;
+  });
 }
 
 // ── Combined search for newsletter ───────────────────────────────────────────
@@ -242,18 +195,16 @@ export async function gatherSocialIntelligence(config) {
 
   // LinkedIn queries - focused on recent posts
   const linkedinQueries = [
-    `${region} construction project awarded 2026`,
+    `${region} construction project awarded`,
     `general contractor ${region} new project groundbreaking`,
     `data center Texas construction concrete`,
   ];
 
   console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)...`);
 
-  // LinkedIn Puppeteer scraping disabled - unreliable on VPS (auth walls + timeouts)
-  // TODO: Replace with LinkedIn API or Proxycurl when available
   const [xResults, linkedinResults] = await Promise.all([
     searchX(xQueries),
-    Promise.resolve([]),
+    searchLinkedIn(linkedinQueries),
   ]);
 
   console.log(`[SocialScraper] Found ${xResults.length} X posts, ${linkedinResults.length} LinkedIn posts`);
