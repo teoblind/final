@@ -166,8 +166,18 @@ async function searchLinkedIn(queries) {
         date = post.postedAt;
       }
 
-      // Only include posts with actual content and URLs
-      if (url && text && text.length > 20) {
+      // Only include posts with actual content, URLs, and construction relevance
+      const lowerText = text.toLowerCase();
+      const isRelevant = [
+        'construction', 'concrete', 'foundation', 'groundbreaking', 'broke ground',
+        'awarded', 'general contractor', 'subcontract', 'data center', 'project',
+        'building', 'development', 'commercial', 'industrial', 'infrastructure',
+        'bid', 'preconstruction', 'site work', 'flatwork', 'tilt-wall', 'slab',
+        'paving', 'curb', 'gutter', 'excavat', 'grading', 'hiring', 'superintendent',
+        'project manager', 'safety', 'topping out', 'permit', 'zoning',
+      ].some(kw => lowerText.includes(kw));
+
+      if (url && text && text.length > 20 && isRelevant) {
         results.push({
           author: authorName,
           summary: text.substring(0, 200),

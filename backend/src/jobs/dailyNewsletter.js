@@ -382,9 +382,9 @@ ${JSON.stringify(businessContext, null, 2)}${verificationBlock}
 ${socialResults && (socialResults.xPosts?.length || socialResults.linkedinPosts?.length) ? `
 SOCIAL MEDIA POSTS (real posts with direct URLs - include these in a "Social Media Highlights" section):
 
-${socialResults.xPosts?.length ? 'X/TWITTER POSTS:\n' + socialResults.xPosts.map(p => `- @${p.handle || 'unknown'} (${p.author || ''}): ${p.summary} | URL: ${p.url}${p.date ? ' | Date: ' + p.date : ''}`).join('\n') : ''}
+${socialResults.xPosts?.length ? 'X/TWITTER POSTS:\n' + socialResults.xPosts.slice(0, 20).map(p => `- @${p.handle || 'unknown'} (${p.author || ''}): ${p.summary} | URL: ${p.url}${p.date ? ' | Date: ' + p.date : ''}`).join('\n') : ''}
 
-${socialResults.linkedinPosts?.length ? 'LINKEDIN POSTS:\n' + socialResults.linkedinPosts.map(p => `- ${p.author || 'Unknown'}: ${p.summary} | URL: ${p.url}`).join('\n') : ''}
+${socialResults.linkedinPosts?.length ? 'LINKEDIN POSTS:\n' + socialResults.linkedinPosts.slice(0, 15).map(p => `- ${p.author || 'Unknown'}: ${p.summary} | URL: ${p.url}${p.date ? ' | Date: ' + p.date : ''}`).join('\n') : ''}
 
 IMPORTANT: For X posts, link directly to the tweet URL. For LinkedIn posts, link directly to the post URL. These are REAL URLs that have been scraped - always include them as clickable links.` : `
 NO SOCIAL MEDIA DATA WAS COLLECTED TODAY. Do NOT create a "Social Media Highlights" section. Do NOT invent or fabricate any LinkedIn posts, X/Twitter posts, or social media URLs. Only include social media content when real scraped data is provided above. If no social media data block appears above this line, there is NO social media content to include.`}
