@@ -34,20 +34,20 @@ const TENANT_SEARCH_CONFIG = {
     services: ['concrete', 'masonry', 'foundations', 'flatwork', 'structural concrete', 'site work', 'asphalt', 'paving'],
     color: '#1e3a5f', // navy
     searchQueries: [
-      'new commercial construction projects awarded {region} this week',
-      'data center construction projects Texas general contractor awarded 2026',
-      'large commercial construction projects breaking ground {region}',
-      '{region} construction bid opportunities concrete masonry',
-      'general contractor awarded new project Texas commercial industrial',
-      'construction industry news Texas DFW infrastructure',
-      'hyperscale data center construction Texas concrete subcontractor needed',
-      'semiconductor factory construction Texas groundbreaking 2026',
+      'new commercial construction projects awarded {region} past 7 days',
+      'data center construction projects Texas general contractor awarded this week',
+      '{region} construction bid opportunities closing this week concrete masonry',
+      'large commercial construction projects breaking ground {region} this month',
+      'general contractor awarded new project Texas this week commercial industrial',
+      'construction industry news Texas DFW infrastructure this week',
+      'hyperscale data center construction Texas concrete subcontractor 2026',
+      'semiconductor factory construction Texas groundbreaking update this month',
+      '{region} municipal government construction bid invitation this week',
     ],
     linkedinQueries: [
       'site:linkedin.com construction project awarded Texas this week',
-      'site:linkedin.com general contractor new project DFW concrete',
-      'site:linkedin.com data center construction Texas groundbreaking',
-      'site:linkedin.com "concrete" OR "masonry" OR "foundations" Dallas Fort Worth project',
+      'site:linkedin.com general contractor new project DFW concrete this week',
+      'site:linkedin.com data center construction Texas groundbreaking 2026',
     ],
   },
   // Sangha Systems - Bitcoin mining & energy + renewables (weekly)
@@ -102,10 +102,11 @@ async function searchWeb(query, focus = 'news') {
       body: JSON.stringify({
         model: 'sonar-pro',
         messages: [
-          { role: 'system', content: 'You are a research assistant. Return factual, concise findings with specific names, numbers, and dates. Focus on the most recent and relevant results.' },
+          { role: 'system', content: 'You are a research assistant. Return factual, concise findings with specific names, numbers, and dates. Focus on the most recent results from the past week. Always include source URLs for claims.' },
           { role: 'user', content: query },
         ],
         max_tokens: 1500,
+        search_recency_filter: 'week',
       }),
     });
 
@@ -331,7 +332,9 @@ Use "Draft Email" for outreach actions and "Start Task" for research/analysis ac
 
   const prompt = `You are writing a daily intelligence newsletter for ${config.name}, specializing in ${config.services.join(', ')} in ${config.region}.
 
-WEB RESEARCH RESULTS (gathered this morning):
+IMPORTANT: This is a DAILY newsletter. Only include information from the past 7 days. Do NOT recycle old news or restate well-known projects unless there is a NEW development this week. Every item must have a clear "what's new" angle. If research results contain older information, note the date it was reported.
+
+WEB RESEARCH RESULTS (gathered this morning, filtered to past week):
 ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
 
 CURRENT BUSINESS STATE:
@@ -565,10 +568,13 @@ Return ONLY a JSON array of task objects. No markdown, no explanation.`;
 
 // ── Main Job ──────────────────────────────────────────────────────────────────
 
-async function runDailyNewsletter() {
+async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
   const tenants = getAllTenants();
 
   for (const tenant of tenants) {
+    // Optional tenant filter (e.g. only re-run for DACP)
+    if (tenantFilter && tenant.id !== tenantFilter) continue;
+
     try {
       await runWithTenant(tenant.id, async () => {
         console.log(`[Newsletter] Running for tenant: ${tenant.id}`);
@@ -580,8 +586,8 @@ async function runDailyNewsletter() {
         }
         const config = getTenantConfig(tenant.id);
 
-        // Weekly tenants only run on their configured day (default Monday)
-        if (config.frequency === 'weekly') {
+        // Weekly tenants only run on their configured day (unless manual trigger with tenantFilter)
+        if (!tenantFilter && config.frequency === 'weekly') {
           const today = new Date().getDay(); // 0=Sun, 1=Mon, ...
           if (today !== (config.runDay ?? 1)) {
             console.log(`[Newsletter] Skipping ${tenant.id} - weekly newsletter, not run day (today=${today}, runDay=${config.runDay ?? 1})`);
@@ -589,9 +595,14 @@ async function runDailyNewsletter() {
           }
         }
 
-        // Get recipients (all tenant users with email)
-        const users = getUsersByTenant(tenant.id);
-        const recipients = users.map(u => u.email).filter(Boolean);
+        // Get recipients - override if provided, else all tenant users
+        let recipients;
+        if (recipientOverride) {
+          recipients = Array.isArray(recipientOverride) ? recipientOverride : [recipientOverride];
+        } else {
+          const users = getUsersByTenant(tenant.id);
+          recipients = users.map(u => u.email).filter(Boolean);
+        }
         if (recipients.length === 0) {
           console.log(`[Newsletter] Skipping ${tenant.id} - no recipients`);
           return;

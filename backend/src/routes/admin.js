@@ -1135,8 +1135,9 @@ router.post('/overnight-analysis', async (req, res) => {
 router.post('/daily-newsletter', async (req, res) => {
   try {
     const { runDailyNewsletter } = await import('../jobs/dailyNewsletter.js');
-    runDailyNewsletter().catch(err => console.error('[Admin] Manual newsletter error:', err.message));
-    res.json({ success: true, message: 'Daily newsletter triggered' });
+    const { tenant_id, recipient } = req.body || {};
+    runDailyNewsletter({ tenantFilter: tenant_id, recipientOverride: recipient }).catch(err => console.error('[Admin] Manual newsletter error:', err.message));
+    res.json({ success: true, message: `Daily newsletter triggered${tenant_id ? ` for ${tenant_id}` : ''}${recipient ? ` -> ${recipient}` : ''}` });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
