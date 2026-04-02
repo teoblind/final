@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic, Newspaper, Play, Pause } from 'lucide-react';
+import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic, Newspaper, Play, Pause, Share2, Copy, Check } from 'lucide-react';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../auth/AuthContext';
 
@@ -2029,7 +2029,7 @@ function NewsletterViewerModal({ newsletter, onClose }) {
 
 // ─── Meeting Audio Bar ──────────────────────────────────────────────────────
 
-const MeetingAudioBar = React.forwardRef(function MeetingAudioBar({ audioUrl, onTimeUpdate }, ref) {
+const MeetingAudioBar = React.forwardRef(function MeetingAudioBar({ audioUrl, onTimeUpdate, accent = '#1e3a5f' }, ref) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -2079,13 +2079,13 @@ const MeetingAudioBar = React.forwardRef(function MeetingAudioBar({ audioUrl, on
         onEnded={() => setPlaying(false)}
       />
       <div className="flex items-center gap-3">
-        <button onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity shrink-0" style={{ background: '#7c3aed', color: '#fff' }}>
+        <button onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity shrink-0" style={{ background: accent, color: '#fff' }}>
           {playing ? <Pause size={14} /> : <Play size={14} style={{ marginLeft: '2px' }} />}
         </button>
         <div className="flex-1">
           <div className="relative h-1.5 bg-[#e0ddd8] rounded-full cursor-pointer group" onClick={seek}>
-            <div className="absolute h-full rounded-full transition-all" style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%', background: '#7c3aed' }} />
-            <div className="absolute w-3 h-3 rounded-full -top-[3px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: duration ? `calc(${(currentTime / duration) * 100}% - 6px)` : '0', background: '#7c3aed' }} />
+            <div className="absolute h-full rounded-full transition-all" style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%', background: accent }} />
+            <div className="absolute w-3 h-3 rounded-full -top-[3px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: duration ? `calc(${(currentTime / duration) * 100}% - 6px)` : '0', background: accent }} />
           </div>
         </div>
         <span className="text-[11px] font-mono text-[#6b6b65] tabular-nums shrink-0">{fmt(currentTime)} / {fmt(duration)}</span>
@@ -2117,9 +2117,11 @@ export default function FilesDashboard() {
   const [viewingReport, setViewingReport] = useState(null);
   const [viewingNewsletter, setViewingNewsletter] = useState(null);
   const [viewingFileContent, setViewingFileContent] = useState(null);
-  const [meetingTab, setMeetingTab] = useState('summary');
   const [meetingAudioTime, setMeetingAudioTime] = useState(0);
   const meetingAudioRef = useRef(null);
+  const [shareUrl, setShareUrl] = useState(null);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
   const [commentCounts, setCommentCounts] = useState({});
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -2510,24 +2512,25 @@ export default function FilesDashboard() {
         />
       )}
 
-      {/* Meeting Viewer Modal (Fireflies-style: summary + transcript + audio) */}
+      {/* Meeting Viewer Modal (Fireflies-style: notes + transcript + audio) */}
       {viewingFileContent && (() => {
         const m = viewingFileContent;
-        const COLORS = ['#1a6b3c', '#2563eb', '#7c3aed', '#b8860b', '#c0392b', '#0891b2'];
-        const BGS = ['#edf7f0', '#eff6ff', '#f5f0ff', '#fdf6e8', '#fef2f2', '#ecfeff'];
+        const accent = getComputedStyle(document.documentElement).getPropertyValue('--t-ui-accent').trim() || '#1e3a5f';
+        const COLORS = ['#1a6b3c', '#2563eb', '#c0392b', '#b8860b', '#7c3aed', '#0891b2'];
+        const BGS = ['#edf7f0', '#eff6ff', '#fef2f2', '#fdf6e8', '#f5f0ff', '#ecfeff'];
 
-        // Parse transcript_json
+        // Parse transcript_json for diarized view
         let utterances = [];
         try { utterances = typeof m.transcript_json === 'string' ? JSON.parse(m.transcript_json) : m.transcript_json || []; } catch { utterances = []; }
         const speakers = [...new Set(utterances.map(u => u.speaker))].filter(s => s && s !== 'UNKNOWN');
         const spkIdx = {};
         speakers.forEach((s, i) => { spkIdx[s] = i; });
 
-        // Parse summary into bullet points
-        const summaryLines = (m.summary || '').split('\n').filter(l => l.trim());
+        // Plain transcript fallback (for meetings without diarization)
+        const plainTranscript = m.transcript || '';
 
         // Parse content/notes into sections
-        const contentLines = (m.content || m.transcript || '').split('\n');
+        const contentLines = (m.content || '').split('\n');
         const sections = [];
         let cur = { title: null, lines: [] };
         for (const line of contentLines) {
@@ -2543,144 +2546,138 @@ export default function FilesDashboard() {
         const fmtTime = (s) => { const mn = Math.floor(s / 60); const sc = Math.floor(s % 60); return `${String(mn).padStart(2, '0')}:${String(sc).padStart(2, '0')}`; };
         const fmtDur = (s) => { if (!s) return ''; const h = Math.floor(s / 3600); const mn = Math.floor((s % 3600) / 60); return h > 0 ? `${h}h ${mn}m` : `${mn}m`; };
 
-        // Extract attendees from content
         const attLine = contentLines.find(l => /^attendees:/i.test(l.trim()));
         const attendees = attLine ? attLine.replace(/^attendees:\s*/i, '').split(',').map(a => a.trim()).filter(Boolean) : [];
 
+        const handleShare = async () => {
+          setShareLoading(true);
+          try {
+            const res = await fetch(`${API_BASE}/v1/knowledge/entries/${m.id}/share`, { method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' } });
+            const data = await res.json();
+            if (data.share_url) { setShareUrl(data.share_url); }
+          } catch { showToast('Failed to generate share link'); }
+          setShareLoading(false);
+        };
+
+        const copyShareUrl = () => {
+          if (shareUrl) { navigator.clipboard.writeText(shareUrl); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); }
+        };
+
         return (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm" onClick={() => { setViewingFileContent(null); setMeetingTab('summary'); setMeetingAudioTime(0); }}>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={() => { setViewingFileContent(null); setMeetingAudioTime(0); setShareUrl(null); setShareCopied(false); }}>
           <div
-            className="relative w-full max-w-[1200px] mx-4 my-4 max-h-[calc(100vh-32px)] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+            className="absolute inset-3 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
             style={{ fontFamily: "'DM Sans', sans-serif", background: '#fafaf8' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="shrink-0 px-6 py-5" style={{ background: 'linear-gradient(135deg, #2d1854 0%, #4a2080 100%)' }}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(124, 58, 237, 0.25)' }}>
-                      <Mic size={14} style={{ color: '#c4b5fd' }} />
-                    </div>
-                    <span style={{ fontSize: '10px', fontFamily: "'DM Mono', monospace", fontWeight: 500, letterSpacing: '1.5px', color: 'rgba(196, 181, 253, 0.7)', textTransform: 'uppercase' }}>
-                      Meeting Recording
-                    </span>
+            {/* Header - DACP blue */}
+            <div className="shrink-0 px-6 py-4" style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accent}dd 100%)` }}>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,0.12)' }}>
+                    <Mic size={15} style={{ color: 'rgba(255,255,255,0.8)' }} />
                   </div>
-                  <h2 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '22px', fontWeight: 400, color: '#fff', lineHeight: 1.25, marginBottom: '6px' }}>
-                    {m.title}
-                  </h2>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {m.recorded_at && (
-                      <span className="flex items-center gap-1.5" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontFamily: "'DM Mono', monospace" }}>
-                        <Clock size={10} />
-                        {new Date(m.recorded_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
-                    )}
-                    {m.duration_seconds > 0 && (
-                      <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(124, 58, 237, 0.2)', color: '#c4b5fd', border: '1px solid rgba(124, 58, 237, 0.3)' }}>
-                        {fmtDur(m.duration_seconds)}
-                      </span>
-                    )}
-                    {attendees.length > 0 && (
-                      <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
-                        +{attendees.length} attendees
-                      </span>
-                    )}
+                  <div className="min-w-0 flex-1">
+                    <h2 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '20px', fontWeight: 400, color: '#fff', lineHeight: 1.25, margin: 0 }}>
+                      {m.title}
+                    </h2>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      {m.recorded_at && (
+                        <span className="flex items-center gap-1" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', fontFamily: "'DM Mono', monospace" }}>
+                          <Clock size={10} />
+                          {new Date(m.recorded_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      )}
+                      {m.duration_seconds > 0 && (
+                        <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 8px', borderRadius: '10px', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)' }}>
+                          {fmtDur(m.duration_seconds)}
+                        </span>
+                      )}
+                      {attendees.length > 0 && attendees.map((name, i) => (
+                        <span key={i} style={{ fontSize: '10px', fontWeight: 500, padding: '1px 8px', borderRadius: '10px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}>
+                          {name}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setViewingFileContent(null); setMeetingTab('summary'); setMeetingAudioTime(0); }}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ color: 'rgba(255,255,255,0.4)', transition: 'all 0.15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <X size={18} />
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Share button */}
+                  <button
+                    onClick={handleShare}
+                    disabled={shareLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                    style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.15)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+                  >
+                    <Share2 size={12} />
+                    Share
+                  </button>
+                  <button
+                    onClick={() => { setViewingFileContent(null); setMeetingAudioTime(0); setShareUrl(null); }}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ color: 'rgba(255,255,255,0.4)', transition: 'all 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
+              {/* Share URL bar */}
+              {shareUrl && (
+                <div className="flex items-center gap-2 mt-3 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                  <input readOnly value={shareUrl} className="flex-1 bg-transparent text-[12px] font-mono text-white/80 outline-none" />
+                  <button onClick={copyShareUrl} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+                    {shareCopied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy Link</>}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Two-panel body */}
+            {/* Two-panel body - fills remaining space */}
             <div className="flex-1 flex min-h-0">
-              {/* LEFT: Summary + Notes */}
+              {/* LEFT: Notes */}
               <div className="flex-1 min-w-0 flex flex-col border-r border-[#e8e8e3]">
-                {/* Tab bar */}
-                <div className="flex items-center gap-0 px-6 border-b border-[#e8e8e3] shrink-0" style={{ background: '#fff' }}>
-                  {['summary', 'notes'].map(tab => (
-                    <button
-                      key={tab}
-                      onClick={() => setMeetingTab(tab)}
-                      className="relative px-4 py-2.5 text-[12px] font-semibold transition-colors capitalize"
-                      style={{ color: meetingTab === tab ? '#7c3aed' : '#999' }}
-                    >
-                      {tab === 'summary' ? 'General Summary' : 'Notes'}
-                      {meetingTab === tab && <div className="absolute bottom-0 left-2 right-2 h-[2px] rounded-full" style={{ background: '#7c3aed' }} />}
-                    </button>
-                  ))}
+                <div className="px-6 py-2 border-b border-[#e8e8e3] shrink-0" style={{ background: '#fff' }}>
+                  <span className="text-[12px] font-semibold" style={{ color: accent }}>Notes</span>
                 </div>
-
-                {/* Tab content */}
                 <div className="flex-1 overflow-y-auto px-6 py-5">
-                  {meetingTab === 'summary' ? (
-                    <div className="space-y-3">
-                      {summaryLines.length > 0 ? summaryLines.map((line, i) => {
-                        const trimmed = line.trim();
-                        if (/^#{1,3}\s/.test(trimmed)) {
-                          return <h3 key={i} style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginTop: i > 0 ? '16px' : 0, marginBottom: '4px' }}>{trimmed.replace(/^#+\s*/, '')}</h3>;
-                        }
-                        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-                          const text = trimmed.slice(2);
-                          const colonIdx = text.indexOf(':');
-                          return (
-                            <div key={i} className="flex gap-3 py-1">
-                              <span style={{ color: '#7c3aed', fontSize: '8px', marginTop: '7px', shrink: 0 }}>&#9679;</span>
-                              <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, margin: 0 }}>
-                                {colonIdx > 0 && colonIdx < 40 ? (
-                                  <><strong style={{ color: '#1a1a1a' }}>{text.slice(0, colonIdx + 1)}</strong>{text.slice(colonIdx + 1)}</>
-                                ) : text}
-                              </p>
-                            </div>
-                          );
-                        }
-                        return <p key={i} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7 }}>{trimmed}</p>;
-                      }) : (
-                        <p style={{ fontSize: '13px', color: '#999', fontStyle: 'italic' }}>No summary available for this meeting.</p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-5">
-                      {sections.map((sec, si) => {
-                        const cLines = sec.lines.filter(l => l.trim());
-                        if (!cLines.length && !sec.title) return null;
-                        return (
-                          <div key={si}>
-                            {sec.title && <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '8px' }}>{sec.title}</h3>}
-                            <div className="space-y-1">
-                              {cLines.map((line, li) => {
-                                const t = line.trim();
-                                const nm = t.match(/^(\d+)\.\s+(.*)/);
-                                if (nm) return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, paddingLeft: '4px' }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: '#7c3aed', marginRight: '8px' }}>{nm[1]}.</span>{nm[2]}</p>;
-                                if (t.startsWith('- ') || t.startsWith('* ')) return (
-                                  <div key={li} className="flex gap-2 py-0.5">
-                                    <span style={{ color: '#7c3aed', fontSize: '8px', marginTop: '7px' }}>&#9679;</span>
-                                    <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, margin: 0 }}>{t.slice(2)}</p>
-                                  </div>
-                                );
-                                return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7 }}>{t}</p>;
-                              })}
-                            </div>
+                  <div className="space-y-5">
+                    {sections.length > 0 ? sections.map((sec, si) => {
+                      const cLines = sec.lines.filter(l => l.trim());
+                      if (!cLines.length && !sec.title) return null;
+                      return (
+                        <div key={si}>
+                          {sec.title && <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '8px' }}>{sec.title}</h3>}
+                          <div className="space-y-1">
+                            {cLines.map((line, li) => {
+                              const t = line.trim();
+                              const nm = t.match(/^(\d+)\.\s+(.*)/);
+                              if (nm) return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, paddingLeft: '4px' }}><span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', color: accent, marginRight: '8px' }}>{nm[1]}.</span>{nm[2]}</p>;
+                              if (t.startsWith('- ') || t.startsWith('* ')) return (
+                                <div key={li} className="flex gap-2 py-0.5">
+                                  <span style={{ color: accent, fontSize: '8px', marginTop: '7px' }}>&#9679;</span>
+                                  <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.7, margin: 0 }}>{t.slice(2)}</p>
+                                </div>
+                              );
+                              return <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.7 }}>{t}</p>;
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        </div>
+                      );
+                    }) : (
+                      <p style={{ fontSize: '13px', color: '#999', fontStyle: 'italic' }}>No notes available.</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* RIGHT: Transcript panel */}
-              <div className="w-[420px] shrink-0 flex flex-col" style={{ background: '#fff' }}>
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#e8e8e3] shrink-0">
-                  <span className="text-[12px] font-semibold" style={{ color: '#7c3aed' }}>Transcript</span>
+              <div className="w-[440px] shrink-0 flex flex-col" style={{ background: '#fff' }}>
+                <div className="flex items-center justify-between px-4 py-2 border-b border-[#e8e8e3] shrink-0">
+                  <span className="text-[12px] font-semibold" style={{ color: accent }}>Transcript</span>
                   {utterances.length > 0 && (
                     <span className="text-[10px] text-[#999] font-mono">{utterances.length} segments</span>
                   )}
@@ -2698,7 +2695,7 @@ export default function FilesDashboard() {
                   </div>
                 )}
 
-                {/* Transcript list */}
+                {/* Transcript content */}
                 <div className="flex-1 overflow-y-auto px-3 py-2">
                   {utterances.length > 0 ? utterances.map((u, i) => {
                     const idx = spkIdx[u.speaker] ?? 0;
@@ -2708,10 +2705,9 @@ export default function FilesDashboard() {
                     return (
                       <div
                         key={i}
-                        className={`flex gap-3 py-2 px-2 rounded-lg transition-colors ${isActive ? 'bg-[#f5f0ff]' : 'hover:bg-[#fafaf8]'}`}
+                        className={`flex gap-3 py-2 px-2 rounded-lg transition-colors ${isActive ? 'bg-[#eff6ff]' : 'hover:bg-[#fafaf8]'}`}
                         style={isActive ? { borderLeft: `3px solid ${color}` } : { borderLeft: '3px solid transparent' }}
                       >
-                        {/* Speaker avatar */}
                         <div className="shrink-0 mt-0.5">
                           <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: bg, color }}>
                             {u.speaker?.charAt(0) || '?'}
@@ -2722,7 +2718,10 @@ export default function FilesDashboard() {
                             <span className="text-[11px] font-bold" style={{ color }}>{u.speaker}</span>
                             <button
                               onClick={() => meetingAudioRef.current?.seekTo(u.start)}
-                              className="text-[10px] font-mono text-[#9a9a92] hover:text-[#7c3aed] cursor-pointer transition-colors"
+                              className="text-[10px] font-mono text-[#9a9a92] cursor-pointer transition-colors"
+                              style={{ '--hover-color': accent }}
+                              onMouseEnter={e => { e.currentTarget.style.color = accent; }}
+                              onMouseLeave={e => { e.currentTarget.style.color = '#9a9a92'; }}
                             >
                               {fmtTime(u.start)}
                             </button>
@@ -2731,26 +2730,28 @@ export default function FilesDashboard() {
                         </div>
                       </div>
                     );
-                  }) : (
-                    <div className="flex items-center justify-center h-32 text-[13px] text-[#999]">
-                      {m.transcript ? (
-                        <div className="px-3 py-2 text-[13px] text-[#333] leading-relaxed whitespace-pre-wrap">{m.transcript}</div>
-                      ) : 'No transcript available'}
-                    </div>
+                  }) : plainTranscript ? (
+                    <div className="px-3 py-3 text-[13px] text-[#333] leading-[1.8] whitespace-pre-wrap">{plainTranscript}</div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-[13px] text-[#999]">No transcript available</div>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Audio player bar at bottom */}
-            {m.audio_url && (() => {
+            {m.audio_url ? (() => {
               const audioUrl = m.audio_url.startsWith('http') ? m.audio_url : `${API_BASE.replace('/api', '')}${m.audio_url}`;
               return (
                 <div className="shrink-0 border-t border-[#e8e8e3]">
-                  <MeetingAudioBar ref={meetingAudioRef} audioUrl={audioUrl} onTimeUpdate={setMeetingAudioTime} />
+                  <MeetingAudioBar ref={meetingAudioRef} audioUrl={audioUrl} onTimeUpdate={setMeetingAudioTime} accent={accent} />
                 </div>
               );
-            })()}
+            })() : (
+              <div className="shrink-0 border-t border-[#e8e8e3] px-5 py-2.5 text-[11px] text-[#999] text-center" style={{ background: '#f5f4f0' }}>
+                No audio recording available
+              </div>
+            )}
           </div>
         </div>
         );
@@ -2936,9 +2937,8 @@ export default function FilesDashboard() {
                             .then(r => r.json())
                             .then(d => {
                               if (d.content || d.transcript || d.summary || d.transcript_json) {
-                                setMeetingTab('summary');
                                 setMeetingAudioTime(0);
-                                setViewingFileContent({ title: d.title || file.name, content: d.content || d.transcript || '', summary: d.summary || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at });
+                                setViewingFileContent({ id: d.id || file.id, title: d.title || file.name, content: d.content || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at });
                               } else showToast('No content available for this file');
                             })
                             .catch(() => showToast('Failed to load file content'));
@@ -3039,7 +3039,7 @@ export default function FilesDashboard() {
                                   if (d.content || d.transcript || d.summary || d.transcript_json) {
                                     setMeetingTab('summary');
                                     setMeetingAudioTime(0);
-                                    setViewingFileContent({ title: d.title || file.name, content: d.content || d.transcript || '', summary: d.summary || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at });
+                                    setViewingFileContent({ id: d.id || file.id, title: d.title || file.name, content: d.content || '', transcript: d.transcript || '', transcript_json: d.transcript_json, audio_url: d.audio_url, duration_seconds: d.duration_seconds, type: d.type, recorded_at: d.recorded_at });
                                   } else showToast('No content available for this file');
                                 })
                                 .catch(() => showToast('Failed to load file content'));
