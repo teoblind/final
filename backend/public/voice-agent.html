@@ -526,18 +526,24 @@ async function getSessionData() {
 
   // 1. Session ID — instructions + botId pre-built by createVoiceBot (most reliable)
   if (sid) {
-    const urls = [
-      `https://coppice.ai/api/v1/voice-session/${sid}`,
-      `${location.origin}/api/v1/voice-session/${sid}`,
-    ];
-    for (const url of urls) {
+    const sessionUrl = `https://coppice.ai/api/v1/voice-session/${sid}`;
+    // Retry loop: botId may not be stored yet (race with Recall API response)
+    for (let attempt = 0; attempt < 4; attempt++) {
       try {
+        if (attempt > 0) {
+          console.log(`[Coppice] Retry #${attempt} for botId...`);
+          await new Promise(r => setTimeout(r, 2000));
+        }
         console.log(`[Coppice] Fetching session data: ${sid}`);
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(sessionUrl, { signal: AbortSignal.timeout(8000) });
         const data = await res.json();
         if (data.instructions && data.instructions.length > 100) {
-          console.log(`[Coppice] Loaded session: ${data.instructions.length} chars, botId=${data.botId || 'none'}`);
-          return { instructions: data.instructions, botId: data.botId || null };
+          if (data.botId || attempt >= 3) {
+            console.log(`[Coppice] Loaded session: ${data.instructions.length} chars, botId=${data.botId || 'none'}`);
+            return { instructions: data.instructions, botId: data.botId || null };
+          }
+          // Got instructions but no botId yet - save instructions, retry for botId
+          console.log(`[Coppice] Got instructions but no botId yet, retrying...`);
         }
       } catch (e) {
         console.warn(`[Coppice] Session fetch failed:`, e.message);
