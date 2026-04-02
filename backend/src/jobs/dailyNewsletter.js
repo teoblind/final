@@ -355,7 +355,7 @@ Use "Draft Email" for outreach actions and "Start Task" for operations/research 
 
 3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
 
-4. **SOCIAL MEDIA HIGHLIGHTS** - ONLY include this section if a "SOCIAL MEDIA POSTS" data block was provided above with real posts. Use ONLY the posts and URLs from that data block. Do NOT invent posts, authors, dates, or URLs. If no social media data block was provided, SKIP THIS SECTION COMPLETELY - do not generate it at all.
+4. **SOCIAL MEDIA HIGHLIGHTS** - ONLY include this section if a "SOCIAL MEDIA POSTS" data block was provided above with real posts. This section MUST include BOTH X/Twitter posts AND LinkedIn posts if both are provided. Organize as two sub-sections: "From X/Twitter" and "From LinkedIn". For each post include the author, a brief summary, and a clickable link ("View on X" or "View on LinkedIn"). Include at least 3-5 LinkedIn posts and 3-5 X posts. Use ONLY the posts and URLs from the data block. Do NOT invent posts, authors, dates, or URLs. If no social media data block was provided, SKIP THIS SECTION COMPLETELY.
 
 5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the primary region (${config.region}) that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
 
