@@ -4682,6 +4682,7 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN share_token TEXT"); } catch (e) {}
   try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN share_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN transcript_json TEXT"); } catch (e) {}
+  try { targetDb.exec("ALTER TABLE knowledge_entries ADD COLUMN shared_emails TEXT DEFAULT '[]'"); } catch (e) {}
   try { targetDb.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_share_token ON knowledge_entries(share_token)"); } catch (e) {}
 
   // Agent insights table (for Command dashboard)

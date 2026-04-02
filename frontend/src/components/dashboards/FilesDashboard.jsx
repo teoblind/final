@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic, Newspaper, Play, Pause, Share2, Copy, Check } from 'lucide-react';
+import { Search, ExternalLink, ChevronRight, ChevronDown, FolderOpen, RefreshCw, Send, Mail, X, AlertTriangle, TrendingUp, Shield, Target, Zap, Clock, FileText, Printer, Download, MessageCircle, Upload, Mic, Newspaper, Play, Pause, Share2, Copy, Check, Link, UserPlus } from 'lucide-react';
 import { useTenant } from '../../contexts/TenantContext';
 import { useAuth } from '../auth/AuthContext';
 
@@ -2127,6 +2127,10 @@ export default function FilesDashboard() {
   const [shareUrl, setShareUrl] = useState(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
+  const [shareInviting, setShareInviting] = useState(false);
+  const [sharedEmails, setSharedEmails] = useState([]);
   const [commentCounts, setCommentCounts] = useState({});
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -2579,16 +2583,39 @@ export default function FilesDashboard() {
             const res = await fetch(`${API_BASE}/v1/knowledge/entries/${m.id}/share`, { method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' } });
             const data = await res.json();
             if (data.share_url) { setShareUrl(data.share_url); }
+            if (data.shared_emails) { setSharedEmails(data.shared_emails); }
           } catch { showToast('Failed to generate share link'); }
           setShareLoading(false);
+          setShareModalOpen(true);
         };
 
         const copyShareUrl = () => {
           if (shareUrl) { navigator.clipboard.writeText(shareUrl); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); }
         };
 
+        const handleInviteEmail = async () => {
+          if (!shareEmail || !shareEmail.includes('@')) return;
+          setShareInviting(true);
+          try {
+            const res = await fetch(`${API_BASE}/v1/knowledge/entries/${m.id}/share-email`, {
+              method: 'POST',
+              headers: { ...authHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: shareEmail }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              setSharedEmails(data.shared_emails || []);
+              setShareEmail('');
+              showToast(`Invite sent to ${shareEmail}`, 'success');
+            } else {
+              showToast(data.error || 'Failed to send invite', 'error');
+            }
+          } catch { showToast('Failed to send invite', 'error'); }
+          setShareInviting(false);
+        };
+
         return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={() => { setViewingFileContent(null); setMeetingAudioTime(0); setShareUrl(null); setShareCopied(false); }}>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={() => { setViewingFileContent(null); setMeetingAudioTime(0); setShareUrl(null); setShareCopied(false); setShareModalOpen(false); setShareEmail(''); setSharedEmails([]); }}>
           <div
             className="absolute inset-3 flex flex-col rounded-2xl shadow-2xl overflow-hidden"
             style={{ fontFamily: "'DM Sans', sans-serif", background: '#fafaf8' }}
@@ -2639,7 +2666,7 @@ export default function FilesDashboard() {
                     Share
                   </button>
                   <button
-                    onClick={() => { setViewingFileContent(null); setMeetingAudioTime(0); setShareUrl(null); }}
+                    onClick={() => { setViewingFileContent(null); setMeetingAudioTime(0); setShareUrl(null); setShareModalOpen(false); }}
                     className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                     style={{ color: 'rgba(255,255,255,0.4)', transition: 'all 0.15s' }}
                     onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
@@ -2649,16 +2676,94 @@ export default function FilesDashboard() {
                   </button>
                 </div>
               </div>
-              {/* Share URL bar */}
-              {shareUrl && (
-                <div className="flex items-center gap-2 mt-3 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                  <input readOnly value={shareUrl} className="flex-1 bg-transparent text-[12px] font-mono text-white/80 outline-none" />
-                  <button onClick={copyShareUrl} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
-                    {shareCopied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy Link</>}
-                  </button>
-                </div>
-              )}
             </div>
+
+            {/* Share Modal Overlay */}
+            {shareModalOpen && (
+              <div className="absolute inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(2px)' }} onClick={() => setShareModalOpen(false)}>
+                <div className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden" style={{ background: '#fff', fontFamily: "'DM Sans', sans-serif" }} onClick={e => e.stopPropagation()}>
+                  {/* Modal header */}
+                  <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                    <div>
+                      <h3 className="text-[15px] font-semibold" style={{ color: '#1a1a1a' }}>{m.title}</h3>
+                      {m.recorded_at && (
+                        <p className="text-[11px] mt-0.5" style={{ color: '#999' }}>
+                          {new Date(m.recorded_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={() => setShareModalOpen(false)} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: '#999' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f0f0f0'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Email invite input */}
+                  <div className="px-5 pb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: '#e0e0e0', background: '#fafafa' }}>
+                        <Mail size={14} style={{ color: '#aaa', flexShrink: 0 }} />
+                        <input
+                          type="email"
+                          placeholder="Email address"
+                          value={shareEmail}
+                          onChange={e => setShareEmail(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleInviteEmail(); }}
+                          className="flex-1 bg-transparent outline-none text-[13px]"
+                          style={{ color: '#333' }}
+                        />
+                      </div>
+                      <button
+                        onClick={handleInviteEmail}
+                        disabled={shareInviting || !shareEmail.includes('@')}
+                        className="px-4 py-2 rounded-lg text-[12px] font-semibold transition-all"
+                        style={{
+                          background: shareEmail.includes('@') ? accent : '#e0e0e0',
+                          color: shareEmail.includes('@') ? '#fff' : '#999',
+                          opacity: shareInviting ? 0.6 : 1,
+                        }}
+                      >
+                        {shareInviting ? 'Sending...' : 'Invite'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Shared with list */}
+                  {sharedEmails.length > 0 && (
+                    <div className="px-5 pb-4">
+                      <p className="text-[11px] font-semibold mb-2" style={{ color: '#999', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Shared with</p>
+                      <div className="space-y-1.5">
+                        {sharedEmails.map((email, i) => (
+                          <div key={i} className="flex items-center gap-2.5 py-1.5">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: `${accent}18`, color: accent }}>
+                              {email.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-[13px]" style={{ color: '#555' }}>{email}</span>
+                            <span className="text-[10px] ml-auto px-2 py-0.5 rounded-full" style={{ background: '#f0f0f0', color: '#999' }}>Invited</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Copy link section */}
+                  <div className="px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid #f0f0f0', background: '#fafaf8' }}>
+                    <div className="flex items-center gap-2">
+                      <Link size={13} style={{ color: '#999' }} />
+                      <span className="text-[12px]" style={{ color: '#777' }}>Anyone with the link can view</span>
+                    </div>
+                    <button onClick={copyShareUrl} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all" style={{ background: '#f0f0f0', color: '#555' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#e5e5e5'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#f0f0f0'; }}
+                    >
+                      {shareCopied ? <><Check size={11} /> Copied</> : <><Copy size={11} /> Copy Link</>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Two-panel body - fills remaining space */}
             <div className="flex-1 flex min-h-0">

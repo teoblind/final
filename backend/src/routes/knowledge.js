@@ -26,6 +26,7 @@ import { processMeetingComplete } from '../services/meetingProcessor.js';
 import { insertActivity, getCurrentTenantId, getTenantDb, getAllTenantDbs, getAgentAssignment, getThread, SANGHA_TENANT_ID } from '../cache/database.js';
 import { getThreadMessages } from '../services/chatService.js';
 import { authenticate } from '../middleware/auth.js';
+import { sendHtmlEmail } from '../services/emailService.js';
 
 const __filename_knowledge = fileURLToPath(import.meta.url);
 const __dirname_knowledge = dirname(__filename_knowledge);
@@ -374,19 +375,95 @@ router.post('/entries/:id/share', async (req, res) => {
     const { tenantId } = resolveIds(req);
     const { id } = req.params;
 
-    const entry = db.prepare('SELECT id FROM knowledge_entries WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+    const entry = db.prepare('SELECT id, share_token, share_enabled, shared_emails FROM knowledge_entries WHERE id = ? AND tenant_id = ?').get(id, tenantId);
     if (!entry) return res.status(404).json({ error: 'Entry not found' });
 
-    const shareToken = crypto.randomBytes(12).toString('hex');
-    db.prepare('UPDATE knowledge_entries SET share_token = ?, share_enabled = 1 WHERE id = ? AND tenant_id = ?')
-      .run(shareToken, id, tenantId);
+    // Reuse existing token if already shared
+    let shareToken = entry.share_token;
+    if (!shareToken || !entry.share_enabled) {
+      shareToken = crypto.randomBytes(12).toString('hex');
+      db.prepare('UPDATE knowledge_entries SET share_token = ?, share_enabled = 1 WHERE id = ? AND tenant_id = ?')
+        .run(shareToken, id, tenantId);
+    }
 
     const baseUrl = process.env.APP_BASE_URL || 'https://app.coppice.ai';
     const shareUrl = `${baseUrl}/shared/meeting/${shareToken}`;
+    let sharedEmails = [];
+    try { sharedEmails = JSON.parse(entry.shared_emails || '[]'); } catch { sharedEmails = []; }
 
-    res.json({ share_url: shareUrl, share_token: shareToken });
+    res.json({ share_url: shareUrl, share_token: shareToken, shared_emails: sharedEmails });
   } catch (error) {
     console.error('Share link error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /entries/:id/share-email - Share meeting via email invite
+ * Body: { email: string }
+ */
+router.post('/entries/:id/share-email', async (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+    const { email } = req.body;
+
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Valid email required' });
+    }
+
+    const entry = db.prepare('SELECT id, title, share_token, share_enabled, recorded_at FROM knowledge_entries WHERE id = ? AND tenant_id = ?').get(id, tenantId);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+    // Generate share token if not already shared
+    let shareToken = entry.share_token;
+    if (!shareToken || !entry.share_enabled) {
+      shareToken = crypto.randomBytes(12).toString('hex');
+      db.prepare('UPDATE knowledge_entries SET share_token = ?, share_enabled = 1 WHERE id = ? AND tenant_id = ?')
+        .run(shareToken, id, tenantId);
+    }
+
+    const baseUrl = process.env.APP_BASE_URL || 'https://app.coppice.ai';
+    const shareUrl = `${baseUrl}/shared/meeting/${shareToken}`;
+    const tenantName = req.resolvedTenant?.name || 'Coppice';
+    const meetingDate = entry.recorded_at ? new Date(entry.recorded_at).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : '';
+
+    const html = `
+      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto;">
+        <div style="background: #1a2332; border-radius: 12px 12px 0 0; padding: 28px 32px;">
+          <h2 style="color: #fff; margin: 0; font-size: 18px; font-weight: 600;">Meeting notes shared with you</h2>
+          <p style="color: rgba(255,255,255,0.5); margin: 6px 0 0; font-size: 13px;">${tenantName}</p>
+        </div>
+        <div style="background: #fff; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 12px 12px; padding: 28px 32px;">
+          <h3 style="margin: 0 0 4px; font-size: 16px; color: #1a1a1a;">${entry.title}</h3>
+          ${meetingDate ? `<p style="color: #888; font-size: 13px; margin: 0 0 20px;">${meetingDate}</p>` : ''}
+          <a href="${shareUrl}" style="display: inline-block; background: #1a2332; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;">View Meeting Notes</a>
+          <p style="color: #999; font-size: 12px; margin: 24px 0 0;">This link gives access to the full meeting summary, transcript, and action items.</p>
+        </div>
+      </div>
+    `;
+
+    await sendHtmlEmail({
+      to: email,
+      subject: `Meeting shared: ${entry.title}`,
+      html,
+      tenantId,
+      skipSignature: true,
+    });
+
+    // Track shared emails in a JSON column
+    const current = db.prepare('SELECT shared_emails FROM knowledge_entries WHERE id = ?').get(id);
+    let sharedEmails = [];
+    try { sharedEmails = JSON.parse(current?.shared_emails || '[]'); } catch { sharedEmails = []; }
+    if (!sharedEmails.includes(email)) {
+      sharedEmails.push(email);
+      db.prepare('UPDATE knowledge_entries SET shared_emails = ? WHERE id = ? AND tenant_id = ?')
+        .run(JSON.stringify(sharedEmails), id, tenantId);
+    }
+
+    res.json({ success: true, share_url: shareUrl, shared_emails: sharedEmails });
+  } catch (error) {
+    console.error('Share email error:', error);
     res.status(500).json({ error: error.message });
   }
 });
