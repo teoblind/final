@@ -2111,7 +2111,12 @@ export default function FilesDashboard() {
   const [liveMode, setLiveMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expandedFolders, setExpandedFolders] = useState(() => new Set());
-  const [selectedFolder, setSelectedFolder] = useState(null);
+  const [selectedFolder, setSelectedFolder] = useState(() => {
+    const hash = window.location.hash.slice(1); // e.g. "files/Meetings"
+    const parts = hash.split('/');
+    return parts.length > 1 ? decodeURIComponent(parts[1]) : null;
+  });
+  const initialFolderRef = useRef(selectedFolder);
   const [search, setSearch] = useState('');
   const [totalFiles, setTotalFiles] = useState(0);
   const [viewingReport, setViewingReport] = useState(null);
@@ -2257,8 +2262,11 @@ export default function FilesDashboard() {
               }
               return { ...special, ...grouped };
             });
-            setExpandedFolders(new Set(Object.keys(grouped)));
-            setSelectedFolder(Object.keys(grouped)[0]);
+            const allKeys = Object.keys(grouped);
+            setExpandedFolders(new Set(allKeys));
+            // Restore folder from URL hash, or default to first
+            const urlFolder = initialFolderRef.current;
+            setSelectedFolder(urlFolder && allKeys.includes(urlFolder) ? urlFolder : allKeys[0]);
             setLiveMode(true);
             setTotalFiles(data.total || data.files.length);
             setLoading(false);
@@ -2297,8 +2305,10 @@ export default function FilesDashboard() {
                 }
                 return { ...special, ...grouped };
               });
-              setExpandedFolders(new Set(Object.keys(grouped)));
-              setSelectedFolder(Object.keys(grouped)[0]);
+              const wsKeys = Object.keys(grouped);
+              setExpandedFolders(new Set(wsKeys));
+              const urlFolder2 = initialFolderRef.current;
+              setSelectedFolder(urlFolder2 && wsKeys.includes(urlFolder2) ? urlFolder2 : wsKeys[0]);
               setLiveMode(true);
             }
           }
@@ -2336,6 +2346,11 @@ export default function FilesDashboard() {
             Meetings: { path: '/Meetings/', files: meetingFiles },
             ...prev,
           }));
+          // If URL had #files/Meetings, select it now that data loaded
+          if (initialFolderRef.current === 'Meetings') {
+            setSelectedFolder('Meetings');
+            setExpandedFolders(prev => new Set([...prev, 'Meetings']));
+          }
         }
       } catch {}
     }
@@ -2365,6 +2380,10 @@ export default function FilesDashboard() {
             'Daily Briefs': { path: '/Daily Briefs/', files: briefFiles },
             ...prev,
           }));
+          if (initialFolderRef.current === 'Daily Briefs') {
+            setSelectedFolder('Daily Briefs');
+            setExpandedFolders(prev => new Set([...prev, 'Daily Briefs']));
+          }
         }
       } catch {}
     }
@@ -2454,6 +2473,7 @@ export default function FilesDashboard() {
       return next;
     });
     setSelectedFolder(name);
+    window.location.hash = `files/${encodeURIComponent(name)}`;
   };
 
   const allFiles = useMemo(() => {

@@ -374,7 +374,9 @@ function AppContent() {
   const { tenant } = useTenant();
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    return hash || 'command';
+    // Support sub-paths like #files/Meetings - extract just the tab part
+    const tab = hash.split('/')[0];
+    return tab || 'command';
   });
   const handleSetActiveTab = (tab) => {
     if (tab !== 'portfolio') setSelectedCompanyId(null);
@@ -386,7 +388,8 @@ function AppContent() {
   useEffect(() => {
     const onHash = () => {
       const hash = window.location.hash.slice(1);
-      if (hash) setActiveTab(hash);
+      const tab = hash.split('/')[0];
+      if (tab) setActiveTab(tab);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
