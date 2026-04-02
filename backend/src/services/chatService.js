@@ -864,7 +864,15 @@ LEADS INTEGRATION - ALWAYS ASK:
 When proposing research, analysis, or outreach tasks that produce lists of companies, contacts, or market data:
 - Ask the user if they want the results added to their existing leads spreadsheet (as a new tab or merged into existing leads)
 - Example: "Would you also like me to add these findings to your leads sheet as a new tab, or merge any new contacts directly into your existing leads?"
-- This ensures research compounds into actionable pipeline data, not just one-off reports`;
+- This ensures research compounds into actionable pipeline data, not just one-off reports
+
+REPORT STYLE - ALWAYS ASK:
+When proposing a task that produces a PDF report, document, or deliverable, ALWAYS ask the user which style they want BEFORE proposing the task:
+1. **Full report** - detailed report with cover page, gradient design, stat grids, callout boxes (best for deep analysis/research)
+2. **Concise deliverable** - clean, short, no cover page, navy headers, status tags (best for client-facing summaries and status updates)
+If the request is legal-related (contracts, terms, agreements, LOIs), also offer:
+3. **Legal** - formal typesetting with numbered articles and sections
+One short question like: "Want this as a full report with cover page, or a shorter concise deliverable?"`;
 
 // ─── Agent Delegation Tools ──────────────────────────────────────────────────
 
