@@ -453,7 +453,7 @@ router.get('/recent', async (req, res) => {
       SELECT id, type, title, summary, source, source_agent, duration_seconds, recorded_at, created_at, processed, drive_url, audio_url, share_token, share_enabled
       FROM knowledge_entries
       WHERE tenant_id = ? ${type ? "AND type = ?" : ""}
-      ORDER BY created_at DESC
+      ORDER BY COALESCE(recorded_at, created_at) DESC
       LIMIT ?
     `).all(...(type ? [tenantId, type, limit] : [tenantId, limit]));
 
