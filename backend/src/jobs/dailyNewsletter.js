@@ -22,6 +22,7 @@ import {
   SANGHA_TENANT_ID,
 } from '../cache/database.js';
 import { apolloBulkMatch } from '../services/leadEngine.js';
+import { gatherSocialIntelligence } from '../services/socialScraper.js';
 
 let timer = null;
 
@@ -242,7 +243,7 @@ Return ONLY valid JSON, no commentary or markdown.`;
 
 // ── Newsletter Generation via Claude ──────────────────────────────────────────
 
-async function generateNewsletter(tenantId, searchResults, businessContext, contactVerification = null) {
+async function generateNewsletter(tenantId, searchResults, businessContext, contactVerification = null, socialResults = null) {
   const config = getTenantConfig(tenantId);
   const { tunnelPrompt } = await import('../services/cliTunnel.js');
 
@@ -319,7 +320,7 @@ Use "Draft Email" for outreach actions and "Start Task" for operations/research 
 
 3. **MARKET INTELLIGENCE** - Material pricing trends, labor market, regulatory changes, infrastructure spending that affects the business.
 
-4. **LINKEDIN HIGHLIGHTS** - Interesting posts or announcements from construction industry professionals (if any LinkedIn results were found).
+4. **SOCIAL MEDIA HIGHLIGHTS** - Posts from X/Twitter and LinkedIn about construction projects, GC activity, or industry news in ${config.region}. For EACH post, include a clickable link to the original post (View on X / View on LinkedIn). Use the REAL URLs from the social media data provided above. If no social media posts were found, omit this section entirely.
 
 5. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.
 
@@ -339,6 +340,14 @@ ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answ
 
 CURRENT BUSINESS STATE:
 ${JSON.stringify(businessContext, null, 2)}${verificationBlock}
+${socialResults && (socialResults.xPosts?.length || socialResults.linkedinPosts?.length) ? `
+SOCIAL MEDIA POSTS (real posts with direct URLs - include these in the LinkedIn/X Highlights section):
+
+${socialResults.xPosts?.length ? 'X/TWITTER POSTS:\n' + socialResults.xPosts.map(p => `- @${p.handle || 'unknown'} (${p.author || ''}): ${p.summary} | URL: ${p.url}${p.date ? ' | Date: ' + p.date : ''}`).join('\n') : 'No X posts found.'}
+
+${socialResults.linkedinPosts?.length ? 'LINKEDIN POSTS:\n' + socialResults.linkedinPosts.map(p => `- ${p.author || 'Unknown'}: ${p.summary} | URL: ${p.url}`).join('\n') : 'No LinkedIn posts found.'}
+
+IMPORTANT: For X posts, link directly to the tweet URL. For LinkedIn posts, link directly to the post URL. These are REAL URLs that have been scraped - always include them as clickable links.` : ''}
 
 Write a morning intelligence briefing newsletter. Structure it as clean HTML (no <html>/<body> tags, just the content).
 
@@ -632,13 +641,23 @@ async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
         }
         console.log(`[Newsletter] Got ${searchResults.length} research results`);
 
-        // Step 2: Verify contacts via Apollo
-        console.log(`[Newsletter] Verifying contacts for ${tenant.id}...`);
-        const contactVerification = await extractAndVerifyContacts(tenant.id, searchResults);
+        // Step 1b: Social media search (X + LinkedIn) - runs in parallel with contact verification
+        console.log(`[Newsletter] Searching social media for ${tenant.id}...`);
+        const config = getTenantConfig(tenant.id);
 
-        // Step 3: Generate newsletter via Claude (with verification data)
+        // Step 2: Verify contacts via Apollo + social scraping in parallel
+        console.log(`[Newsletter] Verifying contacts for ${tenant.id}...`);
+        const [contactVerification, socialResults] = await Promise.all([
+          extractAndVerifyContacts(tenant.id, searchResults),
+          gatherSocialIntelligence(config).catch(err => {
+            console.warn(`[Newsletter] Social scraper failed:`, err.message);
+            return { xPosts: [], linkedinPosts: [] };
+          }),
+        ]);
+
+        // Step 3: Generate newsletter via Claude (with verification data + social posts)
         console.log(`[Newsletter] Generating newsletter for ${tenant.id}...`);
-        const newsletterHtml = await generateNewsletter(tenant.id, searchResults, businessContext, contactVerification);
+        const newsletterHtml = await generateNewsletter(tenant.id, searchResults, businessContext, contactVerification, socialResults);
         if (!newsletterHtml || newsletterHtml.length < 100) {
           console.log(`[Newsletter] Generation failed or empty for ${tenant.id}`);
           return;
