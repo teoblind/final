@@ -122,7 +122,7 @@ function LoadingSpinner() {
 
 // ─── Sidebar Navigation ──────────────────────────────────────────────────────
 
-function WorkspaceSwitcher({ user }) {
+function WorkspaceSwitcher({ user, ceoWorkspace, setCeoWorkspace }) {
   const [open, setOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState(null); // null = not loaded
   const { tenant } = useTenant();
@@ -146,11 +146,13 @@ function WorkspaceSwitcher({ user }) {
   }, [open]);
 
   const currentSlug = tenant?.slug || window.location.hostname.split('.')[0];
+  const isConstruction = tenant?.settings?.industry === 'construction';
+  const isCeo = user?.role === 'ceo' || user?.role === 'owner' || user?.email === 'dcruz@dacpholdings.com';
 
   // Only show if user is admin/owner or has multiple workspaces
   const isAdmin = user?.role === 'admin' || user?.role === 'owner' || user?.role === 'sangha_admin' || user?.role === 'super_admin';
   if (workspaces === null) return null; // still loading
-  if (!isAdmin && workspaces.length <= 1) return null;
+  if (!isAdmin && workspaces.length <= 1 && !(isConstruction && isCeo)) return null;
 
   const switchTo = (ws) => {
     const subdomain = ws.subdomain || ws.slug;
@@ -168,18 +170,22 @@ function WorkspaceSwitcher({ user }) {
     window.location.href = target;
   };
 
+  // Current display name depends on CEO workspace mode
+  const currentName = ceoWorkspace ? 'CEO Dashboard' : (tenant?.name || 'Workspace');
+  const currentSubtitle = ceoWorkspace ? 'Executive overview' : `${currentSlug}.coppice.ai`;
+
   return (
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-white/[0.06] transition-colors"
       >
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white/80" style={{ backgroundColor: 'var(--t-ui-accent)' }}>
-          <Building size={14} />
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white/80" style={{ backgroundColor: ceoWorkspace ? '#7c3aed' : 'var(--t-ui-accent)' }}>
+          {ceoWorkspace ? <BarChart3 size={14} /> : <Building size={14} />}
         </div>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-[11px] font-semibold text-white/80 truncate">{tenant?.name || 'Workspace'}</p>
-          <p className="text-[9px] text-white/25 truncate">{currentSlug}.coppice.ai</p>
+          <p className="text-[11px] font-semibold text-white/80 truncate">{currentName}</p>
+          <p className="text-[9px] text-white/25 truncate">{currentSubtitle}</p>
         </div>
         <ChevronsUpDown size={14} className="text-white/30 shrink-0" />
       </button>
@@ -189,12 +195,41 @@ function WorkspaceSwitcher({ user }) {
           <div className="px-3 py-2 border-b border-white/[0.06]">
             <p className="text-[9px] font-bold uppercase tracking-[1.5px] text-white/30">Workspaces</p>
           </div>
+
+          {/* CEO Dashboard workspace entry - only for construction tenants with CEO/owner access */}
+          {isConstruction && isCeo && (
+            <button
+              onClick={() => { setCeoWorkspace(true); setOpen(false); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                ceoWorkspace ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="w-6 h-6 rounded-md bg-purple-500/20 flex items-center justify-center shrink-0">
+                <BarChart3 size={12} className="text-purple-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-medium text-white/80 truncate">CEO Dashboard</p>
+                <p className="text-[10px] text-white/25">Executive overview</p>
+              </div>
+              {ceoWorkspace && <Check size={14} className="text-white/50 shrink-0" />}
+            </button>
+          )}
+
           {(workspaces || []).map(ws => {
-            const isCurrent = ws.slug === currentSlug || ws.subdomain === currentSlug;
+            const isCurrent = !ceoWorkspace && (ws.slug === currentSlug || ws.subdomain === currentSlug);
             return (
               <button
                 key={ws.id}
-                onClick={() => { if (!isCurrent) switchTo(ws); setOpen(false); }}
+                onClick={() => {
+                  if (ceoWorkspace && (ws.slug === currentSlug || ws.subdomain === currentSlug)) {
+                    // Switching back from CEO to current tenant - just toggle off CEO mode
+                    setCeoWorkspace(false);
+                  } else if (!isCurrent) {
+                    setCeoWorkspace(false);
+                    switchTo(ws);
+                  }
+                  setOpen(false);
+                }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
                   isCurrent ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
                 }`}
@@ -216,7 +251,7 @@ function WorkspaceSwitcher({ user }) {
   );
 }
 
-function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarOpen, setSidebarOpen }) {
+function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarOpen, setSidebarOpen, ceoWorkspace, setCeoWorkspace }) {
   const { tenant } = useTenant();
   const brandName = tenant?.branding?.companyName || 'COPPICE';
   const logo = tenant?.branding?.logo;
@@ -313,7 +348,7 @@ function AppSidebar({ activeTab, setActiveTab, navGroups, user, logout, sidebarO
 
         {/* Workspace switcher + User footer */}
         <div className="border-t border-white/[0.06] px-3 py-3 space-y-1.5">
-          <WorkspaceSwitcher user={user} />
+          <WorkspaceSwitcher user={user} ceoWorkspace={ceoWorkspace} setCeoWorkspace={setCeoWorkspace} />
           <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-white/[0.04] cursor-pointer">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: 'var(--t-ui-accent)' }}>
               {user?.name?.split(' ').map(n => n[0]).join('').slice(0, 1).toUpperCase() || 'U'}
@@ -339,13 +374,7 @@ function AppContent() {
   const { tenant } = useTenant();
   const [activeTab, setActiveTab] = useState(() => {
     const hash = window.location.hash.slice(1);
-    if (hash) return hash;
-    // CEO default landing page
-    try {
-      const sess = JSON.parse(sessionStorage.getItem('sangha_auth'));
-      if (sess?.user?.role === 'ceo' || sess?.user?.email === 'dcruz@dacpholdings.com') return 'ceo';
-    } catch {}
-    return 'command';
+    return hash || 'command';
   });
   const handleSetActiveTab = (tab) => {
     if (tab !== 'portfolio') setSelectedCompanyId(null);
@@ -382,6 +411,14 @@ function AppContent() {
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showSetPassword, setShowSetPassword] = useState(false);
+  const [ceoWorkspace, setCeoWorkspace] = useState(() => {
+    // CEO role defaults to CEO workspace
+    try {
+      const sess = JSON.parse(sessionStorage.getItem('sangha_auth'));
+      if (sess?.user?.role === 'ceo' || sess?.user?.email === 'dcruz@dacpholdings.com') return true;
+    } catch {}
+    return false;
+  });
 
   // Clean query params from URL (e.g. ?email=... from login)
   useEffect(() => {
@@ -445,10 +482,8 @@ function AppContent() {
   let agentItems = [];
   let infraItems = [];
 
-  const isCeo = user?.role === 'ceo' || user?.role === 'owner' || user?.email === 'dcruz@dacpholdings.com';
   if (isConstruction) {
     platformItems = [
-      ...(isCeo ? [{ id: 'ceo', label: 'CEO', icon: BarChart3 }] : []),
       { id: 'command', label: 'Command', icon: LayoutDashboard },
       { id: 'office', label: 'Office', icon: Building },
       { id: 'files', label: 'Files', icon: FolderOpen },
@@ -687,8 +722,6 @@ function AppContent() {
     switch (activeTab) {
       case 'command':
         return isConstruction ? <DacpCommandDashboard onNavigate={handleSetActiveTab} /> : <CommandDashboard onNavigate={handleSetActiveTab} />;
-      case 'ceo':
-        return <CeoDashboard />;
       case 'agent-tasks':
         return <TaskTrackerDashboard />;
       case 'field-reports':
@@ -771,6 +804,55 @@ function AppContent() {
     }
   };
 
+  // CEO Workspace - completely separate layout
+  if (ceoWorkspace) {
+    const ceoNavGroups = [
+      { label: 'Overview', items: [
+        { id: 'ceo-overview', label: 'Dashboard', icon: BarChart3 },
+      ]},
+    ];
+    return (
+      <div className="min-h-screen bg-terminal-bg text-terminal-text flex">
+        <AppSidebar
+          activeTab="ceo-overview"
+          setActiveTab={() => {}}
+          navGroups={ceoNavGroups}
+          user={user}
+          logout={logout}
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          ceoWorkspace={ceoWorkspace}
+          setCeoWorkspace={setCeoWorkspace}
+        />
+        <div className="flex-1 min-h-screen overflow-auto">
+          <header className="sticky top-0 z-30 bg-terminal-panel border-b border-terminal-border px-7 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setSidebarOpen(true)} className="p-1.5 hover:bg-terminal-border/50 rounded-lg lg:hidden">
+                <Menu size={20} />
+              </button>
+              <h1 className="text-lg font-heading font-bold tracking-[0.3px]">CEO Dashboard</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              <NotificationBell onNavigate={handleSetActiveTab} />
+            </div>
+          </header>
+          <main className="flex-1">
+            <Suspense fallback={<LoadingSpinner />}>
+              <CeoDashboard />
+            </Suspense>
+          </main>
+        </div>
+        {showSetPassword && (
+          <Suspense fallback={null}>
+            <SetPasswordModal onSuccess={() => setShowSetPassword(false)} onSkip={() => setShowSetPassword(false)} />
+          </Suspense>
+        )}
+        {changePasswordOverlay}
+        <Suspense fallback={null}><HelpChatWidget /></Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-terminal-bg text-terminal-text flex">
       {/* Left Sidebar */}
@@ -782,6 +864,8 @@ function AppContent() {
         logout={logout}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
+        ceoWorkspace={ceoWorkspace}
+        setCeoWorkspace={setCeoWorkspace}
       />
 
       {/* Main area */}
