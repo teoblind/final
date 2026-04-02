@@ -29,21 +29,21 @@ async function searchX(queries) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'grok-4-mini',
+          model: 'grok-4-fast-non-reasoning',
           tools: [{ type: 'x_search' }],
           input: [
             {
               role: 'user',
-              content: `Search X for posts from the past 24 hours about: ${query}
+              content: `Search X for recent posts about: ${query}
 
-For each relevant post, return a JSON array. Each object must have:
-- "author": full name
-- "handle": @username
-- "summary": 1-2 sentence summary of what they posted
-- "url": direct link to the post (https://x.com/username/status/ID)
-- "date": YYYY-MM-DD
+Find up to 10 relevant posts. Return a JSON array where each object has:
+- "author": the poster's display name
+- "handle": their @username
+- "summary": 1-2 sentence summary of the post content
+- "url": the direct post URL (https://x.com/username/status/ID)
+- "date": post date as YYYY-MM-DD
 
-Only include REAL posts with REAL URLs. Return ONLY the JSON array, no other text. If nothing found, return [].`,
+Return ONLY the JSON array, no other text. If nothing relevant found, return [].`,
             },
           ],
         }),
@@ -86,8 +86,8 @@ Only include REAL posts with REAL URLs. Return ONLY the JSON array, no other tex
         }
       }
 
-      // Rate limit between queries
-      await new Promise(r => setTimeout(r, 1500));
+      // Brief pause between queries
+      await new Promise(r => setTimeout(r, 500));
     } catch (err) {
       console.warn(`[SocialScraper] X search failed for: ${query.slice(0, 50)}`, err.message);
     }
@@ -226,12 +226,14 @@ export async function gatherSocialIntelligence(config) {
   const region = config.region || 'DFW Texas';
   const services = config.services || ['construction'];
 
-  // X queries - focused on last 24h
+  // X queries - broader to catch more posts, Grok filters by recency
   const xQueries = [
-    `${region} construction project awarded today`,
-    `${region} general contractor new project concrete bid`,
-    `data center construction Texas groundbreaking OR awarded`,
-    `${services[0]} subcontractor Texas opportunity OR hiring`,
+    `construction project Dallas OR "Fort Worth" OR DFW`,
+    `Texas construction awarded OR groundbreaking OR "broke ground"`,
+    `data center Texas construction OR building`,
+    `general contractor Texas new project OR hiring OR bid`,
+    `commercial construction Dallas OR Houston OR Austin OR Texas`,
+    `concrete OR foundation OR "site work" Texas construction`,
   ];
 
   // LinkedIn queries - focused on recent posts
@@ -243,9 +245,11 @@ export async function gatherSocialIntelligence(config) {
 
   console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)...`);
 
+  // LinkedIn Puppeteer scraping disabled - unreliable on VPS (auth walls + timeouts)
+  // TODO: Replace with LinkedIn API or Proxycurl when available
   const [xResults, linkedinResults] = await Promise.all([
     searchX(xQueries),
-    searchLinkedIn(linkedinQueries),
+    Promise.resolve([]),
   ]);
 
   console.log(`[SocialScraper] Found ${xResults.length} X posts, ${linkedinResults.length} LinkedIn posts`);
