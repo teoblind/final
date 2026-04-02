@@ -10,14 +10,14 @@
  * GET  /count           - Return unread count
  */
 import express from 'express';
-import db from '../cache/database.js';
+import db, { SANGHA_TENANT_ID } from '../cache/database.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 router.use(authenticate);
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || 'default';
+  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
   const userId = req.user?.id || 'anonymous';
   return { tenantId, userId };
 }
@@ -30,7 +30,7 @@ function seedDemoNotifications(tenantId) {
   if (count.c > 0) return;
 
   const demos = {
-    'default': [
+    [SANGHA_TENANT_ID]: [
       { agent_id: 'curtailment', title: 'Curtailment Agent recommends S19 shutdown', body: 'ERCOT prices negative for 4+ hours - S19 fleet idle saves $2,140/hr. Approve to execute.', type: 'action', link_tab: 'curtailment' },
       { agent_id: 'sangha', title: 'Weekly Executive Briefing ready for review', body: 'Fleet hashrate 42.1 EH/s, uptime 97.3%, revenue $1.24M. Full report attached.', type: 'info', link_tab: 'reports' },
       { agent_id: 'pools', title: 'Pool routing detected 3.2% yield improvement on Foundry', body: 'Switching 15 EH/s from F2Pool to Foundry USA increases daily yield by ~$4,800.', type: 'success', link_tab: 'pools' },

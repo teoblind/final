@@ -27,6 +27,7 @@ import {
   getOrphanMessageCount, backfillOrphanMessages,
   getContextPins, addContextPin, removeContextPin,
   getGcProfile, getRelatedThreads, getThreadEntities, upsertKnowledgeEntity,
+  SANGHA_TENANT_ID,
 } from '../cache/database.js';
 
 const __filename_chat = fileURLToPath(import.meta.url);
@@ -79,7 +80,7 @@ router.post('/help/:agentId/messages/stream', async (req, res) => {
     // Cap message length for public endpoint
     const text = content.trim().slice(0, 1000);
 
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const visitorId = `visitor_${ip.replace(/[^a-zA-Z0-9]/g, '_')}`;
     // Help chat is ephemeral - no thread or message persistence
     const threadId = `help_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -124,7 +125,7 @@ router.get('/uploads/:threadId/:filename', async (req, res) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    const tenantId = decoded.tenantId || 'default';
+    const tenantId = decoded.tenantId || SANGHA_TENANT_ID;
     const { threadId, filename } = req.params;
 
     const thread = getThread(threadId);
@@ -159,7 +160,7 @@ const VALID_AGENTS = new Set([
 ]);
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || 'default';
+  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
   const userId = req.user.id; // auth middleware guarantees req.user exists
   const agentId = req.params.agentId;
   return { tenantId, userId, agentId };
@@ -199,7 +200,7 @@ function generateAndEmitTitle(content, threadId, res) {
  */
 router.get('/pinned-threads', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const threads = getPinnedThreads(tenantId, { limit });
     res.json({ threads });
@@ -1068,7 +1069,7 @@ router.delete('/:agentId/messages', async (req, res) => {
  */
 router.post('/generate-report', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const userId = req.user?.id || 'anonymous';
 
     // Check rate limit
@@ -1148,7 +1149,7 @@ router.post('/send-reminder', async (req, res) => {
   }
 
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const result = await sendEmail({ ...reminder, tenantId });
     res.json({ sent: true, messageId: result.messageId });
   } catch (err) {
@@ -1172,7 +1173,7 @@ router.post('/send-estimate', async (req, res) => {
   const demoRecipient = 'teo@zhan.capital';
 
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     let result;
     if (attachment) {
       result = await sendEstimateEmail({
@@ -1222,7 +1223,7 @@ router.post('/send-estimate', async (req, res) => {
  */
 router.get('/context/:threadId', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const { threadId } = req.params;
 
     const thread = getThread(threadId);
@@ -1342,7 +1343,7 @@ router.get('/context/:threadId', async (req, res) => {
  */
 router.post('/context/:threadId/pin', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const { threadId } = req.params;
     const { pinType, refId, label, metadata } = req.body;
 
@@ -1367,7 +1368,7 @@ router.post('/context/:threadId/pin', async (req, res) => {
  */
 router.delete('/context/pin/:pinId', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const { pinId } = req.params;
     removeContextPin(tenantId, pinId);
     res.json({ deleted: true });

@@ -102,7 +102,7 @@ router.get('/status', async (req, res) => {
       const tenantSlug = tenant.slug || tenant.id;
       // Map default tenant to friendly name
       const TENANT_DISPLAY_NAMES = {
-        'default': 'Sangha',
+        'sangha-renewables': 'Sangha',
         'sangha': 'Sangha',
         'dacp-construction-001': 'DACP',
         'dacp': 'DACP',

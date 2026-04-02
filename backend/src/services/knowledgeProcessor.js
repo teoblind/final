@@ -14,12 +14,12 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { tunnelPrompt } from './cliTunnel.js';
-import { getCurrentTenantId, getTenantDb, insertAgentAssignment, updateAgentAssignment } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, insertAgentAssignment, updateAgentAssignment , SANGHA_TENANT_ID } from '../cache/database.js';
 
 // Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
-    const tenantId = getCurrentTenantId() || 'default';
+    const tenantId = getCurrentTenantId() || SANGHA_TENANT_ID;
     const realDb = getTenantDb(tenantId);
     const val = realDb[prop];
     if (typeof val === 'function') return val.bind(realDb);
@@ -207,7 +207,7 @@ Output ONLY valid JSON. The summary field should be the full structured markdown
         analysisText = analysis.content[0].text;
       } else {
         analysisText = await tunnelPrompt({
-          tenantId: tenantId || 'default',
+          tenantId: tenantId || SANGHA_TENANT_ID,
           agentId: 'knowledge',
           prompt: `${systemInstructions}\n\n---\n\n${textContent}`,
           maxTurns: 3,

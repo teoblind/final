@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
@@ -13,6 +13,60 @@ function getAuthHeaders() {
   const legacy = localStorage.getItem('auth_token');
   if (legacy) return { Authorization: `Bearer ${legacy}` };
   return {};
+}
+
+// ─── Meeting Audio Player (Fireflies-style) ─────────────────────────────────
+function MeetingAudioPlayer({ src }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [speed, setSpeed] = useState(1);
+
+  const toggle = () => {
+    if (!audioRef.current) return;
+    if (playing) audioRef.current.pause(); else audioRef.current.play();
+    setPlaying(!playing);
+  };
+  const seek = (e) => {
+    if (!audioRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    audioRef.current.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration;
+  };
+  const cycleSpeed = () => {
+    const speeds = [1, 1.5, 2];
+    const next = speeds[(speeds.indexOf(speed) + 1) % speeds.length];
+    setSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+
+  return (
+    <div className="flex items-center gap-3">
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+        onEnded={() => setPlaying(false)}
+      />
+      <button onClick={toggle} className="w-9 h-9 rounded-full bg-[#7c3aed] text-white flex items-center justify-center hover:opacity-80 transition-opacity shrink-0">
+        {playing ? (
+          <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><rect x="1" y="1" width="3" height="12" rx="1"/><rect x="8" y="1" width="3" height="12" rx="1"/></svg>
+        ) : (
+          <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor"><path d="M1 1.5v11l10-5.5z"/></svg>
+        )}
+      </button>
+      <div className="flex-1">
+        <div className="relative h-2 bg-[#e0ddd8] rounded-full cursor-pointer group" onClick={seek}>
+          <div className="absolute h-full bg-[#7c3aed] rounded-full transition-all" style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }} />
+          <div className="absolute w-3 h-3 bg-[#7c3aed] rounded-full -top-0.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: duration ? `calc(${(currentTime / duration) * 100}% - 6px)` : '0' }} />
+        </div>
+      </div>
+      <span className="text-[11px] font-mono text-[#6b6b65] tabular-nums w-24 text-right shrink-0">{fmt(currentTime)} / {fmt(duration)}</span>
+      <button onClick={cycleSpeed} className="text-[11px] font-bold text-[#6b6b65] bg-[#e0ddd8] px-2 py-1 rounded-md hover:bg-[#d0cdc8] transition-colors shrink-0">{speed}x</button>
+    </div>
+  );
 }
 
 const DELTA_COLORS = {
@@ -2431,10 +2485,41 @@ export default function DacpCommandDashboard({ onNavigate }) {
       </div>
     )}
 
-    {/* Meeting Detail Modal */}
-    {meetingDetail && (
+    {/* Meeting Detail Modal - Fireflies-style split panel */}
+    {meetingDetail && (() => {
+      const SPKR_COLORS = ['#1a6b3c', '#2563eb', '#7c3aed', '#b8860b', '#c0392b', '#0891b2'];
+      const SPKR_BG = ['#edf7f0', '#eff6ff', '#f5f0ff', '#fdf6e8', '#fef2f2', '#ecfeff'];
+      const SEC_STYLES = {
+        'summary': { border: '#1a6b3c', bg: '#edf7f0', label: '#1a6b3c' },
+        'key points': { border: '#2563eb', bg: '#eff6ff', label: '#2563eb' },
+        'action items': { border: '#7c3aed', bg: '#f5f0ff', label: '#7c3aed' },
+        'decisions made': { border: '#b8860b', bg: '#fdf6e8', label: '#b8860b' },
+      };
+      let utterances = [];
+      try { utterances = meetingDetail.transcript_json ? (typeof meetingDetail.transcript_json === 'string' ? JSON.parse(meetingDetail.transcript_json) : meetingDetail.transcript_json) : []; } catch { utterances = []; }
+      const speakers = [...new Set(utterances.map(u => u.speaker))].filter(Boolean);
+      const spkrIdx = {}; speakers.forEach((s, i) => { spkrIdx[s] = i; });
+      const hasDiarized = utterances.length > 0;
+      const hasAudio = !!meetingDetail.audio_url;
+      const fmtTime = (s) => { const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2, '0')}`; };
+
+      // Parse summary into sections
+      const parseSummary = (text) => {
+        if (!text) return [];
+        const sections = []; const lines = text.split('\n'); let cur = null;
+        for (const line of lines) {
+          const hm = line.match(/^##\s+(.+)/);
+          if (hm) { if (cur) sections.push(cur); cur = { title: hm[1].trim(), lines: [] }; }
+          else if (cur && line.trim()) cur.lines.push(line);
+        }
+        if (cur) sections.push(cur);
+        return sections;
+      };
+      const summarySections = parseSummary(meetingDetail.summary || meetingDetail.content);
+
+      return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setMeetingDetail(null)}>
-        <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className={`bg-white rounded-2xl shadow-2xl ${hasDiarized ? 'w-[1100px]' : 'w-[700px]'} max-h-[90vh] flex flex-col overflow-hidden`} onClick={e => e.stopPropagation()}>
           {/* Header */}
           <div className="px-6 py-4 border-b border-[#e8e6e1] bg-[#faf9f7]">
             <div className="flex items-center justify-between">
@@ -2446,97 +2531,193 @@ export default function DacpCommandDashboard({ onNavigate }) {
                   <h3 className="text-[15px] font-bold text-[#111110] font-heading">{meetingDetail.title || meetingDetail.calendarEvent?.title || 'Meeting'}</h3>
                   <div className="flex items-center gap-3 mt-0.5">
                     {(meetingDetail.recorded_at || meetingDetail.calendarEvent?.start) && (
-                      <span className="text-[11px] text-[#9a9a92]">{new Date(meetingDetail.recorded_at || meetingDetail.calendarEvent?.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      <span className="text-[11px] text-[#9a9a92]">{new Date(meetingDetail.recorded_at || meetingDetail.calendarEvent?.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                     )}
                     {meetingDetail.duration_seconds && (
                       <span className="text-[11px] text-[#9a9a92]">{Math.round(meetingDetail.duration_seconds / 60)} min</span>
                     )}
                     {meetingDetail.source && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0edf7] text-[#7c3aed] font-semibold">{meetingDetail.source === 'local-capture' ? 'Desktop App' : meetingDetail.source === 'meeting-room' ? 'Live Meeting' : meetingDetail.source}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0edf7] text-[#7c3aed] font-semibold">{meetingDetail.source === 'local-capture' ? 'Desktop App' : meetingDetail.source === 'calendar-poll' ? 'Coppice Bot' : meetingDetail.source}</span>
+                    )}
+                    {speakers.length > 0 && (
+                      <span className="text-[11px] text-[#9a9a92]">+{speakers.length} speakers</span>
                     )}
                   </div>
                 </div>
               </div>
-              <button onClick={() => setMeetingDetail(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                {hasAudio && (
+                  <a href={`${API_BASE}${meetingDetail.audio_url}`} download className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors" title="Download audio">
+                    <Download size={16} />
+                  </a>
+                )}
+                {meetingDetail.drive_url && (
+                  <a href={meetingDetail.drive_url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors" title="Open in Drive">
+                    <ExternalLink size={16} />
+                  </a>
+                )}
+                <button onClick={() => setMeetingDetail(null)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#9a9a92] hover:text-[#111110] hover:bg-[#f0f0ec] transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto">
-            {meetingDetail.noTranscript ? (
-              <div className="px-6 py-12 text-center">
-                <Mic size={32} className="mx-auto mb-3 text-[#d4d4cf]" />
-                <p className="text-[14px] font-semibold text-[#333] mb-1">No transcript available</p>
-                <p className="text-[12px] text-[#9a9a92]">Invite Coppice to future meetings or use the desktop app to record and transcribe automatically.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-[#f0eeea]">
-                {/* AI Summary */}
-                {meetingDetail.summary && (
-                  <div className="px-6 py-4">
-                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">Summary</h4>
-                    <div className="text-[13px] text-[#333] leading-[1.7] whitespace-pre-wrap">{meetingDetail.summary}</div>
-                  </div>
-                )}
+          {meetingDetail.noTranscript ? (
+            <div className="px-6 py-12 text-center">
+              <Mic size={32} className="mx-auto mb-3 text-[#d4d4cf]" />
+              <p className="text-[14px] font-semibold text-[#333] mb-1">No transcript available</p>
+              <p className="text-[12px] text-[#9a9a92]">Invite Coppice to future meetings or use the desktop app to record and transcribe automatically.</p>
+            </div>
+          ) : (
+            <>
+              {/* Split body */}
+              <div className={`flex-1 overflow-hidden flex ${hasDiarized ? '' : 'flex-col'}`}>
+                {/* Left: Summary + Action Items */}
+                <div className={`${hasDiarized ? 'w-[55%] border-r border-[#e8e6e1]' : 'w-full'} overflow-y-auto`}>
+                  <div className="p-5 space-y-4">
+                    {/* Structured summary sections */}
+                    {summarySections.length > 0 ? (
+                      <div className="space-y-3">
+                        {summarySections.map((section, i) => {
+                          const key = section.title.toLowerCase();
+                          const styles = SEC_STYLES[key] || { border: '#9a9a92', bg: '#f5f4f0', label: '#6b6b65' };
+                          return (
+                            <div key={i} className="rounded-[10px] p-[14px_16px] border-l-[3px]" style={{ borderLeftColor: styles.border, background: styles.bg }}>
+                              <div className="text-[10px] font-bold tracking-[0.8px] uppercase mb-2 font-heading" style={{ color: styles.label }}>{section.title}</div>
+                              <div className="space-y-1.5">
+                                {section.lines.map((line, j) => {
+                                  const trimmed = line.replace(/^[-*]\s*/, '').replace(/^- \[ \]\s*/, '').trim();
+                                  if (!trimmed) return null;
+                                  const isBullet = /^[-*]\s/.test(line.trim()) || /^- \[/.test(line.trim());
+                                  const parts = trimmed.split(/(\*\*[^*]+\*\*)/);
+                                  return (
+                                    <div key={j} className="flex items-start gap-2 text-[13px] leading-relaxed">
+                                      {isBullet && <div className="w-[3px] h-[3px] rounded-full shrink-0 mt-[8px]" style={{ background: styles.border }} />}
+                                      <div className="text-[#333]">
+                                        {parts.map((part, k) =>
+                                          part.startsWith('**') && part.endsWith('**')
+                                            ? <span key={k} className="font-semibold">{part.slice(2, -2)}</span>
+                                            : <span key={k}>{part}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : meetingDetail.summary ? (
+                      <div className="bg-[#f5f4f0] rounded-[10px] p-[14px_16px] border-l-[3px] border-l-[#1a6b3c]">
+                        <div className="text-[10px] font-bold text-[#1a6b3c] tracking-[0.8px] uppercase mb-1.5 font-heading">AI Summary</div>
+                        <div className="text-[13px] text-[#333] leading-relaxed whitespace-pre-wrap">{meetingDetail.summary}</div>
+                      </div>
+                    ) : null}
 
-                {/* Action Items */}
-                {meetingDetail.action_items?.length > 0 && (
-                  <div className="px-6 py-4">
-                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">Action Items</h4>
-                    <div className="space-y-1.5">
-                      {meetingDetail.action_items.map((item, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center shrink-0 ${item.status === 'done' ? 'bg-[#1a6b3c] border-[#1a6b3c]' : 'border-[#d4d4cf]'}`}>
-                            {item.status === 'done' && <Check size={10} className="text-white" />}
-                          </div>
-                          <div>
-                            <span className="text-[12px] text-[#333]">{item.title || item.description}</span>
-                            {item.assignee && <span className="text-[10px] text-[#9a9a92] ml-2">@{item.assignee}</span>}
-                          </div>
+                    {/* Action Items */}
+                    {meetingDetail.action_items?.length > 0 && (
+                      <div>
+                        <h4 className="text-[11px] font-bold font-heading text-[#6b6b65] uppercase tracking-[0.8px] mb-2">Action Items</h4>
+                        <div className="space-y-1.5">
+                          {meetingDetail.action_items.map((item, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <div className={`w-4 h-4 mt-0.5 rounded border flex items-center justify-center shrink-0 ${item.status === 'done' ? 'bg-[#1a6b3c] border-[#1a6b3c]' : 'border-[#d4d4cf]'}`}>
+                                {item.status === 'done' && <Check size={10} className="text-white" />}
+                              </div>
+                              <div>
+                                <span className="text-[12px] text-[#333]">{item.title || item.description}</span>
+                                {item.assignee && <span className="text-[10px] text-[#9a9a92] ml-2">@{item.assignee}</span>}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
+                    )}
 
-                {/* Entities */}
-                {meetingDetail.entities?.length > 0 && (
-                  <div className="px-6 py-4">
-                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">People & Companies</h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {meetingDetail.entities.map((e, i) => (
-                        <span key={i} className="px-2 py-1 rounded-lg bg-[#f5f4f0] text-[11px] text-[#444] font-medium">{e.name}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                    {/* Entities */}
+                    {meetingDetail.entities?.length > 0 && (
+                      <div>
+                        <h4 className="text-[11px] font-bold font-heading text-[#6b6b65] uppercase tracking-[0.8px] mb-2">People & Companies</h4>
+                        <div className="flex flex-wrap gap-1.5">
+                          {meetingDetail.entities.map((e, i) => (
+                            <span key={i} className="px-2 py-1 rounded-lg bg-[#f5f4f0] text-[11px] text-[#444] font-medium">{e.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                {/* Transcript or Content */}
-                {(meetingDetail.transcript || meetingDetail.content) && (
-                  <div className="px-6 py-4">
-                    <h4 className="text-[12px] font-bold font-heading text-[#1e3a5f] uppercase tracking-[0.5px] mb-2">{meetingDetail.transcript ? 'Transcript' : 'Meeting Notes'}</h4>
-                    <div className="bg-[#f9f9f7] rounded-lg p-4 max-h-[300px] overflow-y-auto">
-                      <pre className="text-[12px] text-[#444] leading-[1.8] whitespace-pre-wrap font-mono">{meetingDetail.transcript || meetingDetail.content}</pre>
-                    </div>
+                    {/* Plain transcript fallback (no diarized JSON) */}
+                    {!hasDiarized && (meetingDetail.transcript || meetingDetail.content) && (
+                      <div>
+                        <h4 className="text-[11px] font-bold font-heading text-[#6b6b65] uppercase tracking-[0.8px] mb-2">Transcript</h4>
+                        <div className="bg-[#f9f9f7] rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                          <pre className="text-[12px] text-[#444] leading-[1.8] whitespace-pre-wrap font-mono">{meetingDetail.transcript || meetingDetail.content}</pre>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
 
-                {/* Drive link */}
-                {meetingDetail.drive_url && (
-                  <div className="px-6 py-3">
-                    <a href={meetingDetail.drive_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[#1e3a5f] hover:underline">
-                      <ExternalLink size={12} /> Open full notes in Drive
-                    </a>
+                {/* Right: Diarized transcript panel */}
+                {hasDiarized && (
+                  <div className="w-[45%] flex flex-col overflow-hidden">
+                    {/* Speaker legend */}
+                    <div className="px-4 py-3 border-b border-[#f0eeea] bg-[#faf9f7]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold text-[#6b6b65] tracking-[0.8px] uppercase font-heading">Transcript</span>
+                        <span className="text-[10px] text-[#9a9a92]">{utterances.length} segments</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {speakers.map((s, i) => (
+                          <span key={s} className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md" style={{ background: SPKR_BG[i % SPKR_BG.length], color: SPKR_COLORS[i % SPKR_COLORS.length] }}>
+                            <span className="w-2 h-2 rounded-full" style={{ background: SPKR_COLORS[i % SPKR_COLORS.length] }} />
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Scrollable utterances */}
+                    <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+                      {utterances.map((u, i) => {
+                        const idx = spkrIdx[u.speaker] ?? speakers.length;
+                        const color = SPKR_COLORS[idx % SPKR_COLORS.length];
+                        return (
+                          <div key={i} className="flex gap-3 py-2 px-2 rounded-lg hover:bg-[#fafaf8] transition-colors" style={{ borderLeft: `3px solid transparent` }}>
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 mt-0.5" style={{ background: color }}>
+                              {(u.speaker || '?').split(/\s+/).map(w => w[0]?.toUpperCase()).join('').slice(0, 2)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[11px] font-bold" style={{ color }}>{u.speaker}</span>
+                                <span className="text-[10px] font-mono text-[#9a9a92]">{fmtTime(u.start)}</span>
+                              </div>
+                              <div className="text-[13px] text-[#333] leading-relaxed">{u.text}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-          </div>
+
+              {/* Audio player bar */}
+              {hasAudio && (() => {
+                const audioSrc = `${API_BASE}${meetingDetail.audio_url}`;
+                return (
+                  <div className="border-t border-[#e8e6e1] bg-[#faf9f7] px-5 py-3">
+                    <MeetingAudioPlayer src={audioSrc} />
+                  </div>
+                );
+              })()}
+            </>
+          )}
         </div>
       </div>
-    )}
+      );
+    })()}
 
     {/* Leads Share Modal */}
     {showShareModal && (

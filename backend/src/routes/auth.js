@@ -44,6 +44,7 @@ import {
   addCompanyEmailAccount,
   updateCompanyEmailAccountToken,
   runWithTenant,
+  SANGHA_TENANT_ID,
 } from '../cache/database.js';
 import { authenticate, ROLE_PERMISSIONS } from '../middleware/auth.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
@@ -129,8 +130,8 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
         const tenants = users.map(u => {
           const t = getTenant(u.tenant_id);
           const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
-          const displayName = (isAdmin && u.tenant_id === 'default') ? 'Platform Admin' : t?.name;
-          const subdomain = (isAdmin && u.tenant_id === 'default') ? 'admin' : getSubdomainForSlug(t?.slug || u.tenant_id);
+          const displayName = (isAdmin && u.tenant_id === SANGHA_TENANT_ID) ? 'Platform Admin' : t?.name;
+          const subdomain = (isAdmin && u.tenant_id === SANGHA_TENANT_ID) ? 'admin' : getSubdomainForSlug(t?.slug || u.tenant_id);
           return { id: u.tenant_id, slug: t?.slug, name: displayName, role: u.role, subdomain };
         });
         return res.json({ tenant_required: true, tenants });
@@ -464,8 +465,8 @@ router.get('/my-tenants', authenticate, (req, res) => {
     const tenants = users.map(u => {
       const t = getTenant(u.tenant_id);
       const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
-      const displayName = (isAdmin && u.tenant_id === 'default') ? 'Platform Admin' : t?.name;
-      const subdomain = (isAdmin && u.tenant_id === 'default') ? 'admin' : getSubdomainForSlug(t?.slug || u.tenant_id);
+      const displayName = (isAdmin && u.tenant_id === SANGHA_TENANT_ID) ? 'Platform Admin' : t?.name;
+      const subdomain = (isAdmin && u.tenant_id === SANGHA_TENANT_ID) ? 'admin' : getSubdomainForSlug(t?.slug || u.tenant_id);
       return {
         id: u.tenant_id,
         slug: t?.slug,
@@ -783,7 +784,7 @@ router.get('/google/callback', async (req, res) => {
     }
 
     // Resolve tenant from hostname
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
 
     // Find or create user
     let user = getUserByEmailAndTenant(profile.email, tenantId);

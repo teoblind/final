@@ -11,7 +11,7 @@ const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const TIMEOUT_MS = parseInt(process.env.CLAUDE_TIMEOUT_MS, 10) || 90_000;
 
 const TENANT_CONTEXT = {
-  default: `Tenant: Sangha Holdings (Bitcoin mining operator).
+  'sangha-renewables': `Tenant: Sangha Holdings (Bitcoin mining operator).
 DB: /root/coppice/backend/data/cache.db (SQLite). Codebase: /root/coppice/
 Tables: leads, contacts, outreach, tenant_files, messages, threads, audit_log
 Domains: ERCOT energy, mining ops, pool routing, insurance`,
@@ -23,7 +23,7 @@ Domains: estimating, bid management, field ops, GC relationships`,
 };
 
 function buildSystemPrompt(tenantId) {
-  const tenantCtx = TENANT_CONTEXT[tenantId] || TENANT_CONTEXT.default;
+  const tenantCtx = TENANT_CONTEXT[tenantId] || TENANT_CONTEXT['sangha-renewables'];
   return `You are Coppice Hivemind - AI ops agent with full system access.
 Rules: Be concise. Include real data. Use markdown. SQLite: sqlite3 /root/coppice/backend/data/cache.db "SQL". Never expose secrets.
 ${tenantCtx}`;

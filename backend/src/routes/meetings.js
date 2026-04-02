@@ -12,7 +12,7 @@
 import express from 'express';
 import { google } from 'googleapis';
 import { authenticate } from '../middleware/auth.js';
-import { getTenantEmailConfig, getTenantDb, insertActivity, getAllTenants, getKeyVaultValue } from '../cache/database.js';
+import { getTenantEmailConfig, getTenantDb, insertActivity, getAllTenants, getKeyVaultValue, SANGHA_TENANT_ID } from '../cache/database.js';
 import { createBot, removeBot } from '../services/recallService.js';
 import {
   createMeetingRoom,
@@ -138,7 +138,7 @@ const AGENT_PROMPTS = {
  */
 router.get('/', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     // Prefer user's personal calendar token (has actual meetings) over agent calendar
     const userCalToken = getKeyVaultValue(tenantId, 'google-calendar-user', 'refresh_token');
     const calToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
@@ -230,7 +230,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/start', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const tenantSlug = req.resolvedTenant?.slug || tenantId;
     const emailConfig = getTenantEmailConfig(tenantId);
 
@@ -284,7 +284,7 @@ router.post('/start', async (req, res) => {
 
     // 3. Build agent list for the meeting room
     const TENANT_DISPLAY = {
-      'default': 'Sangha', 'sangha': 'Sangha',
+      [SANGHA_TENANT_ID]: 'Sangha', 'sangha': 'Sangha',
       'dacp-construction-001': 'DACP', 'dacp': 'DACP',
       'zhan-capital': 'Zhan Capital', 'zhan': 'Zhan Capital',
     };
@@ -436,7 +436,7 @@ router.get('/rooms', (req, res) => {
  */
 router.post('/:eventId/invite', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || 'default';
+    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const emailConfig = getTenantEmailConfig(tenantId);
 
     if (!emailConfig?.gmailRefreshToken) {

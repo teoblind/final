@@ -48,7 +48,7 @@ const router = express.Router();
 router.get('/public', (req, res) => {
   const tenant = req.resolvedTenant;
   if (!tenant) {
-    return res.json({ name: 'AMPERA', slug: 'default', branding: {} });
+    return res.json({ name: 'AMPERA', slug: 'sangha-renewables', branding: {} });
   }
   const { companyName, primaryColor, logo, hideSanghaBranding } = tenant.branding || {};
   const settings = tenant.settings || {};
@@ -185,7 +185,7 @@ router.post('/users/invite', requirePermission('manageUsers'), async (req, res) 
     // Auto-send invitation email
     const tenantId = req.user.tenantId;
     const slug = tenant.slug || 'app';
-    const subdomain = slug === 'default' ? 'sangha' : slug;
+    const subdomain = slug === 'sangha-renewables' ? 'sangha' : slug;
     const domain = `${subdomain}.coppice.ai`;
     const inviteUrl = `https://${domain}/login?invite=${token}&email=${encodeURIComponent(email)}`;
     const inviterName = req.user.name || 'Your team';

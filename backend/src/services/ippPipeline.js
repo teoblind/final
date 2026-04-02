@@ -32,7 +32,7 @@ const NODAL_PATH = join(__dirname, '../../data/nodal_correct.json');
 
 if (!existsSync(SPECS_DIR)) mkdirSync(SPECS_DIR, { recursive: true });
 
-const DEFAULT_TENANT_ID = 'default'; // Sangha tenant
+const DEFAULT_TENANT_ID = 'sangha-renewables'; // Sangha tenant
 
 // ─── Load ERCOT Nodal + Load LMP Data ────────────────────────────────────────
 

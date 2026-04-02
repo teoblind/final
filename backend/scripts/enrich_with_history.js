@@ -3,8 +3,8 @@
  * Enrich HubSpot Contact Classification Reasoning with Engagement History
  *
  * Fetches actual engagement history (emails, meetings, notes, calls) from
- * HubSpot API and uses Claude CLI to generate reasoning that references
- * specific conversations and interactions.
+ * HubSpot API and uses Claude API (Anthropic) to generate reasoning that
+ * references specific conversations and interactions.
  *
  * Usage:
  *   node scripts/enrich_with_history.js [--limit N] [--dry-run] [--include-other]
@@ -13,25 +13,33 @@
  */
 
 import Database from 'better-sqlite3';
-import { execSync } from 'child_process';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { config } from 'dotenv';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Load .env from backend root
+config({ path: join(__dirname, '..', '.env') });
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 const DB_PATH = join(__dirname, '..', 'data', 'sangha', 'sangha.db');
-const HUBSPOT_API_KEY = process.env.HUBSPOT_API_KEY || (process.argv.includes('--key') ? process.argv[process.argv.indexOf('--key') + 1] : null);
-if (!HUBSPOT_API_KEY) { console.error('ERROR: Pass --key <api_key> or set HUBSPOT_API_KEY env'); process.exit(1); }
+const HUBSPOT_API_KEY = process.env.HUBSPOT_API_KEY || '';
 const HUBSPOT_BASE = 'https://api.hubapi.com';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const HUBSPOT_DELAY_MS = 200;
-const CLAUDE_DELAY_MS = 1000;
-const TEMP_PROMPT_PATH = '/tmp/enrich_prompt.txt';
+const CLAUDE_DELAY_MS = 500;
+
+if (!ANTHROPIC_API_KEY) {
+  console.error('ERROR: ANTHROPIC_API_KEY not found in environment or .env file');
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -69,16 +77,16 @@ function sleep(ms) {
 }
 
 /**
- * Fetch all engagements for a contact using the v1 API.
- * Returns an array of { type, timestamp, metadata } objects.
- * Paginates if hasMore is true.
+ * Fetch engagements for a contact using the v1 API.
+ * Caps at 250 to avoid huge payloads for internal contacts.
  */
 async function fetchEngagements(contactId) {
   const allResults = [];
   let offset = 0;
   let hasMore = true;
+  const MAX_ENGAGEMENTS = 250;
 
-  while (hasMore) {
+  while (hasMore && allResults.length < MAX_ENGAGEMENTS) {
     try {
       const data = await hubspotGet(
         `/engagements/v1/engagements/associated/CONTACT/${contactId}/paged?limit=100&offset=${offset}`
@@ -93,7 +101,7 @@ async function fetchEngagements(contactId) {
       }
       hasMore = data.hasMore === true;
       offset = data.offset || 0;
-      if (hasMore) await sleep(HUBSPOT_DELAY_MS);
+      if (hasMore && allResults.length < MAX_ENGAGEMENTS) await sleep(HUBSPOT_DELAY_MS);
     } catch (err) {
       console.error(`    [WARN] Failed to fetch engagements for contact ${contactId}: ${err.message}`);
       hasMore = false;
@@ -181,11 +189,9 @@ function buildEngagementSummary(engagements) {
     const outbound = emails.filter((e) => e.type === 'EMAIL').length;
     const inbound = emails.filter((e) => e.type === 'INCOMING_EMAIL').length;
     lines.push(`EMAILS (${emails.length} total - ${outbound} outbound, ${inbound} inbound):`);
-    // Email content is redacted without sales-email-read scope, but we have timestamps
     const emailDates = emails.slice(0, 10).map((e) => formatDate(e.timestamp));
     lines.push(`  Most recent exchanges: ${emailDates.join(', ')}`);
 
-    // Check for email subjects if available (sometimes present)
     const withSubject = emails.filter((e) => e.metadata.subject);
     if (withSubject.length > 0) {
       lines.push('  Subjects:');
@@ -221,30 +227,41 @@ function stripHtml(html) {
 }
 
 // ---------------------------------------------------------------------------
-// Claude CLI helper
+// Claude API helper (direct Anthropic API)
 // ---------------------------------------------------------------------------
 
-function callClaude(prompt) {
-  // Write prompt to temp file to handle long prompts safely
-  fs.writeFileSync(TEMP_PROMPT_PATH, prompt, 'utf8');
-
-  // Build env without CLAUDECODE to allow nested invocation
-  const env = { ...process.env };
-  delete env.CLAUDECODE;
-
+async function callClaude(prompt) {
   try {
-    const result = execSync(`claude -p < "${TEMP_PROMPT_PATH}"`, {
-      encoding: 'utf8',
-      timeout: 120000, // 2 minute timeout
-      maxBuffer: 1024 * 1024,
-      shell: true,
-      env,
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }],
+      }),
     });
-    return result.trim();
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`    [WARN] Claude API ${res.status}: ${errText.substring(0, 200)}`);
+      return null;
+    }
+
+    const data = await res.json();
+    const text = (data.content || [])
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+      .trim();
+
+    return text || null;
   } catch (err) {
-    const stderr = (err.stderr || '').trim();
-    const stdout = (err.stdout || '').trim();
-    console.error(`    [WARN] Claude CLI error: ${stderr || stdout || (err.message || '').substring(0, 200)}`);
+    console.error(`    [WARN] Claude API error: ${err.message}`);
     return null;
   }
 }
@@ -283,6 +300,7 @@ function isAlreadyEnriched(reasoning) {
 async function main() {
   console.log('=== HubSpot Classification Reasoning Enrichment (with Engagement History) ===\n');
   console.log(`DB: ${DB_PATH}`);
+  console.log(`Model: ${ANTHROPIC_MODEL}`);
   console.log(`Limit: ${LIMIT} contacts`);
   if (DRY_RUN) console.log('** DRY RUN - no DB writes **');
   if (INCLUDE_OTHER) console.log('** Including Other contacts **');
@@ -379,15 +397,15 @@ async function main() {
         console.log(prompt.substring(0, 600));
         console.log(`    --- END PREVIEW ---`);
         console.log(`    --- ENGAGEMENT SUMMARY ---`);
-        console.log(engagementSummary.substring(0, 400));
+        console.log(engagementSummary.substring(0, 500));
         console.log(`    --- END SUMMARY ---`);
       }
       processed++;
       continue;
     }
 
-    // Call Claude
-    const newReasoning = callClaude(prompt);
+    // Call Claude API
+    const newReasoning = await callClaude(prompt);
     await sleep(CLAUDE_DELAY_MS);
 
     if (!newReasoning || newReasoning.length < 20) {
@@ -406,13 +424,8 @@ async function main() {
     processed++;
 
     console.log(`    Updated reasoning (${cleanReasoning.length} chars):`);
-    console.log(`    "${cleanReasoning.substring(0, 200)}${cleanReasoning.length > 200 ? '...' : ''}"`);
+    console.log(`    "${cleanReasoning.substring(0, 250)}${cleanReasoning.length > 250 ? '...' : ''}"`);
   }
-
-  // Cleanup temp file
-  try {
-    fs.unlinkSync(TEMP_PROMPT_PATH);
-  } catch (_) {}
 
   console.log('\n=== RESULTS ===');
   console.log(`Processed: ${processed}`);

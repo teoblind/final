@@ -10,7 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getMeetingPrompt } from './chatService.js';
-import { getTenantDb } from '../cache/database.js';
+import { getTenantDb , SANGHA_TENANT_ID } from '../cache/database.js';
 import { getVisualContext, isVisionActive } from './geminiVisionService.js';
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || '';
@@ -29,7 +29,7 @@ const activeLoops = new Map();
 /**
  * Start a voice loop for a bot. No greeting - bot stays silent until addressed.
  */
-export async function startVoiceLoop(botId, tenantId = 'default') {
+export async function startVoiceLoop(botId, tenantId = SANGHA_TENANT_ID) {
   if (activeLoops.has(botId)) return;
 
   // Build tenant-aware system prompt with accumulated memory

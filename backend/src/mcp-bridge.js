@@ -15,7 +15,7 @@
  *
  * Environment:
  *   MCP_BRIDGE_PORT - Backend port (default: 3002)
- *   MCP_BRIDGE_TENANT - Default tenant ID (default: from CLI args or 'default')
+ *   MCP_BRIDGE_TENANT - Default tenant ID (default: from CLI args or 'sangha-renewables')
  */
 
 const BACKEND_PORT = process.env.MCP_BRIDGE_PORT || 3002;
@@ -23,7 +23,7 @@ const BASE_URL = `http://127.0.0.1:${BACKEND_PORT}/api/v1/internal`;
 
 // Parse tenant from CLI args: node mcp-bridge.js --tenant=dacp-construction-001
 const tenantArg = process.argv.find(a => a.startsWith('--tenant='));
-const DEFAULT_TENANT = tenantArg ? tenantArg.split('=')[1] : (process.env.MCP_BRIDGE_TENANT || 'default');
+const DEFAULT_TENANT = tenantArg ? tenantArg.split('=')[1] : (process.env.MCP_BRIDGE_TENANT || 'sangha-renewables');
 
 // ─── MCP Protocol (JSON-RPC over stdio with Content-Length framing) ─────────
 

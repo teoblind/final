@@ -12,6 +12,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { SANGHA_TENANT_ID } from '../cache/database.js';
 
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';
@@ -174,7 +175,7 @@ export async function sendAudio(botId, mp3Buffer) {
 export async function createVoiceBot(meetingUrl, opts = {}) {
   const {
     botName = 'Coppice',
-    tenantId = 'default',
+    tenantId = SANGHA_TENANT_ID,
     voiceAgentUrl = process.env.VOICE_AGENT_URL || 'https://coppice.ai/voice-agent',
     relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
   } = opts;
@@ -270,6 +271,34 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
  */
 export async function getBotStatus(botId) {
   return recallFetch(`/bot/${botId}/`);
+}
+
+/**
+ * Get recording URLs (video + audio) after a meeting ends.
+ * Recall.ai makes recordings available ~10s after bot status reaches 'done'.
+ *
+ * @param {string} botId
+ * @returns {{ recordingId, videoUrl, audioUrl }} or null if no recording
+ */
+export async function getRecording(botId) {
+  const bot = await recallFetch(`/bot/${botId}/`);
+  const recording = bot.recordings?.[0];
+  if (!recording || recording.status?.code !== 'done') return null;
+
+  const videoUrl = recording.media_shortcuts?.video_mixed?.data?.download_url || null;
+
+  // Audio MP3 requires a separate endpoint
+  let audioUrl = null;
+  if (recording.id) {
+    try {
+      const audioResult = await recallFetch(`/audio_mixed?recording_id=${recording.id}`);
+      audioUrl = audioResult.results?.[0]?.data?.download_url || null;
+    } catch (e) {
+      console.warn(`[Recall] Audio retrieval failed for recording ${recording.id}: ${e.message}`);
+    }
+  }
+
+  return { recordingId: recording.id, videoUrl, audioUrl };
 }
 
 /**

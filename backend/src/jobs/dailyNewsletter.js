@@ -19,6 +19,7 @@ import {
   getAllTenants, runWithTenant, getUsersByTenant,
   getDacpBidRequests, getDacpJobs, getDacpStats, getTenantDb,
   insertAgentAssignment, updateAgentAssignment,
+  SANGHA_TENANT_ID,
 } from '../cache/database.js';
 import { apolloBulkMatch } from '../services/leadEngine.js';
 
@@ -50,7 +51,7 @@ const TENANT_SEARCH_CONFIG = {
     ],
   },
   // Sangha Systems - Bitcoin mining & energy + renewables (weekly)
-  default: {
+  [SANGHA_TENANT_ID]: {
     name: 'Sangha Systems',
     region: 'Texas ERCOT',
     services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading', 'renewable energy partnerships'],
@@ -82,7 +83,7 @@ const TENANT_SEARCH_CONFIG = {
 };
 
 function getTenantConfig(tenantId) {
-  return TENANT_SEARCH_CONFIG[tenantId] || TENANT_SEARCH_CONFIG.default;
+  return TENANT_SEARCH_CONFIG[tenantId] || TENANT_SEARCH_CONFIG[SANGHA_TENANT_ID];
 }
 
 // ── Web Research ──────────────────────────────────────────────────────────────

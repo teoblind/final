@@ -12,12 +12,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { tunnelPrompt, tunnelOrChat } from './cliTunnel.js';
 import { sendEmail } from './emailService.js';
-import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig, getAgentMode } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb, getTenantEmailConfig, getAgentMode , SANGHA_TENANT_ID } from '../cache/database.js';
 
 // Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
-    const tenantId = getCurrentTenantId() || 'default';
+    const tenantId = getCurrentTenantId() || SANGHA_TENANT_ID;
     const realDb = getTenantDb(tenantId);
     const val = realDb[prop];
     if (typeof val === 'function') return val.bind(realDb);
@@ -116,7 +116,7 @@ Rules:
 - Only include actionable tasks, not observations`;
 
   const text = await tunnelPrompt({
-    tenantId: getCurrentTenantId() || 'default',
+    tenantId: getCurrentTenantId() || SANGHA_TENANT_ID,
     agentId: 'knowledge',
     prompt,
     maxTurns: 3,
@@ -303,7 +303,7 @@ export async function processMeetingComplete({
 
 // Map tenant IDs to the agent that should handle instructions
 const TENANT_AGENT_MAP = {
-  'default': 'sangha',
+  [SANGHA_TENANT_ID]: 'sangha',
   'dacp-construction-001': 'hivemind',
   'zhan-capital': 'zhan',
 };
@@ -464,7 +464,7 @@ Output JSON only. If no agent instructions found, return empty array:
 }`;
 
   const text = await tunnelPrompt({
-    tenantId: getCurrentTenantId() || 'default',
+    tenantId: getCurrentTenantId() || SANGHA_TENANT_ID,
     agentId: 'knowledge',
     prompt,
     maxTurns: 3,

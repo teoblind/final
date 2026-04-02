@@ -87,7 +87,7 @@ const cliQueue = new RequestQueue(CLI_CONCURRENCY);
 // inject domain knowledge + tool guidance.
 
 const TENANT_PROMPTS = {
-  'default': `You are Coppice - the AI agent for Sangha Renewables, a Bitcoin mining + renewable energy company.
+  'sangha-renewables': `You are Coppice - the AI agent for Sangha Renewables, a Bitcoin mining + renewable energy company.
 Key facts: 8 years operating, co-locates mining behind-the-meter at 2.8-4.0¢/kWh, $14M raised, flagship 19.9 MW West Texas facility on TotalEnergies solar farm.
 Team: Spencer Marr (President), Colin Peirce (Partner), Marcel Pineda (BD), Teo Blind (quant modeling).
 You handle: ERCOT analysis, fleet ops, IPP evaluation, financial modeling, LP reporting, email, docs, research.`,
@@ -139,7 +139,7 @@ export function isComplexQuery(message) {
 
 function getAgentCliConfig(agentId) {
   try {
-    const db = getTenantDb('default'); // agents table is in system DB
+    const db = getTenantDb('sangha-renewables'); // agents table is in system DB
     const row = db.prepare('SELECT config_json FROM agents WHERE id = ?').get(agentId);
     if (row?.config_json) return JSON.parse(row.config_json);
   } catch {}
@@ -219,7 +219,7 @@ async function isTunnelHealthy() {
  */
 export async function queryClaudeAgent({ tenantId, agentId, message, history, maxTurns, timeoutMs, isExecution = false }) {
   const config = getAgentCliConfig(agentId);
-  const resolvedTenantId = tenantId || 'default';
+  const resolvedTenantId = tenantId || 'sangha-renewables';
   const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config, null, { isExecution });
   const fullMessage = buildUserMessage(message, history);
   const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
@@ -573,7 +573,7 @@ function streamViaTunnel({ resolvedTenantId, agentId, systemPrompt, fullMessage,
  */
 export async function streamClaudeAgent({ tenantId, agentId, userId, message, history, maxTurns, timeoutMs, onText }) {
   const config = getAgentCliConfig(agentId);
-  const resolvedTenantId = tenantId || 'default';
+  const resolvedTenantId = tenantId || 'sangha-renewables';
   const systemPrompt = buildSystemPrompt(resolvedTenantId, agentId, config, userId);
   const fullMessage = buildUserMessage(message, history);
   const turns = maxTurns || config.max_turns || DEFAULT_MAX_TURNS;
@@ -859,7 +859,7 @@ function shellEscape(str) {
 }
 
 function buildSystemPrompt(tenantId, agentId, config, userId, { isExecution = false } = {}) {
-  const base = TENANT_PROMPTS[tenantId] || TENANT_PROMPTS.default;
+  const base = TENANT_PROMPTS[tenantId] || TENANT_PROMPTS['sangha-renewables'];
   const custom = config.system_prompt_addon || '';
 
   // Look up the current user's name

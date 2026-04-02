@@ -1,12 +1,12 @@
-import { getTenantBySlug, getTenantByDomain, setTenantContext } from '../cache/database.js';
+import { getTenantBySlug, getTenantByDomain, setTenantContext, SANGHA_TENANT_ID } from '../cache/database.js';
 
 const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 
 // Slug aliases - map subdomain to DB slug if they differ
-const SLUG_ALIASES = { sangha: 'default', admin: 'default' };
+const SLUG_ALIASES = { sangha: SANGHA_TENANT_ID, admin: SANGHA_TENANT_ID };
 
 // Reverse alias - map DB slug back to subdomain
-const REVERSE_ALIASES = { default: 'sangha' };
+const REVERSE_ALIASES = { [SANGHA_TENANT_ID]: 'sangha' };
 
 /** Get the canonical subdomain for a tenant slug */
 export function getSubdomainForSlug(slug) {
@@ -20,9 +20,9 @@ export function getSubdomainForSlug(slug) {
  *
  * Supports:
  *   dacp.coppice.ai     → slug 'dacp'
- *   sangha.coppice.ai   → slug 'default' (via alias)
+ *   sangha.coppice.ai   → slug 'sangha-renewables' (via alias)
  *   dacp.localhost:5173  → slug 'dacp' (dev mode)
- *   localhost:5173       → slug 'default' (dev fallback)
+ *   localhost:5173       → slug 'sangha-renewables' (dev fallback)
  */
 export default function tenantResolver(req, res, next) {
   const hostname = req.hostname; // e.g. "dacp.coppice.ai", "localhost"
@@ -53,7 +53,7 @@ export default function tenantResolver(req, res, next) {
     }
 
     if (subdomain && subdomain !== 'www' && subdomain !== 'api') {
-      // Apply alias (sangha → default)
+      // Apply alias (sangha → sangha-renewables)
       const resolvedSlug = SLUG_ALIASES[subdomain] || subdomain;
       tenant = getTenantBySlug(resolvedSlug);
     }
@@ -61,7 +61,7 @@ export default function tenantResolver(req, res, next) {
 
   // 3. Fallback: no subdomain → Sangha tenant
   if (!tenant) {
-    tenant = getTenantBySlug('default');
+    tenant = getTenantBySlug(SANGHA_TENANT_ID);
   }
 
   if (tenant) {
@@ -77,6 +77,6 @@ export default function tenantResolver(req, res, next) {
   }
 
   // Wrap downstream handlers in tenant context so the DB proxy routes correctly
-  const tenantId = req.resolvedTenant?.id || 'default';
+  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
   setTenantContext(tenantId, () => next());
 }

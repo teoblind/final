@@ -6,6 +6,7 @@
  */
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
+import { SANGHA_TENANT_ID } from '../cache/database.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -28,7 +29,7 @@ function buildHeaders(tenantId) {
  * Resolve the tenant ID from the request (set by upstream middleware).
  */
 function getTenantId(req) {
-  return req.resolvedTenant?.id || 'default';
+  return req.resolvedTenant?.id || SANGHA_TENANT_ID;
 }
 
 /**

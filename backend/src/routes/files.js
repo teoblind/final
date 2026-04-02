@@ -13,7 +13,7 @@ import multer from 'multer';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { authenticate } from '../middleware/auth.js';
-import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue, getDriveSyncStatus, getDriveSyncedFiles, getDriveSyncedFileCount } from '../cache/database.js';
+import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue, getDriveSyncStatus, getDriveSyncedFiles, getDriveSyncedFileCount, SANGHA_TENANT_ID } from '../cache/database.js';
 import { runWithTenant } from '../cache/database.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -49,7 +49,7 @@ const MIME_TO_CATEGORY = {
 };
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || 'default';
+  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
   return { tenantId };
 }
 

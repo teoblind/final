@@ -18,6 +18,16 @@
 
 import { google } from 'googleapis';
 import Anthropic from '@anthropic-ai/sdk';
+import { createWriteStream, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
+
+const __filename_cp = fileURLToPath(import.meta.url);
+const __dirname_cp = dirname(__filename_cp);
+const AUDIO_DIR = join(__dirname_cp, '../../data/audio/meetings/');
+if (!existsSync(AUDIO_DIR)) mkdirSync(AUDIO_DIR, { recursive: true });
 import {
   getAllTenants,
   getAllTenantDbs,
@@ -33,6 +43,7 @@ import {
   getBotStatus,
   getTranscript,
   getLocalBot,
+  getRecording,
 } from '../services/recallService.js';
 import { startChatLoop, stopChatLoop } from '../services/meetingChatLoop.js';
 import { startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
@@ -572,6 +583,27 @@ async function handleMeetingEnd(eventKey) {
       segments = localBot.transcript;
     }
 
+    // Build diarized transcript JSON for Fireflies-like viewer
+    // Recall.ai segments have: { speaker, text, timestamp, start_time, end_time }
+    const meetingStartTime = segments[0]?.timestamp ? new Date(segments[0].timestamp).getTime() / 1000 : 0;
+    const transcriptSegments = segments
+      .filter(s => (s.text || '').trim())
+      .map(s => {
+        const speaker = s.speaker || 'Unknown';
+        const text = (s.text || '').trim();
+        // Calculate start/end in seconds from meeting start
+        let start = 0, end = 0;
+        if (s.start_time != null) {
+          start = Number(s.start_time);
+          end = s.end_time != null ? Number(s.end_time) : start + 5;
+        } else if (s.timestamp) {
+          start = Math.max(0, new Date(s.timestamp).getTime() / 1000 - meetingStartTime);
+          end = start + 5;
+        }
+        return { speaker, text, start, end };
+      });
+    const transcriptJson = JSON.stringify(transcriptSegments);
+
     const transcript = segments
       .map(s => {
         const speaker = s.speaker || 'Unknown';
@@ -642,6 +674,31 @@ ${transcript}`,
 
     const summary = summaryRes.content[0].text;
 
+    // ── Retrieve + download audio recording from Recall.ai ──
+    // Download to local storage so URLs don't expire (Recall.ai uses signed S3 links)
+    let localAudioPath = null; // will be set to "/api/v1/knowledge/audio/{entryId}" after download
+    try {
+      const recording = await getRecording(botId);
+      const downloadUrl = recording?.audioUrl || recording?.videoUrl;
+      if (downloadUrl) {
+        // Use a temp ID for the filename - will be renamed per-tenant later
+        const tempAudioId = `recall-${botId}`;
+        const tempPath = join(AUDIO_DIR, `${tempAudioId}.mp3`);
+        const resp = await fetch(downloadUrl);
+        if (resp.ok) {
+          await pipeline(Readable.fromWeb(resp.body), createWriteStream(tempPath));
+          localAudioPath = tempPath;
+          console.log(`[CalendarPoll] Audio downloaded for "${meetingName}" (${(resp.headers.get('content-length') || '?')} bytes)`);
+        } else {
+          console.warn(`[CalendarPoll] Audio download failed: HTTP ${resp.status}`);
+        }
+      } else {
+        console.log(`[CalendarPoll] No recording available for "${meetingName}"`);
+      }
+    } catch (err) {
+      console.warn(`[CalendarPoll] Recording retrieval failed for "${meetingName}": ${err.message}`);
+    }
+
     // ── Distribute to all tenants where attendees have accounts ──
     const targetTenants = new Set([tenantId]); // always include the inviting tenant
     try {
@@ -667,11 +724,24 @@ ${transcript}`,
         const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const tdb = getTenantDb(tid);
 
-        // Insert into knowledge base
+        // Copy audio file to entry-specific path (so each entry has its own serving URL)
+        let audioUrlForEntry = null;
+        if (localAudioPath && existsSync(localAudioPath)) {
+          try {
+            const { copyFileSync } = await import('fs');
+            const destPath = join(AUDIO_DIR, `${entryId}.mp3`);
+            copyFileSync(localAudioPath, destPath);
+            audioUrlForEntry = `/api/v1/knowledge/audio/${entryId}`;
+          } catch (e) {
+            console.warn(`[CalendarPoll] Audio copy failed for ${entryId}: ${e.message}`);
+          }
+        }
+
+        // Insert into knowledge base with audio + diarized transcript
         tdb.prepare(`
-          INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at, processed)
-          VALUES (?, ?, 'meeting', ?, ?, ?, 'calendar-poll', 'meetings', ?, 1)
-        `).run(entryId, tid, meetingName, transcript, summary, recordedAt);
+          INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at, processed, audio_url, transcript_json)
+          VALUES (?, ?, 'meeting', ?, ?, ?, 'calendar-poll', 'meetings', ?, 1, ?, ?)
+        `).run(entryId, tid, meetingName, transcript, summary, recordedAt, audioUrlForEntry, transcriptJson);
 
         // Also add to tenant_files so it shows in Files > Meeting Notes
         try {
@@ -698,6 +768,11 @@ ${transcript}`,
           }
         }
       });
+    }
+
+    // Clean up temp audio file (copies were made per-entry)
+    if (localAudioPath && existsSync(localAudioPath)) {
+      try { const { unlinkSync } = await import('fs'); unlinkSync(localAudioPath); } catch {}
     }
 
     console.log(`[CalendarPoll] Meeting processed: "${meetingName}" -> ${[...targetTenants].join(', ')}`);
