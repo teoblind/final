@@ -419,8 +419,25 @@ class WavStreamPlayer {
 
   _start() {
     const streamNode = new AudioWorkletNode(this.context, 'stream_processor');
+    // Route through MediaStreamDestination -> Audio element for reliable tab audio
+    // AudioContext.destination alone doesn't produce tab audio in Recall's headless Chrome
+    try {
+      const mediaDest = this.context.createMediaStreamDestination();
+      streamNode.connect(mediaDest);
+      const audioEl = document.createElement('audio');
+      audioEl.srcObject = mediaDest.stream;
+      audioEl.play().then(() => {
+        console.log('[AUDIO-DEBUG] Audio element playing MediaStream');
+      }).catch(e => {
+        console.warn('[AUDIO-DEBUG] Audio element play failed:', e.message);
+      });
+      this._audioEl = audioEl;
+    } catch (e) {
+      console.warn('[AUDIO-DEBUG] MediaStreamDestination failed, using direct destination:', e.message);
+    }
+    // Also connect to destination as fallback
     streamNode.connect(this.context.destination);
-    console.log('[AUDIO-DEBUG] StreamNode created and connected to destination');
+    console.log('[AUDIO-DEBUG] StreamNode connected to MediaStream + destination');
     console.log('[AUDIO-DEBUG] AudioContext state at playback start:', this.context.state);
     console.log('[AUDIO-DEBUG] AudioContext destination:', this.context.destination.channelCount, 'channels');
     streamNode.port.onmessage = (e) => {
