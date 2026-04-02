@@ -118,7 +118,6 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [contextLoading, setContextLoading] = useState(false);
   // Team action items
   const [actionItems, setActionItems] = useState([]);
-  const [recentMeetings, setRecentMeetings] = useState([]);
 
   // Available sender email accounts (fetched from backend)
   const [sendersList, setSendersList] = useState([]);
@@ -510,9 +509,6 @@ export default function DacpCommandDashboard({ onNavigate }) {
       // Fetch action items
       fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`, { headers })
         .then(r => r.ok ? r.json() : []).then(items => setActionItems(items)).catch(() => setActionItems([]));
-      // Fetch recent meeting notes from knowledge base
-      fetch(`${API_BASE}/v1/knowledge/recent?type=meeting&limit=10`, { headers })
-        .then(r => r.ok ? r.json() : []).then(items => setRecentMeetings(items)).catch(() => setRecentMeetings([]));
     };
 
     refreshDashboard();
@@ -1728,59 +1724,6 @@ export default function DacpCommandDashboard({ onNavigate }) {
         )}
       </div>
 
-
-      {/* Recent Meeting Notes */}
-      {recentMeetings.length > 0 && (
-        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
-            <div className="flex items-center gap-2">
-              <FileText size={14} className="text-[#1e3a5f]" />
-              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Meeting Notes</span>
-            </div>
-            <span className="text-[11px] font-mono text-terminal-muted">{recentMeetings.length} recent</span>
-          </div>
-          <div>
-            {recentMeetings.map((m) => (
-              <div
-                key={m.id}
-                onClick={async () => {
-                  setMeetingDetailLoading(true);
-                  try {
-                    const res = await fetch(`${API_BASE}/v1/knowledge/entries/${m.id}`, { headers: getAuthHeaders() });
-                    if (res.ok) {
-                      const detail = await res.json();
-                      setMeetingDetail(detail);
-                    } else {
-                      setMeetingDetail({ id: m.id, title: m.title, summary: m.summary, source: m.source, recorded_at: m.recorded_at, created_at: m.created_at, content: m.summary });
-                    }
-                  } catch {
-                    setMeetingDetail({ id: m.id, title: m.title, summary: m.summary, source: m.source });
-                  } finally { setMeetingDetailLoading(false); }
-                }}
-                className="flex items-start gap-4 px-[18px] py-3 border-b border-[#f0eeea] last:border-b-0 hover:bg-[#f9f9f7] transition-colors cursor-pointer"
-              >
-                <div className="w-[72px] shrink-0">
-                  <div className="text-[11px] font-heading font-semibold text-[#1e3a5f]">
-                    {new Date(m.recorded_at || m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </div>
-                  <div className="text-[10px] font-mono text-terminal-muted">
-                    {m.source === 'calendar-poll' ? 'Recall' : m.source?.includes('fireflies') ? 'Fireflies' : 'Notes'}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-medium text-terminal-text truncate">{m.title}</div>
-                  {m.summary && (
-                    <div className="text-[11px] text-terminal-muted mt-0.5 line-clamp-2">{m.summary}</div>
-                  )}
-                </div>
-                {m.processed === 1 && (
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#edf7f0] text-[#1a6b3c] font-semibold shrink-0">Processed</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Metrics Strip */}
       {metrics.length > 0 && (
