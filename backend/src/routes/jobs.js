@@ -224,4 +224,81 @@ router.delete('/keys/:id', (req, res) => {
   }
 });
 
+// ─── Batch API (300K output) ────────────────────────────────────────────────
+
+/**
+ * POST /batch - Submit a batch generation request
+ * Body: { type: 'report'|'newsletter', system, prompt, model? }
+ */
+router.post('/batch', async (req, res) => {
+  try {
+    const tenantId = resolveTenant(req);
+    const { type, system, prompt, model } = req.body;
+
+    if (!type || !prompt) {
+      return res.status(400).json({ error: 'type and prompt are required' });
+    }
+
+    const { generateReport, generateLongForm } = await import('../services/batchService.js');
+
+    if (type === 'report') {
+      // Fire and forget - store job ID for polling
+      const jobId = `batch-${Date.now()}`;
+      const job = createBackgroundJob(tenantId, req.user?.id || 'system', {
+        type: 'batch_generation',
+        status: 'running',
+        metadata: JSON.stringify({ batchType: type }),
+      });
+
+      // Run async
+      generateReport({ tenantId, reportType: 'custom', system, prompt, model })
+        .then(result => {
+          updateBackgroundJob(job.id, {
+            status: 'completed',
+            result: JSON.stringify({ text: result.text, inputTokens: result.inputTokens, outputTokens: result.outputTokens }),
+          });
+        })
+        .catch(err => {
+          updateBackgroundJob(job.id, { status: 'failed', result: JSON.stringify({ error: err.message }) });
+        });
+
+      res.json({ jobId: job.id, status: 'submitted' });
+    } else {
+      const result = await generateLongForm({ system, prompt, model });
+      res.json({ text: result.text, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
+    }
+  } catch (error) {
+    console.error('Batch submit error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /batch/test - Quick test of the batch API with a simple prompt
+ */
+router.post('/batch/test', async (req, res) => {
+  try {
+    const { submitBatch, waitForBatch } = await import('../services/batchService.js');
+
+    const { batchId } = await submitBatch([{
+      id: 'test-ping',
+      messages: [{ role: 'user', content: 'Reply with exactly: "Batch API working. 300K output ready."' }],
+      maxTokens: 256,
+    }], { longOutput: false });
+
+    const results = await waitForBatch(batchId, { pollIntervalMs: 5000, maxWaitMs: 120000 });
+    const result = results.get('test-ping');
+
+    res.json({
+      success: result?.type === 'succeeded',
+      batchId,
+      response: result?.text,
+      tokens: { input: result?.inputTokens, output: result?.outputTokens },
+    });
+  } catch (error) {
+    console.error('Batch test error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
