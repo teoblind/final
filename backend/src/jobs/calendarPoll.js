@@ -20,6 +20,7 @@ import { google } from 'googleapis';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   getAllTenants,
+  getAllTenantDbs,
   getTenantDb,
   insertActivity,
   runWithTenant,
@@ -641,37 +642,65 @@ ${transcript}`,
 
     const summary = summaryRes.content[0].text;
 
-    // ── Per-tenant post-processing ──
-    await runWithTenant(tenantId, async () => {
-      const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const tdb = getTenantDb(tenantId);
-
-      // Insert into knowledge base
-      tdb.prepare(`
-        INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at, processed)
-        VALUES (?, ?, 'meeting', ?, ?, ?, 'calendar-poll', 'meetings', ?, 1)
-      `).run(
-        entryId, tenantId, meetingName, transcript, summary,
-        new Date().toISOString(),
-      );
-
-      // Extract per-person tasks + send follow-up emails
-      try {
-        const result = await processMeetingComplete({
-          tenantId,
-          entryId,
-          meetingTitle: meetingName,
-          transcript,
-          summary,
-          attendees,
-        });
-        console.log(`[CalendarPoll] Post-processing done: ${result.actionItemsInserted || 0} items, ${result.instructionsExecuted || 0} instructions`);
-      } catch (err) {
-        console.error(`[CalendarPoll] processMeetingComplete failed:`, err.message);
+    // ── Distribute to all tenants where attendees have accounts ──
+    const targetTenants = new Set([tenantId]); // always include the inviting tenant
+    try {
+      const allDbs = getAllTenantDbs();
+      for (const [tid, tdb] of Object.entries(allDbs)) {
+        for (const email of attendees) {
+          try {
+            const user = tdb.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND tenant_id = ? AND status = ?').get(email, tid, 'active');
+            if (user) targetTenants.add(tid);
+          } catch { /* table may not exist */ }
+        }
       }
-    });
+    } catch (err) {
+      console.warn(`[CalendarPoll] Cross-tenant lookup failed, using inviting tenant only: ${err.message}`);
+    }
 
-    console.log(`[CalendarPoll] ✓ Meeting processed: "${meetingName}" (${tenantId})`);
+    console.log(`[CalendarPoll] Distributing "${meetingName}" to ${targetTenants.size} tenant(s): ${[...targetTenants].join(', ')}`);
+
+    const recordedAt = new Date().toISOString();
+
+    for (const tid of targetTenants) {
+      await runWithTenant(tid, async () => {
+        const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const tdb = getTenantDb(tid);
+
+        // Insert into knowledge base
+        tdb.prepare(`
+          INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, recorded_at, processed)
+          VALUES (?, ?, 'meeting', ?, ?, ?, 'calendar-poll', 'meetings', ?, 1)
+        `).run(entryId, tid, meetingName, transcript, summary, recordedAt);
+
+        // Also add to tenant_files so it shows in Files > Meeting Notes
+        try {
+          tdb.prepare(`
+            INSERT OR IGNORE INTO tenant_files (id, tenant_id, name, category, file_type, size_bytes, modified_at)
+            VALUES (?, ?, ?, 'Meeting Notes', 'meeting_transcript', ?, ?)
+          `).run(entryId, tid, meetingName, (transcript || '').length, recordedAt);
+        } catch { /* tenant_files may not exist */ }
+
+        // Extract per-person tasks + send follow-up emails (only for inviting tenant to avoid duplicate emails)
+        if (tid === tenantId) {
+          try {
+            const result = await processMeetingComplete({
+              tenantId: tid,
+              entryId,
+              meetingTitle: meetingName,
+              transcript,
+              summary,
+              attendees,
+            });
+            console.log(`[CalendarPoll] Post-processing done for ${tid}: ${result.actionItemsInserted || 0} items, ${result.instructionsExecuted || 0} instructions`);
+          } catch (err) {
+            console.error(`[CalendarPoll] processMeetingComplete failed for ${tid}:`, err.message);
+          }
+        }
+      });
+    }
+
+    console.log(`[CalendarPoll] Meeting processed: "${meetingName}" -> ${[...targetTenants].join(', ')}`);
 
   } catch (err) {
     console.error(`[CalendarPoll] Post-meeting error for "${meetingName}":`, err.message);
