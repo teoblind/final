@@ -685,7 +685,13 @@ async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
         console.log(`[Newsletter] Verifying contacts for ${tenant.id}...`);
         const [contactVerification, socialResults] = await Promise.all([
           extractAndVerifyContacts(tenant.id, searchResults),
-          gatherSocialIntelligence(config).catch(err => {
+          Promise.race([
+            gatherSocialIntelligence(config),
+            new Promise(resolve => setTimeout(() => {
+              console.warn('[Newsletter] Social scraper timed out after 60s');
+              resolve({ xPosts: [], linkedinPosts: [] });
+            }, 60000)),
+          ]).catch(err => {
             console.warn(`[Newsletter] Social scraper failed:`, err.message);
             return { xPosts: [], linkedinPosts: [] };
           }),
