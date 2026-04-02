@@ -680,7 +680,6 @@ async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
 
         // Step 1b: Social media search (X + LinkedIn) - runs in parallel with contact verification
         console.log(`[Newsletter] Searching social media for ${tenant.id}...`);
-        const config = getTenantConfig(tenant.id);
 
         // Step 2: Verify contacts via Apollo + social scraping in parallel
         console.log(`[Newsletter] Verifying contacts for ${tenant.id}...`);
