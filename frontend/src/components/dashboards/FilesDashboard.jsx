@@ -2440,37 +2440,188 @@ export default function FilesDashboard() {
       )}
 
       {/* File Content Viewer Modal (meeting notes, etc.) */}
-      {viewingFileContent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setViewingFileContent(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-3 border-b border-[#e8e6e1] shrink-0">
-              <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-bold text-terminal-text font-heading truncate">{viewingFileContent.title}</h3>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {viewingFileContent.type && <span className="text-[10px] text-terminal-muted capitalize">{viewingFileContent.type.replace(/_/g, ' ')}</span>}
-                  {viewingFileContent.recorded_at && <span className="text-[10px] text-terminal-muted">{new Date(viewingFileContent.recorded_at).toLocaleDateString()}</span>}
+      {viewingFileContent && (() => {
+        const lines = viewingFileContent.content.split('\n');
+        // Parse attendees line
+        const attendeeLine = lines.find(l => /^attendees:/i.test(l.trim()));
+        const attendees = attendeeLine ? attendeeLine.replace(/^attendees:\s*/i, '').split(',').map(a => a.trim()).filter(Boolean) : [];
+        // Parse sections - group lines into headed sections
+        const sections = [];
+        let currentSection = { title: null, lines: [] };
+        for (const line of lines) {
+          if (/^attendees:/i.test(line.trim())) continue; // skip attendee line, shown in header
+          // Detect section headers: ALL CAPS with colon, or markdown headers
+          const isSectionHeader = /^[A-Z][A-Z\s/&()-]+:/.test(line.trim()) || line.startsWith('# ') || line.startsWith('## ') || line.startsWith('### ');
+          if (isSectionHeader) {
+            if (currentSection.title || currentSection.lines.length > 0) sections.push(currentSection);
+            const title = line.replace(/^#+\s*/, '').replace(/:$/, '').trim();
+            currentSection = { title, lines: [] };
+          } else {
+            currentSection.lines.push(line);
+          }
+        }
+        if (currentSection.title || currentSection.lines.length > 0) sections.push(currentSection);
+
+        const sectionIcons = {
+          default: { bg: '#f0edf7', color: '#7c3aed' },
+          key: { bg: '#fdf6e8', color: '#b8860b' },
+          action: { bg: '#edf7f0', color: '#1a6b3c' },
+          process: { bg: '#e8eef5', color: '#2c5282' },
+          risk: { bg: '#fdedf0', color: '#dc3545' },
+        };
+        const getSectionStyle = (title) => {
+          if (!title) return sectionIcons.default;
+          const t = title.toLowerCase();
+          if (t.includes('key') || t.includes('detail') || t.includes('note')) return sectionIcons.key;
+          if (t.includes('action') || t.includes('next') || t.includes('follow') || t.includes('todo')) return sectionIcons.action;
+          if (t.includes('process') || t.includes('step') || t.includes('estimat') || t.includes('scope') || t.includes('method')) return sectionIcons.process;
+          if (t.includes('risk') || t.includes('issue') || t.includes('concern') || t.includes('challenge')) return sectionIcons.risk;
+          return sectionIcons.default;
+        };
+
+        return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm" onClick={() => setViewingFileContent(null)}>
+          <div
+            className="relative w-full max-w-[900px] mx-4 my-6 max-h-[calc(100vh-48px)] flex flex-col rounded-2xl shadow-2xl overflow-hidden"
+            style={{ fontFamily: "'DM Sans', sans-serif", background: '#fafaf8' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="shrink-0 px-8 py-6" style={{ background: 'linear-gradient(135deg, #2d1854 0%, #4a2080 100%)' }}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(124, 58, 237, 0.25)' }}>
+                      <Mic size={16} style={{ color: '#c4b5fd' }} />
+                    </div>
+                    <span style={{ fontSize: '10px', fontFamily: "'DM Mono', monospace", fontWeight: 500, letterSpacing: '1.5px', color: 'rgba(196, 181, 253, 0.7)', textTransform: 'uppercase' }}>
+                      Meeting Notes
+                    </span>
+                  </div>
+                  <h2 style={{ fontFamily: "'Instrument Serif', serif", fontSize: '24px', fontWeight: 400, color: '#fff', lineHeight: 1.25, marginBottom: '8px' }}>
+                    {viewingFileContent.title}
+                  </h2>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {viewingFileContent.recorded_at && (
+                      <span className="flex items-center gap-1.5" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontFamily: "'DM Mono', monospace" }}>
+                        <Clock size={10} />
+                        {new Date(viewingFileContent.recorded_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    )}
+                    {viewingFileContent.type && (
+                      <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(124, 58, 237, 0.2)', color: '#c4b5fd', border: '1px solid rgba(124, 58, 237, 0.3)' }}>
+                        {viewingFileContent.type.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <button
+                  onClick={() => setViewingFileContent(null)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ color: 'rgba(255,255,255,0.4)', transition: 'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <button onClick={() => setViewingFileContent(null)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f5f4f0] text-terminal-muted hover:text-terminal-text transition-colors ml-3">
-                <X size={16} />
-              </button>
+
+              {/* Attendees strip */}
+              {attendees.length > 0 && (
+                <div className="flex items-center gap-2 mt-4 pt-4 flex-wrap" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <span style={{ fontSize: '9px', fontFamily: "'DM Mono', monospace", fontWeight: 500, letterSpacing: '1px', color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' }}>
+                    Attendees
+                  </span>
+                  {attendees.map((name, i) => (
+                    <span
+                      key={i}
+                      style={{ fontSize: '10px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)', letterSpacing: '0.3px' }}
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="flex-1 overflow-y-auto px-8 py-6">
-              <div className="text-[13px] leading-relaxed text-terminal-text whitespace-pre-wrap">
-                {viewingFileContent.content.split('\n').map((line, i) => {
-                  if (line.startsWith('# ')) return <h1 key={i} className="text-[18px] font-bold text-[var(--t-ui-accent)] mt-6 mb-2 font-heading">{line.slice(2)}</h1>;
-                  if (line.startsWith('## ')) return <h2 key={i} className="text-[15px] font-bold text-[var(--t-ui-accent)] mt-5 mb-1.5 font-heading">{line.slice(3)}</h2>;
-                  if (line.startsWith('### ')) return <h3 key={i} className="text-[13px] font-bold text-[var(--t-ui-accent)] mt-4 mb-1 font-heading">{line.slice(4)}</h3>;
-                  if (line.startsWith('- ')) return <li key={i} className="ml-4 mb-0.5">{line.slice(2)}</li>;
-                  if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-bold mt-2">{line.slice(2, -2)}</p>;
-                  if (line.trim() === '') return <br key={i} />;
-                  return <p key={i} className="mb-1">{line}</p>;
-                })}
-              </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
+              {sections.map((section, si) => {
+                const style = getSectionStyle(section.title);
+                const contentLines = section.lines.filter(l => l.trim() !== '');
+                if (contentLines.length === 0 && !section.title) return null;
+                return (
+                  <section key={si}>
+                    {section.title && (
+                      <div className="flex items-center gap-2.5 mb-3">
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: style.bg }}>
+                          <FileText size={12} style={{ color: style.color }} />
+                        </div>
+                        <h3 style={{ fontSize: '14px', fontWeight: 600, color: '#1a1a1a', margin: 0, letterSpacing: '-0.01em' }}>
+                          {section.title}
+                        </h3>
+                      </div>
+                    )}
+                    {contentLines.length > 0 && (
+                      <div className="rounded-xl overflow-hidden" style={{ background: '#fff', border: '1px solid #e8e8e3' }}>
+                        <div className="px-5 py-4 space-y-1.5">
+                          {contentLines.map((line, li) => {
+                            const trimmed = line.trim();
+                            // Numbered items (1. 2. etc)
+                            const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
+                            if (numMatch) {
+                              return (
+                                <div key={li} className="flex gap-3 py-1">
+                                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: '11px', fontWeight: 500, color: style.color, minWidth: '18px', textAlign: 'right', paddingTop: '1px' }}>
+                                    {numMatch[1]}.
+                                  </span>
+                                  <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.65, margin: 0, flex: 1 }}>
+                                    {numMatch[2].split(/(\*\*.*?\*\*|__.*?__)/).map((part, pi) => {
+                                      if (/^\*\*.*\*\*$/.test(part)) return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                                      if (/^__.*__$/.test(part)) return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                                      return part;
+                                    })}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            // Bullet items
+                            if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                              return (
+                                <div key={li} className="flex gap-3 py-0.5" style={{ paddingLeft: '4px' }}>
+                                  <span style={{ color: style.color, fontSize: '8px', marginTop: '6px' }}>&#9679;</span>
+                                  <p style={{ fontSize: '13px', color: '#333', lineHeight: 1.65, margin: 0, flex: 1 }}>
+                                    {trimmed.slice(2).split(/(\*\*.*?\*\*|__.*?__)/).map((part, pi) => {
+                                      if (/^\*\*.*\*\*$/.test(part)) return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                                      if (/^__.*__$/.test(part)) return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                                      return part;
+                                    })}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            // Regular paragraph
+                            return (
+                              <p key={li} style={{ fontSize: '13px', color: '#333', lineHeight: 1.65, margin: '2px 0' }}>
+                                {trimmed.split(/(\*\*.*?\*\*|__.*?__)/).map((part, pi) => {
+                                  if (/^\*\*.*\*\*$/.test(part)) return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                                  if (/^__.*__$/.test(part)) return <strong key={pi}>{part.slice(2, -2)}</strong>;
+                                  return part;
+                                })}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
