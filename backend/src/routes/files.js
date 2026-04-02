@@ -14,6 +14,7 @@ import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { authenticate } from '../middleware/auth.js';
 import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue, getDriveSyncStatus, getDriveSyncedFiles, getDriveSyncedFileCount, SANGHA_TENANT_ID } from '../cache/database.js';
+import db from '../cache/database.js';
 import { runWithTenant } from '../cache/database.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -149,6 +150,28 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[Files] List error:', err.message);
     res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+/** GET /files/:id/content - Get file content (for meeting notes and other local files) */
+router.get('/:id/content', (req, res) => {
+  try {
+    const { tenantId } = resolveIds(req);
+    const { id } = req.params;
+    // Try knowledge_entries first (meeting notes, emails, etc.)
+    const ke = db.prepare('SELECT title, content, type, source, recorded_at FROM knowledge_entries WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+    if (ke && ke.content) {
+      return res.json({ title: ke.title, content: ke.content, type: ke.type, source: ke.source, recorded_at: ke.recorded_at });
+    }
+    // Try tenant_files for any stored content
+    const tf = db.prepare('SELECT name, category, file_type FROM tenant_files WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+    if (tf) {
+      return res.json({ title: tf.name, content: null, type: tf.file_type, message: 'No inline content available for this file.' });
+    }
+    res.status(404).json({ error: 'File not found' });
+  } catch (err) {
+    console.error('[Files] Content error:', err.message);
+    res.status(500).json({ error: 'Failed to get file content' });
   }
 });
 

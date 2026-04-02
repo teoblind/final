@@ -2048,6 +2048,7 @@ export default function FilesDashboard() {
   const [totalFiles, setTotalFiles] = useState(0);
   const [viewingReport, setViewingReport] = useState(null);
   const [viewingNewsletter, setViewingNewsletter] = useState(null);
+  const [viewingFileContent, setViewingFileContent] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -2436,6 +2437,39 @@ export default function FilesDashboard() {
         />
       )}
 
+      {/* File Content Viewer Modal (meeting notes, etc.) */}
+      {viewingFileContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setViewingFileContent(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[760px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-3 border-b border-[#e8e6e1] shrink-0">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-terminal-text font-heading truncate">{viewingFileContent.title}</h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {viewingFileContent.type && <span className="text-[10px] text-terminal-muted capitalize">{viewingFileContent.type.replace(/_/g, ' ')}</span>}
+                  {viewingFileContent.recorded_at && <span className="text-[10px] text-terminal-muted">{new Date(viewingFileContent.recorded_at).toLocaleDateString()}</span>}
+                </div>
+              </div>
+              <button onClick={() => setViewingFileContent(null)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#f5f4f0] text-terminal-muted hover:text-terminal-text transition-colors ml-3">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              <div className="text-[13px] leading-relaxed text-terminal-text whitespace-pre-wrap">
+                {viewingFileContent.content.split('\n').map((line, i) => {
+                  if (line.startsWith('# ')) return <h1 key={i} className="text-[18px] font-bold text-[var(--t-ui-accent)] mt-6 mb-2 font-heading">{line.slice(2)}</h1>;
+                  if (line.startsWith('## ')) return <h2 key={i} className="text-[15px] font-bold text-[var(--t-ui-accent)] mt-5 mb-1.5 font-heading">{line.slice(3)}</h2>;
+                  if (line.startsWith('### ')) return <h3 key={i} className="text-[13px] font-bold text-[var(--t-ui-accent)] mt-4 mb-1 font-heading">{line.slice(4)}</h3>;
+                  if (line.startsWith('- ')) return <li key={i} className="ml-4 mb-0.5">{line.slice(2)}</li>;
+                  if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-bold mt-2">{line.slice(2, -2)}</p>;
+                  if (line.trim() === '') return <br key={i} />;
+                  return <p key={i} className="mb-1">{line}</p>;
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <h2 className="text-sm font-bold text-terminal-text tracking-[0.3px] font-heading">Files</h2>
@@ -2610,6 +2644,15 @@ export default function FilesDashboard() {
                           window.open(file.url, '_blank', 'noopener,noreferrer');
                         } else if (file.url) {
                           window.open(`${FILE_BASE}${file.url}`, '_blank');
+                        } else if (file.id) {
+                          // Local file (meeting note, etc.) - fetch and show content
+                          fetch(`${API_BASE}/v1/files/${file.id}/content`, { headers: getAuthHeaders() })
+                            .then(r => r.json())
+                            .then(d => {
+                              if (d.content) setViewingFileContent({ title: d.title || file.name, content: d.content, type: d.type, recorded_at: d.recorded_at });
+                              else showToast('No content available for this file');
+                            })
+                            .catch(() => showToast('Failed to load file content'));
                         } else {
                           showToast('Sample file - upload real files with the Upload button above');
                         }
@@ -2700,6 +2743,14 @@ export default function FilesDashboard() {
                               window.open(file.url, '_blank', 'noopener,noreferrer');
                             } else if (file.url) {
                               window.open(`${FILE_BASE}${file.url}`, '_blank');
+                            } else if (file.id) {
+                              fetch(`${API_BASE}/v1/files/${file.id}/content`, { headers: getAuthHeaders() })
+                                .then(r => r.json())
+                                .then(d => {
+                                  if (d.content) setViewingFileContent({ title: d.title || file.name, content: d.content, type: d.type, recorded_at: d.recorded_at });
+                                  else showToast('No content available for this file');
+                                })
+                                .catch(() => showToast('Failed to load file content'));
                             } else {
                               showToast('Sample file - upload real files with the Upload button above');
                             }
