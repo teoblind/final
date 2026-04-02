@@ -34,15 +34,23 @@ const TENANT_SEARCH_CONFIG = {
     region: 'Dallas-Fort Worth Texas',
     services: ['concrete', 'masonry', 'foundations', 'flatwork', 'structural concrete', 'site work', 'asphalt', 'paving'],
     color: '#1e3a5f', // navy
+    // Expansion regions - searched if primary region returns < MIN_RESULTS
+    expansionRegions: [
+      'Houston Texas',
+      'Austin San Antonio Texas',
+      'Southeast United States',
+      'Southwest United States',
+      'United States nationwide',
+    ],
+    minResults: 4, // minimum Perplexity results before expanding
     searchQueries: [
       'new commercial construction projects awarded {region} today OR yesterday',
-      'data center construction projects Texas general contractor awarded today',
+      'data center construction projects {region} general contractor awarded today',
       '{region} construction bid opportunities closing soon concrete masonry',
       'large commercial construction projects breaking ground {region} today OR yesterday',
-      'general contractor awarded new project Texas today commercial industrial',
-      'construction industry news Texas DFW infrastructure today',
-      'hyperscale data center construction Texas update today OR yesterday',
-      'semiconductor factory construction Texas update today',
+      'general contractor awarded new project {region} today commercial industrial',
+      'construction industry news {region} infrastructure today',
+      'hyperscale data center construction {region} update today OR yesterday',
       '{region} municipal government construction bid invitation new today',
     ],
     linkedinQueries: [
@@ -128,26 +136,53 @@ async function searchWeb(query, focus = 'news') {
   }
 }
 
+async function runSearchBatch(queries) {
+  const results = [];
+  const batchSize = 4;
+  for (let i = 0; i < queries.length; i += batchSize) {
+    const batch = queries.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(q => searchWeb(q, 'news')));
+    results.push(...batchResults.filter(Boolean));
+    if (i + batchSize < queries.length) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  return results;
+}
+
 async function gatherIntelligence(tenantId) {
   const config = getTenantConfig(tenantId);
-  const results = [];
+  const minResults = config.minResults || 4;
 
-  // Replace {region} placeholder in queries
-  const allQueries = [
+  // Phase 1: Primary region search
+  const primaryQueries = [
     ...config.searchQueries.map(q => q.replace(/\{region\}/g, config.region)),
     ...config.linkedinQueries,
   ];
+  const results = await runSearchBatch(primaryQueries);
 
-  // Run searches in parallel (max 4 concurrent to avoid rate limits)
-  const batchSize = 4;
-  for (let i = 0; i < allQueries.length; i += batchSize) {
-    const batch = allQueries.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(q => searchWeb(q, 'news')));
-    results.push(...batchResults.filter(Boolean));
+  // Count results with actual content (not empty answers)
+  const substantiveResults = results.filter(r => r.answer && r.answer.length > 100);
+  console.log(`[Newsletter] Primary region (${config.region}): ${substantiveResults.length} substantive results`);
 
-    // Small delay between batches
-    if (i + batchSize < allQueries.length) {
-      await new Promise(r => setTimeout(r, 2000));
+  // Phase 2: Progressive region expansion if primary is thin
+  if (substantiveResults.length < minResults && config.expansionRegions?.length) {
+    for (const expandRegion of config.expansionRegions) {
+      console.log(`[Newsletter] Expanding search to: ${expandRegion}`);
+
+      // Use a subset of queries for expansion (top 4 most relevant)
+      const expandQueries = config.searchQueries.slice(0, 4).map(q => q.replace(/\{region\}/g, expandRegion));
+      const expandResults = await runSearchBatch(expandQueries);
+      const expandSubstantive = expandResults.filter(r => r.answer && r.answer.length > 100);
+
+      results.push(...expandResults.filter(Boolean));
+      console.log(`[Newsletter] ${expandRegion}: +${expandSubstantive.length} results (total: ${results.filter(r => r.answer?.length > 100).length})`);
+
+      // Stop expanding once we have enough
+      if (results.filter(r => r.answer?.length > 100).length >= minResults * 2) {
+        console.log(`[Newsletter] Sufficient results, stopping expansion`);
+        break;
+      }
     }
   }
 
@@ -334,6 +369,8 @@ Use "Draft Email" for outreach actions and "Start Task" for research/analysis ac
   const prompt = `You are writing a daily intelligence newsletter for ${config.name}, specializing in ${config.services.join(', ')} in ${config.region}.
 
 IMPORTANT: This is a DAILY newsletter. Only include information from the past 24 hours. Do NOT recycle old news or restate projects from previous newsletters. Every item must have a clear "what's new TODAY" angle. If research results contain information older than 24 hours, skip it or clearly note it as background context. The goal is that each day's newsletter contains ONLY new information the reader hasn't seen before.
+
+NOTE: If results include projects outside the primary region (${config.region}), organize them in a separate "NATIONAL / REGIONAL OPPORTUNITIES" section after the primary region content. Clearly label the location for each out-of-region project and note travel distance or strategic relevance.
 
 WEB RESEARCH RESULTS (gathered this morning, filtered to past 24 hours):
 ${searchResults.map((r, i) => `--- Research ${i + 1}: "${r.query}" ---\n${r.answer}\n${r.citations?.length ? 'Sources: ' + r.citations.join(', ') : ''}`).join('\n\n')}
