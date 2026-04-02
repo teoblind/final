@@ -380,38 +380,13 @@ class WavStreamPlayer {
     this.interruptedTrackIds = {};
   }
 
-  async connect(sharedContext) {
-    // Use a shared AudioContext if provided (avoids dual-context issues in headless Chrome)
-    this.context = sharedContext || new AudioContext({ sampleRate: this.sampleRate });
-    console.log('[AUDIO-DEBUG] AudioContext state:', this.context.state, sharedContext ? '(shared)' : '(new)');
+  async connect() {
+    this.context = new AudioContext({ sampleRate: this.sampleRate });
     if (this.context.state === 'suspended') {
-      console.log('[AUDIO-DEBUG] AudioContext suspended, calling resume()...');
       await this.context.resume();
-      console.log('[AUDIO-DEBUG] AudioContext after resume():', this.context.state);
     }
-    // Force AudioContext activation in headless Chrome via silent oscillator trick.
-    // In headless Chromium, resume() alone may not activate the audio pipeline.
-    // Creating and immediately stopping an OscillatorNode forces Chrome to
-    // initialize the audio output path even without a user gesture.
-    try {
-      const osc = this.context.createOscillator();
-      const gain = this.context.createGain();
-      gain.gain.value = 0; // silent
-      osc.connect(gain);
-      gain.connect(this.context.destination);
-      osc.start();
-      osc.stop(this.context.currentTime + 0.01);
-      console.log('[AUDIO-DEBUG] Silent oscillator trick applied');
-    } catch (e) {
-      console.warn('[AUDIO-DEBUG] Oscillator trick failed:', e.message);
-    }
-    // Monitor state changes
-    this.context.onstatechange = () => {
-      console.log('[AUDIO-DEBUG] AudioContext state changed to:', this.context.state);
-    };
     await this.context.audioWorklet.addModule(streamProcessorSrc);
-    console.log('[AUDIO-DEBUG] StreamProcessor worklet loaded');
-    console.log('[Coppice] WavStreamPlayer ready, sampleRate:', this.sampleRate);
+    console.log('[Coppice] WavStreamPlayer ready, sampleRate:', this.sampleRate, 'state:', this.context.state);
     this._chunksReceived = 0;
     this._chunksWritten = 0;
     return true;
@@ -419,31 +394,12 @@ class WavStreamPlayer {
 
   _start() {
     const streamNode = new AudioWorkletNode(this.context, 'stream_processor');
-    // Route through MediaStreamDestination -> Audio element for reliable tab audio
-    // AudioContext.destination alone doesn't produce tab audio in Recall's headless Chrome
-    try {
-      const mediaDest = this.context.createMediaStreamDestination();
-      streamNode.connect(mediaDest);
-      const audioEl = document.createElement('audio');
-      audioEl.srcObject = mediaDest.stream;
-      audioEl.play().then(() => {
-        console.log('[AUDIO-DEBUG] Audio element playing MediaStream');
-      }).catch(e => {
-        console.warn('[AUDIO-DEBUG] Audio element play failed:', e.message);
-      });
-      this._audioEl = audioEl;
-    } catch (e) {
-      console.warn('[AUDIO-DEBUG] MediaStreamDestination failed, using direct destination:', e.message);
-    }
-    // Also connect to destination as fallback
     streamNode.connect(this.context.destination);
-    console.log('[AUDIO-DEBUG] StreamNode connected to MediaStream + destination');
-    console.log('[AUDIO-DEBUG] AudioContext state at playback start:', this.context.state);
-    console.log('[AUDIO-DEBUG] AudioContext destination:', this.context.destination.channelCount, 'channels');
+    console.log('[Coppice] StreamNode connected to destination, state:', this.context.state);
     streamNode.port.onmessage = (e) => {
       const { event } = e.data;
       if (event === 'stop') {
-        console.log('[AUDIO-DEBUG] StreamNode stopped, chunks written:', this._chunksWritten);
+        console.log('[Coppice] StreamNode stopped after', this._chunksWritten, 'chunks');
         streamNode.disconnect();
         this.stream = null;
       } else if (event === 'offset') {
@@ -459,7 +415,7 @@ class WavStreamPlayer {
     if (typeof trackId !== 'string') throw new Error('trackId must be string');
     if (this.interruptedTrackIds[trackId]) return;
     if (!this.stream) {
-      console.log('[AUDIO-DEBUG] First audio chunk — starting stream node');
+      console.log('[Coppice] First audio chunk - starting playback');
       this._start();
     }
     let buffer;
@@ -472,14 +428,8 @@ class WavStreamPlayer {
     }
     this._chunksReceived++;
     this._chunksWritten++;
-    // Log first few chunks and then every 50th
-    if (this._chunksReceived <= 5 || this._chunksReceived % 50 === 0) {
-      // Check if audio has actual content (not silence)
-      let maxVal = 0;
-      for (let i = 0; i < Math.min(buffer.length, 100); i++) {
-        maxVal = Math.max(maxVal, Math.abs(buffer[i]));
-      }
-      console.log(`[AUDIO-DEBUG] add16BitPCM chunk #${this._chunksReceived}: ${buffer.length} samples, maxAmp=${maxVal}, trackId=${trackId}, ctxState=${this.context.state}`);
+    if (this._chunksReceived <= 3) {
+      console.log(`[Coppice] Audio chunk #${this._chunksReceived}: ${buffer.length} samples`);
     }
     this.stream.port.postMessage({ event: 'write', buffer, trackId });
     return buffer;
@@ -613,14 +563,8 @@ async function getSessionData() {
     return;
   }
 
-  // Share the recorder's AudioContext with the player.
-  // Headless Chrome (Recall.ai output_media) can misbehave with multiple AudioContexts:
-  // tab audio capture may only route from one context, causing playback to be inaudible.
-  const sharedContext = wavRecorder._context;
-  console.log('[Coppice] Sharing AudioContext between recorder and player, state:', sharedContext?.state);
-
   try {
-    await wavStreamPlayer.connect(sharedContext);
+    await wavStreamPlayer.connect();
   } catch (e) {
     console.error('[Coppice] Audio output failed:', e);
     return;
