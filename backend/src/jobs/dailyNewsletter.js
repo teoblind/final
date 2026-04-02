@@ -109,7 +109,7 @@ async function searchWeb(query, focus = 'news') {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',
+        model: 'sonar',
         messages: [
           { role: 'system', content: 'You are a research assistant. Return factual, concise findings with specific names, numbers, and dates. Focus on the most recent results from the past week. Always include source URLs for claims.' },
           { role: 'user', content: query },
@@ -450,9 +450,35 @@ Return ONLY the HTML content, no markdown wrapping.`;
       let socialHtml = `<div style="margin-top:28px; border-top:2px solid ${brandColor}; padding-top:20px;">
   <h2 style="color:${brandColor}; font-size:18px; font-weight:700; margin:0 0 16px 0;">Social Media Highlights</h2>`;
 
+      // Score and rank posts by commercial construction relevance to DACP
+      function scorePost(post) {
+        const text = ((post.summary || '') + ' ' + (post.author || '')).toLowerCase();
+        let score = 0;
+        // High-value signals: project awards, dollar amounts, GC activity
+        const highValue = ['awarded', 'broke ground', 'groundbreaking', 'topping out', 'million', 'billion', '$',
+          'general contractor', 'subcontract', 'bid', 'preconstruction', 'permit'];
+        const medium = ['concrete', 'foundation', 'flatwork', 'slab', 'masonry', 'site work', 'paving',
+          'commercial', 'industrial', 'warehouse', 'data center', 'infrastructure', 'municipal',
+          'multifamily', 'apartment', 'hotel', 'hospital', 'school'];
+        const gcNames = ['hensel phelps', 'je dunn', 'mccarthy', 'turner', 'skanska', 'balfour beatty',
+          'rogers-o\'brien', 'manhattan construction', 'austin commercial', 'beck group', 'primoris',
+          'granite construction', 'whiting-turner', 'brasfield & gorrie'];
+        const noise = ['podcast', 'episode', 'student', 'college', 'trades lab', 'custom home',
+          'residential', 'remodel', 'renovation', 'kitchen', 'bathroom', 'roofing', 'roof',
+          'plumbing', 'hvac', 'landscap', 'lawn', 'fence', 'diy', 'cable rack'];
+        for (const kw of highValue) if (text.includes(kw)) score += 3;
+        for (const kw of medium) if (text.includes(kw)) score += 2;
+        for (const kw of gcNames) if (text.includes(kw)) score += 5;
+        for (const kw of noise) if (text.includes(kw)) score -= 5;
+        return score;
+      }
+
       if (socialResults.xPosts?.length) {
+        const rankedX = [...socialResults.xPosts].map(p => ({ ...p, _score: scorePost(p) }))
+          .filter(p => p._score > 0)
+          .sort((a, b) => b._score - a._score);
         socialHtml += `\n  <h3 style="color:${brandColor}; font-size:14px; font-weight:600; margin:16px 0 10px 0;">From X/Twitter</h3>\n  <ul style="list-style:none; padding:0; margin:0;">`;
-        for (const post of socialResults.xPosts.slice(0, 5)) {
+        for (const post of rankedX.slice(0, 5)) {
           const author = post.handle ? `@${post.handle}` : (post.author || 'Unknown');
           const date = post.date ? ` - ${post.date}` : '';
           socialHtml += `\n    <li style="margin-bottom:10px; padding:10px 14px; background:#f8f9fa; border-radius:6px; border-left:3px solid ${brandColor};">
@@ -465,8 +491,11 @@ Return ONLY the HTML content, no markdown wrapping.`;
       }
 
       if (socialResults.linkedinPosts?.length) {
+        const rankedLI = [...socialResults.linkedinPosts].map(p => ({ ...p, _score: scorePost(p) }))
+          .filter(p => p._score > 0)
+          .sort((a, b) => b._score - a._score);
         socialHtml += `\n  <h3 style="color:${brandColor}; font-size:14px; font-weight:600; margin:16px 0 10px 0;">From LinkedIn</h3>\n  <ul style="list-style:none; padding:0; margin:0;">`;
-        for (const post of socialResults.linkedinPosts.slice(0, 5)) {
+        for (const post of rankedLI.slice(0, 5)) {
           const author = post.author || 'Unknown';
           const date = post.date ? ` - ${post.date}` : '';
           socialHtml += `\n    <li style="margin-bottom:10px; padding:10px 14px; background:#f8f9fa; border-radius:6px; border-left:3px solid #0077b5;">
