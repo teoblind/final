@@ -2134,6 +2134,7 @@ export default function FilesDashboard() {
         grouped[cat] = { path: `${driveRoot}${cat}/`, files: [] };
       }
       grouped[cat].files.push({
+        id: file.id,
         name: file.name,
         type: file.file_type || 'other',
         owner: '',
@@ -2247,6 +2248,7 @@ export default function FilesDashboard() {
         const entries = await res.json();
         if (entries.length > 0) {
           const meetingFiles = entries.map(e => ({
+            id: e.id,
             name: e.title || 'Untitled Meeting',
             type: 'meeting',
             owner: e.source_agent || 'Meeting Bot',
