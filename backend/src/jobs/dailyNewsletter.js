@@ -470,8 +470,8 @@ Return ONLY the HTML content, no markdown wrapping.`;
           const author = post.author || 'Unknown';
           const date = post.date ? ` - ${post.date}` : '';
           socialHtml += `\n    <li style="margin-bottom:10px; padding:10px 14px; background:#f8f9fa; border-radius:6px; border-left:3px solid #0077b5;">
-      <strong style="font-size:13px;">${author}</strong><span style="color:#666; font-size:11px;">${date}</span><br/>
-      <span style="font-size:13px;">${(post.summary || '').substring(0, 180)}</span><br/>
+      <strong style="font-size:13px;">${author}</strong>${post.authorTitle ? `<span style="color:#888; font-size:11px;"> - ${post.authorTitle}</span>` : ''}<span style="color:#666; font-size:11px;">${date}</span><br/>
+      <span style="font-size:13px;">${(post.summary || '').substring(0, 250)}</span><br/>
       <a href="${post.url}" style="color:#0077b5; font-size:11px; text-decoration:underline;">View on LinkedIn</a>
     </li>`;
         }

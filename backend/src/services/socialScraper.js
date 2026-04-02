@@ -141,12 +141,20 @@ async function searchLinkedIn(queries) {
 
     if (!Array.isArray(posts)) return [];
 
+    // 24h cutoff - only keep posts from the last 24 hours
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const cutoffStr = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
+
     const results = [];
+    let skippedOld = 0;
     for (const post of posts) {
       // Parse author - can be an object with name field or a string
       let authorName = 'Unknown';
+      let authorTitle = '';
       if (typeof post.author === 'object' && post.author) {
         authorName = post.author.name || post.author.publicIdentifier || 'Unknown';
+        authorTitle = post.author.headline || post.author.title || '';
       } else if (typeof post.author === 'string') {
         authorName = post.author;
       }
@@ -166,6 +174,12 @@ async function searchLinkedIn(queries) {
         date = post.postedAt;
       }
 
+      // Strict 24h filter - skip posts older than 24 hours
+      if (date && date < cutoffStr) {
+        skippedOld++;
+        continue;
+      }
+
       // Only include posts with actual content, URLs, and construction relevance
       const lowerText = text.toLowerCase();
       const isRelevant = [
@@ -175,18 +189,24 @@ async function searchLinkedIn(queries) {
         'bid', 'preconstruction', 'site work', 'flatwork', 'tilt-wall', 'slab',
         'paving', 'curb', 'gutter', 'excavat', 'grading', 'hiring', 'superintendent',
         'project manager', 'safety', 'topping out', 'permit', 'zoning',
+        'hensel phelps', 'je dunn', 'mccarthy', 'turner', 'skanska', 'whiting-turner',
+        'rogers-o\'brien', 'manhattan construction', 'austin commercial', 'balfour beatty',
+        'million', 'billion', '$', 'sq ft', 'sqft', 'megawatt', 'mw', 'gw',
       ].some(kw => lowerText.includes(kw));
 
       if (url && text && text.length > 20 && isRelevant) {
         results.push({
           author: authorName,
-          summary: text.substring(0, 200),
+          authorTitle,
+          summary: text.substring(0, 300),
           url,
           date,
           platform: 'linkedin',
         });
       }
     }
+
+    console.log(`[SocialScraper] LinkedIn: skipped ${skippedOld} old posts (before ${cutoffStr}), kept ${results.length} recent+relevant`);
 
     // Deduplicate by URL
     const seen = new Set();
@@ -217,11 +237,13 @@ export async function gatherSocialIntelligence(config) {
     `concrete OR foundation OR "site work" Texas construction`,
   ];
 
-  // LinkedIn queries - focused on recent posts
+  // LinkedIn queries - focused on construction project intel, GC awards, data centers
   const linkedinQueries = [
-    `${region} construction project awarded`,
-    `general contractor ${region} new project groundbreaking`,
-    `data center Texas construction concrete`,
+    `${region} construction project awarded groundbreaking`,
+    `general contractor Texas new project awarded bid`,
+    `data center Texas construction update million billion`,
+    `Texas construction "broke ground" OR "under construction" OR "project update"`,
+    `concrete subcontractor Texas commercial industrial hiring`,
   ];
 
   console.log(`[SocialScraper] Searching X (${xQueries.length} queries) and LinkedIn (${linkedinQueries.length} queries)...`);
