@@ -2648,7 +2648,7 @@ export default function FilesDashboard() {
                           window.open(`${FILE_BASE}${file.url}`, '_blank');
                         } else if (file.id) {
                           // Local file (meeting note, etc.) - fetch and show content
-                          fetch(`${API_BASE}/v1/files/${file.id}/content`, { headers: getAuthHeaders() })
+                          fetch(`${API_BASE}/v1/files/${file.id}/content`, { headers: authHeaders })
                             .then(r => r.json())
                             .then(d => {
                               if (d.content) setViewingFileContent({ title: d.title || file.name, content: d.content, type: d.type, recorded_at: d.recorded_at });
@@ -2746,7 +2746,7 @@ export default function FilesDashboard() {
                             } else if (file.url) {
                               window.open(`${FILE_BASE}${file.url}`, '_blank');
                             } else if (file.id) {
-                              fetch(`${API_BASE}/v1/files/${file.id}/content`, { headers: getAuthHeaders() })
+                              fetch(`${API_BASE}/v1/files/${file.id}/content`, { headers: authHeaders })
                                 .then(r => r.json())
                                 .then(d => {
                                   if (d.content) setViewingFileContent({ title: d.title || file.name, content: d.content, type: d.type, recorded_at: d.recorded_at });

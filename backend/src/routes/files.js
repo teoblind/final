@@ -154,20 +154,24 @@ router.get('/', async (req, res) => {
 });
 
 /** GET /files/:id/content - Get file content (for meeting notes and other local files) */
-router.get('/:id/content', (req, res) => {
+router.get('/:id/content', async (req, res) => {
   try {
     const { tenantId } = resolveIds(req);
     const { id } = req.params;
-    // Try knowledge_entries first (meeting notes, emails, etc.)
-    const ke = db.prepare('SELECT title, content, type, source, recorded_at FROM knowledge_entries WHERE tenant_id = ? AND id = ?').get(tenantId, id);
-    if (ke && ke.content) {
-      return res.json({ title: ke.title, content: ke.content, type: ke.type, source: ke.source, recorded_at: ke.recorded_at });
-    }
-    // Try tenant_files for any stored content
-    const tf = db.prepare('SELECT name, category, file_type FROM tenant_files WHERE tenant_id = ? AND id = ?').get(tenantId, id);
-    if (tf) {
-      return res.json({ title: tf.name, content: null, type: tf.file_type, message: 'No inline content available for this file.' });
-    }
+    const result = await runWithTenant(tenantId, () => {
+      // Try knowledge_entries first (meeting notes, emails, etc.)
+      const ke = db.prepare('SELECT title, content, type, source, recorded_at FROM knowledge_entries WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+      if (ke && ke.content) {
+        return { title: ke.title, content: ke.content, type: ke.type, source: ke.source, recorded_at: ke.recorded_at };
+      }
+      // Try tenant_files for any stored content
+      const tf = db.prepare('SELECT name, category, file_type FROM tenant_files WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+      if (tf) {
+        return { title: tf.name, content: null, type: tf.file_type, message: 'No inline content available for this file.' };
+      }
+      return null;
+    });
+    if (result) return res.json(result);
     res.status(404).json({ error: 'File not found' });
   } catch (err) {
     console.error('[Files] Content error:', err.message);
