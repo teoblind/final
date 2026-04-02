@@ -114,67 +114,81 @@ async function searchLinkedIn(queries) {
     return [];
   }
 
-  const results = [];
-
-  for (const query of queries) {
-    try {
-      // Build LinkedIn search URL with keyword and date filter (past week)
-      const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(query)}&datePosted=%22past-week%22&sortBy=%22date_posted%22`;
-
-      // Run Apify actor synchronously (returns dataset items directly)
-      // Actor: harvestapi/linkedin-post-search (no cookies needed)
-      const res = await fetch(
-        `https://api.apify.com/v2/acts/harvestapi~linkedin-post-search/run-sync-get-dataset-items?token=${apiToken}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            urls: [searchUrl],
-            maxResults: 10,
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.warn(`[SocialScraper] Apify LinkedIn error ${res.status} for: ${query.slice(0, 50)}`, errText.slice(0, 200));
-        continue;
+  try {
+    // Run all queries in a single Apify actor call (saves runs on free tier)
+    // Actor: harvestapi/linkedin-post-search (no cookies needed)
+    // Input: searchQueries array, scrapePages limits results
+    const res = await fetch(
+      `https://api.apify.com/v2/acts/harvestapi~linkedin-post-search/run-sync-get-dataset-items?token=${apiToken}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          searchQueries: queries,
+          scrapePages: 1, // 1 page = ~50 posts per query
+        }),
       }
+    );
 
-      const posts = await res.json();
-      console.log(`[SocialScraper] LinkedIn query "${query.slice(0, 40)}": got ${posts.length} posts`);
-
-      if (Array.isArray(posts)) {
-        for (const post of posts) {
-          // Apify returns various field names depending on the actor version
-          const author = post.authorName || post.author || post.profileName || 'Unknown';
-          const text = post.text || post.postText || post.content || '';
-          const url = post.postUrl || post.url || post.linkedinUrl || '';
-          const date = post.postedDate || post.date || post.publishedAt || '';
-
-          if (url && text) {
-            results.push({
-              author,
-              summary: text.substring(0, 200),
-              url,
-              date,
-              platform: 'linkedin',
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.warn(`[SocialScraper] LinkedIn search failed for: ${query.slice(0, 50)}`, err.message);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      console.warn(`[SocialScraper] Apify LinkedIn error ${res.status}:`, errText.slice(0, 300));
+      return [];
     }
-  }
 
-  // Deduplicate by URL
-  const seen = new Set();
-  return results.filter(p => {
-    if (seen.has(p.url)) return false;
-    seen.add(p.url);
-    return true;
-  });
+    const posts = await res.json();
+    console.log(`[SocialScraper] LinkedIn: got ${posts.length} raw posts from Apify`);
+
+    if (!Array.isArray(posts)) return [];
+
+    const results = [];
+    for (const post of posts) {
+      // Parse author - can be an object with name field or a string
+      let authorName = 'Unknown';
+      if (typeof post.author === 'object' && post.author) {
+        authorName = post.author.name || post.author.publicIdentifier || 'Unknown';
+      } else if (typeof post.author === 'string') {
+        authorName = post.author;
+      }
+
+      // Parse URL
+      const url = post.linkedinUrl || post.postUrl || post.url || '';
+
+      // Parse content
+      const text = post.content || post.text || post.postText || '';
+
+      // Parse date from postedAt object or string
+      let date = '';
+      if (typeof post.postedAt === 'object' && post.postedAt) {
+        date = post.postedAt.date || '';
+        if (date) date = date.split('T')[0]; // YYYY-MM-DD
+      } else if (typeof post.postedAt === 'string') {
+        date = post.postedAt;
+      }
+
+      // Only include posts with actual content and URLs
+      if (url && text && text.length > 20) {
+        results.push({
+          author: authorName,
+          summary: text.substring(0, 200),
+          url,
+          date,
+          platform: 'linkedin',
+        });
+      }
+    }
+
+    // Deduplicate by URL
+    const seen = new Set();
+    return results.filter(p => {
+      if (seen.has(p.url)) return false;
+      seen.add(p.url);
+      return true;
+    });
+  } catch (err) {
+    console.warn(`[SocialScraper] LinkedIn search failed:`, err.message);
+    return [];
+  }
 }
 
 // ── Combined search for newsletter ───────────────────────────────────────────
