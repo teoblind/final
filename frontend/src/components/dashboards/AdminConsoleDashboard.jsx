@@ -200,8 +200,8 @@ export default function AdminConsoleDashboard() {
                     <p className={`text-[10px] ${t.status === 'healthy' ? 'text-[#1a6b3c]' : 'text-[#c0392b]'}`}>
                       {t.status === 'healthy' ? 'Token valid' : 'Token dead - needs re-auth'}
                     </p>
-                    {/* Expiry countdown */}
-                    {t.status === 'healthy' && t.expiresInDays != null && (
+                    {/* Expiry countdown or last authed date */}
+                    {t.status === 'healthy' && t.expiresInDays != null ? (
                       <p className={`text-[9px] mt-0.5 ${
                         t.expiryWarning === 'critical' ? 'text-[#c0392b] font-semibold'
                           : t.expiryWarning === 'warning' ? 'text-[#d4a017]'
@@ -209,7 +209,13 @@ export default function AdminConsoleDashboard() {
                       }`}>
                         Expires in ~{t.expiresInDays}d
                       </p>
-                    )}
+                    ) : t.status === 'healthy' && t.tokenLastAuthedAt ? (
+                      <p className="text-[9px] text-terminal-muted mt-0.5">
+                        Authed {new Date(t.tokenLastAuthedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - no expiry
+                      </p>
+                    ) : t.status === 'healthy' ? (
+                      <p className="text-[9px] text-terminal-muted mt-0.5">Production OAuth - no expiry</p>
+                    ) : null}
                     {t.isEnvVar && (
                       <p className="text-[9px] text-terminal-muted mt-0.5">Env var - manual re-auth</p>
                     )}
