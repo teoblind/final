@@ -85,8 +85,10 @@ async function sendAudioToRecall(botId, mp3Buffer) {
 
 import { createServer } from "http";
 
-// Pending bot IDs - set by HTTP POST /set-bot-id, consumed by WebSocket connections
-const pendingBotIds = new Map(); // sessionId -> botId
+// Global pending bot ID - set by HTTP POST /set-bot-id, consumed by next WebSocket connection
+// Only one voice bot active at a time, so no session matching needed
+let globalPendingBotId = null;
+let globalBotIdResolver = null; // resolve function for WS connections waiting for bot ID
 
 // HTTP server handles /set-bot-id endpoint + serves as WebSocket transport
 const httpServer = createServer((req, res) => {
@@ -95,22 +97,23 @@ const httpServer = createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { botId, sessionId } = JSON.parse(body);
-        if (botId && sessionId) {
-          pendingBotIds.set(sessionId, botId);
-          // Also push to any active WebSocket connection waiting for this session
-          for (const [sid, resolve] of botIdWaiters) {
-            if (sid === sessionId) {
-              resolve(botId);
-              botIdWaiters.delete(sid);
-            }
+        const { botId } = JSON.parse(body);
+        if (botId) {
+          // If a WebSocket is already waiting, resolve it immediately
+          if (globalBotIdResolver) {
+            console.log(`[VoiceRelay] Bot ID received, delivering to waiting connection: ${botId}`);
+            globalBotIdResolver(botId);
+            globalBotIdResolver = null;
+          } else {
+            // Store for the next WebSocket connection
+            globalPendingBotId = botId;
+            console.log(`[VoiceRelay] Bot ID queued for next connection: ${botId}`);
           }
-          console.log(`[VoiceRelay] Bot ID registered: ${sessionId} -> ${botId}`);
           res.writeHead(200, { 'Content-Type': 'text/plain' });
           res.end('ok');
         } else {
           res.writeHead(400);
-          res.end('botId and sessionId required');
+          res.end('botId required');
         }
       } catch (e) {
         res.writeHead(400);
@@ -122,9 +125,6 @@ const httpServer = createServer((req, res) => {
   res.writeHead(404);
   res.end();
 });
-
-// Waiters for bot IDs (WebSocket connections waiting for their bot ID)
-const botIdWaiters = new Map(); // sessionId -> resolve function
 
 const wss = new WebSocketServer({ server: httpServer });
 httpServer.listen(PORT);
@@ -152,24 +152,20 @@ wss.on("connection", (clientWs, req) => {
   let audioFlushTimer = null;
   let totalAudioBytesSent = 0;
 
-  // Check for bot ID from pending registrations or wait for it
-  // The backend POSTs to /set-bot-id after creating the bot
-  // The page may also send it via coppice.set_bot_id WebSocket message
-  const connUrl = new URL(req.url, 'http://localhost');
-  const sessionId = connUrl.searchParams.get('sid');
-  if (sessionId && RECALL_API_KEY) {
-    if (pendingBotIds.has(sessionId)) {
-      recallBotId = pendingBotIds.get(sessionId);
-      pendingBotIds.delete(sessionId);
-      console.log(`[VoiceRelay] Bot ID from pending: ${recallBotId}`);
+  // Get bot ID - either already pending from HTTP POST, or wait for it
+  if (RECALL_API_KEY) {
+    if (globalPendingBotId) {
+      recallBotId = globalPendingBotId;
+      globalPendingBotId = null;
+      console.log(`[VoiceRelay] Bot ID from pending: ${recallBotId} - output_audio ready`);
     } else {
-      // Wait for bot ID to be registered (up to 15 seconds)
-      console.log(`[VoiceRelay] Waiting for bot ID for session ${sessionId}...`);
+      // WebSocket connected before bot ID was registered - wait up to 15s
+      console.log(`[VoiceRelay] Waiting for bot ID (HTTP POST to /set-bot-id)...`);
       const waitPromise = new Promise((resolve) => {
-        botIdWaiters.set(sessionId, resolve);
+        globalBotIdResolver = resolve;
         setTimeout(() => {
-          if (botIdWaiters.has(sessionId)) {
-            botIdWaiters.delete(sessionId);
+          if (globalBotIdResolver === resolve) {
+            globalBotIdResolver = null;
             resolve(null);
           }
         }, 15000);
@@ -177,9 +173,9 @@ wss.on("connection", (clientWs, req) => {
       waitPromise.then(botId => {
         if (botId) {
           recallBotId = botId;
-          console.log(`[VoiceRelay] Bot ID received: ${recallBotId}`);
+          console.log(`[VoiceRelay] Bot ID received: ${recallBotId} - output_audio ready`);
         } else {
-          console.warn(`[VoiceRelay] Timed out waiting for bot ID`);
+          console.warn(`[VoiceRelay] Timed out waiting for bot ID - output_audio disabled`);
         }
       });
     }

@@ -260,9 +260,9 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     await fetch(`${relayUrl}/set-bot-id`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ botId: bot.id, sessionId }),
+      body: JSON.stringify({ botId: bot.id }),
     });
-    console.log(`[Recall] Registered bot ${bot.id} with relay (session: ${sessionId})`);
+    console.log(`[Recall] Registered bot ${bot.id} with voice relay`);
   } catch (e) {
     console.warn(`[Recall] Failed to register bot with relay: ${e.message}`);
   }

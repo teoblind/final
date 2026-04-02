@@ -281,24 +281,7 @@ router.post('/voice-test', async (req, res) => {
     const bot = await createVoiceBot(meetingUrl, { botName: 'Coppice', tenantId: tenantId || 'zhan-capital' });
     startChatLoop(bot.id);
 
-    // Tell the voice relay about this bot's ID so it can use output_audio
-    try {
-      const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
-      // Extract session ID from the bot's page URL
-      const pageUrl = bot.output_media?.camera?.config?.url || '';
-      const sidMatch = pageUrl.match(/sid=([^&]+)/);
-      const sid = sidMatch ? sidMatch[1] : null;
-      if (sid) {
-        await fetch(`${relayUrl}/set-bot-id`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ botId: bot.id, sessionId: sid }),
-        });
-        console.log(`[Recall] Registered bot ${bot.id} with relay (session: ${sid})`);
-      }
-    } catch (e) {
-      console.warn(`[Recall] Failed to register bot with relay: ${e.message}`);
-    }
+    // Bot ID registration with relay is now handled by createVoiceBot directly
 
     res.json({ botId: bot.id, meetingUrl });
   } catch (err) {
