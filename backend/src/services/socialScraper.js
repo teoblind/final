@@ -34,16 +34,16 @@ async function searchX(queries) {
           input: [
             {
               role: 'user',
-              content: `Search X for recent posts about: ${query}
+              content: `Search X/Twitter for posts about: ${query}
 
-Find up to 10 relevant posts. Return a JSON array where each object has:
+Find posts from this week. Return a JSON array where each object has:
 - "author": the poster's display name
 - "handle": their @username
 - "summary": 1-2 sentence summary of the post content
 - "url": the direct post URL (https://x.com/username/status/ID)
 - "date": post date as YYYY-MM-DD
 
-Return ONLY the JSON array, no other text. If nothing relevant found, return [].`,
+Important: cast a wide net. Include posts from companies, journalists, industry accounts, local news, and individuals. Do not limit to only viral or trending posts. Return ONLY the JSON array, no other text. If nothing relevant found, return [].`,
             },
           ],
         }),
