@@ -750,9 +750,9 @@ async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
           Promise.race([
             gatherSocialIntelligence(config),
             new Promise(resolve => setTimeout(() => {
-              console.warn('[Newsletter] Social scraper timed out after 60s');
+              console.warn('[Newsletter] Social scraper timed out after 180s');
               resolve({ xPosts: [], linkedinPosts: [] });
-            }, 60000)),
+            }, 180000)),
           ]).catch(err => {
             console.warn(`[Newsletter] Social scraper failed:`, err.message);
             return { xPosts: [], linkedinPosts: [] };
