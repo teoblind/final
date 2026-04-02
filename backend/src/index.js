@@ -305,10 +305,10 @@ try {
   console.warn('Overnight analysis job not started:', err.message);
 }
 
-// Daily intelligence newsletter (6 AM CT)
+// Daily intelligence newsletter (6 AM CT = 11 UTC)
 try {
   const { startDailyNewsletter } = await import('./jobs/dailyNewsletter.js');
-  startDailyNewsletter({ runAtHour: 6, intervalHours: 24 });
+  startDailyNewsletter({ runAtHour: 11, intervalHours: 24 });
 } catch (err) {
   console.warn('Daily newsletter not started:', err.message);
 }
