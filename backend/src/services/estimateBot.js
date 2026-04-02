@@ -13,6 +13,7 @@ import {
   createDacpEstimate,
   updateDacpBidRequest,
 } from '../cache/database.js';
+import { applyTaxRulesToEstimate, detectProjectState } from './taxRulesEngine.js';
 
 const TENANT_ID = 'dacp-construction-001';
 
@@ -225,12 +226,27 @@ export function generateEstimate(bidRequest, tenantId = TENANT_ID) {
     notes: `Auto-generated estimate. ${comparables.length} historical comparable(s) found. ${missingInfo.length > 0 ? `Missing info: ${missingInfo.join(', ')}` : 'All info provided.'}`,
   };
 
+  // Auto-apply tax rules if project state can be detected
+  let taxAnalysis = null;
+  try {
+    const projectText = [bidRequest.subject, bidRequest.body, bidRequest.gc_name].filter(Boolean).join(' ');
+    const detectedState = detectProjectState(projectText);
+    if (detectedState) {
+      taxAnalysis = applyTaxRulesToEstimate(estimate, detectedState, tenantId);
+      if (taxAnalysis && !taxAnalysis.error) {
+        estimate.notes += ` | Tax: ${detectedState} rules applied - ${taxAnalysis.contractorClassification}, total tax impact $${taxAnalysis.totalTaxImpact.toLocaleString()}`;
+      }
+    }
+  } catch (taxErr) {
+    // Non-fatal - tax analysis is supplementary
+  }
+
   createDacpEstimate(estimate);
 
   // Update bid request status
   updateDacpBidRequest(tenantId, bidRequest.id, { status: 'estimated' });
 
-  return { estimate, comparables };
+  return { estimate, comparables, taxAnalysis };
 }
 
 // ─── Process Inbound Request ────────────────────────────────────────────────

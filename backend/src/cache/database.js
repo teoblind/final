@@ -4354,6 +4354,39 @@ function initDacpTablesSchema(targetDb) {
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_specs_tenant ON dacp_project_specs(tenant_id)'); } catch (e) {}
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_specs_bid ON dacp_project_specs(tenant_id, bid_request_id)'); } catch (e) {}
 
+  // ─── Construction Tax Rules (multi-state) ──────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS construction_tax_rules (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      state TEXT NOT NULL,
+      state_name TEXT NOT NULL,
+      base_sales_tax_rate REAL NOT NULL,
+      max_combined_rate REAL,
+      contractor_classification TEXT NOT NULL,
+      contractor_model_description TEXT,
+      govt_project_exempt INTEGER DEFAULT 0,
+      govt_exemption_mechanism TEXT,
+      govt_exemption_form TEXT,
+      bond_threshold INTEGER,
+      bond_amount_pct REAL DEFAULT 100,
+      bond_tiers_json TEXT,
+      prevailing_wage INTEGER DEFAULT 0,
+      prevailing_wage_threshold INTEGER,
+      prevailing_wage_notes TEXT,
+      labor_taxable INTEGER DEFAULT 0,
+      labor_tax_notes TEXT,
+      use_tax_rate REAL,
+      special_taxes_json TEXT,
+      mpc_details_json TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { targetDb.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_tax_rules_state ON construction_tax_rules(tenant_id, state)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_tax_rules_tenant ON construction_tax_rules(tenant_id)'); } catch (e) {}
+
   // ─── DACP Bid Distributions ─────────────────────────────────────────────
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_bid_distributions (
@@ -5618,6 +5651,62 @@ export function upsertDacpBondProgram(bond) {
 
 export function checkBondRateFlag(tenantId) {
   return db.prepare('SELECT * FROM dacp_bond_program WHERE tenant_id = ? AND current_rate_pct > market_benchmark_pct * 1.2').all(tenantId);
+}
+
+// ─── Construction Tax Rules CRUD ──────────────────────────────────────────
+
+export function getConstructionTaxRules(tenantId) {
+  return db.prepare('SELECT * FROM construction_tax_rules WHERE tenant_id = ? ORDER BY state').all(tenantId);
+}
+
+export function getConstructionTaxRule(tenantId, state) {
+  return db.prepare('SELECT * FROM construction_tax_rules WHERE tenant_id = ? AND state = ?').get(tenantId, state);
+}
+
+export function getConstructionTaxRuleById(id) {
+  return db.prepare('SELECT * FROM construction_tax_rules WHERE id = ?').get(id);
+}
+
+export function upsertConstructionTaxRule(rule) {
+  return db.prepare(`
+    INSERT INTO construction_tax_rules (id, tenant_id, state, state_name, base_sales_tax_rate, max_combined_rate, contractor_classification, contractor_model_description, govt_project_exempt, govt_exemption_mechanism, govt_exemption_form, bond_threshold, bond_amount_pct, bond_tiers_json, prevailing_wage, prevailing_wage_threshold, prevailing_wage_notes, labor_taxable, labor_tax_notes, use_tax_rate, special_taxes_json, mpc_details_json, notes, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id, state) DO UPDATE SET
+      state_name = excluded.state_name,
+      base_sales_tax_rate = excluded.base_sales_tax_rate,
+      max_combined_rate = excluded.max_combined_rate,
+      contractor_classification = excluded.contractor_classification,
+      contractor_model_description = excluded.contractor_model_description,
+      govt_project_exempt = excluded.govt_project_exempt,
+      govt_exemption_mechanism = excluded.govt_exemption_mechanism,
+      govt_exemption_form = excluded.govt_exemption_form,
+      bond_threshold = excluded.bond_threshold,
+      bond_amount_pct = excluded.bond_amount_pct,
+      bond_tiers_json = excluded.bond_tiers_json,
+      prevailing_wage = excluded.prevailing_wage,
+      prevailing_wage_threshold = excluded.prevailing_wage_threshold,
+      prevailing_wage_notes = excluded.prevailing_wage_notes,
+      labor_taxable = excluded.labor_taxable,
+      labor_tax_notes = excluded.labor_tax_notes,
+      use_tax_rate = excluded.use_tax_rate,
+      special_taxes_json = excluded.special_taxes_json,
+      mpc_details_json = excluded.mpc_details_json,
+      notes = excluded.notes,
+      updated_at = datetime('now')
+  `).run(
+    rule.id, rule.tenantId, rule.state, rule.stateName,
+    rule.baseSalesTaxRate, rule.maxCombinedRate,
+    rule.contractorClassification, rule.contractorModelDescription,
+    rule.govtProjectExempt ? 1 : 0, rule.govtExemptionMechanism, rule.govtExemptionForm,
+    rule.bondThreshold, rule.bondAmountPct || 100, rule.bondTiersJson,
+    rule.prevailingWage ? 1 : 0, rule.prevailingWageThreshold, rule.prevailingWageNotes,
+    rule.laborTaxable ? 1 : 0, rule.laborTaxNotes,
+    rule.useTaxRate, rule.specialTaxesJson, rule.mpcDetailsJson, rule.notes
+  );
+}
+
+export function deleteConstructionTaxRule(tenantId, state) {
+  return db.prepare('DELETE FROM construction_tax_rules WHERE tenant_id = ? AND state = ?').run(tenantId, state);
 }
 
 // ─── Lead Engine CRUD Helpers ────────────────────────────────────────────────

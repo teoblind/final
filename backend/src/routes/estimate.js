@@ -45,6 +45,11 @@ import {
   getAgentMode,
   insertApprovalItem,
   insertActivity,
+  getConstructionTaxRules,
+  getConstructionTaxRule,
+  upsertConstructionTaxRule,
+  deleteConstructionTaxRule,
+  getConstructionTaxRuleById,
 } from '../cache/database.js';
 import {
   generateEstimate,
@@ -54,6 +59,13 @@ import {
 } from '../services/estimateBot.js';
 import { google } from 'googleapis';
 import { generateReport } from '../services/documentService.js';
+import {
+  applyTaxRulesToEstimate,
+  detectProjectState,
+  seedTaxRules,
+  calculateBondPremium,
+  calculateMississippiContractorTax,
+} from '../services/taxRulesEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -2170,6 +2182,127 @@ router.post('/bonding/analyze', authenticate, (req, res) => {
     const tenantId = req.resolvedTenant?.id;
     const { estimateTotal, bondRatePct, projectType } = req.body;
     const analysis = analyzeBondRate(tenantId, { estimateTotal, bondRatePct, projectType });
+    res.json(analysis);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Tax Rules Engine ─────────────────────────────────────────────────────
+
+// List all tax rules for this tenant
+router.get('/tax-rules', (req, res) => {
+  try {
+    const rules = getConstructionTaxRules(req.user.tenantId);
+    res.json({ rules, count: rules.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Seed default 10-state rules for this tenant (must be before :state param routes)
+router.post('/tax-rules/seed', (req, res) => {
+  try {
+    const result = seedTaxRules(req.user.tenantId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Detect project state from text (must be before :state param routes)
+router.post('/tax-rules/detect-state', (req, res) => {
+  try {
+    const state = detectProjectState(req.body.text || '');
+    if (!state) return res.json({ detected: false, state: null });
+    const rule = getConstructionTaxRule(req.user.tenantId, state);
+    res.json({ detected: true, state, hasRule: !!rule });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get tax rule for a specific state
+router.get('/tax-rules/:state', (req, res) => {
+  try {
+    const rule = getConstructionTaxRule(req.user.tenantId, req.params.state.toUpperCase());
+    if (!rule) return res.status(404).json({ error: `No tax rule for ${req.params.state}` });
+    rule.bondTiers = rule.bond_tiers_json ? JSON.parse(rule.bond_tiers_json) : [];
+    rule.specialTaxes = rule.special_taxes_json ? JSON.parse(rule.special_taxes_json) : [];
+    rule.mpcDetails = rule.mpc_details_json ? JSON.parse(rule.mpc_details_json) : null;
+    res.json(rule);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create or update a tax rule
+router.put('/tax-rules/:state', (req, res) => {
+  try {
+    const state = req.params.state.toUpperCase();
+    const existing = getConstructionTaxRule(req.user.tenantId, state);
+    upsertConstructionTaxRule({
+      id: existing?.id || `TAXRULE-${state}-${Date.now().toString(36)}`,
+      tenantId: req.user.tenantId,
+      state,
+      stateName: req.body.stateName || req.body.state_name,
+      baseSalesTaxRate: req.body.baseSalesTaxRate ?? req.body.base_sales_tax_rate,
+      maxCombinedRate: req.body.maxCombinedRate ?? req.body.max_combined_rate,
+      contractorClassification: req.body.contractorClassification || req.body.contractor_classification,
+      contractorModelDescription: req.body.contractorModelDescription || req.body.contractor_model_description,
+      govtProjectExempt: req.body.govtProjectExempt ?? req.body.govt_project_exempt ?? false,
+      govtExemptionMechanism: req.body.govtExemptionMechanism || req.body.govt_exemption_mechanism,
+      govtExemptionForm: req.body.govtExemptionForm || req.body.govt_exemption_form,
+      bondThreshold: req.body.bondThreshold ?? req.body.bond_threshold,
+      bondAmountPct: req.body.bondAmountPct ?? req.body.bond_amount_pct ?? 100,
+      bondTiersJson: typeof req.body.bondTiers === 'string' ? req.body.bondTiers : JSON.stringify(req.body.bondTiers || req.body.bond_tiers_json),
+      prevailingWage: req.body.prevailingWage ?? req.body.prevailing_wage ?? false,
+      prevailingWageThreshold: req.body.prevailingWageThreshold ?? req.body.prevailing_wage_threshold,
+      prevailingWageNotes: req.body.prevailingWageNotes || req.body.prevailing_wage_notes,
+      laborTaxable: req.body.laborTaxable ?? req.body.labor_taxable ?? false,
+      laborTaxNotes: req.body.laborTaxNotes || req.body.labor_tax_notes,
+      useTaxRate: req.body.useTaxRate ?? req.body.use_tax_rate,
+      specialTaxesJson: typeof req.body.specialTaxes === 'string' ? req.body.specialTaxes : JSON.stringify(req.body.specialTaxes || req.body.special_taxes_json || []),
+      mpcDetailsJson: typeof req.body.mpcDetails === 'string' ? req.body.mpcDetails : JSON.stringify(req.body.mpcDetails || req.body.mpc_details_json || null),
+      notes: req.body.notes,
+    });
+    const updated = getConstructionTaxRule(req.user.tenantId, state);
+    res.json({ success: true, rule: updated });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a tax rule
+router.delete('/tax-rules/:state', (req, res) => {
+  try {
+    deleteConstructionTaxRule(req.user.tenantId, req.params.state.toUpperCase());
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Apply tax rules to an estimate
+router.post('/estimates/:id/tax-analysis', (req, res) => {
+  try {
+    const estimate = getDacpEstimate(req.user.tenantId, req.params.id);
+    if (!estimate) return res.status(404).json({ error: 'Estimate not found' });
+
+    let state = req.body.state?.toUpperCase();
+    if (!state) {
+      state = detectProjectState(estimate.project_name || estimate.gc_name || '');
+    }
+    if (!state) {
+      return res.status(400).json({ error: 'Could not determine project state. Provide state parameter (e.g., { "state": "TX" }).' });
+    }
+
+    const analysis = applyTaxRulesToEstimate(estimate, state, req.user.tenantId, {
+      isGovtProject: req.body.isGovtProject || false,
+      materialsCost: req.body.materialsCost,
+      laborCost: req.body.laborCost,
+    });
+
     res.json(analysis);
   } catch (error) {
     res.status(500).json({ error: error.message });
