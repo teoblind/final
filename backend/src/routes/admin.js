@@ -65,6 +65,7 @@ const REAUTH_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/presentations',
+  'https://www.googleapis.com/auth/meetings.space.created',
   'openid',
   'email',
 ];

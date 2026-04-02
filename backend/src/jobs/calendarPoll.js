@@ -48,6 +48,7 @@ import {
 import { startChatLoop, stopChatLoop } from '../services/meetingChatLoop.js';
 import { startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
+import { extractMeetingCode, openForBotEntry, restoreAccess } from '../services/googleMeetService.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,10 @@ const activeBots = new Map();
 
 // Seen Gmail message IDs per tenant (prevents re-scanning same invite)
 const seenGmailIds = new Set();
+
+// Track active meeting codes (e.g. "abc-defg-hjk") to prevent duplicate bots
+// across detection methods (Calendar API + Gmail fallback + recovery)
+const activeMeetingCodes = new Set();
 
 let pollTimer = null;
 
@@ -262,12 +267,18 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
           continue;
         }
 
-        // Check if any existing bot (including recovered ones) is already in this meeting
+        // Check if any existing bot is already in this meeting (by normalized meeting code)
+        const meetCode = extractMeetingCode(link);
+        if (meetCode && activeMeetingCodes.has(meetCode)) {
+          joinedEvents.add(eventKey);
+          continue;
+        }
+        // Fallback: also check by raw URL comparison
         const alreadyInMeeting = [...activeBots.values()].some(b =>
-          b.link && link.includes(b.link.split('?')[0]) || b.link?.split('?')[0] === link.split('?')[0]
+          b.link && b.link.split('?')[0] === link.split('?')[0]
         );
         if (alreadyInMeeting) {
-          joinedEvents.add(eventKey); // mark so we don't re-check every cycle
+          joinedEvents.add(eventKey);
           continue;
         }
 
@@ -366,6 +377,8 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         const link = match[0].replace(/\.$/, '');
 
         // Check we haven't already joined this link via another detection method
+        const gmailMeetCode = extractMeetingCode(link);
+        if (gmailMeetCode && activeMeetingCodes.has(gmailMeetCode)) continue;
         const alreadyJoined = [...activeBots.values()].some(b => b.link === link);
         if (alreadyJoined) continue;
 
@@ -434,8 +447,16 @@ function deriveBotName(tenantId, agentEmail) {
 /**
  * Join a meeting via Recall.ai.
  */
-async function joinMeeting(meeting, tenantId, agentEmail) {
+async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
   const { eventKey, summary, link, attendees } = meeting;
+
+  // Prevent duplicate joins by meeting code
+  const meetCode = extractMeetingCode(link);
+  if (meetCode && activeMeetingCodes.has(meetCode)) {
+    console.log(`[CalendarPoll] Skipping "${summary}" - already have bot in ${meetCode}`);
+    joinedEvents.add(eventKey);
+    return null;
+  }
 
   console.log(`[CalendarPoll] ════════════════════════════════════════`);
   console.log(`[CalendarPoll] JOINING: ${summary}`);
@@ -444,8 +465,20 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
   console.log(`[CalendarPoll] ════════════════════════════════════════`);
 
   joinedEvents.add(eventKey);
+  if (meetCode) activeMeetingCodes.add(meetCode);
 
   try {
+    // Open meeting access for bot entry (Google Meet REST API)
+    // This temporarily sets the meeting to OPEN so the Recall.ai bot
+    // can join without waiting room admission, then restores to TRUSTED
+    // once the bot is in the call.
+    if (meetCode && refreshToken) {
+      const opened = await openForBotEntry(refreshToken, link);
+      if (opened) {
+        console.log(`[CalendarPoll] Opened meeting ${meetCode} for bot entry`);
+      }
+    }
+
     const botName = deriveBotName(tenantId, agentEmail);
 
     // Use output_media voice bot (OpenAI Realtime API via voice-agent.html page).
@@ -467,8 +500,10 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
       tenantId,
       meetingName: summary,
       link,
+      meetingCode: meetCode,
       attendees,
       agentEmail,
+      refreshToken,
       isVoiceBot,
       startTime: new Date().toISOString(),
     });
@@ -501,6 +536,7 @@ async function joinMeeting(meeting, tenantId, agentEmail) {
   } catch (err) {
     console.error(`[CalendarPoll] Join failed for "${summary}":`, err.message);
     joinedEvents.delete(eventKey);
+    if (meetCode) activeMeetingCodes.delete(meetCode);
     return null;
   }
 }
@@ -516,6 +552,7 @@ function monitorBot(eventKey) {
   const { botId } = info;
   const maxMs = MAX_MEETING_HOURS * 3600000;
   const startMs = Date.now();
+  let accessRestored = false;
 
   const check = async () => {
     // Guard: bot may have been cleaned up externally
@@ -531,6 +568,15 @@ function monitorBot(eventKey) {
     try {
       const status = await getBotStatus(botId);
       const statusCode = status?.status_changes?.slice(-1)?.[0]?.code || 'unknown';
+
+      // Restore meeting access to TRUSTED once bot is in the call
+      if (!accessRestored && (statusCode === 'in_call_recording' || statusCode === 'in_call_not_recording')) {
+        const botInfo = activeBots.get(eventKey);
+        if (botInfo?.refreshToken && botInfo?.meetingCode) {
+          restoreAccess(botInfo.refreshToken, botInfo.link).catch(() => {});
+          accessRestored = true;
+        }
+      }
 
       if (['done', 'fatal', 'analysis_done', 'media_expired'].includes(statusCode)) {
         console.log(`[CalendarPoll] Bot ${botId} finished: ${statusCode}`);
@@ -562,8 +608,11 @@ async function handleMeetingEnd(eventKey) {
   const info = activeBots.get(eventKey);
   if (!info) return;
 
-  const { botId, tenantId, meetingName, attendees, agentEmail } = info;
+  const { botId, tenantId, meetingName, attendees, agentEmail, meetingCode } = info;
   console.log(`[CalendarPoll] Processing meeting end: "${meetingName}" (${tenantId})`);
+
+  // Clean up meeting code tracking
+  if (meetingCode) activeMeetingCodes.delete(meetingCode);
 
   try {
     // ── Get transcript ──
@@ -884,7 +933,7 @@ async function poll() {
         console.log(`[CalendarPoll] [${cal.agentEmail}] Found ${meetings.length} meeting(s) in window`);
       }
       for (const meeting of meetings) {
-        await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
+        await joinMeeting(meeting, cal.tenantId, cal.agentEmail, cal.refreshToken);
       }
     } catch (err) {
       const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
@@ -906,7 +955,7 @@ async function poll() {
             console.log(`[CalendarPoll] [${cal.agentEmail}] (fallback) Found ${meetings.length} meeting(s) in window`);
           }
           for (const meeting of meetings) {
-            await joinMeeting(meeting, cal.tenantId, cal.agentEmail);
+            await joinMeeting(meeting, cal.tenantId, cal.agentEmail, cal.refreshToken);
           }
           // Fallback worked - remember for future poll cycles
           if (cal.label) useFallbackClient.add(cal.label);
@@ -943,17 +992,21 @@ async function recoverActiveBots() {
     if (!Array.isArray(bots) || bots.length === 0) return;
 
     for (const bot of bots) {
-      const meetingUrl = bot.meeting_url?.meeting_id
-        ? `recall:${bot.meeting_url.meeting_id}`
+      const meetingId = bot.meeting_url?.meeting_id;
+      const meetingUrl = meetingId
+        ? `https://meet.google.com/${meetingId}`
         : bot.meeting_url?.business_meeting_id || bot.id;
+      const meetCode = meetingId || null;
       // Use bot ID as event key since we can't recover the original eventKey
       const eventKey = `recovered:${bot.id}`;
       joinedEvents.add(eventKey);
+      if (meetCode) activeMeetingCodes.add(meetCode);
       activeBots.set(eventKey, {
         botId: bot.id,
         tenantId: 'unknown',
         meetingName: bot.bot_name || 'Recovered',
         link: meetingUrl,
+        meetingCode: meetCode,
         attendees: [],
         startTime: bot.join_at || new Date().toISOString(),
       });
