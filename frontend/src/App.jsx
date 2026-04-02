@@ -445,7 +445,7 @@ function AppContent() {
   let agentItems = [];
   let infraItems = [];
 
-  const isCeo = user?.role === 'ceo' || user?.email === 'dcruz@dacpholdings.com';
+  const isCeo = user?.role === 'ceo' || user?.role === 'owner' || user?.email === 'dcruz@dacpholdings.com';
   if (isConstruction) {
     platformItems = [
       ...(isCeo ? [{ id: 'ceo', label: 'CEO', icon: BarChart3 }] : []),
