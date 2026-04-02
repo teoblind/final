@@ -5300,6 +5300,13 @@ export function getCeoDashboardStats(tenantId) {
     avgMargin: db.prepare("SELECT COALESCE(AVG(margin_pct), 0) as v FROM dacp_jobs WHERE tenant_id = ? AND margin_pct IS NOT NULL").get(tenantId)?.v || 0,
     pendingBids: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_requests WHERE tenant_id = ? AND status = 'new'").get(tenantId)?.c || 0,
     overdueItems: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_requests WHERE tenant_id = ? AND due_date < date('now') AND status NOT IN ('passed', 'estimated', 'awarded')").get(tenantId)?.c || 0,
+    // New KPIs from estimating services
+    openRfis: db.prepare("SELECT COUNT(*) as c FROM dacp_rfis WHERE tenant_id = ? AND status IN ('draft', 'sent')").get(tenantId)?.c || 0,
+    pendingDistributions: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_distributions WHERE tenant_id = ? AND bid_status = 'draft'").get(tenantId)?.c || 0,
+    sentDistributions: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_distributions WHERE tenant_id = ? AND bid_status = 'sent'").get(tenantId)?.c || 0,
+    wonBids: db.prepare("SELECT COUNT(*) as c FROM dacp_bid_distributions WHERE tenant_id = ? AND award_status = 'won'").get(tenantId)?.c || 0,
+    aboveMarketBondRate: db.prepare("SELECT COUNT(*) as c FROM dacp_bond_program WHERE tenant_id = ? AND rate_flag = 'above_market'").get(tenantId)?.c || 0,
+    suppliersOnFile: db.prepare("SELECT COUNT(*) as c FROM dacp_suppliers WHERE tenant_id = ? AND status = 'active'").get(tenantId)?.c || 0,
   };
 
   const pumping = {
@@ -5359,6 +5366,24 @@ export function getCeoRedFlags(tenantId) {
   const staleNewBids = db.prepare("SELECT * FROM dacp_bid_requests WHERE tenant_id = ? AND status = 'new' AND received_at < date('now', '-7 days') LIMIT 5").all(tenantId);
   for (const b of staleNewBids) {
     flags.push({ department: 'estimating', severity: 'medium', title: 'Unreviewed bid request (7+ days)', detail: `${b.gc_name}: "${b.subject}" received ${b.received_at}`, item_id: b.id });
+  }
+
+  // Bond rate above market
+  const aboveMarketBonds = db.prepare("SELECT * FROM dacp_bond_program WHERE tenant_id = ? AND rate_flag = 'above_market' LIMIT 3").all(tenantId);
+  for (const bp of aboveMarketBonds) {
+    flags.push({ department: 'estimating', severity: 'high', title: 'Bond rate above market', detail: `${bp.surety_company}: ${bp.current_rate_pct}% vs market ${bp.market_benchmark_pct}%`, item_id: bp.id });
+  }
+
+  // Unanswered RFIs older than 5 days
+  const staleRfis = db.prepare("SELECT * FROM dacp_rfis WHERE tenant_id = ? AND status = 'sent' AND sent_date < date('now', '-5 days') LIMIT 5").all(tenantId);
+  for (const r of staleRfis) {
+    flags.push({ department: 'estimating', severity: 'medium', title: 'Unanswered RFI (5+ days)', detail: `${r.gc_name}: "${r.subject}" sent ${r.sent_date}`, item_id: r.id });
+  }
+
+  // Unsent bid distributions
+  const unsentDists = db.prepare("SELECT project_name, COUNT(*) as c FROM dacp_bid_distributions WHERE tenant_id = ? AND bid_status = 'draft' GROUP BY project_name LIMIT 5").all(tenantId);
+  for (const d of unsentDists) {
+    flags.push({ department: 'estimating', severity: 'medium', title: 'Unsent bid distributions', detail: `${d.project_name}: ${d.c} distribution(s) still in draft`, item_id: null });
   }
 
   // PUMPING red flags

@@ -17,6 +17,9 @@ import {
   getComplianceIncidents,
   getCeoDepartmentReports,
   getCurrentTenantId,
+  getDacpRfis,
+  getDacpBondProgram,
+  getDacpSuppliers,
 } from '../cache/database.js';
 
 const router = express.Router();
@@ -65,6 +68,24 @@ router.get('/dashboard', (req, res) => {
 });
 
 // ─── Department Detail Endpoints ──────────────────────────────────────────────
+
+/** GET /api/v1/ceo/estimating - Estimating department detail */
+router.get('/estimating', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    const rfis = getDacpRfis(tenantId);
+    const bondPrograms = getDacpBondProgram(tenantId);
+    const suppliers = getDacpSuppliers(tenantId);
+
+    res.json({
+      rfis: { total: rfis.length, draft: rfis.filter(r => r.status === 'draft').length, sent: rfis.filter(r => r.status === 'sent').length, responded: rfis.filter(r => r.status === 'responded').length, items: rfis.slice(0, 20) },
+      bondPrograms: bondPrograms.map(bp => ({ ...bp, tiers: bp.tiers_json ? JSON.parse(bp.tiers_json) : null })),
+      suppliers: { total: suppliers.length, byType: suppliers.reduce((acc, s) => { acc[s.supplier_type] = (acc[s.supplier_type] || 0) + 1; return acc; }, {}) },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /** GET /api/v1/ceo/pumping - Pumping department detail */
 router.get('/pumping', (req, res) => {
@@ -116,6 +137,10 @@ function computeEstimatingHealth(stats) {
   if (stats.activeJobs === 0) score -= 10;
   // Low margin
   if (stats.avgMargin < 8) score -= 15;
+  // Bond rate above market: -10 per flagged program
+  score -= Math.min((stats.aboveMarketBondRate || 0) * 10, 20);
+  // Unsent distributions sitting in draft: -5 per batch
+  score -= Math.min((stats.pendingDistributions || 0) * 5, 15);
   return Math.max(0, Math.min(100, score));
 }
 

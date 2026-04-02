@@ -150,12 +150,48 @@ router.put('/estimates/:id', (req, res) => {
   }
 });
 
-router.post('/estimates/:id/send', (req, res) => {
+router.post('/estimates/:id/send', async (req, res) => {
   try {
     updateDacpEstimate(req.user.tenantId, req.params.id, { status: 'sent' });
     const estimate = getDacpEstimate(req.user.tenantId, req.params.id);
     const emailDraft = draftQuoteEmail(estimate);
-    res.json({ estimate, emailDraft, message: 'Estimate marked as sent' });
+
+    // ── Auto-create bid distributions if GC list provided ──
+    let distributions = [];
+    if (req.body.gcList?.length > 0) {
+      try {
+        const { createBidDistributions } = await import('../services/bidDistribution.js');
+        distributions = createBidDistributions(req.user.tenantId, {
+          bidRequestId: estimate.bid_request_id,
+          estimateId: req.params.id,
+          projectName: estimate.project_name || estimate.gc_name || 'Project',
+          baseBidTotal: estimate.total_bid || estimate.subtotal || 0,
+          gcList: req.body.gcList,
+        });
+      } catch (distErr) {
+        console.error('[BidDistribution] Auto-create failed (non-fatal):', distErr.message);
+      }
+    }
+
+    // ── Auto-analyze bond rate ──
+    let bondAnalysis = null;
+    try {
+      const { analyzeBondRate } = await import('../services/bondingOptimizer.js');
+      const totalBid = estimate.total_bid || estimate.subtotal || 0;
+      if (totalBid > 0) {
+        bondAnalysis = analyzeBondRate(req.user.tenantId, {
+          estimateTotal: totalBid,
+          bondRatePct: req.body.bondRatePct || 3.0,
+        });
+      }
+    } catch (bondErr) {
+      console.error('[BondOptimizer] Analyze failed (non-fatal):', bondErr.message);
+    }
+
+    res.json({
+      estimate, emailDraft, distributions, bondAnalysis,
+      message: `Estimate marked as sent${distributions.length ? ` with ${distributions.length} GC distributions` : ''}`,
+    });
   } catch (error) {
     console.error('Send estimate error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -316,6 +352,60 @@ router.post('/inbox/:id/analyze', async (req, res) => {
         itb_analysis_json: JSON.stringify(analysis),
         workflow_step: 1,
       });
+
+      // ── Auto-parse specs from ITB analysis ──
+      try {
+        const { extractSpecRequirements } = await import('../services/specParser.js');
+        const { upsertDacpProjectSpecs } = await import('../cache/database.js');
+        const { v4: uuidv4 } = await import('uuid');
+        // Combine body + any spec text from analysis for parsing
+        const specText = [bidReq.body, analysis.spec_requirements, analysis.compliance_requirements]
+          .filter(Boolean)
+          .join('\n');
+        if (specText.length > 50) {
+          const parsed = extractSpecRequirements(specText);
+          upsertDacpProjectSpecs({
+            id: uuidv4(),
+            tenantId: req.user.tenantId,
+            bidRequestId: req.params.id,
+            projectName: bidReq.subject || bidReq.project_name || 'Unknown',
+            taxStatus: parsed.taxStatus,
+            taxDetails: parsed.taxDetails,
+            laborRequirementsJson: JSON.stringify(parsed.laborRequirements),
+            bondRequired: parsed.bondRequired,
+            bondType: parsed.bondType,
+            concreteSpecsJson: JSON.stringify(parsed.concreteSpecs),
+            rebarSpecsJson: JSON.stringify(parsed.rebarSpecs),
+            specialConditionsJson: JSON.stringify(parsed.specialConditions),
+            vbeSblvbRequired: parsed.vbeSblvbRequired,
+            vbeSblvbDetails: parsed.vbeSblvbDetails?.trim(),
+          });
+          analysis._parsedSpecs = parsed;
+        }
+      } catch (specErr) {
+        console.error('[SpecParser] Auto-parse failed (non-fatal):', specErr.message);
+      }
+
+      // ── Auto-detect RFI needs ──
+      try {
+        const { detectRfiNeeds, generateRfiDrafts } = await import('../services/rfiGenerator.js');
+        const suggestions = detectRfiNeeds({
+          itbAnalysis: analysis,
+          missingInfo: bidReq.missing_info || bidReq.missing_info_json,
+        });
+        if (suggestions.length > 0) {
+          const rfis = generateRfiDrafts(req.user.tenantId, {
+            bidRequestId: req.params.id,
+            gcName: bidReq.gc_name || bidReq.from_name || 'GC',
+            gcEmail: bidReq.gc_email || bidReq.from_email || '',
+            projectName: bidReq.subject || bidReq.project_name || 'Unknown',
+            suggestions,
+          });
+          analysis._rfiDrafts = rfis.length;
+        }
+      } catch (rfiErr) {
+        console.error('[RFIGenerator] Auto-detect failed (non-fatal):', rfiErr.message);
+      }
     }
 
     res.json({ bid_request_id: req.params.id, analysis });
@@ -333,7 +423,25 @@ router.post('/supplier-quotes', async (req, res) => {
       return res.status(400).json({ error: 'project_name and materials are required' });
     }
     const quotes = draftSupplierQuotes(project_name, gc_name, bid_due_date, materials, project_location);
-    res.json({ project_name, quotes });
+
+    // ── Also search for local suppliers and save to DB ──
+    let localSuppliers = [];
+    if (project_location) {
+      try {
+        const { findLocalSuppliers } = await import('../services/supplierOutreach.js');
+        const concreteSuppliers = await findLocalSuppliers(req.user.tenantId, {
+          location: project_location, supplierType: 'concrete', radiusMinutes: 15,
+        });
+        const rebarSuppliers = await findLocalSuppliers(req.user.tenantId, {
+          location: project_location, supplierType: 'rebar', radiusMinutes: 60,
+        });
+        localSuppliers = [...concreteSuppliers, ...rebarSuppliers];
+      } catch (supplierErr) {
+        console.error('[SupplierOutreach] Local search failed (non-fatal):', supplierErr.message);
+      }
+    }
+
+    res.json({ project_name, quotes, localSuppliers });
   } catch (error) {
     console.error('Supplier quotes error:', error);
     res.status(500).json({ error: error.message });
@@ -383,6 +491,22 @@ router.post('/generate-proposal', async (req, res) => {
   try {
     const { generateProposal } = await import('../services/constructionCopilotV2.js');
     const result = await generateProposal(req.body);
+
+    // ── Auto-analyze bond rate and attach to proposal ──
+    try {
+      const { addBondAnalysisToEstimate } = await import('../services/bondingOptimizer.js');
+      const totalBid = req.body.total_bid || req.body.subtotal || 0;
+      const bondRate = req.body.bond_rate_pct || 3.0; // DACP default per Bill
+      if (totalBid > 0) {
+        const bondNote = addBondAnalysisToEstimate(req.user.tenantId, totalBid, bondRate);
+        if (bondNote) {
+          result.bondAnalysis = bondNote;
+        }
+      }
+    } catch (bondErr) {
+      console.error('[BondOptimizer] Auto-analyze failed (non-fatal):', bondErr.message);
+    }
+
     res.json(result);
   } catch (error) {
     console.error('Generate proposal error:', error);
@@ -568,7 +692,29 @@ router.post('/inbox/:id/analyze-documents', async (req, res) => {
       }
     }
 
-    res.json({ bid_request_id: req.params.id, analysis });
+    // ── Deep-parse specs from uploaded document text ──
+    let parsedSpecs = null;
+    try {
+      const { parseAndSaveSpecs } = await import('../services/specParser.js');
+      // Combine all document text (especially spec-type docs)
+      const specDocs = documents.filter(d =>
+        d.file_type === 'spec' || d.parsed_text?.toLowerCase().includes('section 03')
+      );
+      const allText = (specDocs.length > 0 ? specDocs : documents)
+        .map(d => d.parsed_text || '').join('\n');
+      if (allText.length > 100) {
+        parsedSpecs = await parseAndSaveSpecs(req.user.tenantId, {
+          bidRequestId: req.params.id,
+          projectName: bid.subject || bid.project_name || 'Unknown',
+          specText: allText,
+          docId: specDocs[0]?.id || documents[0]?.id,
+        });
+      }
+    } catch (specErr) {
+      console.error('[SpecParser] Doc analysis failed (non-fatal):', specErr.message);
+    }
+
+    res.json({ bid_request_id: req.params.id, analysis, parsedSpecs });
   } catch (error) {
     console.error('Analyze documents error:', error);
     res.status(500).json({ error: error.message });
