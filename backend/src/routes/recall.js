@@ -266,6 +266,27 @@ router.post('/video-frame', async (req, res) => {
   }
 });
 
+/**
+ * POST /voice-test - Create voice bot without auth (testing only, localhost)
+ */
+router.post('/voice-test', async (req, res) => {
+  // Only allow from localhost
+  const ip = req.ip || req.connection.remoteAddress;
+  if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+    return res.status(403).json({ error: 'localhost only' });
+  }
+  try {
+    const { meetingUrl, tenantId } = req.body;
+    if (!meetingUrl) return res.status(400).json({ error: 'meetingUrl required' });
+    const bot = await createVoiceBot(meetingUrl, { botName: 'Coppice', tenantId: tenantId || 'zhan-capital' });
+    startChatLoop(bot.id);
+    res.json({ botId: bot.id, meetingUrl });
+  } catch (err) {
+    console.error('[Recall] voice-test error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Authenticated routes ──
 router.use(authenticate);
 
