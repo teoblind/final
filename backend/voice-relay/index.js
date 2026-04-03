@@ -296,14 +296,26 @@ const httpServer = createServer((req, res) => {
         }));
 
         if (respond) {
-          // Cancel any in-progress response before starting new one
+          // If already responding, cancel first and wait before creating new response
           if (activeSession.responding) {
             ws.send(JSON.stringify({ type: 'response.cancel' }));
             activeSession.audioBuffer = Buffer.alloc(0);
             activeSession.audioChunkCount = 0;
-            console.log(`[VoiceRelay] Cancelled previous response for new wake-word`);
+            activeSession.responding = false;
+            if (activeSession.flushTimer) { clearTimeout(activeSession.flushTimer); activeSession.flushTimer = null; }
+            console.log(`[VoiceRelay] Cancelled previous response for new input`);
+            // Queue response after cancel processes
+            if (activeSession._pendingResponse) clearTimeout(activeSession._pendingResponse);
+            activeSession._pendingResponse = setTimeout(() => {
+              activeSession._pendingResponse = null;
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'response.create' }));
+                console.log(`[VoiceRelay] Queued response after cancel: "${label}"`);
+              }
+            }, 500);
+          } else {
+            ws.send(JSON.stringify({ type: 'response.create' }));
           }
-          ws.send(JSON.stringify({ type: 'response.create' }));
           console.log(`[VoiceRelay] Injected + respond: "${label}"`);
         } else {
           console.log(`[VoiceRelay] Context only: "${label}"`);
