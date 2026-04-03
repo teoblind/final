@@ -33,6 +33,7 @@ import { getMeetingRoomByBot, addTranscript } from '../services/meetingRoomServi
 import { startVisionLoop, stopVisionLoop, getVisualContext, isVisionActive, processFrame } from '../services/geminiVisionService.js';
 import { authenticate } from '../middleware/auth.js';
 import { SANGHA_TENANT_ID } from '../cache/database.js';
+import { processUtterance, notifyBotResponded, resetConversation } from '../services/conversationStateMachine.js';
 
 const __filename_recall = fileURLToPath(import.meta.url);
 const __dirname_recall = dirname(__filename_recall);
@@ -217,8 +218,7 @@ router.post('/transcript-event', async (req, res) => {
       // Chat loop: text chat response (secondary)
       handleChatTranscriptEvent(botId, { data: transcriptPayload });
 
-      // Voice relay: inject transcript text for OpenAI Realtime
-      // Wake word starts a 60s conversation window where all speech triggers responses
+      // Voice relay: conversation state machine decides when to respond
       const speaker = transcriptPayload.participant?.name || transcriptPayload.speaker || 'Unknown';
 
       // Self-echo filter: skip transcripts from the bot itself
@@ -229,23 +229,26 @@ router.post('/transcript-event', async (req, res) => {
         if (!router._lastInjectText || router._lastInjectText.key !== dedupeKey || now - router._lastInjectText.time > 10000) {
           router._lastInjectText = { key: dedupeKey, time: now };
           const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
-          const isWakeWord = /\b(coppice|copice|copis|cop ice)\b/i.test(text);
 
-          // Conversation window: 60s after last wake word, then goes silent
-          const CONVO_WINDOW_MS = 60000;
-          if (isWakeWord) {
-            router._lastWakeWordTime = now;
-          }
-          const inConvoWindow = router._lastWakeWordTime && (now - router._lastWakeWordTime < CONVO_WINDOW_MS);
-          const shouldRespond = isWakeWord || inConvoWindow;
+          // State machine decides: respond, stay silent, or cancel in-progress response
+          const decision = processUtterance(botId, speaker, text);
 
           try {
+            if (decision.cancel) {
+              // Cancel any in-progress response (conversation moved on or dismissal)
+              await fetch(`${relayUrl}/inject-text`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: '', speaker, cancel: true }),
+              });
+              console.log(`[Recall] Cancelled bot response (conversation moved on)`);
+            }
             await fetch(`${relayUrl}/inject-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text, speaker, respond: shouldRespond }),
+              body: JSON.stringify({ text, speaker, respond: decision.respond }),
             });
-            console.log(`[Recall] Injected text to relay (respond=${shouldRespond}, wake=${isWakeWord}, window=${inConvoWindow}): "${text}" (${speaker})`);
+            console.log(`[Recall] ${decision.respond ? 'Respond' : 'Context'}: "${text}" (${speaker})`);
           } catch (e) {
             console.warn(`[Recall] Failed to inject text to relay: ${e.message}`);
           }
@@ -261,6 +264,16 @@ router.post('/transcript-event', async (req, res) => {
     console.error('[Recall] Transcript event error:', error.message);
     res.sendStatus(200);
   }
+});
+
+/**
+ * POST /bot-responded - Notify state machine that bot finished responding
+ * Called by voice relay after response.done
+ */
+router.post('/bot-responded', (req, res) => {
+  const { botId } = req.body;
+  if (botId) notifyBotResponded(botId);
+  res.sendStatus(200);
 });
 
 /**
@@ -465,6 +478,7 @@ router.delete('/leave/:botId', async (req, res) => {
     await removeBot(botId);
     stopChatLoop(botId);
     stopVisionLoop(botId);
+    resetConversation(botId);
     removeLocalBot(botId);
 
     res.json({ botId, status: 'leaving' });

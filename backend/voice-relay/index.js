@@ -201,6 +201,12 @@ function startSession(botId, instructions) {
         console.log(`[VoiceRelay] Response done (${session.audioChunkCount} chunks, ${pcmBytes}B PCM remaining, ~${durationMs}ms)`);
         session.audioChunkCount = 0;
         flushAudio();
+        // Notify backend state machine that bot responded
+        fetch(`http://localhost:3002/api/v1/recall/bot-responded`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ botId: session.botId }),
+        }).catch(() => {});
         break;
       }
 
@@ -266,7 +272,23 @@ const httpServer = createServer((req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { text, speaker, respond = true } = JSON.parse(body);
+        const { text, speaker, respond = true, cancel = false } = JSON.parse(body);
+
+        // Cancel in-progress response (conversation moved on / dismissal)
+        if (cancel) {
+          const ws = activeSession?.openaiWs;
+          if (ws && ws.readyState === WebSocket.OPEN && activeSession.responding) {
+            ws.send(JSON.stringify({ type: 'response.cancel' }));
+            activeSession.audioBuffer = Buffer.alloc(0);
+            activeSession.audioChunkCount = 0;
+            activeSession.responding = false;
+            if (activeSession.flushTimer) { clearTimeout(activeSession.flushTimer); activeSession.flushTimer = null; }
+            if (activeSession._pendingResponse) { clearTimeout(activeSession._pendingResponse); activeSession._pendingResponse = null; }
+            console.log(`[VoiceRelay] Response cancelled (conversation moved on)`);
+          }
+          if (!text) { res.writeHead(200); res.end('cancelled'); return; }
+        }
+
         if (!text) { res.writeHead(400); res.end('text required'); return; }
 
         const ws = activeSession?.openaiWs;
