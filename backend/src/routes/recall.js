@@ -42,6 +42,81 @@ const recallAudioUpload = multer({ dest: recallAudioDir, limits: { fileSize: 200
 
 const router = express.Router();
 
+/**
+ * Save a bot's accumulated transcript to the database when meeting ends.
+ * Triggers AI processing (summarization, action items, entity extraction).
+ */
+async function saveBotTranscript(botId) {
+  const bot = getLocalBot(botId);
+  if (!bot || !bot.transcript || bot.transcript.length === 0) {
+    console.log(`[Recall] No transcript to save for bot ${botId}`);
+    return;
+  }
+  if (bot._transcriptSaved) return; // prevent double-save
+  bot._transcriptSaved = true;
+
+  const tenantId = bot.tenantId || 'zhan-capital';
+
+  // Build plain text transcript with speaker labels
+  const transcriptText = bot.transcript
+    .map(t => `${t.speaker}: ${t.text}`)
+    .join('\n');
+
+  // Build JSON transcript for structured display
+  const transcriptJson = bot.transcript;
+
+  // Calculate approximate duration from first to last timestamp
+  let durationSeconds = null;
+  if (bot.transcript.length >= 2) {
+    const first = new Date(bot.transcript[0].timestamp).getTime();
+    const last = new Date(bot.transcript[bot.transcript.length - 1].timestamp).getTime();
+    durationSeconds = Math.round((last - first) / 1000);
+  }
+
+  // Try to get meeting title from Recall API
+  let meetingTitle = 'Meeting';
+  try {
+    const remoteBot = await getBotStatus(botId);
+    const meetingUrl = remoteBot?.meeting_url || bot.meetingUrl || '';
+    const participants = remoteBot?.meeting_participants?.map(p => p.name).filter(Boolean) || [];
+    if (participants.length > 0) {
+      meetingTitle = `Meeting with ${participants.slice(0, 3).join(', ')}`;
+      if (participants.length > 3) meetingTitle += ` +${participants.length - 3}`;
+    }
+  } catch (e) {
+    console.warn(`[Recall] Could not fetch bot details for title: ${e.message}`);
+  }
+
+  try {
+    const { getTenantDb } = await import('../cache/database.js');
+    const db = getTenantDb(tenantId);
+    const id = `recall-${botId}-${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, duration_seconds, recorded_at, processed, transcript_json)
+      VALUES (?, ?, 'meeting', ?, ?, ?, 'recall-bot', 'coppice-voice-bot', ?, ?, 0, ?)
+    `).run(
+      id, tenantId, meetingTitle, transcriptText, transcriptText,
+      durationSeconds, bot.createdAt || new Date().toISOString(),
+      JSON.stringify(transcriptJson)
+    );
+
+    console.log(`[Recall] Saved transcript for bot ${botId}: "${meetingTitle}" (${bot.transcript.length} segments, ${transcriptText.split(/\s+/).length} words)`);
+
+    // Trigger async AI processing
+    try {
+      const { processKnowledgeEntry } = await import('../services/knowledgeProcessor.js');
+      processKnowledgeEntry(id, tenantId).catch(err => {
+        console.error(`[Recall] Background processing failed for ${id}:`, err.message);
+      });
+    } catch (e) {
+      console.warn('[Recall] Knowledge processor not available:', e.message);
+    }
+  } catch (e) {
+    console.error(`[Recall] Failed to save transcript for bot ${botId}:`, e.message);
+  }
+}
+
 // ── Unauthenticated routes - Recall.ai webhooks (called by Recall servers, not users) ──
 
 /**
@@ -62,8 +137,10 @@ router.post('/webhook', (req, res) => {
         updateLocalBot(botId, { status });
         console.log(`[Recall] Bot ${botId} status → ${status}`);
 
-        if (['done', 'fatal', 'analysis_done'].includes(status)) {
-          // Clean up
+        if (['done', 'analysis_done'].includes(status)) {
+          saveBotTranscript(botId).catch(e => console.error(`[Recall] Save transcript error:`, e.message));
+          stopChatLoop(botId);
+          stopVoiceLoop(botId);
         }
         break;
       }
@@ -83,6 +160,9 @@ router.post('/webhook', (req, res) => {
       case 'bot.done': {
         console.log(`[Recall] Bot ${botId} meeting complete`);
         updateLocalBot(botId, { status: 'done' });
+        saveBotTranscript(botId).catch(e => console.error(`[Recall] Save transcript error:`, e.message));
+        stopChatLoop(botId);
+        stopVoiceLoop(botId);
         break;
       }
 
@@ -151,18 +231,13 @@ router.post('/transcript-event', async (req, res) => {
           const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
           const isWakeWord = /\b(coppice|copice|copis|cop ice)\b/i.test(text);
 
-          // Conversation window: 60s after wake word, all speech triggers responses
+          // Conversation window: 60s after last wake word, then goes silent
           const CONVO_WINDOW_MS = 60000;
           if (isWakeWord) {
             router._lastWakeWordTime = now;
           }
           const inConvoWindow = router._lastWakeWordTime && (now - router._lastWakeWordTime < CONVO_WINDOW_MS);
           const shouldRespond = isWakeWord || inConvoWindow;
-
-          // Reset window timer on each interaction so it stays open during active conversation
-          if (shouldRespond && !isWakeWord) {
-            router._lastWakeWordTime = now;
-          }
 
           try {
             await fetch(`${relayUrl}/inject-text`, {
