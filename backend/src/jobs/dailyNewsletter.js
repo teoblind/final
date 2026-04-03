@@ -457,14 +457,36 @@ ${isSangha ? '- For IPP/developer targets, use a card-style layout with company 
 
 Return ONLY the HTML content, no markdown wrapping.`;
 
-  const response = await tunnelPrompt({
-    tenantId,
-    agentId: 'hivemind',
-    prompt,
-    maxTurns: 30,
-    timeoutMs: 300_000,
-    label: 'Daily Newsletter',
-  });
+  let response;
+  try {
+    response = await tunnelPrompt({
+      tenantId,
+      agentId: 'hivemind',
+      prompt,
+      maxTurns: 30,
+      timeoutMs: 300_000,
+      label: 'Daily Newsletter',
+    });
+  } catch (err) {
+    console.error(`[Newsletter] Claude API error for ${tenantId}:`, err.message);
+    return null;
+  }
+
+  // Detect rate limit or API errors in the response text
+  const errorPatterns = [
+    /you've hit your limit/i,
+    /rate limit/i,
+    /resets \d+[ap]m/i,
+    /error code: \d+/i,
+    /overloaded_error/i,
+    /api_error/i,
+    /authentication.*failed/i,
+    /quota.*exceeded/i,
+  ];
+  if (errorPatterns.some(p => p.test(response)) || !response || response.length < 200) {
+    console.error(`[Newsletter] Claude returned error or insufficient content for ${tenantId}: ${(response || '').substring(0, 150)}`);
+    return null;
+  }
 
   // Clean up - remove markdown code fences if present
   let html = response.replace(/^```html?\n?/i, '').replace(/\n?```$/i, '').trim();
@@ -883,8 +905,15 @@ async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
         // Step 3: Generate newsletter via Claude (with verification data + social posts)
         console.log(`[Newsletter] Generating newsletter for ${tenant.id}...`);
         const newsletterHtml = await generateNewsletter(tenant.id, searchResults, businessContext, contactVerification, socialResults);
-        if (!newsletterHtml || newsletterHtml.length < 100) {
-          console.log(`[Newsletter] Generation failed or empty for ${tenant.id}`);
+        if (!newsletterHtml || newsletterHtml.length < 500) {
+          console.log(`[Newsletter] Generation failed or too short for ${tenant.id} (${(newsletterHtml || '').length} chars)`);
+          return;
+        }
+        // Validate newsletter has actual content sections, not just boilerplate/social
+        const hasRecommendedActions = /recommended\s*actions/i.test(newsletterHtml);
+        const hasH2Sections = (newsletterHtml.match(/<h2/gi) || []).length >= 2;
+        if (!hasRecommendedActions && !hasH2Sections) {
+          console.error(`[Newsletter] Newsletter for ${tenant.id} appears incomplete (missing sections). Not sending.`);
           return;
         }
 
