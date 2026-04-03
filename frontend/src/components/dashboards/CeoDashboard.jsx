@@ -4,7 +4,8 @@ import {
   ChevronUp, ClipboardList, DollarSign, FileCheck, HardHat, Shield,
   TrendingUp, Truck, Users, XCircle, Megaphone, Clock, AlertCircle, Activity,
   Mail, FileText, Calendar, ArrowRight, Eye, X,
-  Star, ArrowLeft, Briefcase
+  Star, ArrowLeft, Briefcase, MapPin, Map, Plus, Minus, Navigation,
+  ExternalLink, Check, Trash2, GripVertical
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -131,7 +132,21 @@ export default function CeoDashboard({ onNavigate }) {
   const [selectedGc, setSelectedGc] = useState(null);
   const [gcDetail, setGcDetail] = useState(null);
   const [gcDetailLoading, setGcDetailLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('departments'); // departments | funnel | leads | newsletters | gc-profiles
+  const [activeTab, setActiveTab] = useState('departments'); // departments | funnel | leads | newsletters | gc-profiles | sales-trips
+
+  // Sales Trips state
+  const [salesTrips, setSalesTrips] = useState(null);
+  const [tripSuggestions, setTripSuggestions] = useState(null);
+  const [gcOffices, setGcOffices] = useState(null);
+  const [selectedTrip, setSelectedTrip] = useState(null);
+  const [showCreateTrip, setShowCreateTrip] = useState(false);
+  const [newTripName, setNewTripName] = useState('');
+  const [newTripDate, setNewTripDate] = useState('');
+  const [newTripStops, setNewTripStops] = useState([]);
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
+  const [expandedTalkingPoints, setExpandedTalkingPoints] = useState({});
+  const [tripDetailLoading, setTripDetailLoading] = useState(false);
+  const [creatingTrip, setCreatingTrip] = useState(false);
 
   const fetchDashboard = useCallback(() => {
     fetch(`${API_BASE}/v1/ceo/dashboard`, { headers: getAuthHeaders() })
@@ -186,15 +201,87 @@ export default function CeoDashboard({ onNavigate }) {
       .catch(e => { console.error(e); setGcDetailLoading(false); });
   }, []);
 
+  const fetchSalesTrips = useCallback(() => {
+    fetch(`${API_BASE}/v1/ceo/sales-trips`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setSalesTrips(d))
+      .catch(console.error);
+  }, []);
+
+  const fetchTripSuggestions = useCallback(() => {
+    fetch(`${API_BASE}/v1/ceo/sales-trips/suggestions`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setTripSuggestions(d))
+      .catch(console.error);
+  }, []);
+
+  const fetchGcOffices = useCallback(() => {
+    fetch(`${API_BASE}/v1/ceo/gc-offices`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setGcOffices(d))
+      .catch(console.error);
+  }, []);
+
+  const openTripDetail = useCallback((tripId) => {
+    setTripDetailLoading(true);
+    fetch(`${API_BASE}/v1/ceo/sales-trips/${tripId}`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => { setSelectedTrip(d); setTripDetailLoading(false); })
+      .catch(e => { console.error(e); setTripDetailLoading(false); });
+  }, []);
+
+  const createTrip = useCallback(() => {
+    if (!newTripName.trim() || !newTripDate) return;
+    setCreatingTrip(true);
+    fetch(`${API_BASE}/v1/ceo/sales-trips`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newTripName.trim(),
+        date: newTripDate,
+        stops: newTripStops.map((s, i) => ({ gc_name: s.gc_name, office_id: s.id, order: i + 1 })),
+      }),
+    })
+      .then(r => r.json())
+      .then(() => {
+        setShowCreateTrip(false);
+        setNewTripName('');
+        setNewTripDate('');
+        setNewTripStops([]);
+        fetchSalesTrips();
+      })
+      .catch(console.error)
+      .finally(() => setCreatingTrip(false));
+  }, [newTripName, newTripDate, newTripStops, fetchSalesTrips]);
+
+  const toggleStopVisited = useCallback((tripId, stopIndex, visited) => {
+    const trip = selectedTrip;
+    if (!trip) return;
+    const updatedStops = (trip.stops || []).map((s, i) =>
+      i === stopIndex ? { ...s, visited } : s
+    );
+    fetch(`${API_BASE}/v1/ceo/sales-trips/${tripId}`, {
+      method: 'PUT',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...trip, stops: updatedStops }),
+    })
+      .then(r => r.json())
+      .then(d => setSelectedTrip(d))
+      .catch(console.error);
+  }, [selectedTrip]);
+
   useEffect(() => {
     fetchDashboard();
     fetchBidFunnel();
     fetchNewsletterLeads();
     fetchNewsletters();
     fetchGcProfiles();
+    fetchSalesTrips();
+    fetchTripSuggestions();
+    fetchGcOffices();
     const poll = setInterval(fetchDashboard, 15_000);
     return () => clearInterval(poll);
-  }, [fetchDashboard, fetchBidFunnel, fetchNewsletterLeads, fetchNewsletters, fetchGcProfiles]);
+  }, [fetchDashboard, fetchBidFunnel, fetchNewsletterLeads, fetchNewsletters, fetchGcProfiles, fetchSalesTrips, fetchTripSuggestions, fetchGcOffices]);
 
   const toggleExpand = (dept) => setExpanded(prev => ({ ...prev, [dept]: !prev[dept] }));
 
@@ -317,6 +404,7 @@ export default function CeoDashboard({ onNavigate }) {
           { id: 'gc-profiles', label: 'GC Profiles', icon: Briefcase },
           { id: 'leads', label: 'Newsletter Leads', icon: Mail },
           { id: 'newsletters', label: 'Newsletters', icon: FileText },
+          { id: 'sales-trips', label: 'Sales Trips', icon: MapPin },
         ].map(tab => (
           <button
             key={tab.id}
@@ -1101,6 +1189,491 @@ export default function CeoDashboard({ onNavigate }) {
                 )}
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Sales Trips Tab */}
+      {activeTab === 'sales-trips' && (
+        <div className="space-y-4">
+          {!salesTrips ? (
+            <div className="flex items-center justify-center py-12 text-terminal-muted text-sm">Loading sales trips...</div>
+          ) : selectedTrip && !showCreateTrip ? (
+            /* ─── Trip Detail View ─────────────────────────────────── */
+            <div>
+              <button
+                onClick={() => setSelectedTrip(null)}
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-terminal-muted hover:text-terminal-text mb-3"
+              >
+                <ArrowLeft size={12} /> Back to all trips
+              </button>
+
+              {tripDetailLoading ? (
+                <div className="flex items-center justify-center py-12 text-terminal-muted text-sm">Loading trip details...</div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Trip Header */}
+                  <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <div className="flex items-center gap-2.5">
+                          <h2 className="text-[16px] font-heading font-bold text-terminal-text">{selectedTrip.name}</h2>
+                          <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                            selectedTrip.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            selectedTrip.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>{(selectedTrip.status || 'planned').replace('_', ' ')}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[11px] text-terminal-muted flex items-center gap-1">
+                            <Calendar size={11} /> {selectedTrip.date ? new Date(selectedTrip.date).toLocaleDateString() : 'No date set'}
+                          </span>
+                          <span className="text-[11px] text-terminal-muted flex items-center gap-1">
+                            <MapPin size={11} /> {(selectedTrip.stops || []).length} stop{(selectedTrip.stops || []).length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+                      {selectedTrip.route_url && (
+                        <a
+                          href={selectedTrip.route_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[11px] font-heading font-bold text-white transition-colors hover:opacity-90"
+                          style={{ backgroundColor: '#1e3a5f' }}
+                        >
+                          <Navigation size={13} />
+                          Open in Google Maps
+                          <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stops List */}
+                  <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+                    <div className="px-5 py-3 border-b border-terminal-border">
+                      <h3 className="text-[13px] font-heading font-semibold text-terminal-text">Route Stops</h3>
+                      <p className="text-[10px] text-terminal-muted mt-0.5">Ordered by route - check off as you visit</p>
+                    </div>
+                    <div className="divide-y divide-[#f0eeea]">
+                      {(selectedTrip.stops || []).map((stop, i) => (
+                        <div key={i} className="px-5 py-4">
+                          <div className="flex items-start gap-3">
+                            {/* Order Number */}
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold tabular-nums ${
+                              stop.visited ? 'bg-emerald-100 text-emerald-700' : 'bg-[#e8eef5] text-[#1e3a5f]'
+                            }`}>
+                              {stop.visited ? <Check size={13} /> : i + 1}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[12px] font-semibold text-terminal-text">{stop.gc_name}</span>
+                                {stop.is_known_gc && (
+                                  <span className="text-[8px] font-bold bg-[#fdf6e8] text-[#b8860b] px-1.5 py-0.5 rounded-full border border-[#f0e0b0] shrink-0">
+                                    <Star size={8} className="inline mr-0.5 -mt-px" />KNOWN
+                                  </span>
+                                )}
+                              </div>
+                              {stop.office_address && (
+                                <div className="text-[10px] text-terminal-muted mt-0.5 flex items-center gap-1">
+                                  <MapPin size={10} className="shrink-0" /> {stop.office_address}
+                                </div>
+                              )}
+                              {stop.duration_estimate && (
+                                <div className="text-[10px] text-terminal-muted mt-0.5 flex items-center gap-1">
+                                  <Clock size={10} className="shrink-0" /> Est. {stop.duration_estimate}
+                                </div>
+                              )}
+
+                              {/* Talking Points */}
+                              {stop.talking_points?.length > 0 && (
+                                <div className="mt-2">
+                                  <button
+                                    onClick={() => setExpandedTalkingPoints(prev => ({ ...prev, [i]: !prev[i] }))}
+                                    className="flex items-center gap-1 text-[10px] font-heading font-semibold text-[#1e3a5f] hover:underline"
+                                  >
+                                    {expandedTalkingPoints[i] ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                                    Talking Points ({stop.talking_points.length})
+                                  </button>
+                                  {expandedTalkingPoints[i] && (
+                                    <ul className="mt-1.5 ml-3 space-y-1">
+                                      {stop.talking_points.map((pt, j) => (
+                                        <li key={j} className="text-[10px] text-terminal-text flex items-start gap-1.5">
+                                          <span className="text-terminal-muted mt-0.5 shrink-0">-</span>
+                                          <span>{pt}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Notes */}
+                              {stop.notes && (
+                                <div className="mt-2 text-[10px] text-terminal-muted italic">
+                                  Note: {stop.notes}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Visited Checkbox */}
+                            <button
+                              onClick={() => toggleStopVisited(selectedTrip.id, i, !stop.visited)}
+                              className={`shrink-0 w-6 h-6 rounded-[6px] border-2 flex items-center justify-center transition-colors ${
+                                stop.visited
+                                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                                  : 'border-gray-300 hover:border-[#1e3a5f]'
+                              }`}
+                            >
+                              {stop.visited && <Check size={12} />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {(!selectedTrip.stops || selectedTrip.stops.length === 0) && (
+                        <div className="px-5 py-8 text-center text-terminal-muted text-sm">No stops added to this trip yet.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Trip Summary */}
+                  {(selectedTrip.total_stops || selectedTrip.estimated_distance || selectedTrip.estimated_duration) && (
+                    <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5">
+                      <h3 className="text-[13px] font-heading font-semibold text-terminal-text mb-3">Trip Summary</h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                          <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Total Stops</div>
+                          <div className="text-lg font-display font-bold text-terminal-text tabular-nums">{selectedTrip.total_stops || (selectedTrip.stops || []).length}</div>
+                        </div>
+                        {selectedTrip.estimated_distance && (
+                          <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                            <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Est. Distance</div>
+                            <div className="text-lg font-display font-bold text-terminal-text tabular-nums">{selectedTrip.estimated_distance}</div>
+                          </div>
+                        )}
+                        {selectedTrip.estimated_duration && (
+                          <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                            <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Est. Duration</div>
+                            <div className="text-lg font-display font-bold text-terminal-text tabular-nums">{selectedTrip.estimated_duration}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ─── Trip List View + Create ──────────────────────────── */
+            <>
+              {/* Summary Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                  <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Total Trips</div>
+                  <div className="text-xl font-display font-bold text-terminal-text tabular-nums">{salesTrips.total || (salesTrips.trips || []).length}</div>
+                </div>
+                <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                  <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Planned</div>
+                  <div className="text-xl font-display font-bold text-amber-600 tabular-nums">
+                    {(salesTrips.trips || []).filter(t => t.status === 'planned').length}
+                  </div>
+                </div>
+                <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                  <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Completed</div>
+                  <div className="text-xl font-display font-bold text-emerald-600 tabular-nums">
+                    {(salesTrips.trips || []).filter(t => t.status === 'completed').length}
+                  </div>
+                </div>
+                <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                  <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">GC Offices Mapped</div>
+                  <div className="text-xl font-display font-bold text-[#1e3a5f] tabular-nums">
+                    {gcOffices ? (gcOffices.offices || gcOffices || []).length : 0}
+                  </div>
+                </div>
+              </div>
+
+              {/* Smart Suggestions Panel */}
+              <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+                <div
+                  className="px-5 py-3 flex items-center justify-between cursor-pointer hover:bg-[#f5f4f0] transition-colors"
+                  onClick={() => setSuggestionsExpanded(v => !v)}
+                >
+                  <div>
+                    <h3 className="text-[13px] font-heading font-semibold text-terminal-text flex items-center gap-2">
+                      <Activity size={13} className="text-[#1e3a5f]" />
+                      Suggested Visits
+                    </h3>
+                    <p className="text-[10px] text-terminal-muted mt-0.5">GCs you should visit based on bid history, prequal status, and recent leads</p>
+                  </div>
+                  {suggestionsExpanded ? <ChevronUp size={14} className="text-terminal-muted" /> : <ChevronDown size={14} className="text-terminal-muted" />}
+                </div>
+                {suggestionsExpanded && (
+                  <div className="border-t border-[#f0eeea] divide-y divide-[#f0eeea]">
+                    {tripSuggestions && (tripSuggestions.suggestions || tripSuggestions || []).length > 0 ? (
+                      (tripSuggestions.suggestions || tripSuggestions || []).map((sug, i) => {
+                        const priorityStyles = {
+                          high: 'bg-red-100 text-red-700',
+                          medium: 'bg-amber-100 text-amber-700',
+                          low: 'bg-gray-100 text-gray-600',
+                        };
+                        return (
+                          <div key={i} className="px-5 py-3 flex items-start gap-3">
+                            <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                              sug.priority === 'high' ? 'bg-red-500' :
+                              sug.priority === 'medium' ? 'bg-amber-500' : 'bg-gray-400'
+                            }`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[12px] font-semibold text-terminal-text">{sug.gc_name}</span>
+                                {sug.is_known_gc && (
+                                  <span className="text-[8px] font-bold bg-[#fdf6e8] text-[#b8860b] px-1.5 py-0.5 rounded-full border border-[#f0e0b0] shrink-0">
+                                    <Star size={8} className="inline mr-0.5 -mt-px" />KNOWN
+                                  </span>
+                                )}
+                                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${priorityStyles[sug.priority] || priorityStyles.low}`}>
+                                  {sug.priority}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-terminal-muted mt-0.5">{sug.reason}</div>
+                              {sug.office_address && (
+                                <div className="text-[10px] text-terminal-muted mt-0.5 flex items-center gap-1">
+                                  <MapPin size={9} className="shrink-0" /> {sug.office_address}
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => {
+                                setNewTripStops(prev => {
+                                  if (prev.find(s => s.gc_name === sug.gc_name)) return prev;
+                                  return [...prev, { gc_name: sug.gc_name, id: sug.office_id, office_address: sug.office_address }];
+                                });
+                                if (!showCreateTrip) setShowCreateTrip(true);
+                              }}
+                              className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] text-[10px] font-heading font-semibold text-[#1e3a5f] bg-[#e8eef5] hover:bg-[#d5dfed] transition-colors"
+                            >
+                              <Plus size={10} /> Add to Trip
+                            </button>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="px-5 py-8 text-center text-terminal-muted text-sm">
+                        {tripSuggestions ? 'No visit suggestions at this time.' : 'Loading suggestions...'}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Plan New Trip Button + Create Form */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-[13px] font-heading font-semibold text-terminal-text">
+                  {showCreateTrip ? 'Plan New Trip' : 'Trips'}
+                </h3>
+                <button
+                  onClick={() => setShowCreateTrip(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[10px] font-heading font-bold text-white transition-colors hover:opacity-90"
+                  style={{ backgroundColor: '#1e3a5f' }}
+                >
+                  {showCreateTrip ? <><X size={10} /> Cancel</> : <><Plus size={10} /> Plan New Trip</>}
+                </button>
+              </div>
+
+              {showCreateTrip && (
+                <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5 space-y-4">
+                  {/* Trip Name */}
+                  <div>
+                    <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] block mb-1.5">Trip Name</label>
+                    <input
+                      type="text"
+                      value={newTripName}
+                      onChange={e => setNewTripName(e.target.value)}
+                      placeholder="e.g. Gulf Coast GC Visits"
+                      className="w-full px-3 py-2 rounded-[8px] border border-terminal-border bg-white text-[12px] text-terminal-text placeholder:text-terminal-muted/50 focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                    />
+                  </div>
+
+                  {/* Date */}
+                  <div>
+                    <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] block mb-1.5">Date</label>
+                    <input
+                      type="date"
+                      value={newTripDate}
+                      onChange={e => setNewTripDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-[8px] border border-terminal-border bg-white text-[12px] text-terminal-text focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                    />
+                  </div>
+
+                  {/* GC Office Selector */}
+                  <div>
+                    <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] block mb-1.5">Add Stops</label>
+                    <div className="flex gap-2">
+                      <select
+                        id="gc-office-select"
+                        className="flex-1 px-3 py-2 rounded-[8px] border border-terminal-border bg-white text-[12px] text-terminal-text focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                        defaultValue=""
+                        onChange={e => {
+                          const offices = gcOffices?.offices || gcOffices || [];
+                          const office = offices.find(o => String(o.id) === e.target.value);
+                          if (office && !newTripStops.find(s => s.gc_name === office.gc_name && s.id === office.id)) {
+                            setNewTripStops(prev => [...prev, { gc_name: office.gc_name, id: office.id, office_address: office.address }]);
+                          }
+                          e.target.value = '';
+                        }}
+                      >
+                        <option value="" disabled>Select a GC office...</option>
+                        {(gcOffices?.offices || gcOffices || []).map((o, i) => (
+                          <option key={i} value={o.id}>{o.gc_name} - {o.address || 'No address'}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => {
+                          if (!tripSuggestions) return;
+                          const suggestions = tripSuggestions.suggestions || tripSuggestions || [];
+                          const highPriority = suggestions.filter(s => s.priority === 'high');
+                          const toAdd = highPriority.length > 0 ? highPriority : suggestions.slice(0, 3);
+                          setNewTripStops(prev => {
+                            const existing = new Set(prev.map(s => s.gc_name));
+                            const newOnes = toAdd.filter(s => !existing.has(s.gc_name)).map(s => ({
+                              gc_name: s.gc_name, id: s.office_id, office_address: s.office_address,
+                            }));
+                            return [...prev, ...newOnes];
+                          });
+                        }}
+                        className="shrink-0 flex items-center gap-1 px-3 py-2 rounded-[8px] text-[10px] font-heading font-semibold text-[#1e3a5f] bg-[#e8eef5] hover:bg-[#d5dfed] transition-colors"
+                      >
+                        <Activity size={10} /> Add from Suggestions
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Added Stops */}
+                  {newTripStops.length > 0 && (
+                    <div>
+                      <label className="text-[10px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] block mb-1.5">
+                        Stops ({newTripStops.length})
+                      </label>
+                      <div className="space-y-1.5">
+                        {newTripStops.map((stop, i) => (
+                          <div key={i} className="flex items-center gap-2 px-3 py-2 bg-[#f5f4f0] rounded-[8px]">
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => {
+                                  if (i === 0) return;
+                                  setNewTripStops(prev => {
+                                    const arr = [...prev];
+                                    [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+                                    return arr;
+                                  });
+                                }}
+                                disabled={i === 0}
+                                className={`p-0.5 rounded ${i === 0 ? 'text-gray-300' : 'text-terminal-muted hover:text-terminal-text'}`}
+                              >
+                                <ChevronUp size={10} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (i === newTripStops.length - 1) return;
+                                  setNewTripStops(prev => {
+                                    const arr = [...prev];
+                                    [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+                                    return arr;
+                                  });
+                                }}
+                                disabled={i === newTripStops.length - 1}
+                                className={`p-0.5 rounded ${i === newTripStops.length - 1 ? 'text-gray-300' : 'text-terminal-muted hover:text-terminal-text'}`}
+                              >
+                                <ChevronDown size={10} />
+                              </button>
+                            </div>
+                            <div className="w-5 h-5 rounded-full bg-[#e8eef5] flex items-center justify-center text-[9px] font-bold text-[#1e3a5f] tabular-nums shrink-0">
+                              {i + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[11px] font-semibold text-terminal-text">{stop.gc_name}</span>
+                              {stop.office_address && (
+                                <span className="text-[10px] text-terminal-muted ml-2">{stop.office_address}</span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => setNewTripStops(prev => prev.filter((_, idx) => idx !== i))}
+                              className="shrink-0 p-1 text-terminal-muted hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submit */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={createTrip}
+                      disabled={!newTripName.trim() || !newTripDate || creatingTrip}
+                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-[10px] text-[11px] font-heading font-bold text-white transition-colors disabled:opacity-40 hover:opacity-90"
+                      style={{ backgroundColor: '#1e3a5f' }}
+                    >
+                      {creatingTrip ? (
+                        <><Clock size={12} /> Creating...</>
+                      ) : (
+                        <><MapPin size={12} /> Create Trip</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Trip List */}
+              {!showCreateTrip && (
+                <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+                  <div className="px-5 py-3 border-b border-terminal-border">
+                    <p className="text-[10px] text-terminal-muted">Click a trip to view route details and manage stops</p>
+                  </div>
+                  <div className="divide-y divide-[#f0eeea]">
+                    {(salesTrips.trips || []).map((trip, i) => (
+                      <div
+                        key={i}
+                        onClick={() => openTripDetail(trip.id)}
+                        className="px-5 py-3 flex items-center justify-between cursor-pointer hover:bg-[#f5f4f0] transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[12px] font-semibold text-terminal-text">{trip.name}</span>
+                            <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                              trip.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                              trip.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                              'bg-amber-100 text-amber-700'
+                            }`}>{(trip.status || 'planned').replace('_', ' ')}</span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <span className="text-[10px] text-terminal-muted flex items-center gap-1">
+                              <Calendar size={9} /> {trip.date ? new Date(trip.date).toLocaleDateString() : 'No date'}
+                            </span>
+                            <span className="text-[10px] text-terminal-muted flex items-center gap-1">
+                              <MapPin size={9} /> {trip.stop_count || 0} stop{(trip.stop_count || 0) !== 1 ? 's' : ''}
+                            </span>
+                            {trip.created_at && (
+                              <span className="text-[10px] text-terminal-muted">
+                                Created {new Date(trip.created_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <ChevronRight size={14} className="text-terminal-muted shrink-0" />
+                      </div>
+                    ))}
+                    {(!salesTrips.trips || salesTrips.trips.length === 0) && (
+                      <div className="px-5 py-8 text-center text-terminal-muted text-sm">
+                        No sales trips yet. Click "Plan New Trip" to create your first route.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

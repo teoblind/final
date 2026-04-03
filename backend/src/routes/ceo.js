@@ -29,6 +29,14 @@ import {
   getDacpPrequalPackages,
   createDacpPrequalPackage,
   updateDacpPrequalPackage,
+  getDacpGcOffices,
+  getDacpGcOffice,
+  createDacpGcOffice,
+  updateDacpGcOffice,
+  getDacpSalesTrips,
+  getDacpSalesTrip,
+  createDacpSalesTrip,
+  updateDacpSalesTrip,
 } from '../cache/database.js';
 
 const router = express.Router();
@@ -768,6 +776,597 @@ router.get('/gc-profiles/:gcName', (req, res) => {
     });
   } catch (error) {
     console.error('CEO gc-profile detail error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── GC Office Management (Sales Trip Planner) ──────────────────────────────
+
+/** GET /api/v1/ceo/gc-offices - List all GC offices with geocoded status */
+router.get('/gc-offices', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const offices = getDacpGcOffices(tenantId);
+    const summary = {
+      total: offices.length,
+      geocoded: offices.filter(o => o.lat != null && o.lng != null).length,
+      notGeocoded: offices.filter(o => o.lat == null || o.lng == null).length,
+      byType: offices.reduce((acc, o) => { acc[o.office_type || 'main'] = (acc[o.office_type || 'main'] || 0) + 1; return acc; }, {}),
+    };
+
+    res.json({ summary, offices });
+  } catch (error) {
+    console.error('CEO gc-offices list error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /api/v1/ceo/gc-offices - Add a GC office */
+router.post('/gc-offices', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const { gc_name, address, city, state, zip, phone, website, office_type, notes } = req.body;
+    if (!gc_name) return res.status(400).json({ error: 'gc_name is required' });
+
+    const id = `GCO-${randomUUID().slice(0, 8).toUpperCase()}`;
+    createDacpGcOffice({
+      id,
+      tenant_id: tenantId,
+      gc_name,
+      address: address || null,
+      city: city || null,
+      state: state || null,
+      zip: zip || null,
+      phone: phone || null,
+      website: website || null,
+      office_type: office_type || 'main',
+      notes: notes || null,
+    });
+
+    res.status(201).json({ id, gc_name, address, city, state });
+  } catch (error) {
+    console.error('CEO gc-offices create error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** PUT /api/v1/ceo/gc-offices/:id - Update office info */
+router.put('/gc-offices/:id', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const allowedFields = ['gc_name', 'address', 'city', 'state', 'zip', 'lat', 'lng', 'phone', 'website', 'office_type', 'notes', 'geocoded_at'];
+    const updates = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const result = updateDacpGcOffice(tenantId, req.params.id, updates);
+    if (!result || result.changes === 0) {
+      return res.status(404).json({ error: 'GC office not found' });
+    }
+
+    res.json({ id: req.params.id, updated: updates });
+  } catch (error) {
+    console.error('CEO gc-offices update error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /api/v1/ceo/gc-offices/:id/geocode - Geocode an office address */
+router.post('/gc-offices/:id/geocode', async (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const office = getDacpGcOffice(tenantId, req.params.id);
+    if (!office) return res.status(404).json({ error: 'GC office not found' });
+
+    const addressParts = [office.address, office.city, office.state, office.zip].filter(Boolean);
+    if (addressParts.length === 0) {
+      return res.status(400).json({ error: 'Office has no address to geocode' });
+    }
+    const fullAddress = addressParts.join(', ');
+
+    let lat = null;
+    let lng = null;
+    let geocodeSource = null;
+
+    // Try Google Places API first if key available
+    const googleKey = process.env.GOOGLE_PLACES_API_KEY;
+    if (googleKey) {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(fullAddress)}&key=${googleKey}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.status === 'OK' && data.results?.length > 0) {
+          lat = data.results[0].geometry.location.lat;
+          lng = data.results[0].geometry.location.lng;
+          geocodeSource = 'google';
+        }
+      } catch (googleErr) {
+        console.warn('Google geocode failed, falling back to Nominatim:', googleErr.message);
+      }
+    }
+
+    // Fallback to Nominatim (free, no key needed)
+    if (lat == null) {
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}&limit=1`;
+        const response = await fetch(url, {
+          headers: { 'User-Agent': 'DACP-CEO-Dashboard/1.0' },
+        });
+        const data = await response.json();
+        if (data?.length > 0) {
+          lat = parseFloat(data[0].lat);
+          lng = parseFloat(data[0].lon);
+          geocodeSource = 'nominatim';
+        }
+      } catch (nomErr) {
+        console.warn('Nominatim geocode failed:', nomErr.message);
+      }
+    }
+
+    if (lat == null || lng == null) {
+      return res.status(422).json({ error: 'Could not geocode address', address: fullAddress });
+    }
+
+    updateDacpGcOffice(tenantId, req.params.id, {
+      lat,
+      lng,
+      geocoded_at: new Date().toISOString(),
+    });
+
+    res.json({ id: req.params.id, lat, lng, source: geocodeSource, address: fullAddress });
+  } catch (error) {
+    console.error('CEO gc-offices geocode error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Sales Trip Planner ─────────────────────────────────────────────────────
+
+/** Helper: Build talking points for a GC stop */
+function buildTalkingPoints(tenantId, gcName) {
+  const points = [];
+  const normalizedTarget = normalizeGcName(gcName);
+
+  // Recent bids from this GC
+  const allBids = getDacpBidRequests(tenantId);
+  const gcBids = allBids.filter(b => normalizeGcName(b.gc_name) === normalizedTarget);
+  if (gcBids.length > 0) {
+    const recentBids = gcBids.slice(0, 5);
+    const statusCounts = gcBids.reduce((acc, b) => { acc[b.status] = (acc[b.status] || 0) + 1; return acc; }, {});
+    points.push({
+      category: 'bids',
+      summary: `${gcBids.length} total bid(s) - ${Object.entries(statusCounts).map(([s, c]) => `${c} ${s}`).join(', ')}`,
+      items: recentBids.map(b => `${b.subject || 'Untitled'} (${b.status}, due ${b.due_date || 'TBD'})`),
+    });
+  }
+
+  // Active jobs with this GC
+  const allJobs = getDacpJobs(tenantId);
+  const gcJobs = allJobs.filter(j => normalizeGcName(j.gc_name) === normalizedTarget);
+  if (gcJobs.length > 0) {
+    const activeJobs = gcJobs.filter(j => j.status === 'active');
+    const completedJobs = gcJobs.filter(j => j.status === 'completed');
+    points.push({
+      category: 'jobs',
+      summary: `${gcJobs.length} job(s) - ${activeJobs.length} active, ${completedJobs.length} completed`,
+      items: gcJobs.slice(0, 5).map(j => `${j.project_name || 'Unnamed'} (${j.status}, $${(j.bid_amount || 0).toLocaleString()})`),
+    });
+  }
+
+  // Prequal package status
+  const prequalPkgs = getDacpPrequalPackages(tenantId);
+  const gcPrequal = prequalPkgs.filter(p => normalizeGcName(p.gc_name) === normalizedTarget);
+  if (gcPrequal.length > 0) {
+    const pkg = gcPrequal[0];
+    points.push({
+      category: 'prequal',
+      summary: `Pre-qualification: ${pkg.status}${pkg.sent_date ? ' (sent ' + pkg.sent_date + ')' : ''}`,
+      items: [],
+    });
+  } else {
+    points.push({
+      category: 'prequal',
+      summary: 'No pre-qualification package on file - opportunity to introduce DACP',
+      items: [],
+    });
+  }
+
+  // Newsletter mentions
+  try {
+    const allTasks = getAgentAssignments(tenantId);
+    const newsletterMentions = allTasks.filter(t => {
+      try {
+        const ctx = t.context_json ? JSON.parse(t.context_json) : {};
+        if (ctx.source !== 'newsletter') return false;
+        const text = `${t.title || ''} ${t.description || ''}`.toLowerCase();
+        return text.includes(normalizedTarget) || text.includes(gcName.toLowerCase());
+      } catch { return false; }
+    });
+    if (newsletterMentions.length > 0) {
+      points.push({
+        category: 'newsletter',
+        summary: `${newsletterMentions.length} newsletter mention(s)`,
+        items: newsletterMentions.slice(0, 3).map(t => t.title || t.description?.substring(0, 80)),
+      });
+    }
+  } catch {}
+
+  return points;
+}
+
+/** Helper: Build Google Maps multi-stop directions URL */
+function buildRouteUrl(stops) {
+  const addresses = stops
+    .sort((a, b) => a.order - b.order)
+    .map(s => {
+      if (s.address) return s.address;
+      if (s.city && s.state) return `${s.gc_name}, ${s.city}, ${s.state}`;
+      return s.gc_name;
+    })
+    .map(a => encodeURIComponent(a));
+
+  if (addresses.length === 0) return null;
+  return `https://www.google.com/maps/dir/${addresses.join('/')}`;
+}
+
+/** Helper: Estimate distance between two lat/lng points (Haversine in miles) */
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 3959; // Earth radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/** Helper: Estimate route distance/duration from stops with lat/lng */
+function estimateRoute(stops) {
+  const ordered = stops.filter(s => s.lat != null && s.lng != null).sort((a, b) => a.order - b.order);
+  if (ordered.length < 2) return { total_distance_mi: null, total_duration_min: null };
+
+  let totalStraightLine = 0;
+  for (let i = 1; i < ordered.length; i++) {
+    totalStraightLine += haversineDistance(ordered[i - 1].lat, ordered[i - 1].lng, ordered[i].lat, ordered[i].lng);
+  }
+
+  // Multiply by 1.3 for driving estimate (roads aren't straight)
+  const drivingDistance = Math.round(totalStraightLine * 1.3 * 10) / 10;
+  // Assume avg 30 mph in metro area
+  const drivingMinutes = Math.round(drivingDistance / 30 * 60);
+
+  return { total_distance_mi: drivingDistance, total_duration_min: drivingMinutes };
+}
+
+/** GET /api/v1/ceo/sales-trips - List all trips */
+router.get('/sales-trips', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const trips = getDacpSalesTrips(tenantId);
+    const result = trips.map(t => ({
+      ...t,
+      stops: t.stops_json ? JSON.parse(t.stops_json) : [],
+    }));
+
+    // Remove raw JSON field
+    for (const t of result) delete t.stops_json;
+
+    res.json({
+      total: result.length,
+      planned: result.filter(t => t.status === 'planned').length,
+      in_progress: result.filter(t => t.status === 'in_progress').length,
+      completed: result.filter(t => t.status === 'completed').length,
+      trips: result,
+    });
+  } catch (error) {
+    console.error('CEO sales-trips list error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /api/v1/ceo/sales-trips/suggestions - Smart suggestions for GCs to visit */
+router.get('/sales-trips/suggestions', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const suggestions = [];
+    const allBids = getDacpBidRequests(tenantId);
+    const allJobs = getDacpJobs(tenantId);
+    const prequalPkgs = getDacpPrequalPackages(tenantId);
+    const offices = getDacpGcOffices(tenantId);
+
+    // Build office lookup by normalized GC name
+    const officeByGc = {};
+    for (const o of offices) {
+      const key = normalizeGcName(o.gc_name);
+      if (!officeByGc[key]) officeByGc[key] = o;
+    }
+
+    // Track which GCs we've already added
+    const seen = new Set();
+
+    // 1. GCs with prequal status 'not_sent' - highest priority (haven't introduced ourselves)
+    for (const pkg of prequalPkgs) {
+      if (pkg.status === 'not_sent') {
+        const key = normalizeGcName(pkg.gc_name);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const office = officeByGc[key];
+        suggestions.push({
+          gc_name: pkg.gc_name,
+          reason: 'Pre-qualification not yet sent - introduce DACP and deliver prequal package',
+          priority: 'high',
+          office_address: office ? [office.address, office.city, office.state, office.zip].filter(Boolean).join(', ') : null,
+          office_id: office?.id || null,
+          recent_activity: 'No prior engagement',
+        });
+      }
+    }
+
+    // 2. Newsletter leads not contacted
+    try {
+      const allTasks = getAgentAssignments(tenantId);
+      const newsletterTasks = allTasks.filter(t => {
+        try {
+          const ctx = t.context_json ? JSON.parse(t.context_json) : {};
+          return ctx.source === 'newsletter' && t.status === 'proposed';
+        } catch { return false; }
+      });
+      for (const task of newsletterTasks) {
+        // Try to extract GC name from task title/description
+        for (const knownGc of KNOWN_GC_LIST) {
+          const key = normalizeGcName(knownGc);
+          if (seen.has(key)) continue;
+          const text = `${task.title || ''} ${task.description || ''}`.toLowerCase();
+          if (text.includes(key)) {
+            seen.add(key);
+            const office = officeByGc[key];
+            suggestions.push({
+              gc_name: knownGc,
+              reason: `Newsletter lead - ${task.title || 'recent mention'}`,
+              priority: 'high',
+              office_address: office ? [office.address, office.city, office.state, office.zip].filter(Boolean).join(', ') : null,
+              office_id: office?.id || null,
+              recent_activity: task.description?.substring(0, 120) || 'Newsletter mention',
+            });
+          }
+        }
+      }
+    } catch {}
+
+    // 3. GCs with recent bid activity but no awarded jobs (relationship building)
+    const gcBidMap = {};
+    for (const bid of allBids) {
+      const key = normalizeGcName(bid.gc_name);
+      if (!gcBidMap[key]) gcBidMap[key] = { gc_name: bid.gc_name, bids: [], hasAwarded: false };
+      gcBidMap[key].bids.push(bid);
+      if (bid.status === 'awarded') gcBidMap[key].hasAwarded = true;
+    }
+    for (const [key, data] of Object.entries(gcBidMap)) {
+      if (seen.has(key)) continue;
+      if (!data.hasAwarded && data.bids.length > 0) {
+        seen.add(key);
+        const office = officeByGc[key];
+        suggestions.push({
+          gc_name: data.gc_name,
+          reason: `${data.bids.length} bid(s) submitted but none awarded yet - strengthen relationship`,
+          priority: 'medium',
+          office_address: office ? [office.address, office.city, office.state, office.zip].filter(Boolean).join(', ') : null,
+          office_id: office?.id || null,
+          recent_activity: `Last bid: ${data.bids[0].subject || 'N/A'} (${data.bids[0].status})`,
+        });
+      }
+    }
+
+    // 4. GCs with awarded jobs (relationship maintenance)
+    const gcJobMap = {};
+    for (const job of allJobs) {
+      const key = normalizeGcName(job.gc_name);
+      if (!gcJobMap[key]) gcJobMap[key] = { gc_name: job.gc_name, jobs: [] };
+      gcJobMap[key].jobs.push(job);
+    }
+    for (const [key, data] of Object.entries(gcJobMap)) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const office = officeByGc[key];
+      const activeCount = data.jobs.filter(j => j.status === 'active').length;
+      const completedCount = data.jobs.filter(j => j.status === 'completed').length;
+      suggestions.push({
+        gc_name: data.gc_name,
+        reason: `${activeCount} active, ${completedCount} completed job(s) - maintain relationship and seek referrals`,
+        priority: 'low',
+        office_address: office ? [office.address, office.city, office.state, office.zip].filter(Boolean).join(', ') : null,
+        office_id: office?.id || null,
+        recent_activity: `Active: ${data.jobs.filter(j => j.status === 'active').map(j => j.project_name).join(', ') || 'none'}`,
+      });
+    }
+
+    // Sort by priority
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    suggestions.sort((a, b) => (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3));
+
+    res.json({ total: suggestions.length, suggestions });
+  } catch (error) {
+    console.error('CEO sales-trips suggestions error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /api/v1/ceo/sales-trips - Create a new trip with auto-generated talking points */
+router.post('/sales-trips', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const { name, date, stops, notes } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!stops || !Array.isArray(stops) || stops.length === 0) {
+      return res.status(400).json({ error: 'At least one stop is required' });
+    }
+
+    const offices = getDacpGcOffices(tenantId);
+    const officeMap = {};
+    for (const o of offices) {
+      officeMap[o.id] = o;
+      // Also index by normalized gc_name for lookup
+      const key = normalizeGcName(o.gc_name);
+      if (!officeMap[`name:${key}`]) officeMap[`name:${key}`] = o;
+    }
+
+    // Build enriched stops
+    const enrichedStops = stops.map((stop, idx) => {
+      // Resolve office - by office_id or by gc_name lookup
+      let office = null;
+      if (stop.office_id) {
+        office = officeMap[stop.office_id] || null;
+      }
+      if (!office && stop.gc_name) {
+        office = officeMap[`name:${normalizeGcName(stop.gc_name)}`] || null;
+      }
+
+      const gcName = stop.gc_name || office?.gc_name || 'Unknown GC';
+      const talkingPoints = buildTalkingPoints(tenantId, gcName);
+
+      return {
+        gc_name: gcName,
+        office_id: office?.id || stop.office_id || null,
+        order: idx + 1,
+        talking_points: talkingPoints,
+        duration_min: stop.duration_min || 30,
+        notes: stop.notes || null,
+        visited: false,
+        // Include address info for route building
+        address: office ? [office.address, office.city, office.state, office.zip].filter(Boolean).join(', ') : null,
+        lat: office?.lat || null,
+        lng: office?.lng || null,
+        city: office?.city || null,
+        state: office?.state || null,
+      };
+    });
+
+    // Build Google Maps route URL
+    const routeUrl = buildRouteUrl(enrichedStops);
+
+    // Estimate route distance/duration
+    const routeEstimate = estimateRoute(enrichedStops);
+
+    const id = `TRIP-${randomUUID().slice(0, 8).toUpperCase()}`;
+    createDacpSalesTrip({
+      id,
+      tenant_id: tenantId,
+      name,
+      date: date || null,
+      status: 'planned',
+      stops_json: JSON.stringify(enrichedStops),
+      route_url: routeUrl,
+      total_distance_mi: routeEstimate.total_distance_mi,
+      total_duration_min: routeEstimate.total_duration_min,
+      notes: notes || null,
+      created_by: req.user?.email || req.user?.id || null,
+    });
+
+    res.status(201).json({
+      id,
+      name,
+      date,
+      status: 'planned',
+      stops: enrichedStops,
+      route_url: routeUrl,
+      total_distance_mi: routeEstimate.total_distance_mi,
+      total_duration_min: routeEstimate.total_duration_min,
+    });
+  } catch (error) {
+    console.error('CEO sales-trips create error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /api/v1/ceo/sales-trips/:id - Get full trip detail */
+router.get('/sales-trips/:id', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const trip = getDacpSalesTrip(tenantId, req.params.id);
+    if (!trip) return res.status(404).json({ error: 'Sales trip not found' });
+
+    const stops = trip.stops_json ? JSON.parse(trip.stops_json) : [];
+    delete trip.stops_json;
+
+    res.json({ ...trip, stops });
+  } catch (error) {
+    console.error('CEO sales-trips detail error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** PUT /api/v1/ceo/sales-trips/:id - Update trip (reorder stops, add notes, mark visited, change status) */
+router.put('/sales-trips/:id', (req, res) => {
+  try {
+    const tenantId = getCurrentTenantId() || req.resolvedTenant?.id;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+
+    const existing = getDacpSalesTrip(tenantId, req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Sales trip not found' });
+
+    const updates = {};
+    const allowedScalars = ['name', 'date', 'status', 'notes', 'route_url', 'total_distance_mi', 'total_duration_min'];
+    for (const field of allowedScalars) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    // Handle stops update (full replacement of stops array)
+    if (req.body.stops !== undefined) {
+      const newStops = req.body.stops;
+      if (!Array.isArray(newStops)) {
+        return res.status(400).json({ error: 'stops must be an array' });
+      }
+      updates.stops_json = JSON.stringify(newStops);
+
+      // Recalculate route URL and estimates
+      const routeUrl = buildRouteUrl(newStops);
+      const routeEstimate = estimateRoute(newStops);
+      updates.route_url = routeUrl;
+      updates.total_distance_mi = routeEstimate.total_distance_mi;
+      updates.total_duration_min = routeEstimate.total_duration_min;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    const result = updateDacpSalesTrip(tenantId, req.params.id, updates);
+    if (!result || result.changes === 0) {
+      return res.status(404).json({ error: 'Sales trip not found' });
+    }
+
+    // Return updated trip
+    const updated = getDacpSalesTrip(tenantId, req.params.id);
+    const stops = updated.stops_json ? JSON.parse(updated.stops_json) : [];
+    delete updated.stops_json;
+
+    res.json({ ...updated, stops });
+  } catch (error) {
+    console.error('CEO sales-trips update error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -4454,6 +4454,50 @@ function initDacpTablesSchema(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_bond_tenant ON dacp_bond_program(tenant_id)'); } catch (e) {}
 
+  // ─── DACP GC Offices (Sales Trip Planner) ─────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_gc_offices (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      gc_name TEXT NOT NULL,
+      address TEXT,
+      city TEXT,
+      state TEXT,
+      zip TEXT,
+      lat REAL,
+      lng REAL,
+      phone TEXT,
+      website TEXT,
+      office_type TEXT DEFAULT 'main',
+      notes TEXT,
+      geocoded_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_gc_offices_tenant ON dacp_gc_offices(tenant_id)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_gc_offices_gc ON dacp_gc_offices(tenant_id, gc_name)'); } catch (e) {}
+
+  // ─── DACP Sales Trips ─────────────────────────────────────────────────
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_sales_trips (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      date TEXT,
+      status TEXT DEFAULT 'planned',
+      stops_json TEXT,
+      route_url TEXT,
+      total_distance_mi REAL,
+      total_duration_min REAL,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_dacp_sales_trips_tenant ON dacp_sales_trips(tenant_id, status)'); } catch (e) {}
+
   // Chat messages
   targetDb.exec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
@@ -5040,6 +5084,35 @@ function initDacpSeedData(targetDb, tenantId) {
       insertPrequal.run(`PQ-${String(i + 1).padStart(3, '0')}`, TENANT_ID, gcWatchlist[i]);
     }
     console.log(`DACP: Seeded ${gcWatchlist.length} pre-qualification packages`);
+  }
+
+  // ─── Seed GC offices (Sales Trip Planner) ─────────────────────────────
+  const gcOfficeCount = targetDb.prepare('SELECT COUNT(*) as c FROM dacp_gc_offices WHERE tenant_id = ?').get(TENANT_SEED_ID);
+  if (gcOfficeCount.c === 0) {
+    const TENANT_ID = TENANT_SEED_ID;
+    const insertOffice = targetDb.prepare(`INSERT OR IGNORE INTO dacp_gc_offices (id, tenant_id, gc_name, address, city, state, zip, office_type, notes) VALUES (?, ?, ?, ?, ?, ?, ?, 'main', ?)`);
+    const gcOffices = [
+      ['GCO-SEED-001', 'Turner Construction', '2711 N Haskell Ave', 'Dallas', 'TX', '75204', null],
+      ['GCO-SEED-002', 'JE Dunn Construction', '1341 W Mockingbird Ln', 'Dallas', 'TX', '75247', null],
+      ['GCO-SEED-003', 'Hensel Phelps', '1340 Empire Central Dr', 'Dallas', 'TX', '75247', null],
+      ['GCO-SEED-004', 'McCarthy Building Companies', '12001 N Central Expy', 'Dallas', 'TX', '75243', null],
+      ['GCO-SEED-005', 'Skanska USA', '1601 Elm St', 'Dallas', 'TX', '75201', null],
+      ['GCO-SEED-006', 'Balfour Beatty', '3100 McKinnon St', 'Dallas', 'TX', '75201', null],
+      ['GCO-SEED-007', 'Rogers-O\'Brien Construction', '3131 McKinney Ave', 'Dallas', 'TX', '75204', null],
+      ['GCO-SEED-008', 'Manhattan Construction', '2120 N Central Expy', 'Dallas', 'TX', '75080', null],
+      ['GCO-SEED-009', 'Austin Commercial', '6001 Bollinger Canyon Rd', 'Dallas', 'TX', '75240', null],
+      ['GCO-SEED-010', 'Whiting-Turner', '2000 McKinney Ave', 'Dallas', 'TX', '75201', null],
+      ['GCO-SEED-011', 'Brasfield & Gorrie', '3500 Maple Ave', 'Dallas', 'TX', '75219', null],
+      ['GCO-SEED-012', 'Granite Construction', '585 W Beach St', 'Watsonville', 'CA', '95076', 'No DFW office'],
+      ['GCO-SEED-013', 'DPR Construction', '1919 McKinney Ave', 'Dallas', 'TX', '75201', null],
+      ['GCO-SEED-014', 'Primoris Services', '2100 McKinney Ave', 'Dallas', 'TX', '75201', null],
+      ['GCO-SEED-015', 'Zachry Group', '527 Logwood Ave', 'San Antonio', 'TX', '78221', 'San Antonio-based - no DFW office'],
+      ['GCO-SEED-016', 'Renegade Construction', null, 'Dallas', 'TX', null, 'Address TBD'],
+    ];
+    for (const [id, gcName, address, city, state, zip, notes] of gcOffices) {
+      insertOffice.run(id, TENANT_ID, gcName, address, city, state, zip, notes);
+    }
+    console.log(`DACP: Seeded ${gcOffices.length} GC offices for Sales Trip Planner`);
   }
 
   // ─── Lead Engine Seed Data ──────────────────────────────────────────────
@@ -5716,6 +5789,66 @@ export function upsertDacpBondProgram(bond) {
 
 export function checkBondRateFlag(tenantId) {
   return db.prepare('SELECT * FROM dacp_bond_program WHERE tenant_id = ? AND current_rate_pct > market_benchmark_pct * 1.2').all(tenantId);
+}
+
+// ─── DACP GC Offices (Sales Trip Planner) ─────────────────────────────────
+
+export function getDacpGcOffices(tenantId) {
+  return db.prepare('SELECT * FROM dacp_gc_offices WHERE tenant_id = ? ORDER BY gc_name ASC').all(tenantId);
+}
+
+export function getDacpGcOffice(tenantId, id) {
+  return db.prepare('SELECT * FROM dacp_gc_offices WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function createDacpGcOffice(office) {
+  return db.prepare(
+    `INSERT INTO dacp_gc_offices (id, tenant_id, gc_name, address, city, state, zip, phone, website, office_type, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(office.id, office.tenant_id, office.gc_name, office.address || null, office.city || null, office.state || null, office.zip || null, office.phone || null, office.website || null, office.office_type || 'main', office.notes || null);
+}
+
+export function updateDacpGcOffice(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_gc_offices SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
+}
+
+// ─── DACP Sales Trips ─────────────────────────────────────────────────────
+
+export function getDacpSalesTrips(tenantId) {
+  return db.prepare('SELECT * FROM dacp_sales_trips WHERE tenant_id = ? ORDER BY date DESC, created_at DESC').all(tenantId);
+}
+
+export function getDacpSalesTrip(tenantId, id) {
+  return db.prepare('SELECT * FROM dacp_sales_trips WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function createDacpSalesTrip(trip) {
+  return db.prepare(
+    `INSERT INTO dacp_sales_trips (id, tenant_id, name, date, status, stops_json, route_url, total_distance_mi, total_duration_min, notes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(trip.id, trip.tenant_id, trip.name, trip.date || null, trip.status || 'planned', trip.stops_json || '[]', trip.route_url || null, trip.total_distance_mi || null, trip.total_duration_min || null, trip.notes || null, trip.created_by || null);
+}
+
+export function updateDacpSalesTrip(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_sales_trips SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
 }
 
 // ─── Construction Tax Rules CRUD ──────────────────────────────────────────
