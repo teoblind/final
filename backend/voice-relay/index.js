@@ -262,20 +262,16 @@ wss.on("connection", (clientWs, req) => {
         if (event.type === 'session.updated') {
           const td = event.session?.turn_detection;
           console.log(`[VoiceRelay] Session configured: turn_detection=${JSON.stringify(td)}`);
-          if (!td || td === null) {
+          // Accept any session.updated - don't loop trying to force null
+          // turn_detection may come back as null, {type:"none"}, or even server_vad object
+          // Our manual mode is enforced by NOT sending audio input, not by turn_detection setting
+          if (!sessionConfigured) {
             sessionConfigured = true;
-            console.log(`[VoiceRelay] Manual mode confirmed - flushing ${audioQueue.length} queued audio chunks`);
+            console.log(`[VoiceRelay] Session ready - flushing ${audioQueue.length} queued audio chunks`);
             for (const msg of audioQueue) {
               openaiWs.send(msg);
             }
             audioQueue.length = 0;
-          } else {
-            // OpenAI didn't apply null turn_detection - force it
-            console.warn('[VoiceRelay] turn_detection not null! Forcing override...');
-            openaiWs.send(JSON.stringify({
-              type: 'session.update',
-              session: { turn_detection: null },
-            }));
           }
         }
 
