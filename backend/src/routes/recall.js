@@ -299,6 +299,35 @@ router.post('/bot-responded', (req, res) => {
 });
 
 /**
+ * POST /create-meeting-task - Create a task/action item from a live meeting
+ * Called by voice relay when OpenAI calls the create_task tool.
+ */
+router.post('/create-meeting-task', async (req, res) => {
+  try {
+    const { botId, title, assignee, due_date } = req.body;
+    if (!title) return res.status(400).json({ error: 'title required' });
+
+    const bot = getLocalBot(botId);
+    const tenantId = bot?.tenantId || 'zhan-capital';
+
+    const { getTenantDb } = await import('../cache/database.js');
+    const db = getTenantDb(tenantId);
+    const id = `meeting-task-${Date.now()}`;
+
+    db.prepare(`
+      INSERT INTO action_items (id, tenant_id, title, assignee, due_date, status, source, created_at)
+      VALUES (?, ?, ?, ?, ?, 'open', 'meeting-voice-bot', ?)
+    `).run(id, tenantId, title, assignee || null, due_date || null, new Date().toISOString());
+
+    console.log(`[Recall] Meeting task created: "${title}" (assignee: ${assignee || 'unassigned'})`);
+    res.json({ id, title, created: true });
+  } catch (e) {
+    console.error('[Recall] Create meeting task error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
  * POST /start-voice-loop - Start voice loop for a manually-created bot (e.g. from menu bar app)
  * No auth - called by local menu bar app.
  * Body: { botId, tenantId?, meetingTitle? }

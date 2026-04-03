@@ -134,6 +134,34 @@ function startSession(botId, instructions) {
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
         turn_detection: null,
+        tools: [
+          {
+            type: 'function',
+            name: 'send_chat_message',
+            description: 'Send a text message to the meeting chat that all participants can see and copy',
+            parameters: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'The message to send to the meeting chat' },
+              },
+              required: ['message'],
+            },
+          },
+          {
+            type: 'function',
+            name: 'create_task',
+            description: 'Create a task or action item from the meeting. Will be saved to the dashboard.',
+            parameters: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: 'Short title of the task' },
+                assignee: { type: 'string', description: 'Who is responsible (name from the meeting)' },
+                due_date: { type: 'string', description: 'Due date if mentioned (YYYY-MM-DD format)' },
+              },
+              required: ['title'],
+            },
+          },
+        ],
       },
     }));
   });
@@ -179,6 +207,55 @@ function startSession(botId, instructions) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ botId: session.botId }),
         }).catch(() => {});
+        break;
+      }
+
+      case 'response.function_call_arguments.done': {
+        // OpenAI called a tool - execute it
+        const fnName = event.name;
+        const callId = event.call_id;
+        let args = {};
+        try { args = JSON.parse(event.arguments); } catch {}
+        console.log(`[VoiceRelay] Tool call: ${fnName}(${JSON.stringify(args)})`);
+
+        (async () => {
+          let result = '';
+          try {
+            if (fnName === 'send_chat_message' && args.message) {
+              const res = await fetch(`${RECALL_BASE}/bot/${session.botId}/send_chat_message/`, {
+                method: 'POST',
+                headers: { 'Authorization': `Token ${RECALL_API_KEY}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: args.message }),
+              });
+              result = res.ok ? 'Message sent to meeting chat.' : `Failed: ${await res.text()}`;
+              console.log(`[VoiceRelay] Chat message sent: "${args.message}"`);
+            } else if (fnName === 'create_task') {
+              const res = await fetch(`http://localhost:3002/api/v1/recall/create-meeting-task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botId: session.botId, ...args }),
+              });
+              result = res.ok ? `Task created: "${args.title}"` : `Failed: ${await res.text()}`;
+              console.log(`[VoiceRelay] Task created: "${args.title}"`);
+            } else {
+              result = `Unknown function: ${fnName}`;
+            }
+          } catch (e) {
+            result = `Error: ${e.message}`;
+            console.error(`[VoiceRelay] Tool error:`, e.message);
+          }
+
+          // Return result to OpenAI so it can continue responding
+          ws.send(JSON.stringify({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: callId,
+              output: result,
+            },
+          }));
+          ws.send(JSON.stringify({ type: 'response.create' }));
+        })();
         break;
       }
 
