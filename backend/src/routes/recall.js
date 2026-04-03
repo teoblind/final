@@ -316,9 +316,7 @@ async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, t
 
   <!-- Header -->
   <div style="background:#FFFFFF;border-radius:12px 12px 0 0;padding:40px 32px 24px;text-align:center;border-bottom:1px solid #E5E7EB;">
-    <div style="width:64px;height:64px;background:linear-gradient(135deg,#6366F1,#8B5CF6);border-radius:16px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;">
-      <span style="font-size:28px;color:#FFFFFF;font-weight:bold;">C</span>
-    </div>
+    <img src="https://sangha.coppice.ai/coppice-logo.png" alt="Coppice" style="width:64px;height:64px;border-radius:16px;margin:0 auto 16px;display:block;" />
     <h1 style="margin:0 0 4px;font-size:22px;color:#111827;font-weight:600;">Meeting Recap</h1>
     <p style="margin:0;color:#6B7280;font-size:14px;">by Coppice</p>
   </div>
