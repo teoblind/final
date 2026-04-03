@@ -737,15 +737,29 @@ IMPORTANT: Be as detailed as Fireflies.ai notes. Every substantive statement sho
 Transcript:
 ${transcript}`;
 
-    const summaryRes = await queryClaudeAgent({
-      tenantId,
-      agentId: 'meetings',
-      message: summaryPrompt,
-      maxTurns: 1,
-      timeoutMs: 120000,
-    });
-
-    const summary = summaryRes?.response || summaryRes?.text || 'Meeting summary unavailable.';
+    // Retry up to 5 times with backoff if rate-limited
+    let summary = 'Meeting summary unavailable.';
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        const summaryRes = await queryClaudeAgent({
+          tenantId,
+          agentId: 'meetings',
+          message: summaryPrompt,
+          maxTurns: 1,
+          timeoutMs: 180000,
+        });
+        const text = summaryRes?.response || summaryRes?.text || '';
+        if (text && !text.includes("hit your limit") && !text.includes("rate limit") && text.length > 200) {
+          summary = text;
+          break;
+        }
+        console.log(`[CalendarPoll] Summarization attempt ${attempt}/5 returned rate limit or empty - waiting before retry...`);
+        await new Promise(r => setTimeout(r, attempt * 60000)); // 1min, 2min, 3min, 4min, 5min
+      } catch (e) {
+        console.warn(`[CalendarPoll] Summarization attempt ${attempt}/5 failed: ${e.message}`);
+        if (attempt < 5) await new Promise(r => setTimeout(r, attempt * 60000));
+      }
+    }
 
     // ── Retrieve + download audio recording from Recall.ai ──
     // Download to local storage so URLs don't expire (Recall.ai uses signed S3 links)
