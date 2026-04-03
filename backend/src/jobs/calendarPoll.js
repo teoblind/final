@@ -909,7 +909,10 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
       });
     }
   } catch (err) {
-    // calendar.events scope may not be available - silent fail
+    const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
+      err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client') ||
+      err.message?.includes('Token has been expired or revoked');
+    if (isAuthError) throw err; // Propagate to poll() for fallback client retry
     if (!err.message?.includes('insufficient')) {
       console.warn(`[CalendarPoll] Auto-accept error for ${agentEmail}: ${err.message}`);
     }
