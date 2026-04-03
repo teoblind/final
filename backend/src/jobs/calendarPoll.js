@@ -873,7 +873,9 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
       const organizerEmail = event.organizer?.email;
       if (!organizerEmail) continue;
 
-      const trusted = getTrustedSenderByEmail(tenantId, organizerEmail);
+      const orgDomain = organizerEmail.split('@')[1];
+      const trusted = getTrustedSenderByEmail(tenantId, organizerEmail)
+        || (orgDomain && getTrustedSenderByDomain(tenantId, orgDomain));
       if (!trusted) continue; // Only auto-accept from trusted senders
 
       // Accept the invite
@@ -884,11 +886,8 @@ async function autoAcceptInvites({ tenantId, calendarClient, agentEmail, refresh
         return a;
       });
 
-      // Need calendar.events scope for patching
-      const auth = makeOAuth2(refreshToken);
-      const calWithWrite = google.calendar({ version: 'v3', auth });
-
-      await calWithWrite.events.patch({
+      // Use the same calendarClient (already has correct OAuth client - primary or fallback)
+      await calendarClient.events.patch({
         calendarId: 'primary',
         eventId: event.id,
         requestBody: { attendees: updatedAttendees },

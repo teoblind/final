@@ -54,20 +54,27 @@ function getReauthRedirectUri(req) {
   return `${proto}://${host}/api/v1/admin/email/reauth/callback`;
 }
 const REAUTH_SCOPES = [
+  // Gmail - full access
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.compose',
-  'https://www.googleapis.com/auth/calendar.readonly',
+  // Calendar - full read+write (calendar subsumes calendar.readonly and calendar.events)
+  'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/calendar.events',
+  // Drive + Docs + Sheets + Slides
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/presentations',
+  // Meet + Contacts
   'https://www.googleapis.com/auth/meetings.space.created',
+  'https://www.googleapis.com/auth/contacts.readonly',
+  // Identity
   'openid',
   'email',
+  'profile',
 ];
 
 router.get('/email/reauth/start', (req, res) => {
