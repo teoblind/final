@@ -882,6 +882,9 @@ function initSchemaForDb(targetDb) {
   // Drive sync tables (auto-scan + RAG)
   initDriveSyncTables(targetDb);
 
+  // User Inbox Monitoring tables
+  initUserInboxTables(targetDb);
+
 
   // =========================================================================
   // Portfolio Companies (Zhan Capital)
@@ -7943,6 +7946,131 @@ export function getHubspotClassificationStats(tenantId) {
 export function getHubspotClassification(tenantId, hubspotId) {
   const db = getTenantDb(tenantId);
   return db.prepare('SELECT * FROM hubspot_classifications WHERE tenant_id = ? AND hubspot_id = ?').get(tenantId, hubspotId);
+}
+
+// ─── User Inbox Monitoring ─────────────────────────────────────────────────
+
+function initUserInboxTables(targetDb) {
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS user_inbox_config (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      poll_interval_minutes INTEGER DEFAULT 5,
+      last_polled_at TEXT,
+      last_history_id TEXT,
+      ingest_mode TEXT DEFAULT 'review',
+      auto_approve_senders TEXT,
+      auto_skip_senders TEXT,
+      max_age_days INTEGER DEFAULT 7,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, user_email)
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_user_inbox_config_tenant ON user_inbox_config(tenant_id, enabled)'); } catch (e) {}
+
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS user_inbox_processed (
+      message_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      thread_id TEXT,
+      subject TEXT,
+      from_email TEXT,
+      ingested_at TEXT DEFAULT (datetime('now')),
+      knowledge_entry_id TEXT,
+      status TEXT DEFAULT 'ingested',
+      PRIMARY KEY(message_id, tenant_id)
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_user_inbox_processed_tenant ON user_inbox_processed(tenant_id, ingested_at)'); } catch (e) {}
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_user_inbox_processed_from ON user_inbox_processed(tenant_id, from_email)'); } catch (e) {}
+}
+
+export function getUserInboxConfig(tenantId) {
+  const tdb = getTenantDb(tenantId);
+  return tdb.prepare('SELECT * FROM user_inbox_config WHERE tenant_id = ? AND enabled = 1').get(tenantId) || null;
+}
+
+export function upsertUserInboxConfig(tenantId, config) {
+  const tdb = getTenantDb(tenantId);
+  const id = config.id || `uic_${tenantId}_${Date.now()}`;
+  tdb.prepare(`
+    INSERT INTO user_inbox_config (id, tenant_id, user_email, enabled, poll_interval_minutes, last_polled_at, last_history_id, ingest_mode, auto_approve_senders, auto_skip_senders, max_age_days, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id, user_email) DO UPDATE SET
+      enabled = excluded.enabled,
+      poll_interval_minutes = excluded.poll_interval_minutes,
+      last_polled_at = excluded.last_polled_at,
+      last_history_id = excluded.last_history_id,
+      ingest_mode = excluded.ingest_mode,
+      auto_approve_senders = excluded.auto_approve_senders,
+      auto_skip_senders = excluded.auto_skip_senders,
+      max_age_days = excluded.max_age_days,
+      updated_at = datetime('now')
+  `).run(
+    id,
+    tenantId,
+    config.user_email || config.userEmail,
+    config.enabled !== undefined ? (config.enabled ? 1 : 0) : 1,
+    config.poll_interval_minutes || config.pollIntervalMinutes || 5,
+    config.last_polled_at || config.lastPolledAt || null,
+    config.last_history_id || config.lastHistoryId || null,
+    config.ingest_mode || config.ingestMode || 'review',
+    config.auto_approve_senders || config.autoApproveSenders || null,
+    config.auto_skip_senders || config.autoSkipSenders || null,
+    config.max_age_days || config.maxAgeDays || 7
+  );
+  return tdb.prepare('SELECT * FROM user_inbox_config WHERE tenant_id = ? AND user_email = ?').get(tenantId, config.user_email || config.userEmail);
+}
+
+export function isUserInboxMessageProcessed(tenantId, messageId) {
+  const tdb = getTenantDb(tenantId);
+  const row = tdb.prepare('SELECT 1 FROM user_inbox_processed WHERE tenant_id = ? AND message_id = ? LIMIT 1').get(tenantId, messageId);
+  return !!row;
+}
+
+export function markUserInboxMessageProcessed({ tenantId, messageId, threadId, subject, fromEmail, knowledgeEntryId, status }) {
+  const tdb = getTenantDb(tenantId);
+  tdb.prepare(`
+    INSERT OR IGNORE INTO user_inbox_processed (message_id, tenant_id, thread_id, subject, from_email, knowledge_entry_id, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(messageId, tenantId, threadId || null, subject || null, fromEmail || null, knowledgeEntryId || null, status || 'ingested');
+}
+
+export function getUserInboxStats(tenantId) {
+  const tdb = getTenantDb(tenantId);
+  const total = tdb.prepare('SELECT COUNT(*) as c FROM user_inbox_processed WHERE tenant_id = ?').get(tenantId).c;
+  const byDay = tdb.prepare(`
+    SELECT DATE(ingested_at) as day, COUNT(*) as count
+    FROM user_inbox_processed
+    WHERE tenant_id = ? AND ingested_at >= datetime('now', '-30 days')
+    GROUP BY DATE(ingested_at)
+    ORDER BY day DESC
+  `).all(tenantId);
+  const byStatus = tdb.prepare(`
+    SELECT status, COUNT(*) as count
+    FROM user_inbox_processed
+    WHERE tenant_id = ?
+    GROUP BY status
+  `).all(tenantId);
+  return { total, byDay, byStatus };
+}
+
+export function getAllUserInboxConfigs() {
+  const tenants = systemDb.prepare('SELECT id FROM tenants').all();
+  const configs = [];
+  for (const t of tenants) {
+    try {
+      const tdb = getTenantDb(t.id);
+      const rows = tdb.prepare('SELECT * FROM user_inbox_config WHERE enabled = 1').all();
+      configs.push(...rows);
+    } catch (e) {
+      // Skip tenants where table may not exist yet
+    }
+  }
+  return configs;
 }
 
 // ─── Graceful Shutdown ─────────────────────────────────────────────────────

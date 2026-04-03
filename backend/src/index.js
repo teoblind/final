@@ -82,6 +82,7 @@ import portfolioRoutes from './routes/portfolio.js';
 import schedulerRoutes from './routes/scheduler.js';
 import mcpConfigRoutes from './routes/mcpConfig.js';
 import ceoRoutes from './routes/ceo.js';
+import userInboxRoutes from './routes/userInbox.js';
 import internalRoutes from './routes/internal.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
@@ -245,6 +246,14 @@ try {
   }
 } catch (err) {
   console.warn('Gmail poll scheduler not started:', err.message);
+}
+
+// Start user inbox poll scheduler (personal inbox -> knowledge ingestion)
+try {
+  const { startUserInboxPollScheduler } = await import('./jobs/userInboxPoll.js');
+  startUserInboxPollScheduler(5); // poll user inboxes every 5 minutes
+} catch (err) {
+  console.warn('User inbox poll scheduler not started:', err.message);
 }
 
 // Start calendar poll scheduler - multi-tenant meeting auto-join (every 30s)
@@ -541,6 +550,7 @@ app.use('/api/v1/portfolio', portfolioRoutes);
 app.use('/api/v1/scheduler', schedulerRoutes);
 app.use('/api/v1/mcp-servers', mcpConfigRoutes);
 app.use('/api/v1/ceo', ceoRoutes);
+app.use('/api/v1/user-inbox', userInboxRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) - redirect to /api/v1/

@@ -534,6 +534,50 @@ Execute this instruction now. This action has been explicitly approved.`;
       }
     }
 
+    // If this is an inbox_ingest (user inbox email approved for knowledge ingestion)
+    if (item.type === 'inbox_ingest' && item.payload_json) {
+      try {
+        const payload = JSON.parse(item.payload_json);
+        const { getTenantDb } = await import('../cache/database.js');
+        const { processKnowledgeEntry } = await import('../services/knowledgeProcessor.js');
+        const tdb = getTenantDb(tenantId);
+
+        // Create knowledge entry from the email data
+        const knId = `KN-uinbox-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const knContent = JSON.stringify({
+          from: payload.from,
+          fromName: payload.fromName,
+          to: payload.to,
+          subject: payload.subject,
+          date: payload.date,
+          body: (payload.body || '').slice(0, 10000),
+          threadId: payload.threadId,
+          messageId: payload.messageId,
+        });
+
+        tdb.prepare(`INSERT OR IGNORE INTO knowledge_entries (id, tenant_id, type, title, content, source, source_agent, recorded_at)
+          VALUES (?, ?, 'email-observation', ?, ?, ?, 'user-inbox-poll', datetime('now'))`)
+          .run(knId, tenantId, `${payload.subject} (from ${payload.fromName || payload.from})`, knContent, `user-inbox:${payload.from}`);
+
+        // Process knowledge entry async (extract entities, summaries)
+        processKnowledgeEntry(knId, tenantId).catch(err => {
+          console.warn(`[Approvals] Knowledge processing failed for ${knId}: ${err.message}`);
+        });
+
+        // Update user_inbox_processed status to 'ingested'
+        try {
+          tdb.prepare(`UPDATE user_inbox_processed SET status = 'ingested', knowledge_entry_id = ? WHERE message_id = ? AND tenant_id = ?`)
+            .run(knId, payload.messageId, tenantId);
+        } catch (uipErr) {
+          console.warn(`[Approvals] user_inbox_processed update failed: ${uipErr.message}`);
+        }
+
+        console.log(`Approval ${item.id}: inbox email ingested as ${knId}`);
+      } catch (ingestErr) {
+        console.error(`Approval ${item.id}: inbox ingest failed:`, ingestErr.message);
+      }
+    }
+
     res.json(formatItem(updated));
   } catch (error) {
     console.error('Approvals approve error:', error);
