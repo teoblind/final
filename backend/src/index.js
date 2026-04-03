@@ -83,6 +83,7 @@ import schedulerRoutes from './routes/scheduler.js';
 import mcpConfigRoutes from './routes/mcpConfig.js';
 import ceoRoutes from './routes/ceo.js';
 import userInboxRoutes from './routes/userInbox.js';
+import usageRoutes from './routes/usage.js';
 import internalRoutes from './routes/internal.js';
 import tenantResolver from './middleware/tenantResolver.js';
 import { startRefreshScheduler } from './jobs/liquidityRefresh.js';
@@ -551,6 +552,7 @@ app.use('/api/v1/scheduler', schedulerRoutes);
 app.use('/api/v1/mcp-servers', mcpConfigRoutes);
 app.use('/api/v1/ceo', ceoRoutes);
 app.use('/api/v1/user-inbox', userInboxRoutes);
+app.use('/api/v1/usage', usageRoutes);
 
 // =========================================================================
 // Backward-compatible routes (/api/) - redirect to /api/v1/

@@ -27,6 +27,7 @@ import {
   getTenant,
   getUsersByTenant,
   insertNotification,
+  getTenantDb,
 } from '../cache/database.js';
 import { tunnelOrChat } from '../services/cliTunnel.js';
 import { getThreadKnowledge, searchKnowledge } from '../services/knowledgeProcessor.js';
@@ -626,6 +627,35 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     });
   }
 
+  // Calculate task cost from chat messages generated during execution
+  let costCents = 0;
+  try {
+    const tdb = getTenantDb(tenantId);
+    const taskMessages = tdb.prepare(`
+      SELECT
+        json_extract(metadata_json, '$.model') as model,
+        json_extract(metadata_json, '$.input_tokens') as input_tokens,
+        json_extract(metadata_json, '$.output_tokens') as output_tokens
+      FROM chat_messages
+      WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+        AND created_at >= ?
+      ORDER BY created_at DESC
+      LIMIT 50
+    `).all(tenantId, assignment.confirmed_at || new Date(Date.now() - 3600000).toISOString());
+
+    for (const msg of taskMessages) {
+      const m = (msg.model || '').toLowerCase();
+      let inputRate = 3, outputRate = 15; // default sonnet
+      if (m.includes('haiku')) { inputRate = 0.80; outputRate = 4; }
+      else if (m.includes('opus')) { inputRate = 15; outputRate = 75; }
+      costCents += Math.round(
+        (((msg.input_tokens || 0) / 1_000_000) * inputRate + ((msg.output_tokens || 0) / 1_000_000) * outputRate) * 100
+      );
+    }
+  } catch (costErr) {
+    console.warn(`[AssignmentExecutor] Cost calculation failed: ${costErr.message}`);
+  }
+
   // Complete the assignment - save full response for document regeneration
   updateAgentAssignment(tenantId, assignment.id, {
     status: 'completed',
@@ -633,6 +663,7 @@ async function handleResponse(tenantId, assignment, jobId, response) {
     full_response: cleanResponse,
     completed_at: new Date().toISOString(),
     output_artifacts_json: artifacts ? JSON.stringify(artifacts) : null,
+    cost_cents: costCents,
   });
 
   updateBackgroundJob(jobId, {

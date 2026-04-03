@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users, BarChart3, Activity } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
 
@@ -172,6 +172,8 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [contextLoading, setContextLoading] = useState(false);
   // Team action items
   const [actionItems, setActionItems] = useState([]);
+  // Usage metering
+  const [usageData, setUsageData] = useState(null);
 
   // Available sender email accounts (fetched from backend)
   const [sendersList, setSendersList] = useState([]);
@@ -563,6 +565,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
       // Fetch action items
       fetch(`${API_BASE}/v1/knowledge/action-items?status=all&limit=30`, { headers })
         .then(r => r.ok ? r.json() : []).then(items => setActionItems(items)).catch(() => setActionItems([]));
+      // Fetch usage summary
+      fetch(`${API_BASE}/v1/usage/summary`, { headers })
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setUsageData(data); }).catch(() => {});
     };
 
     refreshDashboard();
@@ -777,6 +782,101 @@ export default function DacpCommandDashboard({ onNavigate }) {
           )}
         </div>
       </div>
+
+      {/* Usage Metering Card */}
+      {usageData && (() => {
+        const s = usageData.summary || {};
+        const budget = usageData.budget || {};
+        const byDay = usageData.by_day || [];
+        const byUser = [...(usageData.by_user || [])].sort((a, b) => (b.cost_cents || 0) - (a.cost_cents || 0));
+        const maxDayCost = Math.max(...byDay.map(d => d.cost_cents || 0), 1);
+        const totalTokens = (s.total_input_tokens || 0) + (s.total_output_tokens || 0);
+        const fmtTokens = totalTokens >= 1_000_000 ? `${(totalTokens / 1_000_000).toFixed(1)}M` : totalTokens >= 1_000 ? `${(totalTokens / 1_000).toFixed(0)}K` : `${totalTokens}`;
+        const monthLabel = usageData.month ? new Date(usageData.month + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '';
+        const pctUsed = budget.pct_used || 0;
+        const barColor = pctUsed >= 100 ? 'bg-red-500' : pctUsed >= (budget.alert_threshold_pct || 80) ? 'bg-amber-500' : 'bg-[#1e3a5f]';
+        return (
+          <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+            {/* Header */}
+            <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+              <div className="flex items-center gap-2">
+                <Activity size={14} className="text-[#1e3a5f]" />
+                <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Usage</span>
+              </div>
+              <span className="text-[11px] text-terminal-muted font-mono">{monthLabel}</span>
+            </div>
+            <div className="px-[18px] py-4">
+              {/* Main stat + sub-stats */}
+              <div className="flex items-end gap-4 mb-4">
+                <div className="text-[28px] font-display font-bold text-terminal-text tabular-nums leading-none">
+                  ${((s.total_cost_cents || 0) / 100).toFixed(2)}
+                </div>
+                <div className="flex items-center gap-4 pb-1">
+                  <span className="text-[11px] text-terminal-muted"><span className="font-mono tabular-nums">{s.total_requests || 0}</span> requests</span>
+                  <span className="text-[11px] text-terminal-muted"><span className="font-mono tabular-nums">{s.tasks_run || 0}</span> tasks</span>
+                  <span className="text-[11px] text-terminal-muted"><span className="font-mono tabular-nums">{fmtTokens}</span> tokens</span>
+                </div>
+              </div>
+              {/* Daily sparkline */}
+              {byDay.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-2">Daily Cost</div>
+                  <div className="flex items-end gap-[2px] h-[40px]">
+                    {byDay.map((d, i) => {
+                      const h = Math.max(2, Math.round(((d.cost_cents || 0) / maxDayCost) * 36));
+                      return (
+                        <div
+                          key={i}
+                          title={`${d.day}: $${((d.cost_cents || 0) / 100).toFixed(2)} (${d.requests} req)`}
+                          className="flex-1 rounded-sm bg-[#1e3a5f] hover:bg-[#2a5080] transition-colors cursor-default"
+                          style={{ height: `${h}px`, minWidth: '4px', maxWidth: '20px' }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {/* Per-user breakdown */}
+              {byUser.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider mb-1.5">By User</div>
+                  <div className="space-y-1">
+                    {byUser.map((u, i) => (
+                      <div key={i} className="flex items-center justify-between text-[11px] font-mono">
+                        <span className="text-terminal-text truncate max-w-[200px]">{u.user_id}</span>
+                        <div className="flex items-center gap-4">
+                          <span className="text-terminal-muted tabular-nums">{u.requests} req</span>
+                          <span className="text-terminal-text font-semibold tabular-nums">${((u.cost_cents || 0) / 100).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Budget indicator */}
+              {budget.monthly_limit_cents > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-wider">Budget</span>
+                    <span className="text-[10px] text-terminal-muted font-mono tabular-nums">
+                      ${((s.total_cost_cents || 0) / 100).toFixed(2)} / ${(budget.monthly_limit_cents / 100).toFixed(2)}
+                      {' '}({pctUsed}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-[6px] bg-[#f0eeea] rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(pctUsed, 100)}%` }} />
+                  </div>
+                  {pctUsed >= 100 && (
+                    <div className="text-[10px] text-red-500 font-semibold mt-1">
+                      {budget.enforce_limit ? 'Limit reached - requests blocked' : 'Over budget (soft limit)'}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Team Action Items + Approval Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
@@ -1506,6 +1606,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                               <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
                                 <CheckCircle size={11} /> Done
                               </span>
+                              {a.cost_cents > 0 && (
+                                <span className="text-[10px] text-terminal-muted font-mono tabular-nums">${(a.cost_cents / 100).toFixed(2)}</span>
+                              )}
                               {a.visibility === 'shared' && (
                                 <button
                                   onClick={async () => {
@@ -2296,6 +2399,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                       a.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                       'bg-gray-50 text-gray-600 border-gray-200'
                     }`}>{a.status?.replace('_', ' ')}</span>
+                    {a.status === 'completed' && a.cost_cents > 0 && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-200 tabular-nums">${(a.cost_cents / 100).toFixed(2)}</span>
+                    )}
                   </div>
                   <h3 className="text-[15px] font-bold text-[#111110] font-heading leading-snug">{a.title}</h3>
                 </div>
@@ -2442,6 +2548,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
                 {a.confirmed_at && <span>Started: {new Date(a.confirmed_at).toLocaleDateString()}</span>}
                 {a.completed_at && <span>Completed: {new Date(a.completed_at).toLocaleDateString()}</span>}
                 {a.agent_id && <span>Agent: {a.agent_id}</span>}
+                {a.cost_cents > 0 && <span>Cost: ${(a.cost_cents / 100).toFixed(2)}</span>}
               </div>
             </div>
             {/* Footer actions */}

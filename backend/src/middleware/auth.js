@@ -13,6 +13,8 @@ import {
   updateApiKeyLastUsed,
   insertAuditLog,
   setTenantContext,
+  upsertActiveSession,
+  touchSession,
 } from '../cache/database.js';
 
 // ─── Role Permissions Map ───────────────────────────────────────────────────
@@ -266,6 +268,18 @@ export async function authenticate(req, res, next) {
         permissions,
       };
       req.tenantId = user.tenant_id;
+
+      // Track active session (use last 16 chars of token as session key)
+      try {
+        const sessionKey = token.slice(-16);
+        // touchSession updates last_active; upsertActiveSession creates if missing
+        const touched = touchSession(sessionKey);
+        if (!touched?.changes) {
+          upsertActiveSession(user.tenant_id, user.id, sessionKey, req.ip, req.headers['user-agent']);
+        }
+      } catch (sessErr) {
+        // Non-critical - don't block auth on session tracking failure
+      }
 
       // Re-set AsyncLocalStorage tenant context to match the authenticated user's tenant.
       // This ensures the DB proxy routes to the correct tenant database even when

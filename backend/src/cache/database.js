@@ -1021,6 +1021,34 @@ function initSchemaForDb(targetDb) {
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN attached_entity_ids_json TEXT'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN input_fields_json TEXT'); } catch (e) {}
   try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN input_values_json TEXT'); } catch (e) {}
+  try { targetDb.exec('ALTER TABLE agent_assignments ADD COLUMN cost_cents INTEGER DEFAULT 0'); } catch (e) {}
+
+  // Usage budgets - per-tenant monthly spend limits
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS usage_budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL UNIQUE,
+      monthly_limit_cents INTEGER DEFAULT 0,
+      alert_threshold_pct INTEGER DEFAULT 80,
+      enforce_limit INTEGER DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Active sessions - track concurrent users per tenant
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS active_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      session_token TEXT NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      last_active TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(tenant_id, user_id)'); } catch (e) {}
 
   // CC thread tracking - auto-trigger assignments from accumulated observations
   targetDb.exec(`
@@ -6229,6 +6257,116 @@ export function getUsageByDayAllTenants(startDate, endDate) {
   return Object.values(dayMap).sort((a, b) => a.day.localeCompare(b.day));
 }
 
+// ─── Usage Budgets ──────────────────────────────────────────────────────────
+
+export function getUsageBudget(tenantId) {
+  return db.prepare('SELECT * FROM usage_budgets WHERE tenant_id = ?').get(tenantId) || null;
+}
+
+export function upsertUsageBudget(tenantId, { monthlyLimitCents, alertThresholdPct, enforceLimit }) {
+  return db.prepare(`
+    INSERT INTO usage_budgets (tenant_id, monthly_limit_cents, alert_threshold_pct, enforce_limit, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(tenant_id) DO UPDATE SET
+      monthly_limit_cents = excluded.monthly_limit_cents,
+      alert_threshold_pct = excluded.alert_threshold_pct,
+      enforce_limit = excluded.enforce_limit,
+      updated_at = datetime('now')
+  `).run(tenantId, monthlyLimitCents || 0, alertThresholdPct || 80, enforceLimit ? 1 : 0);
+}
+
+// ─── Active Sessions ────────────────────────────────────────────────────────
+
+export function upsertActiveSession(tenantId, userId, sessionToken, ipAddress, userAgent) {
+  // Remove old sessions for this token (refresh)
+  db.prepare('DELETE FROM active_sessions WHERE session_token = ?').run(sessionToken);
+  return db.prepare(`
+    INSERT INTO active_sessions (tenant_id, user_id, session_token, ip_address, user_agent, last_active, created_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(tenantId, userId, sessionToken, ipAddress, userAgent);
+}
+
+export function touchSession(sessionToken) {
+  return db.prepare("UPDATE active_sessions SET last_active = datetime('now') WHERE session_token = ?").run(sessionToken);
+}
+
+export function getActiveSessions(tenantId) {
+  // Sessions active in the last 30 minutes
+  return db.prepare(`
+    SELECT * FROM active_sessions
+    WHERE tenant_id = ? AND last_active > datetime('now', '-30 minutes')
+    ORDER BY last_active DESC
+  `).all(tenantId);
+}
+
+export function cleanExpiredSessions() {
+  db.prepare("DELETE FROM active_sessions WHERE last_active < datetime('now', '-2 hours')").run();
+}
+
+export function getSessionCountByUser(tenantId, userId) {
+  return db.prepare(`
+    SELECT COUNT(*) as count FROM active_sessions
+    WHERE tenant_id = ? AND user_id = ? AND last_active > datetime('now', '-30 minutes')
+  `).get(tenantId, userId)?.count || 0;
+}
+
+// ─── Usage Aggregation for Tenants ──────────────────────────────────────────
+
+export function getMonthlyUsageSummary(tenantId) {
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const startDate = startOfMonth.toISOString().slice(0, 10);
+  const endDate = new Date().toISOString().slice(0, 10) + 'T23:59:59';
+
+  const byModel = db.prepare(`
+    SELECT
+      json_extract(metadata_json, '$.model') as model,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY model
+  `).all(tenantId, startDate, endDate);
+
+  const byUser = db.prepare(`
+    SELECT
+      user_id,
+      json_extract(metadata_json, '$.model') as model,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY user_id, model
+  `).all(tenantId, startDate, endDate);
+
+  const byDay = db.prepare(`
+    SELECT
+      date(created_at) as day,
+      COUNT(*) as requests,
+      SUM(json_extract(metadata_json, '$.input_tokens')) as input_tokens,
+      SUM(json_extract(metadata_json, '$.output_tokens')) as output_tokens
+    FROM chat_messages
+    WHERE tenant_id = ? AND role = 'assistant' AND metadata_json IS NOT NULL
+      AND created_at >= ? AND created_at <= ?
+    GROUP BY date(created_at)
+    ORDER BY day
+  `).all(tenantId, startDate, endDate);
+
+  // Task costs this month
+  const taskCosts = db.prepare(`
+    SELECT COUNT(*) as tasks_run, SUM(cost_cents) as total_task_cost_cents
+    FROM agent_assignments
+    WHERE tenant_id = ? AND status = 'completed' AND completed_at >= ?
+  `).get(tenantId, startDate);
+
+  return { byModel, byUser, byDay, taskCosts };
+}
+
 // ─── Tenant Files ─────────────────────────────────────────────────────────
 
 function initFilesTable(targetDb) {
@@ -7572,7 +7710,7 @@ export function insertAgentAssignment(assignment) {
 }
 
 export function updateAgentAssignment(tenantId, id, updates) {
-  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility', 'full_response', 'shared_with_json', 'attached_entity_ids_json', 'input_fields_json', 'input_values_json'];
+  const allowed = ['status', 'result_summary', 'thread_id', 'confirmed_at', 'completed_at', 'title', 'description', 'action_prompt', 'output_artifacts_json', 'user_id', 'job_id', 'source_type', 'source_thread_id', 'knowledge_entry_ids_json', 'info_requests_pending', 'visibility', 'full_response', 'shared_with_json', 'attached_entity_ids_json', 'input_fields_json', 'input_values_json', 'cost_cents'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {
