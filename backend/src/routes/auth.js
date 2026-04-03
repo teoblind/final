@@ -1054,6 +1054,15 @@ async function handleIntegrationCallback(req, res, code, state) {
       ? ['google-gmail', 'google-calendar', 'google-docs']
       : [source];
 
+    // Extract the authenticated Google email from id_token
+    let connectedEmail = null;
+    if (tokens.id_token) {
+      try {
+        const payload = JSON.parse(Buffer.from(tokens.id_token.split('.')[1], 'base64').toString());
+        connectedEmail = payload.email;
+      } catch {}
+    }
+
     await runWithTenant(tenantId, async () => {
       for (const svc of services) {
         if (tokens.refresh_token) {
@@ -1062,7 +1071,7 @@ async function handleIntegrationCallback(req, res, code, state) {
             service: svc,
             keyName: 'refresh_token',
             keyValue: tokens.refresh_token,
-            addedBy: userId,
+            addedBy: connectedEmail ? `user:${connectedEmail}` : userId,
           });
         }
         if (tokens.access_token) {
@@ -1071,10 +1080,31 @@ async function handleIntegrationCallback(req, res, code, state) {
             service: svc,
             keyName: 'access_token',
             keyValue: tokens.access_token,
-            addedBy: userId,
+            addedBy: connectedEmail ? `user:${connectedEmail}` : userId,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
           });
         }
+      }
+
+      // Store the user's personal email as a sender option if it's not the agent account
+      if (connectedEmail && !connectedEmail.includes('coppice.ai')) {
+        upsertKeyVaultEntry({
+          tenantId,
+          service: 'google-gmail-user',
+          keyName: 'email',
+          keyValue: connectedEmail,
+          addedBy: `oauth:${connectedEmail}`,
+        });
+        if (tokens.refresh_token) {
+          upsertKeyVaultEntry({
+            tenantId,
+            service: 'google-gmail-user',
+            keyName: 'refresh_token',
+            keyValue: tokens.refresh_token,
+            addedBy: `oauth:${connectedEmail}`,
+          });
+        }
+        console.log(`[Integration] Stored personal sender: ${connectedEmail} for tenant ${tenantId}`);
       }
 
       insertAuditLog({
@@ -1083,7 +1113,7 @@ async function handleIntegrationCallback(req, res, code, state) {
         action: 'integration.connected',
         resourceType: 'integration',
         resourceId: source,
-        details: { source, services, hasRefreshToken: !!tokens.refresh_token },
+        details: { source, services, hasRefreshToken: !!tokens.refresh_token, connectedEmail },
         ipAddress: req.ip,
       });
     });

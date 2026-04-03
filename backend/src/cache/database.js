@@ -6994,7 +6994,14 @@ export function countAutoReplies(tenantId, senderEmail, sinceDatetime) {
 // ─── Tenant Email Config ─────────────────────────────────────────────────────
 
 export function getTenantEmailConfig(tenantId) {
-  const row = db.prepare('SELECT * FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+  // Check main DB first, then fall back to tenant-specific DB
+  let row = db.prepare('SELECT * FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+  if (!row) {
+    try {
+      const tdb = getTenantDb(tenantId);
+      row = tdb.prepare('SELECT * FROM tenant_email_config WHERE tenant_id = ?').get(tenantId);
+    } catch {}
+  }
   if (!row) return null;
   return {
     senderEmail: row.sender_email,
@@ -7007,13 +7014,36 @@ export function getTenantEmailConfig(tenantId) {
 }
 
 export function getAllTenantEmailConfigs() {
+  const configs = new Map();
+  // Main DB
   const rows = db.prepare('SELECT * FROM tenant_email_config').all();
-  return rows.map(row => ({
-    tenantId: row.tenant_id,
-    senderEmail: row.sender_email,
-    senderName: row.sender_name,
-    gmailRefreshToken: row.gmail_refresh_token,
-  }));
+  for (const row of rows) {
+    configs.set(row.sender_email, {
+      tenantId: row.tenant_id,
+      senderEmail: row.sender_email,
+      senderName: row.sender_name,
+      gmailRefreshToken: row.gmail_refresh_token,
+    });
+  }
+  // Also check each tenant DB for configs not in main DB
+  const tenants = db.prepare('SELECT id FROM tenants').all();
+  for (const t of tenants) {
+    try {
+      const tdb = getTenantDb(t.id);
+      const tRows = tdb.prepare('SELECT * FROM tenant_email_config').all();
+      for (const row of tRows) {
+        if (!configs.has(row.sender_email)) {
+          configs.set(row.sender_email, {
+            tenantId: row.tenant_id,
+            senderEmail: row.sender_email,
+            senderName: row.sender_name,
+            gmailRefreshToken: row.gmail_refresh_token,
+          });
+        }
+      }
+    } catch {}
+  }
+  return Array.from(configs.values());
 }
 
 export function setTenantEmailConfig(tenantId, { senderEmail, senderName, gmailRefreshToken }) {

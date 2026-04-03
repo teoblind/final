@@ -47,23 +47,57 @@ function resolveIds(req) {
 // ---------------------------------------------------------------------------
 // GET /senders - list available sender email accounts
 // ---------------------------------------------------------------------------
-router.get('/senders', (req, res) => {
+router.get('/senders', async (req, res) => {
   try {
     const { tenantId } = resolveIds(req);
     const allConfigs = getAllTenantEmailConfigs();
     // Current tenant's config first, then others
     const current = getTenantEmailConfig(tenantId);
+    const seen = new Set();
     const senders = [];
     if (current) {
       senders.push({ email: current.senderEmail, name: current.senderName, current: true });
+      seen.add(current.senderEmail);
     }
-    // Add the logged-in user's personal email as a sender option
-    if (req.user?.email && !senders.some(s => s.email === req.user.email)) {
-      senders.push({ email: req.user.email, name: req.user.name || req.user.email.split('@')[0], current: false, personal: true });
-    }
+    // Check key vault for user's personal OAuth email
+    try {
+      const { getTenantDb } = await import('../cache/database.js');
+      const tdb = getTenantDb(tenantId);
+      // Check google-gmail-user (new format from integration callback)
+      const gmailUserEntry = tdb.prepare("SELECT key_value FROM key_vault WHERE service = 'google-gmail-user' AND key_name = 'email'").get();
+      if (gmailUserEntry?.key_value && !seen.has(gmailUserEntry.key_value)) {
+        const email = gmailUserEntry.key_value;
+        const name = email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        senders.push({ email, name, current: false, personal: true });
+        seen.add(email);
+      }
+      // Also check google-calendar-user addedBy (re-auth format)
+      if (!gmailUserEntry) {
+        const calUserEntry = tdb.prepare("SELECT added_by FROM key_vault WHERE service = 'google-calendar-user' AND key_name = 'refresh_token'").get();
+        if (calUserEntry?.added_by?.startsWith('reauth:')) {
+          const email = calUserEntry.added_by.replace('reauth:', '');
+          if (email && !seen.has(email)) {
+            const name = email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            senders.push({ email, name, current: false, personal: true });
+            seen.add(email);
+          }
+        }
+      }
+      // Also check addedBy on google-gmail entries for user: prefix
+      const gmailEntry = tdb.prepare("SELECT added_by FROM key_vault WHERE service = 'google-gmail' AND key_name = 'refresh_token'").get();
+      if (gmailEntry?.added_by?.startsWith('user:')) {
+        const email = gmailEntry.added_by.replace('user:', '');
+        if (email && !seen.has(email)) {
+          const name = email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          senders.push({ email, name, current: false, personal: true });
+          seen.add(email);
+        }
+      }
+    } catch {}
     for (const c of allConfigs) {
-      if (c.senderEmail !== current?.senderEmail && c.senderEmail !== req.user?.email) {
+      if (!seen.has(c.senderEmail)) {
         senders.push({ email: c.senderEmail, name: c.senderName, current: false });
+        seen.add(c.senderEmail);
       }
     }
     res.json({ senders });
