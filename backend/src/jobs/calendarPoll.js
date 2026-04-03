@@ -697,23 +697,41 @@ async function handleMeetingEnd(eventKey) {
     // ── Summarize with Claude (via BBB tunnel / local CLI) ──
     console.log(`[CalendarPoll] Summarizing "${meetingName}" with Claude...`);
 
-    const summaryPrompt = `Summarize this meeting transcript into structured notes.
+    const summaryPrompt = `You are a professional meeting analyst. Produce comprehensive, Fireflies-quality meeting notes from this transcript. Be thorough - capture every substantive point, specific data, numbers, names, and strategic context. Do NOT summarize loosely; extract precise details.
 
 Meeting: ${meetingName}
 Attendees: ${attendees.join(', ')}
 
-Format:
-## Summary
-(2-3 sentences)
+Produce the following sections:
 
-## Key Points
-- (bulleted)
+## Overview
+2-3 sentence executive summary of the meeting's purpose and outcome.
+
+## Key Topics
+For EACH major topic discussed, create a subsection:
+### [Topic Name]
+- Detailed bullet points capturing specific facts, numbers, percentages, dollar amounts, and quotes
+- Note who said what when relevant
+- Include context and reasoning behind statements, not just conclusions
+- Capture any data points, metrics, or benchmarks mentioned
 
 ## Action Items
-- [ ] (with owner if identifiable)
+For EACH person who was assigned or volunteered for a task:
+### [Person Name]
+- [ ] Specific task description with enough detail to act on it
+- [ ] Include any deadlines, dependencies, or conditions mentioned
 
 ## Decisions Made
-- (any decisions)
+- Specific decisions with rationale and any conditions/caveats
+
+## Strategic Context
+- Key strategic insights, market observations, or competitive intelligence discussed
+- Any risks, concerns, or open questions raised
+
+## Next Steps
+- What happens next, when the next meeting is, what needs to happen before then
+
+IMPORTANT: Be as detailed as Fireflies.ai notes. Every substantive statement should be captured. Include specific numbers, percentages, dollar figures, company names, and technical terms exactly as stated. Do not generalize or paraphrase when precision is available.
 
 ---
 Transcript:

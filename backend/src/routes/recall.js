@@ -185,7 +185,7 @@ async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, t
     if (entry?.processed === 1) break;
   }
 
-  const summary = entry?.summary || '';
+  const summary = entry?.content || entry?.summary || '';
   const wordCount = transcript.map(t => t.text).join(' ').split(/\s+/).length;
 
   // Get action items for this entry
@@ -194,13 +194,42 @@ async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, t
     actionItems = db.prepare('SELECT title, assignee, due_date FROM action_items WHERE entry_id = ?').all(entryId);
   } catch {}
 
-  // Extract topics from summary (first few key phrases)
+  // If no DB action items, extract from summary markdown
+  if (actionItems.length === 0) {
+    const aiSection = summary.match(/## Action Items\s*\n([\s\S]*?)(?=\n## |\n---|\Z)/);
+    if (aiSection) {
+      const aiLines = aiSection[1].match(/- \[[ x]?\]\s+(.+)/g) || [];
+      for (const line of aiLines) {
+        const cleaned = line.replace(/^- \[[ x]?\]\s+/, '').trim();
+        // Try to extract assignee from "Task (Person)" or "Person: Task" patterns
+        const assigneeMatch = cleaned.match(/\(([^)]+)\)$/) || cleaned.match(/^([^:]{3,30}):\s+/);
+        actionItems.push({
+          title: assigneeMatch ? cleaned.replace(assigneeMatch[0], '').trim() : cleaned,
+          assignee: assigneeMatch ? assigneeMatch[1].trim() : null,
+        });
+      }
+    }
+  }
+
+  // Extract topics from ### subsection headers in Key Topics section
   const topics = [];
-  const topicMatches = summary.match(/(?:^|\n)[-*]\s+(.+?)(?:\n|$)/g);
-  if (topicMatches) {
-    for (const m of topicMatches.slice(0, 5)) {
-      const cleaned = m.replace(/^[\n\-*\s]+/, '').replace(/[:].+$/, '').trim();
-      if (cleaned.length > 3 && cleaned.length < 60) topics.push(cleaned);
+  const topicSection = summary.match(/## Key Topics\s*\n([\s\S]*?)(?=\n## )/);
+  if (topicSection) {
+    const headerMatches = topicSection[1].match(/### (.+)/g);
+    if (headerMatches) {
+      for (const h of headerMatches.slice(0, 8)) {
+        topics.push(h.replace(/^### /, '').trim());
+      }
+    }
+  }
+  // Fallback: extract from bullet points
+  if (topics.length === 0) {
+    const topicMatches = summary.match(/(?:^|\n)[-*]\s+(.+?)(?:\n|$)/g);
+    if (topicMatches) {
+      for (const m of topicMatches.slice(0, 5)) {
+        const cleaned = m.replace(/^[\n\-*\s]+/, '').replace(/[:].+$/, '').trim();
+        if (cleaned.length > 3 && cleaned.length < 60) topics.push(cleaned);
+      }
     }
   }
 
@@ -226,14 +255,37 @@ async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, t
     ? participants.slice(0, 6).join(', ') + (participants.length > 6 ? ` +${participants.length - 6} more` : '')
     : 'Unknown participants';
 
-  // Build summary section - extract key bullet points
+  // Build summary section - extract overview + first key bullets from each topic
   const summaryBullets = [];
-  const bulletMatches = summary.match(/[-*]\s+(.+)/g);
-  if (bulletMatches) {
-    for (const b of bulletMatches.slice(0, 6)) {
-      summaryBullets.push(b.replace(/^[-*]\s+/, '').trim());
+
+  // 1. Get overview paragraph
+  const overviewMatch = summary.match(/## Overview\s*\n([\s\S]*?)(?=\n## )/);
+  if (overviewMatch) {
+    const overviewText = overviewMatch[1].trim();
+    if (overviewText) summaryBullets.push(overviewText);
+  }
+
+  // 2. Get first bullet from each Key Topic subsection
+  if (topicSection) {
+    const subsections = topicSection[1].split(/### /);
+    for (const sub of subsections.slice(1, 7)) {
+      const firstBullet = sub.match(/[-*]\s+(.+)/);
+      if (firstBullet) {
+        summaryBullets.push(firstBullet[1].trim());
+      }
     }
   }
+
+  // 3. Fallback to any bullets
+  if (summaryBullets.length === 0) {
+    const bulletMatches = summary.match(/[-*]\s+(.+)/g);
+    if (bulletMatches) {
+      for (const b of bulletMatches.slice(0, 6)) {
+        summaryBullets.push(b.replace(/^[-*]\s+/, '').trim());
+      }
+    }
+  }
+
   const summaryHtml = summaryBullets.length > 0
     ? summaryBullets.map(b => `<li style="margin-bottom:8px;color:#374151;font-size:15px;line-height:1.5;">${b}</li>`).join('')
     : `<li style="color:#374151;font-size:15px;">${summary.slice(0, 500) || 'Processing meeting summary...'}</li>`;
