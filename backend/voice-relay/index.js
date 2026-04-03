@@ -83,10 +83,8 @@ function startSession(botId, instructions) {
     activeSession.openaiWs.close();
   }
 
-  // 3 seconds of PCM at 24kHz 16-bit mono = 144000 bytes
-  const CHUNK_FLUSH_BYTES = 144000;
-  // 100ms silence to prepend to first chunk (avoids MP3 encoder/decoder clipping)
-  const SILENCE_PAD = Buffer.alloc(4800); // 100ms * 24000Hz * 2 bytes
+  // 200ms silence to prepend (avoids MP3 encoder/decoder clipping the start)
+  const SILENCE_PAD = Buffer.alloc(9600); // 200ms * 24000Hz * 2 bytes
 
   const session = {
     botId,
@@ -96,20 +94,13 @@ function startSession(botId, instructions) {
     totalBytesSent: 0,
     ready: false,
     responding: false,
-    isFirstChunk: true,
-    flushTimer: null,
   };
 
   async function flushAudio() {
     if (session.audioBuffer.length === 0 || !RECALL_API_KEY) return;
-    let pcm = session.audioBuffer;
+    // Prepend silence so beginning doesn't get clipped
+    const pcm = Buffer.concat([SILENCE_PAD, session.audioBuffer]);
     session.audioBuffer = Buffer.alloc(0);
-
-    // Prepend silence to first chunk so beginning doesn't get clipped
-    if (session.isFirstChunk) {
-      pcm = Buffer.concat([SILENCE_PAD, pcm]);
-      session.isFirstChunk = false;
-    }
 
     try {
       const mp3 = await pcmToMp3(pcm);
@@ -120,18 +111,6 @@ function startSession(botId, instructions) {
     } catch (err) {
       console.error(`[VoiceRelay] output_audio error: ${err.message}`);
     }
-  }
-
-  // Periodically flush audio in ~3s chunks for lower latency
-  function scheduleFlush() {
-    if (session.flushTimer) return;
-    session.flushTimer = setTimeout(() => {
-      session.flushTimer = null;
-      if (session.audioBuffer.length > 0) {
-        flushAudio();
-        if (session.responding) scheduleFlush();
-      }
-    }, 3000);
   }
 
   const ws = new WebSocket(OPENAI_REALTIME_URL, {
@@ -184,21 +163,14 @@ function startSession(botId, instructions) {
         if (event.delta) {
           const pcm = Buffer.from(event.delta, 'base64');
           session.audioBuffer = Buffer.concat([session.audioBuffer, pcm]);
-          // Flush in ~3s chunks for lower latency
-          if (session.audioBuffer.length >= CHUNK_FLUSH_BYTES) {
-            flushAudio();
-          } else {
-            scheduleFlush();
-          }
         }
         break;
 
       case 'response.done': {
         session.responding = false;
-        if (session.flushTimer) { clearTimeout(session.flushTimer); session.flushTimer = null; }
         const pcmBytes = session.audioBuffer.length;
         const durationMs = Math.round(pcmBytes / 2 / 24000 * 1000);
-        console.log(`[VoiceRelay] Response done (${session.audioChunkCount} chunks, ${pcmBytes}B PCM remaining, ~${durationMs}ms)`);
+        console.log(`[VoiceRelay] Response done (${session.audioChunkCount} chunks, ${pcmBytes}B PCM, ~${durationMs}ms)`);
         session.audioChunkCount = 0;
         flushAudio();
         // Notify backend state machine that bot responded
@@ -282,7 +254,6 @@ const httpServer = createServer((req, res) => {
             activeSession.audioBuffer = Buffer.alloc(0);
             activeSession.audioChunkCount = 0;
             activeSession.responding = false;
-            if (activeSession.flushTimer) { clearTimeout(activeSession.flushTimer); activeSession.flushTimer = null; }
             if (activeSession._pendingResponse) { clearTimeout(activeSession._pendingResponse); activeSession._pendingResponse = null; }
             console.log(`[VoiceRelay] Response cancelled (conversation moved on)`);
           }
@@ -324,7 +295,6 @@ const httpServer = createServer((req, res) => {
             activeSession.audioBuffer = Buffer.alloc(0);
             activeSession.audioChunkCount = 0;
             activeSession.responding = false;
-            if (activeSession.flushTimer) { clearTimeout(activeSession.flushTimer); activeSession.flushTimer = null; }
             console.log(`[VoiceRelay] Cancelled previous response for new input`);
             // Queue response after cancel processes
             if (activeSession._pendingResponse) clearTimeout(activeSession._pendingResponse);
