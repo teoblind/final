@@ -2339,7 +2339,7 @@ export default function FilesDashboard() {
             name: e.title || 'Untitled Meeting',
             type: 'meeting',
             owner: e.source_agent || 'Meeting Bot',
-            modified: e.recorded_at || e.created_at || '',
+            modified: (() => { const d = e.recorded_at || e.created_at; if (!d) return ''; const dt = new Date(d); return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + dt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); })(),
             agent: true,
             url: e.drive_url || null,
             knowledgeId: e.id,
