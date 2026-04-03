@@ -249,9 +249,9 @@ wss.on("connection", (clientWs, req) => {
       const str = data.toString();
       let event = null;
 
-      if (str.length < 10000) {
-        try { event = JSON.parse(str); } catch {}
-      }
+      // Must parse ALL messages including large audio deltas (12-15KB each)
+      // Previous 10KB limit was silently dropping most audio chunks
+      try { event = JSON.parse(str); } catch {}
 
       if (event) {
         // ── Session lifecycle ──
