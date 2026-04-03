@@ -140,6 +140,29 @@ function markUserInboxMessageProcessed(tdb, { messageId, tenantId, status, knowl
   `).run(messageId, tenantId, status, knowledgeEntryId || null, approvalItemId || null);
 }
 
+function upsertUserInboxConfig(tdb, tenantId, { userEmail, enabled, ingestMode, maxAgeDays, autoApproveSenders, autoSkipSenders }) {
+  ensureSchema(tdb, tenantId);
+  const id = uuidv4();
+  tdb.prepare(`
+    INSERT INTO user_inbox_config (id, tenant_id, user_email, enabled, ingest_mode, max_age_days, auto_approve_senders_json, auto_skip_senders_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(tenant_id, user_email) DO UPDATE SET
+      enabled = excluded.enabled,
+      ingest_mode = excluded.ingest_mode,
+      max_age_days = excluded.max_age_days,
+      auto_approve_senders_json = excluded.auto_approve_senders_json,
+      auto_skip_senders_json = excluded.auto_skip_senders_json,
+      updated_at = datetime('now')
+  `).run(
+    id, tenantId, userEmail,
+    enabled ? 1 : 0,
+    ingestMode || 'auto',
+    maxAgeDays || 7,
+    JSON.stringify(autoApproveSenders || []),
+    JSON.stringify(autoSkipSenders || []),
+  );
+}
+
 // ---- Email Parsing Helpers --------------------------------------------------
 
 function extractEmailBody(payload) {
@@ -396,7 +419,7 @@ async function processUserInboxMessage(gmail, tenantId, messageId, config) {
  * Fetches messages newer than max_age_days and processes up to MAX_MESSAGES_PER_CYCLE.
  */
 async function pollUserInbox(tenantId, config) {
-  const refreshToken = getKeyVaultValue(tenantId, 'google-gmail-user');
+  const refreshToken = getKeyVaultValue(tenantId, 'google-gmail-user', 'refresh_token');
   if (!refreshToken) {
     console.warn(`[UserInboxPoll] No refresh token found for tenant ${tenantId} (service: google-gmail-user)`);
     return;
@@ -493,7 +516,23 @@ async function pollAllUserInboxes() {
   for (const tenant of tenants) {
     try {
       const tdb = getTenantDb(tenant.id);
-      const config = getUserInboxConfig(tdb, tenant.id);
+      let config = getUserInboxConfig(tdb, tenant.id);
+
+      // Auto-create config if personal email is connected but no config exists
+      if (!config) {
+        const userEmail = getKeyVaultValue(tenant.id, 'google-gmail-user', 'email');
+        const refreshToken = getKeyVaultValue(tenant.id, 'google-gmail-user', 'refresh_token');
+        if (userEmail && refreshToken) {
+          console.log(`[UserInboxPoll] Auto-enabling inbox monitoring for ${tenant.id} (${userEmail})`);
+          upsertUserInboxConfig(tdb, tenant.id, {
+            userEmail,
+            enabled: 1,
+            ingestMode: 'auto',
+            maxAgeDays: 7,
+          });
+          config = getUserInboxConfig(tdb, tenant.id);
+        }
+      }
 
       if (!config || !config.enabled) continue;
 
