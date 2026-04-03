@@ -934,23 +934,47 @@ export default function DacpCommandDashboard({ onNavigate }) {
                     <div className="px-[18px] pb-4 pt-1 space-y-3">
                       {/* Email header + body */}
                       <div className="bg-[#f9f9f7] border border-[#e8e6e2] rounded-lg overflow-hidden">
-                        {(payload.to || payload.subject) && (
+                        {(payload.to || payload.subject || item.type === 'email_draft') && (
                           <div className="px-4 py-2.5 border-b border-[#e8e6e2] bg-[#f5f4f0]">
                             <div className="flex items-center justify-between mb-1.5">
-                              <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Reply Preview</div>
+                              <div className="text-[10px] font-heading font-semibold text-terminal-muted uppercase">Draft Preview</div>
                               <div className="flex items-center gap-1.5">
                                 {savingEdit && editingApproval === item.id && <span className="text-[10px] text-terminal-muted italic">Saving...</span>}
                                 <Pencil size={10} className="text-terminal-muted" />
                                 <span className="text-[10px] text-terminal-muted">Click body to edit</span>
                               </div>
                             </div>
-                            {payload.to && (
-                              <div className="text-[11px] text-[#6b6b65]">
-                                <span className="font-medium text-terminal-text">To:</span> {payload.to}
+                            {/* Editable To field */}
+                            <div className="flex items-center gap-2 text-[11px] text-[#6b6b65]">
+                              <span className="font-medium text-terminal-text shrink-0">To:</span>
+                              <input
+                                type="email"
+                                defaultValue={payload.to || ''}
+                                placeholder="Enter recipient email..."
+                                onClick={(e) => e.stopPropagation()}
+                                onBlur={(e) => {
+                                  const newTo = e.target.value.trim();
+                                  if (newTo !== (payload.to || '')) {
+                                    fetch(`${API_BASE}/v1/approvals/${item.id}/update-draft`, {
+                                      method: 'POST',
+                                      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ to: newTo }),
+                                    }).catch(() => {});
+                                  }
+                                }}
+                                className={`flex-1 px-2 py-0.5 rounded border bg-white text-terminal-text text-[11px] ${!payload.to ? 'border-amber-400 ring-1 ring-amber-200' : 'border-[#e8e6e2]'}`}
+                              />
+                              {payload.apolloContact && (
+                                <span className="text-[9px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">APOLLO VERIFIED</span>
+                              )}
+                            </div>
+                            {!payload.to && (
+                              <div className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
+                                <AlertCircle size={10} /> No contact email found - enter manually or search Apollo
                               </div>
                             )}
                             {payload.subject && (
-                              <div className="text-[11px] text-[#6b6b65]">
+                              <div className="text-[11px] text-[#6b6b65] mt-1">
                                 <span className="font-medium text-terminal-text">Subject:</span> {payload.subject}
                               </div>
                             )}
@@ -971,7 +995,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
                               >
                                 <option value="">Select sender...</option>
                                 {sendersList.map(s => (
-                                  <option key={s.email} value={s.email}>{s.name} ({s.email})</option>
+                                  <option key={s.email} value={s.email}>
+                                    {s.personal ? `${s.name} (${s.email}) - Personal` : `${s.name} (${s.email})`}
+                                  </option>
                                 ))}
                               </select>
                               {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}

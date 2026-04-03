@@ -57,8 +57,12 @@ router.get('/senders', (req, res) => {
     if (current) {
       senders.push({ email: current.senderEmail, name: current.senderName, current: true });
     }
+    // Add the logged-in user's personal email as a sender option
+    if (req.user?.email && !senders.some(s => s.email === req.user.email)) {
+      senders.push({ email: req.user.email, name: req.user.name || req.user.email.split('@')[0], current: false, personal: true });
+    }
     for (const c of allConfigs) {
-      if (c.senderEmail !== current?.senderEmail) {
+      if (c.senderEmail !== current?.senderEmail && c.senderEmail !== req.user?.email) {
         senders.push({ email: c.senderEmail, name: c.senderName, current: false });
       }
     }
@@ -747,8 +751,8 @@ router.post('/:id/update-draft', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
     const { id } = req.params;
-    const { body, senderEmail, senderName } = req.body;
-    if (!body && !senderEmail) return res.status(400).json({ error: 'body or senderEmail is required' });
+    const { body, senderEmail, senderName, to, subject } = req.body;
+    if (!body && !senderEmail && !to && !subject) return res.status(400).json({ error: 'body, senderEmail, to, or subject is required' });
 
     const { getApprovalItem, updateApprovalPayload } = await import('../cache/database.js');
     const { markdownToEmailHtml } = await import('../services/emailService.js');
@@ -761,6 +765,8 @@ router.post('/:id/update-draft', async (req, res) => {
       payload.body = body;
       payload.html = markdownToEmailHtml(body);
     }
+    if (to !== undefined) payload.to = to;
+    if (subject !== undefined) payload.subject = subject;
     if (senderEmail !== undefined) payload.senderEmail = senderEmail;
     if (senderName !== undefined) payload.senderName = senderName;
 
@@ -819,17 +825,21 @@ router.post('/newsletter-action', async (req, res) => {
 
     // Step 1: Use Claude to extract company name + generate email draft
     const { chat } = await import('../services/chatService.js');
-    const extractPrompt = `From this newsletter recommended action, extract the target company and generate a cold outreach email draft.
+    const extractPrompt = `From this newsletter recommended action, extract the target company and generate a cold outreach email.
 
 ACTION:
 ${actionTitle ? actionTitle + '\n' : ''}${actionText}
 
-Return ONLY a JSON object with these fields:
+CONTEXT: DACP Construction is a commercial concrete subcontractor based in Dallas-Fort Worth, specializing in foundations, flatwork, structural concrete, and site work for data centers, infrastructure, municipal, and commercial projects across Texas, Louisiana, and Florida.
+
+WRITING STYLE: Direct, no fluff. Short paragraphs. Reference the specific project/opportunity by name and dollar value. Don't pitch generically - connect DACP's concrete capabilities to the specific scope of the project. Do NOT use em dashes (use hyphens instead). No emojis.
+
+Return ONLY a JSON object:
 {
-  "companyName": "the target company to contact",
-  "contactRole": "the ideal role to contact (e.g. VP Preconstruction, Director of Estimating)",
-  "subject": "email subject line",
-  "body": "the full email body - professional, concise, focused on the specific opportunity mentioned in the action. Use DACP Construction's perspective as a concrete subcontractor. Do NOT use em dashes. End with a simple call to action."
+  "companyName": "target company name",
+  "contactRole": "ideal role (e.g. VP Preconstruction, Estimating Director)",
+  "subject": "short, specific subject line referencing the project",
+  "body": "email body - Hey [first name or team],\\n\\n[2-3 short paragraphs: reference the project, explain DACP's relevant experience, ask for a conversation]\\n\\nBest regards"
 }
 
 Return ONLY valid JSON, no commentary or markdown.`;
