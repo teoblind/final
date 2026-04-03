@@ -83,6 +83,11 @@ function startSession(botId, instructions) {
     activeSession.openaiWs.close();
   }
 
+  // 3 seconds of PCM at 24kHz 16-bit mono = 144000 bytes
+  const CHUNK_FLUSH_BYTES = 144000;
+  // 100ms silence to prepend to first chunk (avoids MP3 encoder/decoder clipping)
+  const SILENCE_PAD = Buffer.alloc(4800); // 100ms * 24000Hz * 2 bytes
+
   const session = {
     botId,
     openaiWs: null,
@@ -90,13 +95,22 @@ function startSession(botId, instructions) {
     audioChunkCount: 0,
     totalBytesSent: 0,
     ready: false,
-    responding: false,  // true while generating a response
+    responding: false,
+    isFirstChunk: true,
+    flushTimer: null,
   };
 
   async function flushAudio() {
     if (session.audioBuffer.length === 0 || !RECALL_API_KEY) return;
-    const pcm = session.audioBuffer;
+    let pcm = session.audioBuffer;
     session.audioBuffer = Buffer.alloc(0);
+
+    // Prepend silence to first chunk so beginning doesn't get clipped
+    if (session.isFirstChunk) {
+      pcm = Buffer.concat([SILENCE_PAD, pcm]);
+      session.isFirstChunk = false;
+    }
+
     try {
       const mp3 = await pcmToMp3(pcm);
       await sendAudioToRecall(session.botId, mp3);
@@ -106,6 +120,18 @@ function startSession(botId, instructions) {
     } catch (err) {
       console.error(`[VoiceRelay] output_audio error: ${err.message}`);
     }
+  }
+
+  // Periodically flush audio in ~3s chunks for lower latency
+  function scheduleFlush() {
+    if (session.flushTimer) return;
+    session.flushTimer = setTimeout(() => {
+      session.flushTimer = null;
+      if (session.audioBuffer.length > 0) {
+        flushAudio();
+        if (session.responding) scheduleFlush();
+      }
+    }, 3000);
   }
 
   const ws = new WebSocket(OPENAI_REALTIME_URL, {
@@ -149,6 +175,7 @@ function startSession(botId, instructions) {
 
       case 'response.created':
         session.responding = true;
+        session.isFirstChunk = true;
         console.log(`[VoiceRelay] ${event.type}`);
         break;
 
@@ -157,14 +184,21 @@ function startSession(botId, instructions) {
         if (event.delta) {
           const pcm = Buffer.from(event.delta, 'base64');
           session.audioBuffer = Buffer.concat([session.audioBuffer, pcm]);
+          // Flush in ~3s chunks for lower latency
+          if (session.audioBuffer.length >= CHUNK_FLUSH_BYTES) {
+            flushAudio();
+          } else {
+            scheduleFlush();
+          }
         }
         break;
 
       case 'response.done': {
         session.responding = false;
+        if (session.flushTimer) { clearTimeout(session.flushTimer); session.flushTimer = null; }
         const pcmBytes = session.audioBuffer.length;
         const durationMs = Math.round(pcmBytes / 2 / 24000 * 1000);
-        console.log(`[VoiceRelay] Response done (${session.audioChunkCount} chunks, ${pcmBytes}B PCM, ~${durationMs}ms)`);
+        console.log(`[VoiceRelay] Response done (${session.audioChunkCount} chunks, ${pcmBytes}B PCM remaining, ~${durationMs}ms)`);
         session.audioChunkCount = 0;
         flushAudio();
         break;
