@@ -36,6 +36,7 @@ import {
   runWithTenant,
   getTrustedSenderByEmail,
   getTrustedSenderByDomain,
+  getSystemDb,
 } from '../cache/database.js';
 import {
   createBot,
@@ -94,6 +95,141 @@ const seenGmailIds = new Set();
 const activeMeetingCodes = new Set();
 
 let pollTimer = null;
+
+// ─── SQLite Persistence for Bot Dedup ────────────────────────────────────────
+// Persists active bot tracking to the system DB so PM2 restarts don't cause
+// duplicate bot dispatches. In-memory maps remain the fast-path check;
+// the DB is the persistence/recovery layer.
+
+function initBotTrackingTable() {
+  const sdb = getSystemDb();
+  sdb.exec(`
+    CREATE TABLE IF NOT EXISTS active_meeting_bots (
+      event_key TEXT PRIMARY KEY,
+      bot_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      meeting_code TEXT,
+      meeting_name TEXT,
+      link TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      status TEXT NOT NULL DEFAULT 'active'
+    )
+  `);
+  // Index for meeting code lookups
+  sdb.exec(`
+    CREATE INDEX IF NOT EXISTS idx_amb_meeting_code
+    ON active_meeting_bots(meeting_code) WHERE meeting_code IS NOT NULL
+  `);
+  // Index for status queries
+  sdb.exec(`
+    CREATE INDEX IF NOT EXISTS idx_amb_status
+    ON active_meeting_bots(status)
+  `);
+}
+
+/** Rehydrate in-memory maps from DB on startup */
+function rehydrateFromDb() {
+  try {
+    const sdb = getSystemDb();
+    const rows = sdb.prepare(
+      `SELECT event_key, bot_id, tenant_id, meeting_code, meeting_name, link, created_at
+       FROM active_meeting_bots WHERE status = 'active'`
+    ).all();
+
+    for (const row of rows) {
+      // Skip entries older than 24h (stale from previous crashes)
+      const age = Date.now() - new Date(row.created_at + 'Z').getTime();
+      if (age > 24 * 3600000) {
+        sdb.prepare(`UPDATE active_meeting_bots SET status = 'expired' WHERE event_key = ?`).run(row.event_key);
+        continue;
+      }
+
+      joinedEvents.add(row.event_key);
+      if (row.meeting_code) activeMeetingCodes.add(row.meeting_code);
+      // Only populate activeBots with the fields we can recover -
+      // monitorBot won't restart (that happens via recoverActiveBots + Recall API),
+      // but dedup checks will work
+      activeBots.set(row.event_key, {
+        botId: row.bot_id,
+        tenantId: row.tenant_id,
+        meetingName: row.meeting_name || 'Recovered',
+        link: row.link || '',
+        meetingCode: row.meeting_code,
+        attendees: [],
+        startTime: row.created_at,
+      });
+    }
+
+    if (rows.length > 0) {
+      console.log(`[CalendarPoll] Rehydrated ${activeBots.size} active bot(s) from system DB`);
+    }
+  } catch (err) {
+    console.warn(`[CalendarPoll] DB rehydration failed (non-fatal): ${err.message}`);
+  }
+}
+
+/** Persist a new active bot to DB */
+function persistBotToDb(eventKey, botId, tenantId, meetingCode, meetingName, link) {
+  try {
+    const sdb = getSystemDb();
+    sdb.prepare(
+      `INSERT OR REPLACE INTO active_meeting_bots (event_key, bot_id, tenant_id, meeting_code, meeting_name, link, created_at, status)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 'active')`
+    ).run(eventKey, botId, tenantId, meetingCode || null, meetingName || null, link || null);
+  } catch (err) {
+    console.warn(`[CalendarPoll] Failed to persist bot to DB: ${err.message}`);
+  }
+}
+
+/** Mark a bot as ended in DB */
+function markBotEndedInDb(eventKey) {
+  try {
+    const sdb = getSystemDb();
+    sdb.prepare(`UPDATE active_meeting_bots SET status = 'ended' WHERE event_key = ?`).run(eventKey);
+  } catch (err) {
+    console.warn(`[CalendarPoll] Failed to mark bot ended in DB: ${err.message}`);
+  }
+}
+
+/** Check if a meeting code already has an active bot in DB */
+function isMeetingCodeActiveInDb(meetCode) {
+  try {
+    const sdb = getSystemDb();
+    const row = sdb.prepare(
+      `SELECT 1 FROM active_meeting_bots
+       WHERE meeting_code = ? AND status = 'active'
+       AND created_at > datetime('now', '-24 hours')
+       LIMIT 1`
+    ).get(meetCode);
+    return !!row;
+  } catch (err) {
+    console.warn(`[CalendarPoll] DB meeting code check failed: ${err.message}`);
+    return false;
+  }
+}
+
+/** Clean up old DB entries (older than 24h) */
+function cleanupOldBotEntries() {
+  try {
+    const sdb = getSystemDb();
+    const result = sdb.prepare(
+      `DELETE FROM active_meeting_bots WHERE created_at < datetime('now', '-24 hours')`
+    ).run();
+    if (result.changes > 0) {
+      console.log(`[CalendarPoll] Cleaned up ${result.changes} old bot tracking entries`);
+    }
+  } catch (err) {
+    console.warn(`[CalendarPoll] DB cleanup failed: ${err.message}`);
+  }
+}
+
+// Initialize table and rehydrate on module load
+try {
+  initBotTrackingTable();
+  rehydrateFromDb();
+} catch (err) {
+  console.warn(`[CalendarPoll] Bot tracking DB init failed (non-fatal): ${err.message}`);
+}
 
 // ─── OAuth Helpers ───────────────────────────────────────────────────────────
 
@@ -270,8 +406,9 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         }
 
         // Check if any existing bot is already in this meeting (by normalized meeting code)
+        // Check both in-memory (fast path) and DB (survives PM2 restarts)
         const meetCode = extractMeetingCode(link);
-        if (meetCode && activeMeetingCodes.has(meetCode)) {
+        if (meetCode && (activeMeetingCodes.has(meetCode) || isMeetingCodeActiveInDb(meetCode))) {
           joinedEvents.add(eventKey);
           continue;
         }
@@ -379,8 +516,9 @@ async function pollTenantCalendar({ tenantId, calendarClient, gmailClient, agent
         const link = match[0].replace(/\.$/, '');
 
         // Check we haven't already joined this link via another detection method
+        // Check both in-memory (fast path) and DB (survives PM2 restarts)
         const gmailMeetCode = extractMeetingCode(link);
-        if (gmailMeetCode && activeMeetingCodes.has(gmailMeetCode)) continue;
+        if (gmailMeetCode && (activeMeetingCodes.has(gmailMeetCode) || isMeetingCodeActiveInDb(gmailMeetCode))) continue;
         const alreadyJoined = [...activeBots.values()].some(b => b.link === link);
         if (alreadyJoined) continue;
 
@@ -453,8 +591,9 @@ async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
   const { eventKey, summary, link, attendees } = meeting;
 
   // Prevent duplicate joins by meeting code
+  // Check both in-memory (fast path) and DB (survives PM2 restarts)
   const meetCode = extractMeetingCode(link);
-  if (meetCode && activeMeetingCodes.has(meetCode)) {
+  if (meetCode && (activeMeetingCodes.has(meetCode) || isMeetingCodeActiveInDb(meetCode))) {
     console.log(`[CalendarPoll] Skipping "${summary}" - already have bot in ${meetCode}`);
     joinedEvents.add(eventKey);
     return null;
@@ -510,6 +649,9 @@ async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
       startTime: new Date().toISOString(),
     });
 
+    // Persist to DB so PM2 restarts don't lose dedup state
+    persistBotToDb(eventKey, bot.id, tenantId, meetCode, summary, link);
+
     // Mark as calendar-managed (calendarPoll handles its own emails via processMeetingComplete)
     // Also store inviter email as fallback
     const inviterEmail = attendees.find(e => !e.match(/^agent@.*\.coppice\.ai$/)) || attendees[0];
@@ -544,6 +686,7 @@ async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
     console.error(`[CalendarPoll] Join failed for "${summary}":`, err.message);
     joinedEvents.delete(eventKey);
     if (meetCode) activeMeetingCodes.delete(meetCode);
+    markBotEndedInDb(eventKey);
     return null;
   }
 }
@@ -618,8 +761,9 @@ async function handleMeetingEnd(eventKey) {
   const { botId, tenantId, meetingName, attendees, agentEmail, meetingCode } = info;
   console.log(`[CalendarPoll] Processing meeting end: "${meetingName}" (${tenantId})`);
 
-  // Clean up meeting code tracking
+  // Clean up meeting code tracking (in-memory + DB)
   if (meetingCode) activeMeetingCodes.delete(meetingCode);
+  markBotEndedInDb(eventKey);
 
   try {
     // ── Get transcript ──
@@ -1090,6 +1234,8 @@ async function recoverActiveBots() {
         attendees: [],
         startTime: bot.join_at || new Date().toISOString(),
       });
+      // Also persist Recall-recovered bots to DB
+      persistBotToDb(eventKey, bot.id, 'unknown', meetCode, bot.bot_name || 'Recovered', meetingUrl);
     }
     console.log(`[CalendarPoll] Recovered ${bots.length} active bot(s) from Recall.ai - will not duplicate`);
   } catch (e) {
@@ -1116,6 +1262,11 @@ export function startCalendarPollScheduler(intervalSec = POLL_INTERVAL_SEC) {
   pollTimer = setInterval(() => {
     poll().catch(err => console.error('[CalendarPoll] Poll failed:', err.message));
   }, intervalSec * 1000);
+
+  // Clean up old DB entries every hour
+  setInterval(() => {
+    cleanupOldBotEntries();
+  }, 3600000);
 }
 
 export function stopCalendarPollScheduler() {
