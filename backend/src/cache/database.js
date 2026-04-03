@@ -6668,7 +6668,14 @@ export function getKeyVaultEntries(tenantId) {
 }
 
 export function getKeyVaultValue(tenantId, service, keyName = 'default') {
-  const row = db.prepare('SELECT key_value FROM key_vault WHERE tenant_id = ? AND service = ? AND key_name = ?').get(tenantId, service, keyName);
+  let row = db.prepare('SELECT key_value FROM key_vault WHERE tenant_id = ? AND service = ? AND key_name = ?').get(tenantId, service, keyName);
+  // Fall back to tenant-specific DB if not in main DB
+  if (!row?.key_value) {
+    try {
+      const tdb = getTenantDb(tenantId);
+      row = tdb.prepare('SELECT key_value FROM key_vault WHERE service = ? AND key_name = ?').get(service, keyName);
+    } catch {}
+  }
   if (!row?.key_value) return null;
   try {
     return decryptValue(row.key_value);

@@ -59,39 +59,60 @@ router.get('/senders', async (req, res) => {
       senders.push({ email: current.senderEmail, name: current.senderName, current: true });
       seen.add(current.senderEmail);
     }
-    // Check key vault for user's personal OAuth email
+    // Check key vault for user's personal OAuth email (stored during setup wizard)
     try {
-      const { getTenantDb } = await import('../cache/database.js');
-      const tdb = getTenantDb(tenantId);
-      // Check google-gmail-user (new format from integration callback)
-      const gmailUserEntry = tdb.prepare("SELECT key_value FROM key_vault WHERE service = 'google-gmail-user' AND key_name = 'email'").get();
-      if (gmailUserEntry?.key_value && !seen.has(gmailUserEntry.key_value)) {
-        const email = gmailUserEntry.key_value;
-        const name = email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-        senders.push({ email, name, current: false, personal: true });
-        seen.add(email);
-      }
-      // Also check google-calendar-user addedBy (re-auth format)
-      if (!gmailUserEntry) {
-        const calUserEntry = tdb.prepare("SELECT added_by FROM key_vault WHERE service = 'google-calendar-user' AND key_name = 'refresh_token'").get();
-        if (calUserEntry?.added_by?.startsWith('reauth:')) {
-          const email = calUserEntry.added_by.replace('reauth:', '');
-          if (email && !seen.has(email)) {
-            const name = email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-            senders.push({ email, name, current: false, personal: true });
-            seen.add(email);
+      const { getKeyVaultValue, upsertKeyVaultEntry } = await import('../cache/database.js');
+      // getKeyVaultValue handles decryption and checks both main + tenant DB
+      let personalEmail = getKeyVaultValue(tenantId, 'google-gmail-user', 'email');
+      // If no stored email, discover it from the OAuth token at runtime
+      if (!personalEmail) {
+        try {
+          const refreshToken = getKeyVaultValue(tenantId, 'google-gmail', 'refresh_token');
+          if (refreshToken) {
+            const clients = [
+              { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+              { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+            ].filter(c => c.id && c.secret);
+            for (const client of clients) {
+              try {
+                const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: new URLSearchParams({
+                    client_id: client.id, client_secret: client.secret,
+                    refresh_token: refreshToken, grant_type: 'refresh_token',
+                  }),
+                });
+                const tokens = await tokenResp.json();
+                if (!tokens.access_token) continue;
+                const userResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokens.access_token}` },
+                });
+                const userInfo = await userResp.json();
+                if (userInfo.email) {
+                  personalEmail = userInfo.email;
+                  // Cache it so we don't call Google every time
+                  setTenantContext(tenantId, () => {
+                    upsertKeyVaultEntry({
+                      tenantId, service: 'google-gmail-user',
+                      keyName: 'email', keyValue: personalEmail,
+                      addedBy: `oauth:${personalEmail}`,
+                    });
+                  });
+                  console.log(`[Senders] Discovered and cached personal email for ${tenantId}: ${personalEmail}`);
+                  break;
+                }
+              } catch {}
+            }
           }
+        } catch (e) {
+          console.error('[Senders] Email discovery error:', e.message);
         }
       }
-      // Also check addedBy on google-gmail entries for user: prefix
-      const gmailEntry = tdb.prepare("SELECT added_by FROM key_vault WHERE service = 'google-gmail' AND key_name = 'refresh_token'").get();
-      if (gmailEntry?.added_by?.startsWith('user:')) {
-        const email = gmailEntry.added_by.replace('user:', '');
-        if (email && !seen.has(email)) {
-          const name = email.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-          senders.push({ email, name, current: false, personal: true });
-          seen.add(email);
-        }
+      if (personalEmail && !seen.has(personalEmail)) {
+        const name = personalEmail.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        senders.push({ email: personalEmail, name, current: false, personal: true });
+        seen.add(personalEmail);
       }
     } catch {}
     for (const c of allConfigs) {
