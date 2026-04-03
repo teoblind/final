@@ -191,7 +191,16 @@ async function flushSpeechBuffer(botId, sb) {
   if (!text) return;
 
   const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
-  const decision = processUtterance(botId, speaker, text);
+  const WAKE_WORD_RE = /\b(coppice|copice|copis|cop ice)\b/i;
+  let decision;
+  try {
+    decision = processUtterance(botId, speaker, text);
+  } catch (e) {
+    console.error(`[Recall] processUtterance error: ${e.message}`);
+    // Fallback: respond if wake word present, otherwise context-only
+    decision = { respond: WAKE_WORD_RE.test(text), cancel: false };
+  }
+  console.log(`[Recall] State machine: respond=${decision.respond}, cancel=${decision.cancel}, speaker="${speaker}", text="${text.slice(0, 80)}"`);
 
   try {
     if (decision.cancel) {
@@ -315,9 +324,9 @@ router.post('/create-meeting-task', async (req, res) => {
     const id = `meeting-task-${Date.now()}`;
 
     db.prepare(`
-      INSERT INTO action_items (id, tenant_id, title, assignee, due_date, status, source, created_at)
-      VALUES (?, ?, ?, ?, ?, 'open', 'meeting-voice-bot', ?)
-    `).run(id, tenantId, title, assignee || null, due_date || null, new Date().toISOString());
+      INSERT INTO action_items (id, tenant_id, entry_id, title, assignee, due_date, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
+    `).run(id, tenantId, `meeting-${botId || 'live'}`, title, assignee || null, due_date || null, new Date().toISOString());
 
     console.log(`[Recall] Meeting task created: "${title}" (assignee: ${assignee || 'unassigned'})`);
     res.json({ id, title, created: true });
