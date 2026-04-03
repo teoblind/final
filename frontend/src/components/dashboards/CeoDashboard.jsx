@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   AlertTriangle, BarChart3, Building2, CheckCircle, ChevronDown, ChevronRight,
   ChevronUp, ClipboardList, DollarSign, FileCheck, HardHat, Shield,
@@ -115,6 +115,81 @@ function DepartmentCard({ title, icon: Icon, iconBg, iconColor, health, stats, r
         </div>
       )}
     </div>
+  );
+}
+
+// Newsletter content renderer with Draft Email button injection
+function NewsletterContent({ html }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const el = ref.current;
+    const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--t-ui-accent').trim() || '#1e3a5f';
+
+    // Find Recommended Actions heading
+    const headings = el.querySelectorAll('h2, h3, strong');
+    let actionsHeading = null;
+    headings.forEach(h => {
+      if (/recommended\s*actions|mining\s*actions|renewables\s*outreach/i.test(h.textContent)) actionsHeading = h;
+    });
+
+    // Find bordered action divs
+    const borderedDivs = Array.from(el.querySelectorAll('div')).filter(div => {
+      const style = div.getAttribute('style') || '';
+      return /border-left:\s*4px\s+solid\s+#/i.test(style);
+    });
+
+    borderedDivs.forEach(div => {
+      if (div.querySelector('.newsletter-action-btn')) return;
+      if (actionsHeading) {
+        const pos = actionsHeading.compareDocumentPosition(div);
+        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+      }
+      const text = div.textContent?.trim() || '';
+      if (!text) return;
+      const strongEl = div.querySelector('strong');
+      const actionTitle = strongEl ? strongEl.textContent.trim() : text.slice(0, 80);
+      const btn = document.createElement('button');
+      btn.className = 'newsletter-action-btn';
+      btn.textContent = 'Draft Email';
+      btn.style.cssText = `display:inline-flex;align-items:center;gap:4px;margin-top:10px;padding:8px 18px;background:${accentColor};color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity 0.15s;`;
+      btn.onmouseenter = () => { btn.style.opacity = '0.85'; };
+      btn.onmouseleave = () => { btn.style.opacity = '1'; };
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const actionText = text.replace(/^Draft Email\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        const origText = btn.textContent;
+        btn.textContent = 'Drafting...';
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        try {
+          const res = await fetch(`${API_BASE}/v1/approvals/newsletter-action`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actionTitle, actionText }),
+          });
+          if (!res.ok) throw new Error('Failed');
+          const data = await res.json();
+          btn.textContent = data.contactFound ? 'Queued - Contact Found' : 'Queued';
+          btn.style.background = '#2e7d32';
+          setTimeout(() => { window.location.hash = 'command'; }, 800);
+        } catch {
+          btn.textContent = 'Error';
+          btn.style.background = '#c62828';
+          setTimeout(() => { btn.textContent = origText; btn.style.background = accentColor; btn.disabled = false; btn.style.opacity = '1'; }, 2000);
+        }
+      };
+      div.appendChild(btn);
+    });
+  }, [html]);
+
+  return (
+    <div
+      ref={ref}
+      className="newsletter-preview"
+      dangerouslySetInnerHTML={{ __html: html }}
+      style={{ maxHeight: '80vh', overflowY: 'auto' }}
+    />
   );
 }
 
@@ -1151,11 +1226,7 @@ export default function CeoDashboard({ onNavigate }) {
               </button>
               <div className="bg-white border border-terminal-border rounded-[14px] overflow-hidden">
                 {newsletterHtml ? (
-                  <div
-                    className="newsletter-preview"
-                    dangerouslySetInnerHTML={{ __html: newsletterHtml }}
-                    style={{ maxHeight: '80vh', overflowY: 'auto' }}
-                  />
+                  <NewsletterContent html={newsletterHtml} />
                 ) : (
                   <div className="flex items-center justify-center py-12 text-terminal-muted text-sm">Loading newsletter...</div>
                 )}

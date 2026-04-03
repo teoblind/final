@@ -1947,25 +1947,59 @@ function NewsletterViewerModal({ newsletter, onClose }) {
     const el = contentRef.current;
     const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--t-ui-accent').trim() || '#1a6b3c';
 
+    // Helper: get auth headers for API calls
+    function getAuth() {
+      try {
+        const session = JSON.parse(sessionStorage.getItem('sangha_auth'));
+        if (session?.tokens?.accessToken) return { Authorization: `Bearer ${session.tokens.accessToken}` };
+      } catch {}
+      const legacy = localStorage.getItem('auth_token');
+      if (legacy) return { Authorization: `Bearer ${legacy}` };
+      return {};
+    }
+
+    // Helper: create approval draft from newsletter action
+    async function createNewsletterDraft(btn, actionTitle, actionText) {
+      const origText = btn.textContent;
+      btn.textContent = 'Drafting...';
+      btn.disabled = true;
+      btn.style.opacity = '0.6';
+      try {
+        const res = await fetch(`${API_BASE}/v1/approvals/newsletter-action`, {
+          method: 'POST',
+          headers: { ...getAuth(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actionTitle, actionText }),
+        });
+        if (!res.ok) throw new Error('Failed to create draft');
+        const data = await res.json();
+        btn.textContent = data.contactFound ? 'Created - Contact Found' : 'Created';
+        btn.style.background = '#2e7d32';
+        setTimeout(() => {
+          window.location.hash = 'command';
+          onClose();
+        }, 600);
+      } catch (err) {
+        console.error('Newsletter draft error:', err);
+        btn.textContent = 'Error - Retry';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.background = '#c62828';
+        setTimeout(() => {
+          btn.textContent = origText;
+          btn.style.background = accentColor;
+        }, 2000);
+      }
+    }
+
     // Handle Claude-generated action buttons (class="action-btn")
     el.querySelectorAll('a.action-btn, [data-action]').forEach(btn => {
       btn.style.cursor = 'pointer';
       btn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const title = btn.getAttribute('data-title') || btn.closest('div')?.textContent?.slice(0, 100) || '';
-        const actionType = btn.getAttribute('data-action') || 'draft-email';
+        const title = btn.getAttribute('data-title') || '';
         const actionText = btn.closest('div')?.textContent?.replace(btn.textContent, '').replace(/^\d+\.\s*/, '').trim() || title;
-        if (actionType === 'draft-email') {
-          const prefill = `From today's intelligence brief, draft an email for this action:\n\n${actionText}\n\nGenerate the email draft immediately. Format it as:\nTo: [best contact email]\nSubject: [subject line]\n\n[email body]\n\nDo not explain - just write the draft.`;
-          localStorage.setItem('coppice_chat_prefill', prefill);
-          window.location.hash = 'hivemind-chat';
-        } else {
-          const prefill = `From today's intelligence brief:\n\n${actionText}\n\nBefore doing anything, explain what you would do for this task. I'll confirm before you execute.`;
-          localStorage.setItem('coppice_chat_prefill', prefill);
-          window.location.hash = 'hivemind-chat';
-        }
-        onClose();
+        createNewsletterDraft(btn, title, actionText);
       };
     });
 
@@ -1989,6 +2023,9 @@ function NewsletterViewerModal({ newsletter, onClose }) {
       }
       const text = div.textContent?.trim() || '';
       if (!text) return;
+      // Extract title from the strong tag
+      const strongEl = div.querySelector('strong');
+      const actionTitle = strongEl ? strongEl.textContent.trim() : text.slice(0, 80);
       const btn = document.createElement('button');
       btn.className = 'newsletter-action-btn';
       btn.textContent = 'Draft Email';
@@ -1998,10 +2035,7 @@ function NewsletterViewerModal({ newsletter, onClose }) {
       btn.onclick = (e) => {
         e.stopPropagation();
         const actionText = text.replace(/^Draft Email\s*/, '').replace(/^Start task in chat\s*/, '').replace(/^\d+\.\s*/, '').trim();
-        const prefill = `From today's intelligence brief, draft an email for this action:\n\n${actionText}\n\nGenerate the email draft immediately. Format it as:\nTo: [best contact email]\nSubject: [subject line]\n\n[email body]\n\nDo not explain - just write the draft.`;
-        localStorage.setItem('coppice_chat_prefill', prefill);
-        window.location.hash = 'hivemind-chat';
-        onClose();
+        createNewsletterDraft(btn, actionTitle, actionText);
       };
       div.appendChild(btn);
     });

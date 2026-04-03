@@ -805,6 +805,143 @@ router.post('/:id/rewrite', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /newsletter-action - Create email draft from newsletter recommended action
+// Extracts company/contact info, does Apollo lookup, generates draft via Claude
+// ---------------------------------------------------------------------------
+router.post('/newsletter-action', async (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'tenantId required' });
+
+    const { actionTitle, actionText } = req.body;
+    if (!actionText) return res.status(400).json({ error: 'actionText required' });
+
+    // Step 1: Use Claude to extract company name + generate email draft
+    const { chat } = await import('../services/chatService.js');
+    const extractPrompt = `From this newsletter recommended action, extract the target company and generate a cold outreach email draft.
+
+ACTION:
+${actionTitle ? actionTitle + '\n' : ''}${actionText}
+
+Return ONLY a JSON object with these fields:
+{
+  "companyName": "the target company to contact",
+  "contactRole": "the ideal role to contact (e.g. VP Preconstruction, Director of Estimating)",
+  "subject": "email subject line",
+  "body": "the full email body - professional, concise, focused on the specific opportunity mentioned in the action. Use DACP Construction's perspective as a concrete subcontractor. Do NOT use em dashes. End with a simple call to action."
+}
+
+Return ONLY valid JSON, no commentary or markdown.`;
+
+    const extractResult = await chat(tenantId, 'hivemind', 'system', extractPrompt, null, { helpMode: false });
+    const responseText = extractResult.response || '';
+
+    let parsed;
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+    } catch { parsed = null; }
+
+    if (!parsed) {
+      // Fallback: create draft with raw action text
+      parsed = {
+        companyName: '',
+        contactRole: '',
+        subject: actionTitle || 'Following up on opportunity',
+        body: `Hi,\n\nI came across your project and wanted to reach out.\n\n${actionText}\n\nWould you be open to a brief conversation about how DACP Construction can support this project?\n\nBest regards`,
+      };
+    }
+
+    // Step 2: Apollo contact lookup (if we have credits and a company name)
+    let contactEmail = '';
+    let contactName = '';
+    let contactInfo = null;
+    if (parsed.companyName) {
+      try {
+        const { apolloBulkMatch } = await import('../services/leadEngine.js');
+        // Try to find someone at the company via Apollo organization search
+        const apolloKey = process.env.APOLLO_API_KEY;
+        if (apolloKey) {
+          // Search Apollo for people at this company
+          const searchRes = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
+            method: 'POST',
+            headers: { 'x-api-key': apolloKey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              organization_name: parsed.companyName,
+              person_titles: [parsed.contactRole || 'VP Preconstruction', 'Director of Estimating', 'Preconstruction Manager', 'VP Operations', 'Business Development'],
+              per_page: 3,
+            }),
+          });
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            const people = searchData.people || [];
+            if (people.length > 0) {
+              const best = people[0];
+              contactEmail = best.email || '';
+              contactName = [best.first_name, best.last_name].filter(Boolean).join(' ');
+              contactInfo = {
+                name: contactName,
+                email: contactEmail,
+                title: best.title || '',
+                phone: best.phone_number || '',
+                linkedin: best.linkedin_url || '',
+                org: best.organization?.name || parsed.companyName,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Newsletter Action] Apollo lookup failed:', err.message);
+        // Continue without contact - user can fill in manually
+      }
+    }
+
+    // Step 3: If we found a contact, personalize the email
+    if (contactName && parsed.body) {
+      parsed.body = parsed.body.replace(/^Hi,?\s*/i, `Hi ${contactName.split(' ')[0]},\n`);
+    }
+
+    // Step 4: Create approval item
+    const { markdownToEmailHtml } = await import('../services/emailService.js');
+    const { getTenantEmailConfig } = await import('../cache/database.js');
+    const emailConfig = getTenantEmailConfig(tenantId);
+
+    const payload = {
+      to: contactEmail || '',
+      subject: parsed.subject,
+      body: parsed.body,
+      html: markdownToEmailHtml(parsed.body),
+      senderEmail: emailConfig?.senderEmail || '',
+      senderName: emailConfig?.senderName || '',
+      source: 'newsletter',
+      apolloContact: contactInfo,
+    };
+
+    const result = db.prepare(`
+      INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status, required_role)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', 'admin')
+    `).run(
+      tenantId,
+      'newsletter',
+      actionTitle || 'Newsletter Outreach Draft',
+      contactEmail ? `Email to ${contactName} at ${parsed.companyName}` : `Outreach to ${parsed.companyName || 'contact'}`,
+      'email_draft',
+      JSON.stringify(payload),
+    );
+
+    res.json({
+      success: true,
+      approvalId: result.lastInsertRowid,
+      contactFound: !!contactEmail,
+      contact: contactInfo,
+    });
+  } catch (err) {
+    console.error('[Newsletter Action] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Run seeds on import
 try {
   seedDemoApprovals();
