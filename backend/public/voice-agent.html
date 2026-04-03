@@ -308,10 +308,25 @@ class WavRecorder {
 
   async begin(deviceId) {
     if (this.processor) throw new Error('Already connected');
+    // Enumerate available audio devices for debugging
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+      console.log('[Coppice] Audio input devices:', audioInputs.length, audioInputs.map(d => `${d.label || 'unlabeled'} (${d.deviceId.slice(0,8)})`));
+    } catch (e) { console.warn('[Coppice] Device enumeration failed:', e.message); }
     const config = deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true };
     this.stream = await navigator.mediaDevices.getUserMedia(config);
+    const tracks = this.stream.getAudioTracks();
+    console.log('[Coppice] getUserMedia tracks:', tracks.length, tracks.map(t => `${t.label} enabled=${t.enabled} muted=${t.muted} readyState=${t.readyState}`));
+    // Monitor track state changes
+    if (tracks[0]) {
+      tracks[0].onended = () => console.warn('[Coppice] Audio track ENDED');
+      tracks[0].onmute = () => console.warn('[Coppice] Audio track MUTED');
+      tracks[0].onunmute = () => console.log('[Coppice] Audio track UNMUTED');
+    }
     const context = new AudioContext({ sampleRate: this.sampleRate });
     if (context.state === 'suspended') await context.resume();
+    console.log('[Coppice] Recorder AudioContext state:', context.state, 'sampleRate:', context.sampleRate);
     const source = context.createMediaStreamSource(this.stream);
     await context.audioWorklet.addModule(audioProcessorSrc);
     const processor = new AudioWorkletNode(context, 'audio_processor');
