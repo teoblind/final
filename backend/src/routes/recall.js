@@ -179,6 +179,41 @@ router.post('/webhook', (req, res) => {
 });
 
 /**
+ * Flush accumulated speech buffer - send to state machine + relay as one combined utterance.
+ * Called after 3s of silence from the same speaker, or when speaker changes.
+ */
+async function flushSpeechBuffer(botId, sb) {
+  sb.timer = null;
+  const text = sb.text.trim();
+  const speaker = sb.speaker;
+  sb.text = '';
+  sb.speaker = '';
+  if (!text) return;
+
+  const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
+  const decision = processUtterance(botId, speaker, text);
+
+  try {
+    if (decision.cancel) {
+      await fetch(`${relayUrl}/inject-text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: '', speaker, cancel: true }),
+      });
+      console.log(`[Recall] Cancelled bot response (conversation moved on)`);
+    }
+    await fetch(`${relayUrl}/inject-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, speaker, respond: decision.respond }),
+    });
+    console.log(`[Recall] ${decision.respond ? 'RESPOND' : 'context'}: "${text}" (${speaker})`);
+  } catch (e) {
+    console.warn(`[Recall] Failed to inject text to relay: ${e.message}`);
+  }
+}
+
+/**
  * POST /transcript-event - Real-time transcript webhook from Recall.ai
  * No auth - Recall.ai calls this directly.
  * Feeds both voice loop (audio response) and chat loop (text response).
@@ -218,43 +253,30 @@ router.post('/transcript-event', async (req, res) => {
       // Chat loop: text chat response (secondary)
       handleChatTranscriptEvent(botId, { data: transcriptPayload });
 
-      // Voice relay: conversation state machine decides when to respond
+      // Voice relay: debounce + conversation state machine
       const speaker = transcriptPayload.participant?.name || transcriptPayload.speaker || 'Unknown';
 
       // Self-echo filter: skip transcripts from the bot itself
       const isBotSpeaker = /\b(coppice|copice|copis|cop ice)\b/i.test(speaker) || speaker === 'Unknown';
       if (text && !isBotSpeaker) {
-        const dedupeKey = `${text.trim().toLowerCase().slice(0, 50)}`;
-        const now = Date.now();
-        if (!router._lastInjectText || router._lastInjectText.key !== dedupeKey || now - router._lastInjectText.time > 10000) {
-          router._lastInjectText = { key: dedupeKey, time: now };
-          const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
+        // Debounce: accumulate text from same speaker for 3s before deciding
+        // Prevents partial transcript chunks from triggering separate responses
+        if (!router._speechBuffer) router._speechBuffer = {};
+        const buf = router._speechBuffer;
 
-          // State machine decides: respond, stay silent, or cancel in-progress response
-          const decision = processUtterance(botId, speaker, text);
+        if (!buf[botId]) buf[botId] = { speaker: '', text: '', timer: null };
+        const sb = buf[botId];
 
-          try {
-            if (decision.cancel) {
-              // Cancel any in-progress response (conversation moved on or dismissal)
-              await fetch(`${relayUrl}/inject-text`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: '', speaker, cancel: true }),
-              });
-              console.log(`[Recall] Cancelled bot response (conversation moved on)`);
-            }
-            await fetch(`${relayUrl}/inject-text`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text, speaker, respond: decision.respond }),
-            });
-            console.log(`[Recall] ${decision.respond ? 'Respond' : 'Context'}: "${text}" (${speaker})`);
-          } catch (e) {
-            console.warn(`[Recall] Failed to inject text to relay: ${e.message}`);
-          }
-        } else {
-          console.log(`[Recall] Deduped inject-text: "${text}" (${speaker})`);
+        // If same speaker, accumulate. If different speaker, flush previous first.
+        if (sb.timer && sb.speaker !== speaker) {
+          clearTimeout(sb.timer);
+          flushSpeechBuffer(botId, sb);
         }
+
+        sb.speaker = speaker;
+        sb.text = sb.text ? `${sb.text} ${text}` : text;
+        if (sb.timer) clearTimeout(sb.timer);
+        sb.timer = setTimeout(() => flushSpeechBuffer(botId, sb), 3000);
       } else if (isBotSpeaker && text) {
         console.log(`[Recall] Skipped self-echo from "${speaker}": "${text.slice(0, 80)}"`);
       }
