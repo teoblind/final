@@ -276,7 +276,7 @@ router.post('/transcript-event', async (req, res) => {
         sb.speaker = speaker;
         sb.text = sb.text ? `${sb.text} ${text}` : text;
         if (sb.timer) clearTimeout(sb.timer);
-        sb.timer = setTimeout(() => flushSpeechBuffer(botId, sb), 3000);
+        sb.timer = setTimeout(() => flushSpeechBuffer(botId, sb), 2000);
       } else if (isBotSpeaker && text) {
         console.log(`[Recall] Skipped self-echo from "${speaker}": "${text.slice(0, 80)}"`);
       }
