@@ -18,10 +18,10 @@ const STATES = {
 };
 
 // Timers
-const LISTENING_TIMEOUT_MS = 12000;   // 12s in LISTENING before going IDLE
+const LISTENING_TIMEOUT_MS = 20000;   // 20s in LISTENING before going IDLE
 const HARD_CEILING_MS = 90000;        // 90s max engagement
 const COOLDOWN_MS = 5000;             // 5s cooldown after dismissal
-const INTERLOCUTOR_SILENCE_MS = 12000; // 12s without interlocutor speaking -> LISTENING
+const INTERLOCUTOR_SILENCE_MS = 30000; // 30s without interlocutor speaking -> LISTENING
 
 // Dismissal patterns - high confidence, from anyone
 const PRIMARY_DISMISSALS = [
