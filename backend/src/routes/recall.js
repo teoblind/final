@@ -137,29 +137,34 @@ router.post('/transcript-event', async (req, res) => {
       // Chat loop: text chat response (secondary)
       handleChatTranscriptEvent(botId, { data: transcriptPayload });
 
-      // Voice relay: inject transcript text for OpenAI Realtime response
-      // This bypasses the page's broken mic by feeding text directly to the relay
-      // Dedup: multiple bots in the same meeting each send transcript events
+      // Voice relay: inject transcript text for OpenAI Realtime
+      // All human speech goes as context; only wake-word triggers a response
       const speaker = transcriptPayload.participant?.name || transcriptPayload.speaker || 'Unknown';
-      if (text && /\b(coppice|copice|copis|cop ice)\b/i.test(text)) {
+
+      // Self-echo filter: skip transcripts from the bot itself
+      const isBotSpeaker = /\b(coppice|copice|copis|cop ice)\b/i.test(speaker) || speaker === 'Unknown';
+      if (text && !isBotSpeaker) {
         const dedupeKey = `${text.trim().toLowerCase().slice(0, 50)}`;
         const now = Date.now();
         if (!router._lastInjectText || router._lastInjectText.key !== dedupeKey || now - router._lastInjectText.time > 10000) {
           router._lastInjectText = { key: dedupeKey, time: now };
           const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
+          const isWakeWord = /\b(coppice|copice|copis|cop ice)\b/i.test(text);
           try {
             await fetch(`${relayUrl}/inject-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text, speaker }),
+              body: JSON.stringify({ text, speaker, respond: isWakeWord }),
             });
-            console.log(`[Recall] Injected wake-word text to relay: "${text}" (${speaker})`);
+            console.log(`[Recall] Injected text to relay (respond=${isWakeWord}): "${text}" (${speaker})`);
           } catch (e) {
             console.warn(`[Recall] Failed to inject text to relay: ${e.message}`);
           }
         } else {
           console.log(`[Recall] Deduped inject-text: "${text}" (${speaker})`);
         }
+      } else if (isBotSpeaker && text) {
+        console.log(`[Recall] Skipped self-echo from "${speaker}": "${text.slice(0, 80)}"`);
       }
     }
     res.sendStatus(200);

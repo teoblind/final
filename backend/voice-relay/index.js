@@ -90,6 +90,7 @@ function startSession(botId, instructions) {
     audioChunkCount: 0,
     totalBytesSent: 0,
     ready: false,
+    responding: false,  // true while generating a response
   };
 
   async function flushAudio() {
@@ -146,6 +147,11 @@ function startSession(botId, instructions) {
         console.log('[VoiceRelay] Session ready - waiting for inject-text');
         break;
 
+      case 'response.created':
+        session.responding = true;
+        console.log(`[VoiceRelay] ${event.type}`);
+        break;
+
       case 'response.audio.delta':
         session.audioChunkCount++;
         if (event.delta) {
@@ -155,6 +161,7 @@ function startSession(botId, instructions) {
         break;
 
       case 'response.done': {
+        session.responding = false;
         const pcmBytes = session.audioBuffer.length;
         const durationMs = Math.round(pcmBytes / 2 / 24000 * 1000);
         console.log(`[VoiceRelay] Response done (${session.audioChunkCount} chunks, ${pcmBytes}B PCM, ~${durationMs}ms)`);
@@ -173,7 +180,6 @@ function startSession(botId, instructions) {
 
       // Log other interesting events
       case 'conversation.item.created':
-      case 'response.created':
         console.log(`[VoiceRelay] ${event.type}`);
         break;
     }
@@ -218,13 +224,15 @@ const httpServer = createServer((req, res) => {
     return;
   }
 
-  // Inject transcript text -> create conversation item + trigger response
+  // Inject transcript text -> create conversation item + optionally trigger response
+  // respond=true: wake-word detected, generate audio reply
+  // respond=false: context only, add to conversation without generating reply
   if (req.method === 'POST' && req.url === '/inject-text') {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { text, speaker } = JSON.parse(body);
+        const { text, speaker, respond = true } = JSON.parse(body);
         if (!text) { res.writeHead(400); res.end('text required'); return; }
 
         const ws = activeSession?.openaiWs;
@@ -232,6 +240,15 @@ const httpServer = createServer((req, res) => {
           res.writeHead(503);
           res.end('no active session');
           return;
+        }
+
+        // If someone is talking while bot is responding, cancel current response
+        if (activeSession.responding && !respond) {
+          ws.send(JSON.stringify({ type: 'response.cancel' }));
+          activeSession.audioBuffer = Buffer.alloc(0);
+          activeSession.audioChunkCount = 0;
+          activeSession.responding = false;
+          console.log(`[VoiceRelay] Cancelled response - someone is speaking`);
         }
 
         const label = speaker ? `${speaker} said: "${text}"` : text;
@@ -243,8 +260,21 @@ const httpServer = createServer((req, res) => {
             content: [{ type: 'input_text', text: label }],
           },
         }));
-        ws.send(JSON.stringify({ type: 'response.create' }));
-        console.log(`[VoiceRelay] Injected: "${label}"`);
+
+        if (respond) {
+          // Cancel any in-progress response before starting new one
+          if (activeSession.responding) {
+            ws.send(JSON.stringify({ type: 'response.cancel' }));
+            activeSession.audioBuffer = Buffer.alloc(0);
+            activeSession.audioChunkCount = 0;
+            console.log(`[VoiceRelay] Cancelled previous response for new wake-word`);
+          }
+          ws.send(JSON.stringify({ type: 'response.create' }));
+          console.log(`[VoiceRelay] Injected + respond: "${label}"`);
+        } else {
+          console.log(`[VoiceRelay] Context only: "${label}"`);
+        }
+
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('ok');
       } catch (e) {
