@@ -44,6 +44,7 @@ import {
   getTranscript,
   getLocalBot,
   getRecording,
+  updateLocalBot,
 } from '../services/recallService.js';
 import { startChatLoop, stopChatLoop } from '../services/meetingChatLoop.js';
 import { startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
@@ -507,6 +508,11 @@ async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
       isVoiceBot,
       startTime: new Date().toISOString(),
     });
+
+    // Mark as calendar-managed (calendarPoll handles its own emails via processMeetingComplete)
+    // Also store inviter email as fallback
+    const inviterEmail = attendees.find(e => !e.match(/^agent@.*\.coppice\.ai$/)) || attendees[0];
+    updateLocalBot(bot.id, { inviterEmail, _calendarManaged: true });
 
     // For standard bots: start webhook-based voice loop (ElevenLabs TTS + Recall output_audio).
     // For voice bots: voice-agent.html handles voice via OpenAI Realtime, so skip the voice loop.
