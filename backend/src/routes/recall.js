@@ -136,6 +136,23 @@ router.post('/transcript-event', async (req, res) => {
 
       // Chat loop: text chat response (secondary)
       handleChatTranscriptEvent(botId, { data: transcriptPayload });
+
+      // Voice relay: inject transcript text for OpenAI Realtime response
+      // This bypasses the page's broken mic by feeding text directly to the relay
+      const speaker = transcriptPayload.participant?.name || transcriptPayload.speaker || 'Unknown';
+      if (text && /\b(coppice|copice|copis|cop ice)\b/i.test(text)) {
+        const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
+        try {
+          await fetch(`${relayUrl}/inject-text`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, speaker }),
+          });
+          console.log(`[Recall] Injected wake-word text to relay: "${text}" (${speaker})`);
+        } catch (e) {
+          console.warn(`[Recall] Failed to inject text to relay: ${e.message}`);
+        }
+      }
     }
     res.sendStatus(200);
   } catch (error) {

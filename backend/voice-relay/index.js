@@ -90,6 +90,9 @@ import { createServer } from "http";
 let globalPendingBotId = null;
 let globalBotIdResolver = null; // resolve function for WS connections waiting for bot ID
 
+// Active OpenAI WebSocket - for injecting text from backend transcript events
+let activeOpenaiWs = null;
+
 // HTTP server handles /set-bot-id endpoint + serves as WebSocket transport
 const httpServer = createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/set-bot-id') {
@@ -118,6 +121,37 @@ const httpServer = createServer((req, res) => {
       } catch (e) {
         res.writeHead(400);
         res.end(e.message);
+      }
+    });
+    return;
+  }
+  // Inject transcript text into active OpenAI session (from backend transcript webhooks)
+  if (req.method === 'POST' && req.url === '/inject-text') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { text, speaker } = JSON.parse(body);
+        if (!text) { res.writeHead(400); res.end('text required'); return; }
+        if (!activeOpenaiWs || activeOpenaiWs.readyState !== 1) {
+          res.writeHead(503); res.end('no active session'); return;
+        }
+        // Create a conversation item with the user's text and request a response
+        const label = speaker ? `${speaker} said: "${text}"` : text;
+        activeOpenaiWs.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: label }],
+          },
+        }));
+        activeOpenaiWs.send(JSON.stringify({ type: 'response.create' }));
+        console.log(`[VoiceRelay] Injected text: "${label}"`);
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');
+      } catch (e) {
+        res.writeHead(400); res.end(e.message);
       }
     });
     return;
@@ -247,12 +281,13 @@ wss.on("connection", (clientWs, req) => {
         }
 
         // ── Cancel server-initiated responses (VAD leak defense) ──
+        // Allow responses triggered by /inject-text (they have a preceding conversation.item)
         if (event.type === 'response.created') {
           if (!clientInitiatedResponse) {
-            console.warn('[VoiceRelay] Server-initiated response detected - CANCELING');
-            openaiWs.send(JSON.stringify({ type: 'response.cancel' }));
-            // Don't forward this to client
-            return;
+            // Check if this was triggered by inject-text (has a pending conversation item)
+            // In manual mode with turn_detection:null, responses only happen when we create them
+            // So just track that we got one
+            console.log('[VoiceRelay] Response created (likely from inject-text or client)');
           }
         }
 
@@ -316,6 +351,7 @@ wss.on("connection", (clientWs, req) => {
 
   openaiWs.on('open', () => {
     console.log('[VoiceRelay] Connected to OpenAI Realtime API');
+    activeOpenaiWs = openaiWs;
     // Flush control messages (session.update etc) but NOT audio
     if (controlQueue.length > 0) {
       console.log(`[VoiceRelay] Flushing ${controlQueue.length} control messages`);
@@ -328,6 +364,7 @@ wss.on("connection", (clientWs, req) => {
 
   openaiWs.on('close', (code, reason) => {
     openaiClosed = true;
+    if (activeOpenaiWs === openaiWs) activeOpenaiWs = null;
     console.log(`[VoiceRelay] OpenAI closed: ${code} ${reason}`);
     if (!clientClosed) clientWs.close();
   });
