@@ -4039,6 +4039,23 @@ function initDacpTablesSchema(targetDb) {
   `);
 
   targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS dacp_prequal_packages (
+      id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      gc_name TEXT NOT NULL,
+      gc_contact_name TEXT,
+      gc_contact_email TEXT,
+      status TEXT DEFAULT 'not_sent',
+      sent_date TEXT,
+      received_date TEXT,
+      expiry_date TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  targetDb.exec(`
     CREATE TABLE IF NOT EXISTS dacp_estimates (
       id TEXT PRIMARY KEY,
       tenant_id TEXT NOT NULL,
@@ -5008,6 +5025,23 @@ function initDacpSeedData(targetDb, tenantId) {
     console.log('DACP: Seeded 12 compliance items, 2 incidents');
   }
 
+  // ─── Seed pre-qualification packages (GC watchlist) ─────────────────────
+  const prequalCount = targetDb.prepare('SELECT COUNT(*) as c FROM dacp_prequal_packages WHERE tenant_id = ?').get(TENANT_SEED_ID);
+  if (prequalCount.c === 0) {
+    const TENANT_ID = TENANT_SEED_ID;
+    const insertPrequal = targetDb.prepare(`INSERT OR IGNORE INTO dacp_prequal_packages (id, tenant_id, gc_name, status) VALUES (?, ?, ?, 'not_sent')`);
+    const gcWatchlist = [
+      'Turner Construction', 'Renegade', 'JE Dunn', 'Hensel Phelps',
+      'McCarthy Building Companies', 'Skanska', 'Balfour Beatty', 'Rogers-O\'Brien',
+      'Manhattan Construction', 'Austin Commercial', 'Whiting-Turner', 'Brasfield & Gorrie',
+      'Granite Construction', 'DPR Construction', 'Primoris', 'Zachry Group',
+    ];
+    for (let i = 0; i < gcWatchlist.length; i++) {
+      insertPrequal.run(`PQ-${String(i + 1).padStart(3, '0')}`, TENANT_ID, gcWatchlist[i]);
+    }
+    console.log(`DACP: Seeded ${gcWatchlist.length} pre-qualification packages`);
+  }
+
   // ─── Lead Engine Seed Data ──────────────────────────────────────────────
   const leCount = targetDb.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get(SANGHA_TENANT_ID);
   if (leCount.c === 0) {
@@ -5635,6 +5669,36 @@ export function updateDacpBidDistribution(tenantId, distId, updates) {
   }
   values.push(distId, tenantId);
   return db.prepare(`UPDATE dacp_bid_distributions SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`).run(...values);
+}
+
+// ─── DACP Pre-Qualification Packages ───
+
+export function getDacpPrequalPackages(tenantId) {
+  return db.prepare('SELECT * FROM dacp_prequal_packages WHERE tenant_id = ? ORDER BY gc_name ASC').all(tenantId);
+}
+
+export function getDacpPrequalPackage(tenantId, id) {
+  return db.prepare('SELECT * FROM dacp_prequal_packages WHERE tenant_id = ? AND id = ?').get(tenantId, id);
+}
+
+export function createDacpPrequalPackage(pkg) {
+  return db.prepare(
+    `INSERT INTO dacp_prequal_packages (id, tenant_id, gc_name, gc_contact_name, gc_contact_email, status, sent_date, received_date, expiry_date, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(pkg.id, pkg.tenant_id, pkg.gc_name, pkg.gc_contact_name || null, pkg.gc_contact_email || null, pkg.status || 'not_sent', pkg.sent_date || null, pkg.received_date || null, pkg.expiry_date || null, pkg.notes || null);
+}
+
+export function updateDacpPrequalPackage(tenantId, id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [k, v] of Object.entries(updates)) {
+    fields.push(`${k} = ?`);
+    values.push(v);
+  }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(tenantId, id);
+  return db.prepare(`UPDATE dacp_prequal_packages SET ${fields.join(', ')} WHERE tenant_id = ? AND id = ?`).run(...values);
 }
 
 // ─── DACP Bond Program ───

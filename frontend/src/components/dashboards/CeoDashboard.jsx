@@ -3,7 +3,8 @@ import {
   AlertTriangle, BarChart3, Building2, CheckCircle, ChevronDown, ChevronRight,
   ChevronUp, ClipboardList, DollarSign, FileCheck, HardHat, Shield,
   TrendingUp, Truck, Users, XCircle, Megaphone, Clock, AlertCircle, Activity,
-  Mail, FileText, Calendar, ArrowRight, Eye, X
+  Mail, FileText, Calendar, ArrowRight, Eye, X,
+  Star, ArrowLeft, Briefcase
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -126,7 +127,11 @@ export default function CeoDashboard({ onNavigate }) {
   const [newsletters, setNewsletters] = useState(null);
   const [selectedNewsletter, setSelectedNewsletter] = useState(null);
   const [newsletterHtml, setNewsletterHtml] = useState('');
-  const [activeTab, setActiveTab] = useState('departments'); // departments | funnel | leads | newsletters
+  const [gcProfiles, setGcProfiles] = useState(null);
+  const [selectedGc, setSelectedGc] = useState(null);
+  const [gcDetail, setGcDetail] = useState(null);
+  const [gcDetailLoading, setGcDetailLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('departments'); // departments | funnel | leads | newsletters | gc-profiles
 
   const fetchDashboard = useCallback(() => {
     fetch(`${API_BASE}/v1/ceo/dashboard`, { headers: getAuthHeaders() })
@@ -165,14 +170,31 @@ export default function CeoDashboard({ onNavigate }) {
       .catch(console.error);
   }, []);
 
+  const fetchGcProfiles = useCallback(() => {
+    fetch(`${API_BASE}/v1/ceo/gc-profiles`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => setGcProfiles(d))
+      .catch(console.error);
+  }, []);
+
+  const openGcProfile = useCallback((gcName) => {
+    setSelectedGc(gcName);
+    setGcDetailLoading(true);
+    fetch(`${API_BASE}/v1/ceo/gc-profiles/${encodeURIComponent(gcName)}`, { headers: getAuthHeaders() })
+      .then(r => r.json())
+      .then(d => { setGcDetail(d); setGcDetailLoading(false); })
+      .catch(e => { console.error(e); setGcDetailLoading(false); });
+  }, []);
+
   useEffect(() => {
     fetchDashboard();
     fetchBidFunnel();
     fetchNewsletterLeads();
     fetchNewsletters();
+    fetchGcProfiles();
     const poll = setInterval(fetchDashboard, 15_000);
     return () => clearInterval(poll);
-  }, [fetchDashboard, fetchBidFunnel, fetchNewsletterLeads, fetchNewsletters]);
+  }, [fetchDashboard, fetchBidFunnel, fetchNewsletterLeads, fetchNewsletters, fetchGcProfiles]);
 
   const toggleExpand = (dept) => setExpanded(prev => ({ ...prev, [dept]: !prev[dept] }));
 
@@ -292,6 +314,7 @@ export default function CeoDashboard({ onNavigate }) {
         {[
           { id: 'departments', label: 'Departments', icon: Building2 },
           { id: 'funnel', label: 'Bid Funnel', icon: BarChart3 },
+          { id: 'gc-profiles', label: 'GC Profiles', icon: Briefcase },
           { id: 'leads', label: 'Newsletter Leads', icon: Mail },
           { id: 'newsletters', label: 'Newsletters', icon: FileText },
         ].map(tab => (
@@ -636,6 +659,308 @@ export default function CeoDashboard({ onNavigate }) {
                     ))}
                   </div>
                 </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* GC Profiles Tab */}
+      {activeTab === 'gc-profiles' && (
+        <div className="space-y-4">
+          {selectedGc ? (
+            // ─── GC Detail View ──────────────────────────────────────────
+            <div>
+              <button
+                onClick={() => { setSelectedGc(null); setGcDetail(null); }}
+                className="flex items-center gap-1.5 text-[11px] font-heading font-semibold text-terminal-muted hover:text-terminal-text mb-3"
+              >
+                <ArrowLeft size={12} /> Back to all GCs
+              </button>
+
+              {gcDetailLoading ? (
+                <div className="flex items-center justify-center py-12 text-terminal-muted text-sm">Loading GC profile...</div>
+              ) : gcDetail ? (
+                <div className="space-y-4">
+                  {/* GC Header */}
+                  <div className="bg-terminal-panel border border-terminal-border rounded-[14px] p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-[12px] bg-[#e8eef5] flex items-center justify-center">
+                          <Building2 size={20} className="text-[#1e3a5f]" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-[16px] font-heading font-bold text-terminal-text">{gcDetail.gc_name}</h2>
+                            {gcDetail.is_known_gc && (
+                              <span className="text-[9px] font-bold bg-[#fdf6e8] text-[#b8860b] px-2 py-0.5 rounded-full border border-[#f0e0b0]">
+                                <Star size={9} className="inline mr-0.5 -mt-px" />KNOWN GC
+                              </span>
+                            )}
+                          </div>
+                          {gcDetail.contact_emails?.length > 0 && (
+                            <div className="text-[11px] text-terminal-muted mt-0.5">
+                              {gcDetail.contact_emails.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Summary Stats Row */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                      <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                        <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Total Bids</div>
+                        <div className="text-lg font-display font-bold text-terminal-text tabular-nums">{gcDetail.summary.total_bids}</div>
+                      </div>
+                      <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                        <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Responded</div>
+                        <div className="text-lg font-display font-bold text-[#1e3a5f] tabular-nums">{gcDetail.summary.bids_responded}</div>
+                      </div>
+                      <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                        <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Awarded</div>
+                        <div className="text-lg font-display font-bold text-[#1a6b3c] tabular-nums">{gcDetail.summary.bids_awarded}</div>
+                      </div>
+                      <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                        <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Win Rate</div>
+                        <div className="text-lg font-display font-bold text-terminal-text tabular-nums">{gcDetail.summary.win_rate}%</div>
+                      </div>
+                      <div className="text-center p-3 bg-[#f5f4f0] rounded-[10px]">
+                        <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[0.5px] mb-1">Avg Bid Size</div>
+                        <div className="text-lg font-display font-bold text-terminal-text tabular-nums">{fmtDollars(gcDetail.summary.avg_bid_size)}</div>
+                      </div>
+                    </div>
+
+                    {/* Value Summary */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                      <div className="flex justify-between text-[11px] p-2">
+                        <span className="text-terminal-muted">Total estimate value</span>
+                        <span className="font-semibold text-terminal-text">{fmtDollars(gcDetail.summary.total_estimate_value)}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] p-2">
+                        <span className="text-terminal-muted">Total job value</span>
+                        <span className="font-semibold text-terminal-text">{fmtDollars(gcDetail.summary.total_job_value)}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] p-2">
+                        <span className="text-terminal-muted">Active jobs</span>
+                        <span className="font-semibold text-terminal-text">{gcDetail.summary.active_jobs}</span>
+                      </div>
+                      <div className="flex justify-between text-[11px] p-2">
+                        <span className="text-terminal-muted">Avg margin</span>
+                        <span className="font-semibold text-terminal-text">{gcDetail.summary.avg_margin > 0 ? `${gcDetail.summary.avg_margin.toFixed(1)}%` : '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bid History Table */}
+                  <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+                    <div className="px-5 py-3 border-b border-terminal-border">
+                      <h3 className="text-[13px] font-heading font-semibold text-terminal-text">Bid History</h3>
+                      <p className="text-[10px] text-terminal-muted mt-0.5">{gcDetail.bid_history?.length || 0} bid requests from this GC</p>
+                    </div>
+                    {gcDetail.bid_history?.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b border-terminal-border bg-[#f5f4f0]">
+                              <th className="text-left px-5 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Project</th>
+                              <th className="text-left px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Status</th>
+                              <th className="text-left px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Due Date</th>
+                              <th className="text-right px-5 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Est. Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {gcDetail.bid_history.map((bid, i) => (
+                              <tr key={i} className="border-b border-[#f0eeea] last:border-0 hover:bg-[#f5f4f0]/50">
+                                <td className="px-5 py-2.5">
+                                  <div className="font-semibold text-terminal-text truncate max-w-[300px]">{bid.subject || bid.project_name || 'Untitled'}</div>
+                                  {bid.from_name && <div className="text-[10px] text-terminal-muted">{bid.from_name}</div>}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                    bid.status === 'awarded' ? 'bg-emerald-100 text-emerald-700' :
+                                    bid.status === 'sent' ? 'bg-purple-100 text-purple-700' :
+                                    bid.status === 'estimated' ? 'bg-blue-100 text-blue-700' :
+                                    bid.status === 'new' ? 'bg-indigo-100 text-indigo-700' :
+                                    bid.status === 'reviewing' ? 'bg-amber-100 text-amber-700' :
+                                    bid.status === 'declined' || bid.status === 'lost' ? 'bg-red-100 text-red-700' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>{bid.status}</span>
+                                </td>
+                                <td className="px-3 py-2.5 text-terminal-muted">{bid.due_date || '-'}</td>
+                                <td className="px-5 py-2.5 text-right font-semibold text-terminal-text tabular-nums">
+                                  {bid.estimate_value ? fmtDollars(bid.estimate_value) : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="px-5 py-8 text-center text-terminal-muted text-sm">No bid requests from this GC.</div>
+                    )}
+                  </div>
+
+                  {/* Jobs Table */}
+                  <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+                    <div className="px-5 py-3 border-b border-terminal-border">
+                      <h3 className="text-[13px] font-heading font-semibold text-terminal-text">Jobs</h3>
+                      <p className="text-[10px] text-terminal-muted mt-0.5">{gcDetail.jobs?.length || 0} jobs with this GC</p>
+                    </div>
+                    {gcDetail.jobs?.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr className="border-b border-terminal-border bg-[#f5f4f0]">
+                              <th className="text-left px-5 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Project</th>
+                              <th className="text-left px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Type</th>
+                              <th className="text-left px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Status</th>
+                              <th className="text-right px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Bid Amount</th>
+                              <th className="text-right px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Margin</th>
+                              <th className="text-left px-5 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Dates</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {gcDetail.jobs.map((job, i) => (
+                              <tr key={i} className="border-b border-[#f0eeea] last:border-0 hover:bg-[#f5f4f0]/50">
+                                <td className="px-5 py-2.5">
+                                  <div className="font-semibold text-terminal-text truncate max-w-[250px]">{job.project_name || 'Untitled'}</div>
+                                  {job.location && <div className="text-[10px] text-terminal-muted">{job.location}</div>}
+                                </td>
+                                <td className="px-3 py-2.5 text-terminal-muted capitalize">{job.project_type || '-'}</td>
+                                <td className="px-3 py-2.5">
+                                  <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                    job.status === 'active' ? 'bg-blue-100 text-blue-700' :
+                                    job.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                                    job.status === 'on_hold' ? 'bg-amber-100 text-amber-700' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>{job.status}</span>
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-semibold text-terminal-text tabular-nums">
+                                  {job.bid_amount ? fmtDollars(job.bid_amount) : '-'}
+                                </td>
+                                <td className="px-3 py-2.5 text-right tabular-nums">
+                                  {job.margin_pct != null ? (
+                                    <span className={`font-semibold ${job.margin_pct >= 15 ? 'text-[#1a6b3c]' : job.margin_pct >= 8 ? 'text-terminal-text' : 'text-red-600'}`}>
+                                      {job.margin_pct.toFixed(1)}%
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                                <td className="px-5 py-2.5 text-terminal-muted text-[10px]">
+                                  {job.start_date && <div>Start: {job.start_date}</div>}
+                                  {job.end_date && <div>End: {job.end_date}</div>}
+                                  {!job.start_date && !job.end_date && '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="px-5 py-8 text-center text-terminal-muted text-sm">No jobs with this GC yet.</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-12 text-terminal-muted text-sm">GC profile not found.</div>
+              )}
+            </div>
+          ) : (
+            // ─── GC List View ────────────────────────────────────────────
+            <>
+              {!gcProfiles ? (
+                <div className="flex items-center justify-center py-12 text-terminal-muted text-sm">Loading GC profiles...</div>
+              ) : (
+                <>
+                  {/* Summary Row */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                      <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Total GCs</div>
+                      <div className="text-xl font-display font-bold text-terminal-text tabular-nums">{gcProfiles.total || 0}</div>
+                    </div>
+                    <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                      <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Known GCs</div>
+                      <div className="text-xl font-display font-bold text-[#b8860b] tabular-nums">
+                        {(gcProfiles.profiles || []).filter(p => p.is_known_gc).length}
+                      </div>
+                    </div>
+                    <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                      <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Total Bids</div>
+                      <div className="text-xl font-display font-bold text-terminal-text tabular-nums">
+                        {(gcProfiles.profiles || []).reduce((sum, p) => sum + p.total_bids, 0)}
+                      </div>
+                    </div>
+                    <div className="bg-terminal-panel border border-terminal-border rounded-[12px] p-4">
+                      <div className="text-[9px] font-heading font-bold text-terminal-muted uppercase tracking-[1px] mb-1">Total Value</div>
+                      <div className="text-xl font-display font-bold text-terminal-text tabular-nums">
+                        {fmtDollars((gcProfiles.profiles || []).reduce((sum, p) => sum + p.total_value, 0))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* GC Table */}
+                  <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden">
+                    <div className="px-5 py-3 border-b border-terminal-border">
+                      <h3 className="text-[13px] font-heading font-semibold text-terminal-text">General Contractors</h3>
+                      <p className="text-[10px] text-terminal-muted mt-0.5">Sorted by total bids received - click to view full profile</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="border-b border-terminal-border bg-[#f5f4f0]">
+                            <th className="text-left px-5 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">GC Name</th>
+                            <th className="text-right px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Bids</th>
+                            <th className="text-right px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Responded</th>
+                            <th className="text-right px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Awarded</th>
+                            <th className="text-right px-3 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Total Value</th>
+                            <th className="text-left px-5 py-2.5 font-heading font-bold text-terminal-muted uppercase tracking-[0.5px]">Last Bid</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(gcProfiles.profiles || []).map((gc, i) => (
+                            <tr
+                              key={i}
+                              onClick={() => openGcProfile(gc.gc_name)}
+                              className="border-b border-[#f0eeea] last:border-0 cursor-pointer hover:bg-[#f5f4f0] transition-colors"
+                            >
+                              <td className="px-5 py-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-terminal-text">{gc.gc_name}</span>
+                                  {gc.is_known_gc && (
+                                    <span className="text-[8px] font-bold bg-[#fdf6e8] text-[#b8860b] px-1.5 py-0.5 rounded-full border border-[#f0e0b0] shrink-0">
+                                      <Star size={8} className="inline mr-0.5 -mt-px" />KNOWN
+                                    </span>
+                                  )}
+                                </div>
+                                {gc.gc_email && <div className="text-[10px] text-terminal-muted">{gc.gc_email}</div>}
+                              </td>
+                              <td className="px-3 py-3 text-right font-semibold text-terminal-text tabular-nums">{gc.total_bids}</td>
+                              <td className="px-3 py-3 text-right tabular-nums text-[#1e3a5f] font-semibold">{gc.bids_responded}</td>
+                              <td className="px-3 py-3 text-right tabular-nums">
+                                {gc.bids_awarded > 0 ? (
+                                  <span className="font-semibold text-[#1a6b3c]">{gc.bids_awarded}</span>
+                                ) : (
+                                  <span className="text-terminal-muted">0</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-right font-semibold text-terminal-text tabular-nums">
+                                {gc.total_value > 0 ? fmtDollars(gc.total_value) : '-'}
+                              </td>
+                              <td className="px-5 py-3 text-terminal-muted">{gc.last_bid_date || '-'}</td>
+                            </tr>
+                          ))}
+                          {(!gcProfiles.profiles || gcProfiles.profiles.length === 0) && (
+                            <tr>
+                              <td colSpan={6} className="px-5 py-8 text-center text-terminal-muted text-sm">
+                                No GC data yet. GCs appear when bid requests are received.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
               )}
             </>
           )}

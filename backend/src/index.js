@@ -313,6 +313,14 @@ try {
   console.warn('Daily newsletter not started:', err.message);
 }
 
+// Follow-up automation for stale newsletter tasks (9 AM CT = 14 UTC daily)
+try {
+  const { startFollowUpAutomation } = await import('./jobs/followUpAutomation.js');
+  startFollowUpAutomation({ runAtHour: 14, intervalHours: 24 });
+} catch (err) {
+  console.warn('Follow-up automation not started:', err.message);
+}
+
 // Assignment executor - polls confirmed assignments and executes via CLI tunnel
 try {
   const { startAssignmentExecutor } = await import('./jobs/assignmentExecutor.js');
