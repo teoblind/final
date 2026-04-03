@@ -168,7 +168,7 @@ async function saveBotTranscript(botId) {
 /**
  * Send a Fireflies-style meeting recap email after a meeting ends.
  */
-async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, transcript, durationSeconds, inviterEmail, participants }) {
+export async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, transcript, durationSeconds, inviterEmail, participants, coppiceActions }) {
   if (!inviterEmail) {
     console.log(`[Recall] No inviter email for bot ${botId} - skipping recap email`);
     return;
@@ -361,6 +361,23 @@ async function sendMeetingRecapEmail({ botId, entryId, tenantId, meetingTitle, t
     <ul style="margin:0;padding-left:20px;">
       ${actionItemsHtml}
     </ul>
+  </div>
+  ` : ''}
+
+  <!-- Coppice Action Items -->
+  ${(coppiceActions && coppiceActions.length > 0) ? `
+  <div style="background:#FFFFFF;padding:24px 32px;border-bottom:1px solid #E5E7EB;">
+    <h2 style="margin:0 0 4px;font-size:18px;color:#111827;font-weight:600;">Coppice Action Items</h2>
+    <p style="margin:0 0 14px;color:#9CA3AF;font-size:13px;">Tasks the agent kicked off after this meeting</p>
+    ${coppiceActions.map(a => {
+      const statusColor = a.status === 'completed' ? '#059669' : a.status === 'awaiting_approval' ? '#D97706' : '#DC2626';
+      const statusLabel = a.status === 'completed' ? 'Done' : a.status === 'awaiting_approval' ? 'Awaiting approval' : 'Failed';
+      const statusIcon = a.status === 'completed' ? 'border-color:#059669;' : a.status === 'awaiting_approval' ? 'border-color:#D97706;' : 'border-color:#DC2626;';
+      return `<div style="background:#F9FAFB;border-radius:8px;padding:14px 18px;margin-bottom:8px;border-left:3px solid;${statusIcon}">
+        <p style="margin:0 0 4px;font-size:14px;color:#111827;font-weight:500;">${a.task}</p>
+        <p style="margin:0;font-size:12px;color:${statusColor};font-weight:500;">${statusLabel}${a.requestedBy ? ` - requested by ${a.requestedBy}` : ''}</p>
+      </div>`;
+    }).join('')}
   </div>
   ` : ''}
 

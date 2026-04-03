@@ -49,6 +49,7 @@ import {
 import { startChatLoop, stopChatLoop } from '../services/meetingChatLoop.js';
 import { startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
+import { sendMeetingRecapEmail } from '../routes/recall.js';
 import { extractMeetingCode, openForBotEntry, restoreAccess } from '../services/googleMeetService.js';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -805,10 +806,13 @@ ${transcript}`;
     console.log(`[CalendarPoll] Distributing "${meetingName}" to ${targetTenants.size} tenant(s): ${[...targetTenants].join(', ')}`);
 
     const recordedAt = new Date().toISOString();
+    const coppiceActions = []; // Collect agent-executed instructions for recap email
+    let primaryEntryId = null; // Track the inviting tenant's entry ID for recap email
 
     for (const tid of targetTenants) {
       await runWithTenant(tid, async () => {
         const entryId = `KN-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        if (tid === tenantId) primaryEntryId = entryId;
         const tdb = getTenantDb(tid);
 
         // Copy audio file to entry-specific path (so each entry has its own serving URL)
@@ -850,6 +854,11 @@ ${transcript}`;
             actionItemsOnly: tid !== tenantId,
           });
           console.log(`[CalendarPoll] Post-processing done for ${tid}: ${result.actionItemsInserted || 0} items, ${result.instructionsExecuted || 0} instructions`);
+
+          // Collect coppice actions from the inviting tenant for the recap email
+          if (tid === tenantId && result.executedInstructions?.length > 0) {
+            coppiceActions.push(...result.executedInstructions);
+          }
         } catch (err) {
           console.error(`[CalendarPoll] processMeetingComplete failed for ${tid}:`, err.message);
         }
@@ -859,6 +868,37 @@ ${transcript}`;
     // Clean up temp audio file (copies were made per-entry)
     if (localAudioPath && existsSync(localAudioPath)) {
       try { const { unlinkSync } = await import('fs'); unlinkSync(localAudioPath); } catch {}
+    }
+
+    // Send branded recap email to the person who invited the bot
+    const inviterEmail = attendees.find(e => !e.match(/^agent@.*\.coppice\.ai$/)) || attendees[0];
+    if (inviterEmail) {
+      try {
+        // Build transcript array format expected by sendMeetingRecapEmail
+        const transcriptArr = segments.map(s => ({
+          speaker: s.speaker || 'Unknown',
+          text: (s.text || '').trim(),
+        })).filter(s => s.text);
+
+        const meetingDuration = segments.length > 1
+          ? Math.round(((segments[segments.length - 1]?.end_time || segments[segments.length - 1]?.start_time || 0)
+            - (segments[0]?.start_time || 0)))
+          : 0;
+
+        await sendMeetingRecapEmail({
+          botId,
+          entryId: primaryEntryId,
+          tenantId,
+          meetingTitle: meetingName,
+          transcript: transcriptArr,
+          durationSeconds: meetingDuration,
+          inviterEmail,
+          participants: attendees.filter(e => !e.match(/^agent@.*\.coppice\.ai$/)),
+          coppiceActions,
+        });
+      } catch (emailErr) {
+        console.error(`[CalendarPoll] Recap email failed:`, emailErr.message);
+      }
     }
 
     console.log(`[CalendarPoll] Meeting processed: "${meetingName}" -> ${[...targetTenants].join(', ')}`);

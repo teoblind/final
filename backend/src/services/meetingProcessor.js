@@ -267,15 +267,18 @@ export async function processMeetingComplete({
 
   // 4. Extract and execute agent-directed instructions (skip for non-inviting tenants)
   let instructionsExecuted = 0;
+  let executedInstructions = []; // list of { task, context, requestedBy, status }
   if (!actionItemsOnly) {
     try {
-      instructionsExecuted = await executeAgentInstructions({
+      const instrResult = await executeAgentInstructions({
         tenantId,
         meetingTitle,
         transcript,
         summary: result.meeting_summary || summary,
         attendees,
       });
+      instructionsExecuted = instrResult.count;
+      executedInstructions = instrResult.instructions || [];
     } catch (err) {
       console.error(`[MeetingProcessor] Instruction execution failed:`, err.message);
     }
@@ -299,6 +302,7 @@ export async function processMeetingComplete({
     attendeeTasks: result.attendee_tasks,
     actionItemsInserted: itemCount,
     instructionsExecuted,
+    executedInstructions,
   };
 }
 
@@ -343,6 +347,7 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
 
   if (agentMode === 'copilot') {
     // Create approval items for each instruction instead of executing
+    const copilotInstructions = [];
     for (const instruction of instructions) {
       db.prepare(`
         INSERT INTO approval_items (tenant_id, agent_id, title, description, type, payload_json, status)
@@ -356,6 +361,7 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
           tenantId, agentId, userId: 'meeting-bot',
         }),
       );
+      copilotInstructions.push({ ...instruction, status: 'awaiting_approval' });
     }
     console.log(`[MeetingProcessor] Copilot mode - created ${instructions.length} approval item(s)`);
     insertActivity({
@@ -365,11 +371,12 @@ async function executeAgentInstructions({ tenantId, meetingTitle, transcript, su
       detailJson: JSON.stringify({ instructions, meetingTitle }),
       sourceType: 'meeting', agentId: 'meetings',
     });
-    return instructions.length;
+    return { count: instructions.length, instructions: copilotInstructions };
   }
 
   // Autonomous mode - execute directly via CLI tunnel (with chat() fallback for tool use)
   let executed = 0;
+  const executedList = [];
 
   for (const instruction of instructions) {
     try {
@@ -409,9 +416,11 @@ Execute this instruction now. If it involves sending an email, creating a docume
       });
 
       executed++;
-      console.log(`[MeetingProcessor] ✓ Instruction executed: "${instruction.task.slice(0, 60)}"`);
+      executedList.push({ ...instruction, status: 'completed' });
+      console.log(`[MeetingProcessor] Instruction executed: "${instruction.task.slice(0, 60)}"`);
     } catch (err) {
       console.error(`[MeetingProcessor] Instruction failed: "${instruction.task}" - ${err.message}`);
+      executedList.push({ ...instruction, status: 'failed', error: err.message });
       insertActivity({
         tenantId,
         type: 'alert',
@@ -424,7 +433,7 @@ Execute this instruction now. If it involves sending an email, creating a docume
     }
   }
 
-  return executed;
+  return { count: executed, instructions: executedList };
 }
 
 /**
