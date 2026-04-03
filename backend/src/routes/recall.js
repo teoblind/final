@@ -138,7 +138,7 @@ router.post('/transcript-event', async (req, res) => {
       handleChatTranscriptEvent(botId, { data: transcriptPayload });
 
       // Voice relay: inject transcript text for OpenAI Realtime
-      // All human speech goes as context; only wake-word triggers a response
+      // Wake word starts a 60s conversation window where all speech triggers responses
       const speaker = transcriptPayload.participant?.name || transcriptPayload.speaker || 'Unknown';
 
       // Self-echo filter: skip transcripts from the bot itself
@@ -150,13 +150,27 @@ router.post('/transcript-event', async (req, res) => {
           router._lastInjectText = { key: dedupeKey, time: now };
           const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
           const isWakeWord = /\b(coppice|copice|copis|cop ice)\b/i.test(text);
+
+          // Conversation window: 60s after wake word, all speech triggers responses
+          const CONVO_WINDOW_MS = 60000;
+          if (isWakeWord) {
+            router._lastWakeWordTime = now;
+          }
+          const inConvoWindow = router._lastWakeWordTime && (now - router._lastWakeWordTime < CONVO_WINDOW_MS);
+          const shouldRespond = isWakeWord || inConvoWindow;
+
+          // Reset window timer on each interaction so it stays open during active conversation
+          if (shouldRespond && !isWakeWord) {
+            router._lastWakeWordTime = now;
+          }
+
           try {
             await fetch(`${relayUrl}/inject-text`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text, speaker, respond: isWakeWord }),
+              body: JSON.stringify({ text, speaker, respond: shouldRespond }),
             });
-            console.log(`[Recall] Injected text to relay (respond=${isWakeWord}): "${text}" (${speaker})`);
+            console.log(`[Recall] Injected text to relay (respond=${shouldRespond}, wake=${isWakeWord}, window=${inConvoWindow}): "${text}" (${speaker})`);
           } catch (e) {
             console.warn(`[Recall] Failed to inject text to relay: ${e.message}`);
           }
