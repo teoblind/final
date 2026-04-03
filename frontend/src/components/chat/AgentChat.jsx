@@ -1125,6 +1125,11 @@ function CallPanel({ agentDef, onClose }) {
   const timerRef = useRef(null);
   const conversationRef = useRef(null);
 
+  // Refs to avoid stale closures in speech recognition callbacks
+  const callStateRef = useRef(callState);
+  const voicePhaseRef = useRef('listening');
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
+
   useEffect(() => {
     if (callState === 'connected') {
       timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
@@ -1179,7 +1184,9 @@ function CallPanel({ agentDef, onClose }) {
 
       recognition.onstart = () => {
         setCallState('connected');
+        callStateRef.current = 'connected';
         setVoicePhase('listening');
+        voicePhaseRef.current = 'listening';
       };
 
       recognition.onresult = (event) => {
@@ -1190,14 +1197,17 @@ function CallPanel({ agentDef, onClose }) {
         // Check if final result
         if (results.some(r => r.isFinal)) {
           setVoicePhase('thinking');
+          voicePhaseRef.current = 'thinking';
           sendToAgent(text);
         }
       };
 
       recognition.onerror = (event) => {
         if (event.error === 'no-speech') {
-          // Restart listening
-          try { recognition.start(); } catch {}
+          // Restart listening if still connected
+          if (callStateRef.current === 'connected' && voicePhaseRef.current === 'listening') {
+            try { recognition.start(); } catch {}
+          }
           return;
         }
         if (event.error === 'aborted') return; // Intentional abort
@@ -1213,8 +1223,8 @@ function CallPanel({ agentDef, onClose }) {
       };
 
       recognition.onend = () => {
-        // Only restart if still in listening phase
-        if (voicePhase === 'listening' && callState === 'connected') {
+        // Use refs to get current values (not stale closure values)
+        if (voicePhaseRef.current === 'listening' && callStateRef.current === 'connected') {
           try { recognition.start(); } catch {}
         }
       };
@@ -1276,8 +1286,9 @@ function CallPanel({ agentDef, onClose }) {
       }
 
       // Speak the response
-      if (agentResponse && callState === 'connected') {
+      if (agentResponse && callStateRef.current === 'connected') {
         setVoicePhase('speaking');
+        voicePhaseRef.current = 'speaking';
         await speakText(agentResponse);
       }
     } catch (err) {
@@ -1287,8 +1298,9 @@ function CallPanel({ agentDef, onClose }) {
     }
 
     // Resume listening
-    if (callState === 'connected') {
+    if (callStateRef.current === 'connected') {
       setVoicePhase('listening');
+      voicePhaseRef.current = 'listening';
       setTranscript('');
       restartListening();
     }
@@ -1315,12 +1327,14 @@ function CallPanel({ agentDef, onClose }) {
   };
 
   const restartListening = () => {
-    if (recognitionRef.current && callState === 'connected') {
+    if (recognitionRef.current && callStateRef.current === 'connected') {
       try { recognitionRef.current.start(); } catch {}
     }
   };
 
   const endVoiceChat = async () => {
+    callStateRef.current = 'ended';
+    voicePhaseRef.current = 'listening';
     window.speechSynthesis.cancel();
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
@@ -1331,6 +1345,7 @@ function CallPanel({ agentDef, onClose }) {
     setCallState('ended');
     setVoicePhase('listening');
     setTimeout(() => {
+      callStateRef.current = 'idle';
       setCallState('idle');
       setDuration(0);
       setTranscript('');

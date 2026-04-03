@@ -20,6 +20,7 @@ import {
   removeBot,
   getBotStatus,
   getTranscript,
+  getRecording,
   sendChatMessage,
   getLocalBot,
   updateLocalBot,
@@ -27,6 +28,9 @@ import {
   removeLocalBot,
   listActiveBots,
 } from '../services/recallService.js';
+import { createWriteStream } from 'fs';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { startChatLoop, stopChatLoop, handleChatTranscriptEvent } from '../services/meetingChatLoop.js';
 import { handleTranscriptEvent, startVoiceLoop, stopVoiceLoop } from '../services/meetingVoiceLoop.js';
 import { getMeetingRoomByBot, addTranscript } from '../services/meetingRoomService.js';
@@ -111,6 +115,30 @@ async function saveBotTranscript(botId) {
     );
 
     console.log(`[Recall] Saved transcript for bot ${botId}: "${meetingTitle}" (${bot.transcript.length} segments, ${transcriptText.split(/\s+/).length} words)`);
+
+    // Download audio recording from Recall.ai (async, don't block)
+    (async () => {
+      try {
+        // Wait a few seconds for Recall to finalize recording
+        await new Promise(r => setTimeout(r, 10000));
+        const recording = await getRecording(botId);
+        const downloadUrl = recording?.audioUrl || recording?.videoUrl;
+        if (downloadUrl) {
+          const audioPath = join(recallAudioDir, `${id}.mp3`);
+          const resp = await fetch(downloadUrl);
+          if (resp.ok) {
+            await pipeline(Readable.fromWeb(resp.body), createWriteStream(audioPath));
+            const audioUrl = `/api/v1/knowledge/audio/${id}`;
+            db.prepare('UPDATE knowledge_entries SET audio_url = ? WHERE id = ?').run(audioUrl, id);
+            console.log(`[Recall] Audio downloaded for "${meetingTitle}" (${id})`);
+          }
+        } else {
+          console.log(`[Recall] No recording available yet for bot ${botId}`);
+        }
+      } catch (e) {
+        console.warn(`[Recall] Audio download failed for ${botId}: ${e.message}`);
+      }
+    })();
 
     // Trigger async AI processing
     try {
