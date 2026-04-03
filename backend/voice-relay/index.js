@@ -183,7 +183,6 @@ wss.on("connection", (clientWs, req) => {
   // ── Recall.ai output_audio: buffer PCM from OpenAI, flush as MP3 ──
   let recallBotId = null;
   let audioOutputBuffer = Buffer.alloc(0);
-  let audioFlushTimer = null;
   let totalAudioBytesSent = 0;
 
   // Get bot ID - either already pending from HTTP POST, or wait for it
@@ -293,10 +292,10 @@ wss.on("connection", (clientWs, req) => {
 
         if (event.type === 'response.done') {
           clientInitiatedResponse = false;
-          console.log(`[VoiceRelay] Response complete (${audioOutCount} audio chunks)`);
+          const bufferedBytes = audioOutputBuffer.length;
+          console.log(`[VoiceRelay] Response complete (${audioOutCount} audio chunks, ${bufferedBytes}B PCM buffered)`);
           audioOutCount = 0;
-          // Flush any remaining buffered audio
-          clearTimeout(audioFlushTimer);
+          // Flush entire response as one MP3 - no partial sends
           flushAudioToRecall();
         }
 
@@ -314,12 +313,10 @@ wss.on("connection", (clientWs, req) => {
         // ── Intercept audio for Recall.ai output_audio ──
         if (event.type === 'response.audio.delta') {
           audioOutCount++;
-          // Buffer PCM for output_audio API (the real audio path)
+          // Buffer ALL PCM - flush only on response.done (no timer, no partial sends)
           if (event.delta && recallBotId && RECALL_API_KEY) {
             const pcm = Buffer.from(event.delta, 'base64');
             audioOutputBuffer = Buffer.concat([audioOutputBuffer, pcm]);
-            clearTimeout(audioFlushTimer);
-            audioFlushTimer = setTimeout(() => flushAudioToRecall(), 300);
           }
         }
 
@@ -436,7 +433,6 @@ wss.on("connection", (clientWs, req) => {
 
   clientWs.on("close", () => {
     clientClosed = true;
-    clearTimeout(audioFlushTimer);
     // Flush any remaining audio before closing
     flushAudioToRecall();
     console.log(`[VoiceRelay] Client disconnected (audio in: ${audioInCount}, audio out: ${audioOutCount}, recall bytes: ${totalAudioBytesSent})`);

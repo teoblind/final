@@ -208,7 +208,7 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     console.log(`[Recall] Voice session ${sessionId}: ${instructions.length} chars of instructions`);
   } catch (e) { console.warn('[Recall] Failed to build voice instructions:', e.message); }
 
-  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}&sid=${sessionId}`;
+  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}&sid=${sessionId}&_v=${Date.now()}`;
 
   // Detect platform for variant selection
   const isZoom = meetingUrl.includes('zoom.us');

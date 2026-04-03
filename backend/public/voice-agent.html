@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light only">
 <title>Coppice</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#ffffff;color:#1e3a5f;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden}
+body{background:#ffffff;color:#1e3a5f;color-scheme:light;font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden}
 .container{text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px}
-.avatar{width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,0.2)}
+.avatar{width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid rgba(30,58,95,0.15)}
 .logo{font-size:16px;font-weight:500;letter-spacing:3px;text-transform:uppercase;opacity:0.7}
 .status{font-size:11px;opacity:0.4;letter-spacing:1px}
 </style>
@@ -17,499 +18,28 @@ body{background:#ffffff;color:#1e3a5f;font-family:-apple-system,system-ui,sans-s
 <div class="container">
   <img class="avatar" src="/assets/coppice-bot-avatar.jpg" onerror="this.style.display='none'" />
   <div class="logo">coppice</div>
-  <div class="status">listening</div>
+  <div class="status">connecting...</div>
 </div>
 <script>
 // ============================================================
-// Coppice Voice Agent v2 — Using Recall.ai demo's proven wavtools
-// Architecture: Mic → WavRecorder → WebSocket → Relay → OpenAI Realtime API
-//              OpenAI → Relay → WebSocket → WavStreamPlayer → Meeting audio
+// Coppice Voice Agent v3 - Transcript-driven (no tab audio)
+//
+// Audio INPUT:  Recall transcript webhooks -> backend wake word -> relay /inject-text
+// Audio OUTPUT: Relay -> OpenAI Realtime -> output_audio API -> Recall -> meeting
+//
+// This page: white visual display + WebSocket trigger for relay <-> OpenAI
+// NO mic capture, NO audio playback (prevents "always unmuted" issue)
 // ============================================================
 
-// ============================================================
-// WORKLET: Audio Processor (recording) — from openai/realtime-api-beta
-// ============================================================
-const AudioProcessorWorklet = `
-class AudioProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.port.onmessage = this.receive.bind(this);
-    this.initialize();
-  }
-  initialize() {
-    this.foundAudio = false;
-    this.recording = false;
-    this.chunks = [];
-  }
-  readChannelData(chunks, channel = -1, maxChannels = 9) {
-    let channelLimit;
-    if (channel !== -1) {
-      if (chunks[0] && chunks[0].length - 1 < channel) {
-        throw new Error('Channel ' + channel + ' out of range: max ' + chunks[0].length);
-      }
-      channelLimit = channel + 1;
-    } else {
-      channel = 0;
-      channelLimit = Math.min(chunks[0] ? chunks[0].length : 1, maxChannels);
-    }
-    const channels = [];
-    for (let n = channel; n < channelLimit; n++) {
-      const length = chunks.reduce((sum, chunk) => sum + chunk[n].length, 0);
-      const buffers = chunks.map((chunk) => chunk[n]);
-      const result = new Float32Array(length);
-      let offset = 0;
-      for (let i = 0; i < buffers.length; i++) {
-        result.set(buffers[i], offset);
-        offset += buffers[i].length;
-      }
-      channels[n] = result;
-    }
-    return channels;
-  }
-  formatAudioData(channels) {
-    if (channels.length === 1) {
-      return { float32Array: channels[0].slice(), meanValues: channels[0].slice() };
-    }
-    const float32Array = new Float32Array(channels[0].length * channels.length);
-    const meanValues = new Float32Array(channels[0].length);
-    for (let i = 0; i < channels[0].length; i++) {
-      const offset = i * channels.length;
-      let meanValue = 0;
-      for (let n = 0; n < channels.length; n++) {
-        float32Array[offset + n] = channels[n][i];
-        meanValue += channels[n][i];
-      }
-      meanValues[i] = meanValue / channels.length;
-    }
-    return { float32Array, meanValues };
-  }
-  floatTo16BitPCM(float32Array) {
-    const buffer = new ArrayBuffer(float32Array.length * 2);
-    const view = new DataView(buffer);
-    let offset = 0;
-    for (let i = 0; i < float32Array.length; i++, offset += 2) {
-      let s = Math.max(-1, Math.min(1, float32Array[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-    }
-    return buffer;
-  }
-  getValues(channel = -1) {
-    const channels = this.readChannelData(this.chunks, channel);
-    const { meanValues } = this.formatAudioData(channels);
-    return { meanValues, channels };
-  }
-  export() {
-    const channels = this.readChannelData(this.chunks);
-    const { float32Array, meanValues } = this.formatAudioData(channels);
-    const audioData = this.floatTo16BitPCM(float32Array);
-    return { meanValues, audio: { bitsPerSample: 16, channels, data: audioData } };
-  }
-  receive(e) {
-    const { event, id } = e.data;
-    let receiptData = {};
-    switch (event) {
-      case 'start': this.recording = true; break;
-      case 'stop': this.recording = false; break;
-      case 'clear': this.initialize(); break;
-      case 'export': receiptData = this.export(); break;
-      case 'read': receiptData = this.getValues(); break;
-    }
-    this.port.postMessage({ event: 'receipt', id, data: receiptData });
-  }
-  sendChunk(chunk) {
-    const channels = this.readChannelData([chunk]);
-    const { float32Array, meanValues } = this.formatAudioData(channels);
-    const rawAudioData = this.floatTo16BitPCM(float32Array);
-    const monoAudioData = this.floatTo16BitPCM(meanValues);
-    this.port.postMessage({ event: 'chunk', data: { mono: monoAudioData, raw: rawAudioData } });
-  }
-  process(inputList, outputList) {
-    const sourceLimit = Math.min(inputList.length, outputList.length);
-    for (let inputNum = 0; inputNum < sourceLimit; inputNum++) {
-      const input = inputList[inputNum];
-      const output = outputList[inputNum];
-      const channelCount = Math.min(input.length, output.length);
-      for (let channelNum = 0; channelNum < channelCount; channelNum++) {
-        input[channelNum].forEach((sample, i) => { output[channelNum][i] = sample; });
-      }
-    }
-    const inputs = inputList[0];
-    let sliceIndex = 0;
-    if (!this.foundAudio) {
-      for (const channel of inputs) {
-        sliceIndex = 0;
-        if (this.foundAudio) break;
-        if (channel) {
-          for (const value of channel) {
-            if (value !== 0) { this.foundAudio = true; break; }
-            else sliceIndex++;
-          }
-        }
-      }
-    }
-    if (inputs && inputs[0] && this.foundAudio && this.recording) {
-      const chunk = inputs.map((input) => input.slice(sliceIndex));
-      this.chunks.push(chunk);
-      this.sendChunk(chunk);
-    }
-    return true;
-  }
-}
-registerProcessor('audio_processor', AudioProcessor);
-`;
-
-// ============================================================
-// WORKLET: Stream Processor (playback) — from openai/realtime-api-beta
-// ============================================================
-const StreamProcessorWorklet = `
-class StreamProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.hasStarted = false;
-    this.hasInterrupted = false;
-    this.outputBuffers = [];
-    this.bufferLength = 128;
-    this.write = { buffer: new Float32Array(this.bufferLength), trackId: null };
-    this.writeOffset = 0;
-    this.trackSampleOffsets = {};
-    this.silenceFrames = 0;
-    // At 24kHz with 128-sample frames, 375 frames = ~2 seconds of silence.
-    // After 2s of no new audio data, we consider the response truly complete.
-    this.maxSilenceFrames = 375;
-    this.port.onmessage = (event) => {
-      if (!event.data) return;
-      const payload = event.data;
-      if (payload.event === 'write') {
-        const int16Array = payload.buffer;
-        const float32Array = new Float32Array(int16Array.length);
-        for (let i = 0; i < int16Array.length; i++) {
-          float32Array[i] = int16Array[i] / 0x8000;
-        }
-        this.writeData(float32Array, payload.trackId);
-      } else if (payload.event === 'offset' || payload.event === 'interrupt') {
-        const requestId = payload.requestId;
-        const trackId = this.write.trackId;
-        const offset = this.trackSampleOffsets[trackId] || 0;
-        this.port.postMessage({ event: 'offset', requestId, trackId, offset });
-        if (payload.event === 'interrupt') {
-          this.hasInterrupted = true;
-        }
-      }
-    };
-  }
-  writeData(float32Array, trackId = null) {
-    let { buffer } = this.write;
-    let offset = this.writeOffset;
-    for (let i = 0; i < float32Array.length; i++) {
-      buffer[offset++] = float32Array[i];
-      if (offset >= buffer.length) {
-        this.outputBuffers.push(this.write);
-        this.write = { buffer: new Float32Array(this.bufferLength), trackId };
-        buffer = this.write.buffer;
-        offset = 0;
-      }
-    }
-    this.writeOffset = offset;
-    return true;
-  }
-  process(inputs, outputs) {
-    const output = outputs[0];
-    const outputChannelData = output[0];
-    if (this.hasInterrupted) {
-      this.port.postMessage({ event: 'stop' });
-      return false;
-    } else if (this.outputBuffers.length) {
-      this.hasStarted = true;
-      this.silenceFrames = 0; // Reset silence counter when we have real audio
-      const { buffer, trackId } = this.outputBuffers.shift();
-      for (let i = 0; i < outputChannelData.length; i++) {
-        outputChannelData[i] = buffer[i] || 0;
-      }
-      if (trackId) {
-        this.trackSampleOffsets[trackId] = this.trackSampleOffsets[trackId] || 0;
-        this.trackSampleOffsets[trackId] += buffer.length;
-      }
-      return true;
-    } else if (this.hasStarted) {
-      // Output silence while waiting for more audio chunks.
-      // Audio arrives in bursts with gaps, so we stay alive during brief gaps.
-      // After ~2 seconds of continuous silence, signal completion and stop.
-      this.silenceFrames++;
-      for (let i = 0; i < outputChannelData.length; i++) {
-        outputChannelData[i] = 0;
-      }
-      if (this.silenceFrames >= this.maxSilenceFrames) {
-        this.port.postMessage({ event: 'stop' });
-        return false;
-      }
-      return true;
-    } else {
-      return true;
-    }
-  }
-}
-registerProcessor('stream_processor', StreamProcessor);
-`;
-
-// Create blob URLs for worklets
-function createWorkletUrl(code) {
-  const blob = new Blob([code], { type: 'application/javascript' });
-  return URL.createObjectURL(blob);
-}
-const audioProcessorSrc = createWorkletUrl(AudioProcessorWorklet);
-const streamProcessorSrc = createWorkletUrl(StreamProcessorWorklet);
-
-// ============================================================
-// WavPacker — minimal (just mergeBuffers)
-// ============================================================
-class WavPacker {
-  static mergeBuffers(left, right) {
-    const tmp = new Uint8Array(left.byteLength + right.byteLength);
-    tmp.set(new Uint8Array(left), 0);
-    tmp.set(new Uint8Array(right), left.byteLength);
-    return tmp.buffer;
-  }
-}
-
-// ============================================================
-// WavRecorder — from openai/realtime-api-beta wavtools
-// Simplified: no device listing, no WAV export, no frequency analysis
-// ============================================================
-class WavRecorder {
-  constructor({ sampleRate = 44100 } = {}) {
-    this.sampleRate = sampleRate;
-    this.stream = null;
-    this.processor = null;
-    this.source = null;
-    this.node = null;
-    this.recording = false;
-    this._lastEventId = 0;
-    this.eventReceipts = {};
-    this.eventTimeout = 5000;
-    this._chunkProcessor = () => {};
-    this._chunkProcessorSize = void 0;
-    this._chunkProcessorBuffer = { raw: new ArrayBuffer(0), mono: new ArrayBuffer(0) };
-  }
-
-  async _event(name, data = {}, _processor = null) {
-    _processor = _processor || this.processor;
-    if (!_processor) throw new Error('No processor');
-    const message = { event: name, id: this._lastEventId++, data };
-    _processor.port.postMessage(message);
-    const t0 = Date.now();
-    while (!this.eventReceipts[message.id]) {
-      if (Date.now() - t0 > this.eventTimeout) throw new Error(`Timeout: "${name}"`);
-      await new Promise(r => setTimeout(r, 1));
-    }
-    const payload = this.eventReceipts[message.id];
-    delete this.eventReceipts[message.id];
-    return payload;
-  }
-
-  async begin(deviceId) {
-    if (this.processor) throw new Error('Already connected');
-    // Enumerate available audio devices for debugging
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputs = devices.filter(d => d.kind === 'audioinput');
-      console.log('[Coppice] Audio input devices:', audioInputs.length, audioInputs.map(d => `${d.label || 'unlabeled'} (${d.deviceId.slice(0,8)})`));
-    } catch (e) { console.warn('[Coppice] Device enumeration failed:', e.message); }
-    const config = deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true };
-    this.stream = await navigator.mediaDevices.getUserMedia(config);
-    const tracks = this.stream.getAudioTracks();
-    console.log('[Coppice] getUserMedia tracks:', tracks.length, tracks.map(t => `${t.label} enabled=${t.enabled} muted=${t.muted} readyState=${t.readyState}`));
-    // Monitor track state changes
-    if (tracks[0]) {
-      tracks[0].onended = () => console.warn('[Coppice] Audio track ENDED');
-      tracks[0].onmute = () => console.warn('[Coppice] Audio track MUTED');
-      tracks[0].onunmute = () => console.log('[Coppice] Audio track UNMUTED');
-    }
-    const context = new AudioContext({ sampleRate: this.sampleRate });
-    if (context.state === 'suspended') await context.resume();
-    console.log('[Coppice] Recorder AudioContext state:', context.state, 'sampleRate:', context.sampleRate);
-    const source = context.createMediaStreamSource(this.stream);
-    await context.audioWorklet.addModule(audioProcessorSrc);
-    const processor = new AudioWorkletNode(context, 'audio_processor');
-    processor.port.onmessage = (e) => {
-      const { event, id, data } = e.data;
-      if (event === 'receipt') {
-        this.eventReceipts[id] = data;
-      } else if (event === 'chunk') {
-        if (this._chunkProcessorSize) {
-          const buffer = this._chunkProcessorBuffer;
-          this._chunkProcessorBuffer = {
-            raw: WavPacker.mergeBuffers(buffer.raw, data.raw),
-            mono: WavPacker.mergeBuffers(buffer.mono, data.mono),
-          };
-          if (this._chunkProcessorBuffer.mono.byteLength >= this._chunkProcessorSize) {
-            this._chunkProcessor(this._chunkProcessorBuffer);
-            this._chunkProcessorBuffer = { raw: new ArrayBuffer(0), mono: new ArrayBuffer(0) };
-          }
-        } else {
-          this._chunkProcessor(data);
-        }
-      }
-    };
-    this.node = source.connect(processor);
-    this.source = source;
-    this.processor = processor;
-    this._context = context;
-    console.log('[Coppice] WavRecorder ready, sampleRate:', this.sampleRate);
-    return true;
-  }
-
-  async record(chunkProcessor = () => {}, chunkSize = 8192) {
-    if (!this.processor) throw new Error('Call begin() first');
-    if (this.recording) throw new Error('Already recording');
-    this._chunkProcessor = chunkProcessor;
-    this._chunkProcessorSize = chunkSize;
-    this._chunkProcessorBuffer = { raw: new ArrayBuffer(0), mono: new ArrayBuffer(0) };
-    await this._event('start');
-    this.recording = true;
-    console.log('[Coppice] Recording started');
-    return true;
-  }
-
-  async pause() {
-    if (!this.processor) throw new Error('Call begin() first');
-    if (!this.recording) throw new Error('Not recording');
-    if (this._chunkProcessorBuffer.raw.byteLength) {
-      this._chunkProcessor(this._chunkProcessorBuffer);
-    }
-    await this._event('stop');
-    this.recording = false;
-    return true;
-  }
-}
-
-// ============================================================
-// WavStreamPlayer — from openai/realtime-api-beta wavtools
-// Handles real-time PCM16 playback with interruption support
-// ============================================================
-class WavStreamPlayer {
-  constructor({ sampleRate = 44100 } = {}) {
-    this.sampleRate = sampleRate;
-    this.context = null;
-    this.stream = null;
-    this.trackSampleOffsets = {};
-    this.interruptedTrackIds = {};
-  }
-
-  async connect() {
-    this.context = new AudioContext({ sampleRate: this.sampleRate });
-    if (this.context.state === 'suspended') {
-      await this.context.resume();
-    }
-    await this.context.audioWorklet.addModule(streamProcessorSrc);
-    console.log('[Coppice] WavStreamPlayer ready, sampleRate:', this.sampleRate, 'state:', this.context.state);
-    this._chunksReceived = 0;
-    this._chunksWritten = 0;
-    return true;
-  }
-
-  _start() {
-    const streamNode = new AudioWorkletNode(this.context, 'stream_processor');
-    streamNode.connect(this.context.destination);
-    console.log('[Coppice] StreamNode connected to destination, state:', this.context.state);
-    streamNode.port.onmessage = (e) => {
-      const { event } = e.data;
-      if (event === 'stop') {
-        console.log('[Coppice] StreamNode stopped after', this._chunksWritten, 'chunks');
-        streamNode.disconnect();
-        this.stream = null;
-      } else if (event === 'offset') {
-        const { requestId, trackId, offset } = e.data;
-        this.trackSampleOffsets[requestId] = { trackId, offset, currentTime: offset / this.sampleRate };
-      }
-    };
-    this.stream = streamNode;
-    return true;
-  }
-
-  add16BitPCM(arrayBuffer, trackId = 'default') {
-    if (typeof trackId !== 'string') throw new Error('trackId must be string');
-    if (this.interruptedTrackIds[trackId]) return;
-    if (!this.stream) {
-      console.log('[Coppice] First audio chunk - starting playback');
-      this._start();
-    }
-    let buffer;
-    if (arrayBuffer instanceof Int16Array) {
-      buffer = arrayBuffer;
-    } else if (arrayBuffer instanceof ArrayBuffer) {
-      buffer = new Int16Array(arrayBuffer);
-    } else {
-      throw new Error('argument must be Int16Array or ArrayBuffer');
-    }
-    this._chunksReceived++;
-    this._chunksWritten++;
-    if (this._chunksReceived <= 3) {
-      console.log(`[Coppice] Audio chunk #${this._chunksReceived}: ${buffer.length} samples`);
-    }
-    this.stream.port.postMessage({ event: 'write', buffer, trackId });
-    return buffer;
-  }
-
-  async getTrackSampleOffset(interrupt = false) {
-    if (!this.stream) return null;
-    const requestId = crypto.randomUUID();
-    this.stream.port.postMessage({
-      event: interrupt ? 'interrupt' : 'offset',
-      requestId,
-    });
-    let trackSampleOffset;
-    while (!trackSampleOffset) {
-      trackSampleOffset = this.trackSampleOffsets[requestId];
-      await new Promise(r => setTimeout(r, 1));
-    }
-    const { trackId } = trackSampleOffset;
-    if (interrupt && trackId) {
-      this.interruptedTrackIds[trackId] = true;
-    }
-    return trackSampleOffset;
-  }
-
-  async interrupt() {
-    return this.getTrackSampleOffset(true);
-  }
-}
-
-// ============================================================
-// Utility: ArrayBuffer ↔ base64
-// ============================================================
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-function base64ToArrayBuffer(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-// ============================================================
-// MAIN — Connect everything
-// ============================================================
-const SAMPLE_RATE = 24000;
-
-// Default fallback instructions (used if tenant fetch fails)
 const DEFAULT_INSTRUCTIONS = `You are Coppice, an AI meeting assistant. Be professional, concise, and helpful. Keep responses brief. No emojis or filler phrases.`;
 
-// Get instructions + botId — try session ID (pre-built server-side), then tenant fetch, then default
-// Returns { instructions, botId }
 async function getSessionData() {
   const params = new URLSearchParams(location.search);
   const sid = params.get('sid');
   const tenantId = params.get('tenant') || 'default';
 
-  // 1. Session ID — instructions + botId pre-built by createVoiceBot (most reliable)
   if (sid) {
     const sessionUrl = `https://coppice.ai/api/v1/voice-session/${sid}`;
-    // Retry loop: botId may not be stored yet (race with Recall API response)
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         if (attempt > 0) {
@@ -521,10 +51,9 @@ async function getSessionData() {
         const data = await res.json();
         if (data.instructions && data.instructions.length > 100) {
           if (data.botId || attempt >= 3) {
-            console.log(`[Coppice] Loaded session: ${data.instructions.length} chars, botId=${data.botId || 'none'}`);
+            console.log(`[Coppice] Session loaded: ${data.instructions.length} chars, botId=${data.botId || 'none'}`);
             return { instructions: data.instructions, botId: data.botId || null };
           }
-          // Got instructions but no botId yet - save instructions, retry for botId
           console.log(`[Coppice] Got instructions but no botId yet, retrying...`);
         }
       } catch (e) {
@@ -533,7 +62,6 @@ async function getSessionData() {
     }
   }
 
-  // 2. Fallback — fetch by tenant ID (no botId available)
   const urls = [
     `https://coppice.ai/api/v1/voice-context/${tenantId}`,
     `${location.origin}/api/v1/voice-context/${tenantId}`,
@@ -543,7 +71,7 @@ async function getSessionData() {
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       const data = await res.json();
       if (data.instructions && data.instructions.length > 100) {
-        console.log(`[Coppice] Fetched tenant instructions (${data.instructions.length} chars)`);
+        console.log(`[Coppice] Tenant instructions: ${data.instructions.length} chars`);
         return { instructions: data.instructions, botId: null };
       }
     } catch (e) {
@@ -560,6 +88,7 @@ async function getSessionData() {
   const wssUrl = params.get('wss');
   if (!wssUrl) {
     console.error('[Coppice] Missing ?wss= parameter');
+    document.querySelector('.status').textContent = 'error: no relay';
     return;
   }
   console.log('[Coppice] Relay URL:', wssUrl);
@@ -568,94 +97,22 @@ async function getSessionData() {
   const INSTRUCTIONS = sessionData.instructions;
   const SESSION_BOT_ID = sessionData.botId;
 
-  const wavRecorder = new WavRecorder({ sampleRate: SAMPLE_RATE });
-  const wavStreamPlayer = new WavStreamPlayer({ sampleRate: SAMPLE_RATE });
-
-  try {
-    await wavRecorder.begin();
-  } catch (e) {
-    console.error('[Coppice] Mic access failed:', e);
-    return;
-  }
-
-  try {
-    await wavStreamPlayer.connect();
-  } catch (e) {
-    console.error('[Coppice] Audio output failed:', e);
-    return;
-  }
-
-  // Append session ID to relay URL so relay can fetch botId from backend directly
   const sid = params.get('sid');
   const relayUrlWithSid = sid ? `${wssUrl}${wssUrl.includes('?') ? '&' : '?'}sid=${sid}` : wssUrl;
   const ws = new WebSocket(relayUrlWithSid);
 
-  // ── Wake word gating ──
-  // Bot only responds when "Coppice" is in the utterance. No active window.
-  // Each question needs its own "hey Coppice" — prevents runaway responses.
-
-  // Manual VAD — we control when audio is committed (no auto-responses)
-  let speechDetected = false;
-  let silenceStart = null;
-  let hasUncommittedAudio = false;
-  let bufferStartTime = null;
-  const SPEECH_THRESHOLD = 300;   // int16 amplitude to count as speech
-  const SILENCE_COMMIT_MS = 700;  // ms of silence after speech → commit
-  const MAX_BUFFER_MS = 5000;     // force commit after 5s even if still talking
-
-  // Response tracking
-  let isResponding = false;
-  let expectingResponse = false;  // true only when WE sent response.create
-  let micChunkCount = 0;
-
-  function checkWakeWord(text) {
-    if (!text) return false;
-    const lower = text.toLowerCase();
-    // Note: "copper" removed — construction meetings say it constantly (false positives)
-    return lower.includes('coppice') || lower.includes('copice')
-        || lower.includes('copis') || lower.includes('cop ice');
-  }
-
-  function commitBuffer() {
-    if (!hasUncommittedAudio) return;
-    hasUncommittedAudio = false;
-    bufferStartTime = null;
-    speechDetected = false;
-    silenceStart = null;
-    ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-    console.log('[Coppice] Buffer committed');
-  }
-
-  function interruptBot() {
-    if (!isResponding) return;
-    isResponding = false;
-    wavStreamPlayer.interrupt().then(trackOffset => {
-      if (trackOffset?.trackId) {
-        ws.send(JSON.stringify({ type: 'response.cancel' }));
-        ws.send(JSON.stringify({
-          type: 'conversation.item.truncate',
-          item_id: trackOffset.trackId,
-          content_index: 0,
-          audio_end_ms: Math.floor(trackOffset.currentTime * 1000),
-        }));
-        console.log('[Coppice] Interrupted playback');
-      }
-    });
-  }
-
   ws.onopen = () => {
     console.log('[Coppice] Connected to relay');
+    document.querySelector('.status').textContent = 'connected';
 
-    // Send bot ID to relay so it can inject audio via Recall.ai output_audio API
+    // Send bot ID so relay can deliver audio via output_audio API
     if (SESSION_BOT_ID) {
       ws.send(JSON.stringify({ type: 'coppice.set_bot_id', bot_id: SESSION_BOT_ID }));
-      console.log('[Coppice] Sent bot ID to relay:', SESSION_BOT_ID);
-    } else {
-      console.warn('[Coppice] No bot ID available - relay audio output disabled');
+      console.log('[Coppice] Bot ID sent:', SESSION_BOT_ID);
     }
 
-    // MANUAL MODE — turn_detection: null means NO auto-responses
-    // We commit audio manually and decide when to create responses
+    // Configure OpenAI session - manual mode, no turn detection
+    // Audio input comes via /inject-text (transcript webhooks), not mic
     ws.send(JSON.stringify({
       type: 'session.update',
       session: {
@@ -664,155 +121,52 @@ async function getSessionData() {
         voice: 'alloy',
         input_audio_format: 'pcm16',
         output_audio_format: 'pcm16',
-        input_audio_transcription: { model: 'whisper-1' },
         turn_detection: null,
       },
     }));
 
-    console.log('[Coppice] Manual mode — silent until "hey Coppice"');
-
-    // Stream mic audio to OpenAI + run client-side VAD
-    wavRecorder.record((data) => {
-      if (ws.readyState !== WebSocket.OPEN) return;
-      micChunkCount++;
-
-      const base64 = arrayBufferToBase64(data.mono);
-      ws.send(JSON.stringify({
-        type: 'input_audio_buffer.append',
-        audio: base64,
-      }));
-
-      // Measure amplitude for VAD
-      const view = new Int16Array(data.mono);
-      let maxVal = 0;
-      for (let i = 0; i < view.length; i++) {
-        maxVal = Math.max(maxVal, Math.abs(view[i]));
-      }
-
-      if (micChunkCount <= 3 || micChunkCount % 300 === 0) {
-        console.log(`[Coppice] Mic #${micChunkCount}: amp=${maxVal}`);
-      }
-
-      // Interrupt bot if someone talks over it
-      if (maxVal > SPEECH_THRESHOLD && isResponding) {
-        interruptBot();
-      }
-
-      // VAD: detect speech → silence transition → commit buffer
-      if (maxVal > SPEECH_THRESHOLD) {
-        if (!speechDetected) {
-          speechDetected = true;
-          bufferStartTime = Date.now();
-        }
-        silenceStart = null;
-        hasUncommittedAudio = true;
-      } else if (speechDetected && hasUncommittedAudio) {
-        if (!silenceStart) silenceStart = Date.now();
-        if (Date.now() - silenceStart > SILENCE_COMMIT_MS) {
-          commitBuffer();
-        }
-      }
-
-      // Force commit long buffers
-      if (hasUncommittedAudio && bufferStartTime && Date.now() - bufferStartTime > MAX_BUFFER_MS) {
-        console.log('[Coppice] Force-committing long buffer');
-        commitBuffer();
-      }
-    });
+    console.log('[Coppice] Transcript-driven mode configured');
   };
 
-  ws.onmessage = async (event) => {
+  ws.onmessage = (event) => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
 
     switch (msg.type) {
-      // ── Transcription of what was heard ──
-      case 'conversation.item.input_audio_transcription.completed': {
-        const text = (msg.transcript || '').trim();
-        if (!text) {
-          // Empty — delete item, don't respond
-          if (msg.item_id) {
-            ws.send(JSON.stringify({ type: 'conversation.item.delete', item_id: msg.item_id }));
-          }
-          break;
-        }
-
-        console.log(`[Coppice] Heard: "${text}"`);
-        const hasWakeWord = checkWakeWord(text);
-
-        if (hasWakeWord) {
-          // Wake word detected - respond to this utterance, then go back to passive
-          console.log('[Coppice] *** WAKE WORD - creating response ***');
-          expectingResponse = true;
-          ws.send(JSON.stringify({ type: 'response.create' }));
-          // Stay passive - each question needs its own "hey Coppice"
-        } else {
-          // No wake word - ignore & clean up regardless of state
-          console.log('[Coppice] No wake word - ignoring');
-          if (msg.item_id) {
-            ws.send(JSON.stringify({ type: 'conversation.item.delete', item_id: msg.item_id }));
-          }
-        }
+      case 'session.created':
+        console.log('[Coppice] OpenAI session created');
         break;
-      }
-
-      // ── Guard against server-initiated responses ──
+      case 'session.updated':
+        console.log('[Coppice] Session config confirmed');
+        document.querySelector('.status').textContent = 'listening';
+        break;
       case 'response.created':
-        if (!expectingResponse) {
-          console.warn('[Coppice] AUTO-RESPONSE detected - canceling (we did not request this)');
-          ws.send(JSON.stringify({ type: 'response.cancel' }));
-          isResponding = false;
-        } else {
-          console.log('[Coppice] Response created (wake word triggered)');
-        }
+        document.querySelector('.status').textContent = 'speaking...';
         break;
-
-      // ── Audio playback ──
-      case 'response.audio.delta':
-        if (msg.delta && expectingResponse) {
-          isResponding = true;
-          const pcmBuffer = base64ToArrayBuffer(msg.delta);
-          wavStreamPlayer.add16BitPCM(pcmBuffer, msg.item_id || 'default');
-        }
-        // Drop audio from auto-responses (expectingResponse === false)
-        break;
-
-      case 'response.audio.done':
-        console.log('[Coppice] Audio playback complete');
-        break;
-
-      case 'response.done':
-        isResponding = false;
-        expectingResponse = false;
-        break;
-
       case 'response.audio_transcript.done':
         console.log('[Coppice] Said:', msg.transcript);
         break;
-
-      // ── Session events ──
-      case 'input_audio_buffer.committed':
-        console.log('[Coppice] Buffer committed, item:', msg.item_id);
+      case 'response.done':
+        console.log('[Coppice] Response complete');
+        document.querySelector('.status').textContent = 'listening';
         break;
-
-      case 'session.created':
-        console.log('[Coppice] Session created - manual mode');
-        break;
-
-      case 'session.updated':
-        console.log('[Coppice] Session config confirmed');
-        break;
-
       case 'error':
         console.error('[Coppice] Error:', JSON.stringify(msg.error));
+        document.querySelector('.status').textContent = 'error';
         break;
+      // All other events (response.audio.delta etc) silently ignored
+      // Audio delivery is handled by relay -> output_audio API
     }
   };
 
-  ws.onerror = (e) => console.error('[Coppice] WS error:', e);
+  ws.onerror = (e) => {
+    console.error('[Coppice] WS error:', e);
+    document.querySelector('.status').textContent = 'error';
+  };
+
   ws.onclose = (e) => {
     console.log('[Coppice] WS closed:', e.code, e.reason);
-    if (wavRecorder.recording) wavRecorder.pause().catch(() => {});
+    document.querySelector('.status').textContent = 'disconnected';
   };
 })();
 </script>
