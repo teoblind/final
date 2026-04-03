@@ -22,7 +22,7 @@ body{color:#1e3a5f;font-family:-apple-system,system-ui,sans-serif;display:flex;a
 <div class="container">
   <img class="avatar" src="/assets/coppice-bot-avatar.jpg" onerror="this.style.display='none'" />
   <div class="logo">coppice</div>
-  <div class="status">connecting...</div>
+  <div class="status">listening</div>
 </div>
 <script>
 // ============================================================
@@ -117,7 +117,7 @@ async function getSessionData() {
 
   ws.onopen = () => {
     console.log('[Coppice] Connected to relay');
-    document.querySelector('.status').textContent = 'connected';
+    document.querySelector('.status').textContent = 'listening';
 
     // Send bot ID so relay can deliver audio via output_audio API
     if (SESSION_BOT_ID) {

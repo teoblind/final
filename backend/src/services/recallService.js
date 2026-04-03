@@ -280,6 +280,21 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
 
   console.log(`[Recall] Voice bot ${bot.id} created for ${meetingUrl}`);
   console.log(`[Recall] Page URL: ${pageUrl}`);
+
+  // Mute bot's microphone after it joins (~20s) - output_audio still works when muted
+  // This shows the bot as physically muted in the meeting participant list
+  setTimeout(async () => {
+    try {
+      await recallFetch(`/bot/${bot.id}/set_microphone_enabled/`, {
+        method: 'POST',
+        body: JSON.stringify({ enabled: false }),
+      });
+      console.log(`[Recall] Muted bot ${bot.id}`);
+    } catch (e) {
+      console.warn(`[Recall] Mute failed for ${bot.id}: ${e.message}`);
+    }
+  }, 20000);
+
   return bot;
 }
 
