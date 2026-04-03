@@ -70,6 +70,21 @@ async function sendAudioToRecall(botId, mp3Buffer) {
   }
 }
 
+/**
+ * Close audio output channel to re-mute the bot after speaking.
+ */
+async function muteBot(botId) {
+  try {
+    await fetch(`${RECALL_BASE}/bot/${botId}/output_audio/`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Token ${RECALL_API_KEY}` },
+    });
+    console.log(`[VoiceRelay] Bot re-muted`);
+  } catch (e) {
+    console.warn(`[VoiceRelay] Mute failed: ${e.message}`);
+  }
+}
+
 // ── Active session ──
 let activeSession = null;
 
@@ -108,6 +123,9 @@ function startSession(botId, instructions) {
       session.totalBytesSent += mp3.length;
       const durationMs = Math.round(pcm.length / 2 / 24000 * 1000);
       console.log(`[VoiceRelay] output_audio: ${mp3.length}B MP3, ~${durationMs}ms audio (${session.totalBytesSent}B total)`);
+      // Re-mute after audio finishes playing
+      if (session._muteTimer) clearTimeout(session._muteTimer);
+      session._muteTimer = setTimeout(() => muteBot(session.botId), durationMs + 500);
     } catch (err) {
       console.error(`[VoiceRelay] output_audio error: ${err.message}`);
     }
