@@ -17,7 +17,7 @@
  */
 
 import { google } from 'googleapis';
-import Anthropic from '@anthropic-ai/sdk';
+import { queryClaudeAgent } from '../services/claudeAgent.js';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -694,16 +694,10 @@ async function handleMeetingEnd(eventKey) {
       return;
     }
 
-    // ── Summarize with Claude ──
+    // ── Summarize with Claude (via BBB tunnel / local CLI) ──
     console.log(`[CalendarPoll] Summarizing "${meetingName}" with Claude...`);
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const summaryRes = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      messages: [{
-        role: 'user',
-        content: `Summarize this meeting transcript into structured notes.
+    const summaryPrompt = `Summarize this meeting transcript into structured notes.
 
 Meeting: ${meetingName}
 Attendees: ${attendees.join(', ')}
@@ -723,11 +717,17 @@ Format:
 
 ---
 Transcript:
-${transcript}`,
-      }],
+${transcript}`;
+
+    const summaryRes = await queryClaudeAgent({
+      tenantId,
+      agentId: 'meetings',
+      message: summaryPrompt,
+      maxTurns: 1,
+      timeoutMs: 120000,
     });
 
-    const summary = summaryRes.content[0].text;
+    const summary = summaryRes?.response || summaryRes?.text || 'Meeting summary unavailable.';
 
     // ── Retrieve + download audio recording from Recall.ai ──
     // Download to local storage so URLs don't expire (Recall.ai uses signed S3 links)
