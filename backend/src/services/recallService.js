@@ -176,18 +176,14 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
   const {
     botName = 'Coppice',
     tenantId = SANGHA_TENANT_ID,
-    voiceAgentUrl = process.env.VOICE_AGENT_URL || 'https://coppice.ai/voice-agent',
-    relayUrl = process.env.VOICE_RELAY_URL || 'wss://coppice.ai/ws/voice-relay/',
   } = opts;
 
-  // Pre-generate a voice session ID - instructions are stored server-side and fetched by the page
-  const sessionId = `vs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-  // Build instructions server-side so the page doesn't need to fetch them unreliably
+  // Build instructions for the OpenAI Realtime session
+  let instructions = '';
   try {
     const { getMeetingPrompt } = await import('./chatService.js');
     const { getTenantDb } = await import('../cache/database.js');
-    let instructions = getMeetingPrompt(tenantId);
+    instructions = getMeetingPrompt(tenantId);
 
     // Enrich with tenant memory
     try {
@@ -203,33 +199,31 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
         for (const i of items) instructions += `\n- [${i.assignee || '?'}] ${i.title}${i.due_date ? ` (due: ${i.due_date})` : ''}`;
       }
     } catch (e) { console.warn('[Recall] Failed to enrich voice instructions:', e.message); }
-
-    voiceSessions.set(sessionId, { instructions, createdAt: Date.now() });
-    console.log(`[Recall] Voice session ${sessionId}: ${instructions.length} chars of instructions`);
+    console.log(`[Recall] Voice instructions: ${instructions.length} chars`);
   } catch (e) { console.warn('[Recall] Failed to build voice instructions:', e.message); }
 
-  const pageUrl = `${voiceAgentUrl}?wss=${encodeURIComponent(relayUrl)}&tenant=${encodeURIComponent(tenantId)}&sid=${sessionId}&_v=${Date.now()}`;
+  // Load white tile for video output (bot joins muted with static image, no output_media)
+  let whiteTileB64 = '';
+  try {
+    whiteTileB64 = fs.readFileSync(path.join(__dirname, '../../assets/coppice-white-tile.b64'), 'utf8').trim();
+  } catch (e) {
+    console.warn('[Recall] White tile not found - bot will show default tile');
+  }
 
-  // Detect platform for variant selection
-  const isZoom = meetingUrl.includes('zoom.us');
-  const isTeams = meetingUrl.includes('teams.microsoft.com');
-  const variant = {};
-  if (isZoom) variant.zoom = 'web_4_core';
-  else if (isTeams) variant.microsoft_teams = 'web_4_core';
-  else variant.google_meet = 'web_4_core';
-
-  // Build the transcription webhook so post-meeting processing still works
+  // Build the transcription webhook
   const webhookUrl = `${APP_BASE_URL}/api/v1/recall/transcript-event`;
 
   const body = {
     meeting_url: meetingUrl,
     bot_name: botName,
-    output_media: {
-      camera: {
-        kind: 'webpage',
-        config: { url: pageUrl },
+    // Static white image as video tile (no output_media = bot joins MUTED)
+    // Audio is delivered via output_audio API, not tab capture
+    ...(whiteTileB64 ? {
+      automatic_video_output: {
+        in_call_not_recording: { kind: 'jpeg', b64_data: whiteTileB64 },
+        in_call_recording: { kind: 'jpeg', b64_data: whiteTileB64 },
       },
-    },
+    } : {}),
     recording_config: {
       transcript: {
         provider: { meeting_captions: {} },
@@ -240,7 +234,6 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
         events: ['transcript.data'],
       }],
     },
-    variant,
     automatic_leave: {
       waiting_room_timeout: 600,
       noone_joined_timeout: 60,
@@ -250,21 +243,20 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
 
   const bot = await recallFetch('/bot/', { method: 'POST', body: JSON.stringify(body) });
 
-  // Store bot ID in voice session so relay can send audio via output_audio API
-  const vs = voiceSessions.get(sessionId);
-  if (vs) vs.botId = bot.id;
-
-  // Register bot ID with voice relay for output_audio
+  // Start OpenAI session on relay with instructions (relay manages session directly)
   try {
-    const relayUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
-    await fetch(`${relayUrl}/set-bot-id`, {
+    const relayLocalUrl = process.env.VOICE_RELAY_LOCAL_URL || 'http://localhost:3003';
+    await fetch(`${relayLocalUrl}/set-bot-id`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ botId: bot.id }),
+      body: JSON.stringify({
+        botId: bot.id,
+        instructions: instructions || 'You are Coppice, an AI meeting assistant. Be professional and concise.',
+      }),
     });
-    console.log(`[Recall] Registered bot ${bot.id} with voice relay`);
+    console.log(`[Recall] Relay session started for bot ${bot.id}`);
   } catch (e) {
-    console.warn(`[Recall] Failed to register bot with relay: ${e.message}`);
+    console.warn(`[Recall] Failed to start relay session: ${e.message}`);
   }
 
   activeBots.set(bot.id, {
@@ -278,23 +270,7 @@ export async function createVoiceBot(meetingUrl, opts = {}) {
     transcript: [],
   });
 
-  console.log(`[Recall] Voice bot ${bot.id} created for ${meetingUrl}`);
-  console.log(`[Recall] Page URL: ${pageUrl}`);
-
-  // Mute bot's microphone after it joins (~20s) - output_audio still works when muted
-  // This shows the bot as physically muted in the meeting participant list
-  setTimeout(async () => {
-    try {
-      await recallFetch(`/bot/${bot.id}/set_microphone_enabled/`, {
-        method: 'POST',
-        body: JSON.stringify({ enabled: false }),
-      });
-      console.log(`[Recall] Muted bot ${bot.id}`);
-    } catch (e) {
-      console.warn(`[Recall] Mute failed for ${bot.id}: ${e.message}`);
-    }
-  }, 20000);
-
+  console.log(`[Recall] Voice bot ${bot.id} created for ${meetingUrl} (no output_media, muted)`);
   return bot;
 }
 
