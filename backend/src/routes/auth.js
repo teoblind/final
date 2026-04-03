@@ -1049,11 +1049,6 @@ async function handleIntegrationCallback(req, res, code, state) {
       </body></html>`);
     }
 
-    // ── Standard integration flow (key_vault storage) ──
-    const services = source === 'google-all'
-      ? ['google-gmail', 'google-calendar', 'google-docs']
-      : [source];
-
     // Extract the authenticated Google email from id_token
     let connectedEmail = null;
     if (tokens.id_token) {
@@ -1062,6 +1057,53 @@ async function handleIntegrationCallback(req, res, code, state) {
         connectedEmail = payload.email;
       } catch {}
     }
+
+    // ── Personal email connection (separate from agent tokens) ──
+    if (source === 'personal-gmail') {
+      if (!connectedEmail) {
+        return res.status(400).send(renderIntegrationErrorPage(
+          'Could not determine your email address from the OAuth response.',
+          'no_email'
+        ));
+      }
+      await runWithTenant(tenantId, async () => {
+        upsertKeyVaultEntry({
+          tenantId, service: 'google-gmail-user', keyName: 'email',
+          keyValue: connectedEmail, addedBy: `oauth:${connectedEmail}`,
+        });
+        if (tokens.refresh_token) {
+          upsertKeyVaultEntry({
+            tenantId, service: 'google-gmail-user', keyName: 'refresh_token',
+            keyValue: tokens.refresh_token, addedBy: `oauth:${connectedEmail}`,
+          });
+        }
+        if (tokens.access_token) {
+          upsertKeyVaultEntry({
+            tenantId, service: 'google-gmail-user', keyName: 'access_token',
+            keyValue: tokens.access_token, addedBy: `oauth:${connectedEmail}`,
+            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
+          });
+        }
+        console.log(`[Integration] Connected personal email: ${connectedEmail} for tenant ${tenantId}`);
+        insertAuditLog({
+          tenantId, userId, action: 'integration.personal_email_connected',
+          resourceType: 'integration', resourceId: 'personal-gmail',
+          details: { email: connectedEmail, hasRefreshToken: !!tokens.refresh_token },
+          ipAddress: req.ip,
+        });
+      });
+
+      const postMessageOrigin = origin || '*';
+      return res.send(`<!DOCTYPE html><html><head><title>Personal Email Connected</title></head><body>
+        <p style="font-family:-apple-system,sans-serif;text-align:center;margin-top:40px;color:#1a6b3c;">Personal email (${connectedEmail}) connected successfully. This window will close.</p>
+        <script>if(window.opener){window.opener.postMessage({type:'oauth-integration-success',source:'personal-gmail',email:${JSON.stringify(connectedEmail)}},${JSON.stringify(postMessageOrigin)});}setTimeout(()=>window.close(),1500);</script>
+      </body></html>`);
+    }
+
+    // ── Standard integration flow (key_vault storage) ──
+    const services = source === 'google-all'
+      ? ['google-gmail', 'google-calendar', 'google-docs']
+      : [source];
 
     await runWithTenant(tenantId, async () => {
       for (const svc of services) {
@@ -1086,7 +1128,7 @@ async function handleIntegrationCallback(req, res, code, state) {
         }
       }
 
-      // Store the user's personal email as a sender option if it's not the agent account
+      // Also store as personal sender if it's not an agent account
       if (connectedEmail && !connectedEmail.includes('coppice.ai')) {
         upsertKeyVaultEntry({
           tenantId,

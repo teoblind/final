@@ -1000,6 +1000,32 @@ export default function DacpCommandDashboard({ onNavigate }) {
                                   </option>
                                 ))}
                               </select>
+                              {!sendersList.some(s => s.personal) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const token = localStorage.getItem('auth_token') || (() => { try { return JSON.parse(sessionStorage.getItem('sangha_auth'))?.tokens?.accessToken; } catch { return null; } })();
+                                    if (!token) return;
+                                    const scopes = 'openid,email,profile,gmail.readonly,gmail.send,gmail.compose,gmail.modify';
+                                    const url = `${window.location.origin}/api/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=personal-gmail&token=${encodeURIComponent(token)}`;
+                                    const popup = window.open(url, 'oauth-popup', 'width=600,height=700,scrollbars=yes');
+                                    const handleMsg = (evt) => {
+                                      if (evt.data?.type === 'oauth-integration-success' && evt.data?.source === 'personal-gmail') {
+                                        window.removeEventListener('message', handleMsg);
+                                        // Refresh senders list
+                                        fetch(`${API_BASE}/v1/approvals/senders`, { headers: getAuthHeaders() })
+                                          .then(r => r.json())
+                                          .then(d => setSendersList(d.senders || []))
+                                          .catch(() => {});
+                                      }
+                                    };
+                                    window.addEventListener('message', handleMsg);
+                                  }}
+                                  className="text-[10px] px-2 py-0.5 rounded border border-dashed border-[#1e3a5f] text-[#1e3a5f] hover:bg-[#1e3a5f]/5 transition-colors"
+                                >
+                                  + Connect Personal Email
+                                </button>
+                              )}
                               {rewriting && <span className="text-[10px] text-terminal-muted italic">Rewriting...</span>}
                             </div>
                           </div>

@@ -64,10 +64,11 @@ router.get('/senders', async (req, res) => {
       const { getKeyVaultValue, upsertKeyVaultEntry } = await import('../cache/database.js');
       // getKeyVaultValue handles decryption and checks both main + tenant DB
       let personalEmail = getKeyVaultValue(tenantId, 'google-gmail-user', 'email');
-      // If no stored email, discover it from the OAuth token at runtime
+      // If no stored email, discover it from the personal OAuth token at runtime
       if (!personalEmail) {
         try {
-          const refreshToken = getKeyVaultValue(tenantId, 'google-gmail', 'refresh_token');
+          // Use google-gmail-user token (personal), NOT google-gmail (agent)
+          const refreshToken = getKeyVaultValue(tenantId, 'google-gmail-user', 'refresh_token');
           if (refreshToken) {
             const clients = [
               { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
