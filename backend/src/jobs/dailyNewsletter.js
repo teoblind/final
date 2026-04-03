@@ -381,10 +381,13 @@ IMPORTANT RULES FOR CONTACTS:
     - Suggested approach (e.g., "Propose BTM mining colocation at their new 200MW solar farm to monetize curtailment")
     - Draft one-liner message if a verified contact is available
 
-For each recommended action in sections 9 and 10, add a button styled as:
-<a href="#" class="action-btn" data-action="draft-email" data-title="ACTION_TITLE_HERE" style="display:inline-block;background:${config.color || '#1a6b3c'};color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin-top:8px;">Draft Email</a>
+CRITICAL: Each recommended action in sections 9 and 10 MUST be wrapped in a bordered div like this:
+<div style="margin-bottom:14px; padding:14px 18px; background:#f8f9fa; border-radius:8px; border-left:4px solid ${config.color || '#1a6b3c'}; font-size:14px;">
+  <strong style="color:${config.color || '#1a6b3c'};">Action title here</strong><br/>
+  Action description here.
+</div>
 
-Use "Draft Email" for outreach actions and "Start Task" for operations/research actions. Replace ACTION_TITLE_HERE with a short title for the action.`
+This bordered div format is MANDATORY for every action item. The frontend uses border-left:4px to detect action items and inject interactive buttons. If you use <ol>/<li> or plain text instead, the buttons will NOT appear and the newsletter will be broken.`
     : `SECTIONS (include only sections with actual findings):
 
 1. **NEW PROJECT OPPORTUNITIES** - Projects where ${config.name} could bid. Organize by state/market as sub-sections:
@@ -401,12 +404,15 @@ ${config.knownGCs?.length ? `KNOWN GC WATCHLIST: ${config.knownGCs.join(', ')}. 
 
 5. **NATIONAL / REGIONAL OPPORTUNITIES** - Projects outside the tracked markets that were found during expanded geographic searches. Label each with location and distance from primary region. Only include if out-of-region results exist.
 
-6. **RECOMMENDED ACTIONS** - 2-3 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.${config.knownGCs?.length ? ' Prioritize actions related to Known GC Watchlist companies.' : ''}
+6. **RECOMMENDED ACTIONS** - 3-5 specific actions based on the findings. E.g., "Reach out to JE Dunn about the Meta El Paso project - they'll need concrete subs for a 1.2M sqft data center." For verified contacts, include their email/LinkedIn so the reader can act immediately.${config.knownGCs?.length ? ' Prioritize actions related to Known GC Watchlist companies.' : ''}
 
-For each recommended action, add a button styled as:
-<a href="#" class="action-btn" data-action="draft-email" data-title="ACTION_TITLE_HERE" style="display:inline-block;background:${config.color || '#1e3a5f'};color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;margin-top:8px;">Draft Email</a>
+CRITICAL: Each recommended action MUST be wrapped in a bordered div like this:
+<div style="margin-bottom:14px; padding:14px 18px; background:#f8f9fa; border-radius:8px; border-left:4px solid ${config.color || '#1e3a5f'}; font-size:14px;">
+  <strong style="color:${config.color || '#1e3a5f'};">Action title here</strong><br/>
+  Action description here.
+</div>
 
-Use "Draft Email" for outreach actions and "Start Task" for research/analysis actions. Replace ACTION_TITLE_HERE with a short title for the action.`;
+This bordered div format is MANDATORY for every action item. The frontend uses border-left:4px to detect action items and inject interactive buttons. If you use <ol>/<li> or plain text instead, the buttons will NOT appear and the newsletter will be broken.`;
 
   const targetLength = isSangha ? '1200-1800 words' : '800-1200 words';
 
