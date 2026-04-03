@@ -1086,6 +1086,38 @@ function initSchemaForDb(targetDb) {
   `);
   try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_mcp_servers_tenant ON mcp_servers(tenant_id, enabled)'); } catch (e) {}
 
+  // Service quotas - per-tenant monthly allotments for external API services
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS service_quotas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      service TEXT NOT NULL,
+      monthly_allotment INTEGER NOT NULL,
+      used_this_month INTEGER DEFAULT 0,
+      overage_rate_cents INTEGER DEFAULT 0,
+      unit TEXT NOT NULL DEFAULT 'requests',
+      reset_day INTEGER DEFAULT 1,
+      last_reset TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(tenant_id, service)
+    )
+  `);
+
+  // Service usage log - granular event log for metering
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS service_usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id TEXT NOT NULL,
+      service TEXT NOT NULL,
+      user_id TEXT,
+      quantity INTEGER DEFAULT 1,
+      cost_cents INTEGER DEFAULT 0,
+      description TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+  try { targetDb.exec('CREATE INDEX IF NOT EXISTS idx_service_usage_tenant ON service_usage_log(tenant_id, service, created_at)'); } catch (e) {}
+
   // Add tenant_id to ALL existing tables (idempotent) - kept for defense-in-depth
   const tablesToMigrate = [
     'cache', 'alerts', 'alert_history', 'notes', 'imec_milestones',
@@ -1409,8 +1441,31 @@ function seedTenantData(targetDb, tenantId) {
 
   // Activity log seed data disabled - dashboards now show EmptyState when empty
 
+  // Seed default service quotas for this tenant
+  seedServiceQuotas(targetDb, tenantId);
+
   // Seed trusted senders for email guard
   initEmailTrustSeedData(targetDb, tenantId);
+}
+
+const DEFAULT_SERVICE_QUOTAS = [
+  { service: 'whisper', monthly_allotment: 60, unit: 'minutes', overage_rate_cents: 1 },
+  { service: 'apollo', monthly_allotment: 200, unit: 'leads', overage_rate_cents: 10 },
+  { service: 'elevenlabs', monthly_allotment: 10000, unit: 'characters', overage_rate_cents: 30 },
+  { service: 'perplexity', monthly_allotment: 100, unit: 'queries', overage_rate_cents: 5 },
+  { service: 'fireflies', monthly_allotment: 50, unit: 'imports', overage_rate_cents: 20 },
+  { service: 'recall', monthly_allotment: 600, unit: 'minutes', overage_rate_cents: 1 },
+  { service: 'apify', monthly_allotment: 50, unit: 'scrapes', overage_rate_cents: 15 },
+];
+
+function seedServiceQuotas(targetDb, tenantId) {
+  const insert = targetDb.prepare(`
+    INSERT OR IGNORE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  for (const q of DEFAULT_SERVICE_QUOTAS) {
+    insert.run(tenantId, q.service, q.monthly_allotment, q.unit, q.overage_rate_cents);
+  }
 }
 
 function initEmailTrustSeedData(targetDb, tenantId) {
@@ -6308,6 +6363,107 @@ export function getSessionCountByUser(tenantId, userId) {
     SELECT COUNT(*) as count FROM active_sessions
     WHERE tenant_id = ? AND user_id = ? AND last_active > datetime('now', '-30 minutes')
   `).get(tenantId, userId)?.count || 0;
+}
+
+// ─── Service Quotas ─────────────────────────────────────────────────────────
+
+/**
+ * Seed default quotas for a tenant using the global db proxy (for route-level usage).
+ * Safe to call multiple times - uses INSERT OR IGNORE.
+ */
+export function initServiceQuotas(tenantId) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  for (const q of DEFAULT_SERVICE_QUOTAS) {
+    insert.run(tenantId, q.service, q.monthly_allotment, q.unit, q.overage_rate_cents);
+  }
+}
+
+export function getServiceQuotas(tenantId) {
+  return db.prepare('SELECT * FROM service_quotas WHERE tenant_id = ? ORDER BY service').all(tenantId);
+}
+
+export function getServiceQuota(tenantId, service) {
+  return db.prepare('SELECT * FROM service_quotas WHERE tenant_id = ? AND service = ?').get(tenantId, service);
+}
+
+export function checkServiceQuota(tenantId, service, quantity = 1) {
+  const quota = db.prepare('SELECT * FROM service_quotas WHERE tenant_id = ? AND service = ?').get(tenantId, service);
+  if (!quota) return { allowed: true, remaining: Infinity, overage: false };
+  const remaining = quota.monthly_allotment - quota.used_this_month;
+  const willExceed = (quota.used_this_month + quantity) > quota.monthly_allotment;
+  return {
+    allowed: true, // always allowed, just tracked (soft limit)
+    remaining: Math.max(0, remaining),
+    overage: willExceed,
+    overage_units: willExceed ? (quota.used_this_month + quantity) - quota.monthly_allotment : 0,
+    overage_cost_cents: willExceed ? ((quota.used_this_month + quantity) - quota.monthly_allotment) * quota.overage_rate_cents : 0,
+    quota,
+  };
+}
+
+export function recordServiceUsage(tenantId, service, quantity = 1, userId = null, description = null) {
+  // Increment used_this_month
+  db.prepare(`
+    UPDATE service_quotas SET used_this_month = used_this_month + ?, updated_at = datetime('now')
+    WHERE tenant_id = ? AND service = ?
+  `).run(quantity, tenantId, service);
+
+  // Calculate cost (overage only)
+  const quota = db.prepare('SELECT * FROM service_quotas WHERE tenant_id = ? AND service = ?').get(tenantId, service);
+  let costCents = 0;
+  if (quota && quota.used_this_month > quota.monthly_allotment) {
+    const overageUnits = Math.min(quantity, quota.used_this_month - quota.monthly_allotment);
+    costCents = overageUnits * quota.overage_rate_cents;
+  }
+
+  // Log the usage event
+  db.prepare(`
+    INSERT INTO service_usage_log (tenant_id, service, user_id, quantity, cost_cents, description)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tenantId, service, userId, quantity, costCents, description);
+
+  return { used: quota?.used_this_month || quantity, costCents };
+}
+
+export function updateServiceQuota(tenantId, service, updates) {
+  const allowed = ['monthly_allotment', 'overage_rate_cents', 'unit'];
+  const sets = [];
+  const vals = [];
+  for (const [k, v] of Object.entries(updates)) {
+    if (allowed.includes(k)) { sets.push(`${k} = ?`); vals.push(v); }
+  }
+  if (sets.length === 0) return;
+  sets.push("updated_at = datetime('now')");
+  vals.push(tenantId, service);
+  db.prepare(`UPDATE service_quotas SET ${sets.join(', ')} WHERE tenant_id = ? AND service = ?`).run(...vals);
+}
+
+export function resetServiceQuotas(tenantId) {
+  db.prepare(`UPDATE service_quotas SET used_this_month = 0, last_reset = datetime('now') WHERE tenant_id = ?`).run(tenantId);
+}
+
+export function getServiceUsageLog(tenantId, service = null, limit = 50) {
+  if (service) {
+    return db.prepare('SELECT * FROM service_usage_log WHERE tenant_id = ? AND service = ? ORDER BY created_at DESC LIMIT ?').all(tenantId, service, limit);
+  }
+  return db.prepare('SELECT * FROM service_usage_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?').all(tenantId, limit);
+}
+
+export function getServiceUsageSummary(tenantId) {
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+  const startDate = startOfMonth.toISOString().slice(0, 10);
+
+  return db.prepare(`
+    SELECT service, SUM(quantity) as total_used, SUM(cost_cents) as total_overage_cents, COUNT(*) as event_count
+    FROM service_usage_log
+    WHERE tenant_id = ? AND created_at >= ?
+    GROUP BY service
+  `).all(tenantId, startDate);
 }
 
 // ─── Usage Aggregation for Tenants ──────────────────────────────────────────

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users, BarChart3, Activity } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users, BarChart3, Activity, Volume2, Zap, Globe } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
 
@@ -86,6 +86,16 @@ const MEETING_RANGES = [
   { key: 'month', label: '30d' },
   { key: '90', label: '90d' },
 ];
+
+const SERVICE_META = {
+  whisper: { name: 'Whisper', icon: Mic, desc: 'Transcription' },
+  apollo: { name: 'Apollo', icon: UserPlus, desc: 'Lead Enrichment' },
+  elevenlabs: { name: 'ElevenLabs', icon: Volume2, desc: 'Voice Synthesis' },
+  perplexity: { name: 'Perplexity', icon: Search, desc: 'Web Research' },
+  fireflies: { name: 'Fireflies', icon: Video, desc: 'Meeting Import' },
+  recall: { name: 'Recall.ai', icon: Mic, desc: 'Meeting Bot' },
+  apify: { name: 'LinkedIn', icon: Users, desc: 'Profile Scraping' },
+};
 
 export default function DacpCommandDashboard({ onNavigate }) {
   const [stats, setStats] = useState(null);
@@ -174,6 +184,7 @@ export default function DacpCommandDashboard({ onNavigate }) {
   const [actionItems, setActionItems] = useState([]);
   // Usage metering
   const [usageData, setUsageData] = useState(null);
+  const [quotaData, setQuotaData] = useState(null);
 
   // Available sender email accounts (fetched from backend)
   const [sendersList, setSendersList] = useState([]);
@@ -568,6 +579,9 @@ export default function DacpCommandDashboard({ onNavigate }) {
       // Fetch usage summary
       fetch(`${API_BASE}/v1/usage/summary`, { headers })
         .then(r => r.ok ? r.json() : null).then(data => { if (data) setUsageData(data); }).catch(() => {});
+      // Fetch service quotas
+      fetch(`${API_BASE}/v1/usage/quotas`, { headers })
+        .then(r => r.ok ? r.json() : null).then(data => { if (data) setQuotaData(data); }).catch(() => {});
     };
 
     refreshDashboard();
@@ -877,6 +891,70 @@ export default function DacpCommandDashboard({ onNavigate }) {
           </div>
         );
       })()}
+
+      {/* Service Quotas Card */}
+      {quotaData?.quotas?.length > 0 && (
+        <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
+          {/* Header */}
+          <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
+            <div className="flex items-center gap-2">
+              <Zap size={14} className="text-[#1e3a5f]" />
+              <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Services</span>
+            </div>
+            {quotaData.total_overage_cents > 0 && (
+              <span className="text-[11px] font-mono font-semibold text-red-500 tabular-nums">
+                Overage: ${(quotaData.total_overage_cents / 100).toFixed(2)}
+              </span>
+            )}
+          </div>
+          <div className="px-[18px] py-4">
+            {/* Quota grid - 2 cols desktop, 1 col mobile */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {quotaData.quotas.map((q) => {
+                const meta = SERVICE_META[q.service] || { name: q.service, icon: Globe, desc: '' };
+                const Icon = meta.icon;
+                const barColor = q.overage ? 'bg-purple-500'
+                  : q.pct_used >= 90 ? 'bg-red-500'
+                  : q.pct_used >= 70 ? 'bg-amber-500'
+                  : 'bg-[#1e3a5f]';
+                const barWidth = q.overage ? 100 : Math.min(q.pct_used, 100);
+                return (
+                  <div key={q.service} className="bg-[#faf9f7] border border-[#eae8e4] rounded-[10px] px-3.5 py-3">
+                    {/* Top row: icon+name ... usage fraction */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Icon size={13} className="text-[#6b6b65]" />
+                        <span className="text-[12px] font-heading font-semibold text-terminal-text">{meta.name}</span>
+                      </div>
+                      <span className="text-[11px] font-mono tabular-nums text-terminal-muted">
+                        {q.used_this_month} / {q.monthly_allotment} {q.unit}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full h-[6px] bg-[#e8e6e2] rounded-full overflow-hidden mb-1.5">
+                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${barWidth}%` }} />
+                    </div>
+                    {/* Bottom row: overage rate or overage cost */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-[#9a9a92]">
+                        ${(q.overage_rate_cents / 100).toFixed(2)}/{q.unit === 'minutes' ? 'min' : q.unit === 'leads' ? 'lead' : q.unit} overage
+                      </span>
+                      {q.overage && q.overage_cost_cents > 0 && (
+                        <span className="text-[10px] font-mono font-semibold text-red-500 tabular-nums">
+                          +${(q.overage_cost_cents / 100).toFixed(2)} overage
+                        </span>
+                      )}
+                      {!q.overage && (
+                        <span className="text-[10px] font-mono text-[#9a9a92] tabular-nums">{q.pct_used}%</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Team Action Items + Approval Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">

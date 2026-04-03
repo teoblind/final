@@ -13,6 +13,11 @@ import {
   getUsageBudget,
   upsertUsageBudget,
   getActiveSessions,
+  getServiceQuotas,
+  getServiceUsageSummary,
+  initServiceQuotas,
+  updateServiceQuota,
+  getServiceUsageLog,
 } from '../cache/database.js';
 
 const router = Router();
@@ -148,6 +153,68 @@ router.get('/budget', (req, res) => {
     if (!tenantId) return res.status(400).json({ error: 'No tenant' });
     const budget = getUsageBudget(tenantId);
     res.json(budget || { monthly_limit_cents: 0, alert_threshold_pct: 80, enforce_limit: false });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /usage/quotas - Service quotas for this tenant */
+router.get('/quotas', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant' });
+
+    // Ensure quotas are seeded
+    initServiceQuotas(tenantId);
+
+    const quotas = getServiceQuotas(tenantId);
+    const usageSummary = getServiceUsageSummary(tenantId);
+    const usageMap = {};
+    for (const u of usageSummary) { usageMap[u.service] = u; }
+
+    const enriched = quotas.map(q => ({
+      ...q,
+      pct_used: q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0,
+      overage: q.used_this_month > q.monthly_allotment,
+      overage_units: Math.max(0, q.used_this_month - q.monthly_allotment),
+      overage_cost_cents: Math.max(0, q.used_this_month - q.monthly_allotment) * q.overage_rate_cents,
+      events_this_month: usageMap[q.service]?.event_count || 0,
+    }));
+
+    const totalOverageCents = enriched.reduce((s, q) => s + q.overage_cost_cents, 0);
+
+    res.json({ quotas: enriched, total_overage_cents: totalOverageCents });
+  } catch (error) {
+    console.error('[Usage] Quotas error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** PUT /usage/quotas/:service - Update a service quota (admin only) */
+router.put('/quotas/:service', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant' });
+    if (req.user?.role && !['admin', 'owner'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { service } = req.params;
+    updateServiceQuota(tenantId, service, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /usage/quotas/:service/log - Usage log for a specific service */
+router.get('/quotas/:service/log', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant' });
+    const { service } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+    const log = getServiceUsageLog(tenantId, service, limit);
+    res.json({ log });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
