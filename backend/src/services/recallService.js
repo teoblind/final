@@ -12,7 +12,11 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { SANGHA_TENANT_ID } from '../cache/database.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const RECALL_API_KEY = process.env.RECALL_API_KEY || '';
 const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';

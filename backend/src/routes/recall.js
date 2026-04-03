@@ -112,7 +112,7 @@ router.post('/transcript-event', async (req, res) => {
 
       // Append to local transcript store
       const words = transcriptPayload.words || [];
-      const text = words.map(w => w.text || w).join(' ').trim() || transcriptPayload.text || '';
+      const text = words.map(w => (typeof w === 'string' ? w : (w.text ?? ''))).join(' ').trim() || transcriptPayload.text || '';
       if (text) {
         appendTranscript(botId, {
           speaker: transcriptPayload.speaker || transcriptPayload.participant?.name || 'Unknown',
