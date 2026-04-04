@@ -1438,8 +1438,10 @@ function seedTenantData(targetDb, tenantId) {
     }
   }
 
-  // Seed demo data via the existing initDacpTables seed logic (called per-tenant)
-  initDacpSeedData(targetDb, tenantId);
+  // Seed DACP demo data only for DACP tenant (not Sangha/Zhan)
+  if (tenantId === 'dacp-construction-001') {
+    initDacpSeedData(targetDb, tenantId);
+  }
 
   // Activity log seed data disabled - dashboards now show EmptyState when empty
 
