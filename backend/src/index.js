@@ -339,6 +339,14 @@ try {
   console.warn('Assignment executor not started:', err.message);
 }
 
+// Usage sync - pulls real data from external API providers every 15 minutes
+try {
+  const { startUsageSyncJob } = await import('./services/usageSyncService.js');
+  startUsageSyncJob();
+} catch (err) {
+  console.warn('Usage sync not started:', err.message);
+}
+
 // Chat health check - BBB heartbeat monitor (every 5 minutes)
 try {
   const { startChatHealthCheck } = await import('./jobs/chatHealthCheck.js');
