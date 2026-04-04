@@ -32,7 +32,7 @@ const FALLBACK_TENANTS = {
     settings: { industry: 'construction' },
   },
   sangha: {
-    name: 'Sangha Renewables',
+    name: 'Coppice Platform',
     slug: 'sangha',
     branding: { companyName: 'COPPICE', primaryColor: '#1a6b3c', logo: null },
     settings: { industry: 'mining' },
