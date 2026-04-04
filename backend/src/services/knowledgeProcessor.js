@@ -165,16 +165,33 @@ export async function processKnowledgeEntry(entryId, tenantId) {
         topics: [],
       };
     } else {
-      const systemInstructions = `You are a knowledge extraction agent. Given a transcript or document, output JSON with:
-
-- summary: A structured Fireflies-style meeting summary in markdown. Use these exact section headers:
+      const isMeeting = entry.type === 'meeting' || entry.type === 'meeting-transcript' || entry.source === 'local-capture' || entry.source === 'recall-bot';
+      const summaryInstructions = isMeeting
+        ? `- summary: A dense, comprehensive Fireflies-style meeting summary in markdown. Aim for 2000-4000 words. Use these exact section headers:
 
   ## Overview
-  2-3 sentence high-level summary of what was discussed and the outcome.
+  5-8 short bullet points summarizing the key themes. Each bullet: **Bold Topic**: one sentence summary.
+
+  ## Notes
+  Organize into 3-6 major THEMES (not chronological). Each theme is a ### heading, followed by 3-6 sub-topics. Each sub-topic has:
+  - A **bold sub-topic name** with timestamp in parentheses (MM:SS)
+  - 3-5 bullet points with specific details, numbers, names, conclusions, and context
+
+  ## Action Items
+  Organize by PERSON. For each person, list their specific action items with timestamps:
+  **Person Name**
+  - Specific task with context and details (MM:SS)
+
+  Be extremely thorough. Extract MAXIMUM information. Use specific names, numbers, dollar amounts, percentages, dates, and technical details. Every bullet must contain specific information from this particular meeting. Do not be generic. Do not use em dashes.
+
+  CRITICAL: NEVER invent or hallucinate names. Speaker names appear in the transcript as "Name:" at the start of lines. Use ONLY those exact names.`
+        : `- summary: A structured summary in markdown. Use these exact section headers:
+
+  ## Overview
+  2-3 sentence high-level summary.
 
   ## Topics Discussed
-  - **Topic Name** - one sentence on what was covered
-  (list all major topics, 3-8 items)
+  - **Topic Name** - one sentence on what was covered (3-8 items)
 
   ## Key Decisions
   - Decision with context (only if decisions were actually made; omit section if none)
@@ -183,7 +200,11 @@ export async function processKnowledgeEntry(entryId, tenantId) {
   - "Exact quote or close paraphrase" - Speaker Name (only 2-4 most important; omit if none)
 
   ## Next Steps
-  - Brief description of what happens next - Owner (if known)
+  - Brief description of what happens next - Owner (if known)`;
+
+      const systemInstructions = `You are a knowledge extraction agent. Given a transcript or document, output JSON with:
+
+${summaryInstructions}
 
 - title: a descriptive title if the provided title is generic
 - people: array of full names mentioned
