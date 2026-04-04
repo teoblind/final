@@ -1302,7 +1302,7 @@ function ApiSpendPage() {
   }, [period]);
 
   const fetchQuotas = useCallback(() => {
-    api.get('/v1/usage/quotas/admin').then(res => setQuotaData(res.data)).catch(() => {});
+    api.get('/v1/admin/usage/quotas').then(res => setQuotaData(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => { fetchSpend(); }, [fetchSpend]);
@@ -1310,7 +1310,7 @@ function ApiSpendPage() {
   // Fetch service quotas + Mercury
   useEffect(() => {
     fetchQuotas();
-    api.get('/v1/usage/mercury').then(res => setMercuryData(res.data)).catch(() => {});
+    api.get('/v1/admin/usage/mercury').then(res => setMercuryData(res.data)).catch(() => {});
   }, [fetchQuotas]);
 
   const handleDeleteService = async (service) => {

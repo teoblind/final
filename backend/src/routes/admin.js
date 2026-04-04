@@ -38,6 +38,8 @@ import {
   getOpusDailyCount,
   checkOpusLimit,
   getTenantDb,
+  getServiceQuotas,
+  initServiceQuotas,
 } from '../cache/database.js';
 import { isTunnelHealthy } from '../services/claudeAgent.js';
 import { checkAllTokenHealth, getTokenHealthStatus } from '../jobs/gmailPoll.js';
@@ -784,6 +786,63 @@ router.get('/usage/logs', (req, res) => {
   } catch (error) {
     console.error('Paginated logs error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── GET /usage/quotas - Aggregated service quotas across all tenants ────────
+
+router.get('/usage/quotas', (req, res) => {
+  try {
+    const tenants = getAllTenants();
+    const aggregated = {};
+
+    for (const tenant of tenants) {
+      try {
+        initServiceQuotas(tenant.id);
+        const quotas = getServiceQuotas(tenant.id);
+        for (const q of quotas) {
+          if (!aggregated[q.service]) {
+            aggregated[q.service] = { ...q, used_this_month: 0 };
+          }
+          aggregated[q.service].used_this_month += (q.used_this_month || 0);
+          if (q.monthly_allotment > (aggregated[q.service].monthly_allotment || 0)) {
+            aggregated[q.service].monthly_allotment = q.monthly_allotment;
+          }
+          if (q.monthly_cost_cents > (aggregated[q.service].monthly_cost_cents || 0)) {
+            aggregated[q.service].monthly_cost_cents = q.monthly_cost_cents;
+          }
+        }
+      } catch (e) {
+        console.warn(`[Admin] Quotas failed for ${tenant.id}:`, e.message);
+      }
+    }
+
+    const enriched = Object.values(aggregated).map(q => ({
+      ...q,
+      pct_used: q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0,
+      overage: q.monthly_allotment > 0 && q.used_this_month > q.monthly_allotment,
+      overage_units: Math.max(0, q.used_this_month - (q.monthly_allotment || 0)),
+      overage_cost_cents: Math.max(0, q.used_this_month - (q.monthly_allotment || 0)) * (q.overage_rate_cents || 0),
+    }));
+
+    res.json({ quotas: enriched, total_overage_cents: enriched.reduce((s, q) => s + q.overage_cost_cents, 0) });
+  } catch (error) {
+    console.error('[Admin] Quotas error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── GET /usage/mercury - Mercury bank data ────────────────────────────────
+
+router.get('/usage/mercury', async (req, res) => {
+  try {
+    const { syncMercuryData } = await import('../services/usageSyncService.js');
+    const data = await syncMercuryData();
+    if (!data) return res.json({ error: 'Mercury API not configured', accounts: [], transactions: [] });
+    res.json(data);
+  } catch (error) {
+    console.error('[Admin] Mercury error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
