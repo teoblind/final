@@ -14,6 +14,23 @@ import CoppiceLogo from '../ui/CoppiceLogo';
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const FILE_BASE = window.location.hostname.includes('localhost') ? 'http://localhost:3002' : '';
 
+// Map tenant_id to short display label
+function tenantLabel(tenantId, tenantList) {
+  if (!tenantId) return tenantId;
+  const t = (tenantList || []).find(x => x.id === tenantId);
+  if (t) return t.name;
+  // Fallback: prettify the ID
+  return tenantId.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function tenantBadgeColor(tenantId) {
+  const id = (tenantId || '').toLowerCase();
+  if (id.includes('dacp')) return 'bg-[#eef3f9] text-[#1e3a5f]';
+  if (id.includes('sangha') || id === 'default') return 'bg-[#edf7f0] text-[#1a6b3c]';
+  if (id.includes('zhan')) return 'bg-[#fdf6e8] text-[#b8860b]';
+  return 'bg-[#f5f4f0] text-[#6b6b65]';
+}
+
 // ─── Sidebar ────────────────────────────────────────────────────────────────
 
 const NAV = [
@@ -517,10 +534,8 @@ function DashboardPage() {
             {recentLogs.map((log, i) => (
               <div key={i} className="flex items-center gap-2.5 py-2 border-b border-[#f0eeea] last:border-b-0 text-[11px]">
                 <span className="font-mono text-[10px] text-[#c5c5bc] w-[70px] shrink-0">{formatTime(log.created_at)}</span>
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${
-                  (log.tenant_id || '').includes('dacp') ? 'bg-[#eef3f9] text-[#1e3a5f]' : 'bg-[#edf7f0] text-[#1a6b3c]'
-                }`}>
-                  {(log.tenant_id || '').includes('dacp') ? 'DACP' : 'Sangha'}
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${tenantBadgeColor(log.tenant_id)}`}>
+                  {tenantLabel(log.tenant_id, tenants)}
                 </span>
                 <ModelBadge model={log.model} small />
                 <span className="flex-1 text-[#333330] truncate">{log.content?.slice(0, 80) || 'Chat message'}...</span>
@@ -627,13 +642,14 @@ function TenantsPage() {
             </thead>
             <tbody>
               {tenants.filter(t => t.slug !== 'admin').map(t => {
-                const isDACP = (t.id || '').includes('dacp');
+                const colors = { dacp: '#1e3a5f', sangha: '#1a6b3c', zhan: '#b8860b' };
+                const bgColor = Object.entries(colors).find(([k]) => (t.id || '').includes(k))?.[1] || '#6b6b65';
                 return (
                   <tr key={t.id} className="hover:bg-[#f5f4f0] cursor-pointer">
                     <td className="px-4 py-3.5 border-b border-[#f0eeea]">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold text-white" style={{ background: isDACP ? '#1e3a5f' : '#1a6b3c' }}>
-                          {isDACP ? 'D' : 'S'}
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-bold text-white" style={{ background: bgColor }}>
+                          {(t.name || '?').charAt(0)}
                         </div>
                         <div>
                           <div className="font-semibold text-[13px] text-[#111110]">{t.name}</div>
@@ -920,8 +936,8 @@ function RoleBadge({ role }) {
   const r = (role || '').toLowerCase();
   let cls = 'bg-[#f5f4f0] text-[#9a9a92]';
   let label = role;
-  if (r === 'sangha_admin') { cls = 'bg-[#f3f0ff] text-[#7c3aed]'; label = 'Admin'; }
-  else if (r === 'sangha_underwriter') { cls = 'bg-[#f3f0ff] text-[#7c3aed]'; label = 'Underwriter'; }
+  if (r.endsWith('_admin') || r === 'admin') { cls = 'bg-[#eef3f9] text-[#1e3a5f]'; label = 'Admin'; }
+  else if (r.endsWith('_underwriter')) { cls = 'bg-[#f3f0ff] text-[#7c3aed]'; label = 'Underwriter'; }
   else if (r === 'owner') { cls = 'bg-[#eef3f9] text-[#1e3a5f]'; label = 'Owner'; }
   else if (r === 'admin') { cls = 'bg-[#eef3f9] text-[#1e3a5f]'; label = 'Admin'; }
   else if (r === 'operator') { cls = 'bg-[#edf7f0] text-[#1a6b3c]'; label = 'Operator'; }
@@ -947,7 +963,14 @@ function ApiLogsPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ tenant_id: '', model: '', search: '' });
   const [expandedRow, setExpandedRow] = useState(null);
+  const [tenants, setTenants] = useState([]);
   const limit = 25;
+
+  useEffect(() => {
+    api.get('/v1/admin/tenants').then(res => {
+      setTenants((res.data?.tenants || res.data || []).filter(t => t.slug !== 'admin'));
+    }).catch(() => {});
+  }, []);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -1009,8 +1032,7 @@ function ApiLogsPage() {
           <select className="px-2.5 py-1.5 border border-[#e8e6e1] rounded-lg text-[11px] bg-white text-[#333] outline-none focus:border-[#3b82f6]"
             value={filters.tenant_id} onChange={e => { setFilters(f => ({ ...f, tenant_id: e.target.value })); setPage(1); }}>
             <option value="">All Tenants</option>
-            <option value="default">Sangha</option>
-            <option value="dacp-construction-001">DACP Construction</option>
+            {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </FilterGroup>
         <FilterGroup label="Model">
@@ -1054,14 +1076,13 @@ function ApiLogsPage() {
               <tr><td colSpan={9} className="py-12 text-center text-[#c5c5bc] text-[14px]">No API logs found</td></tr>
             ) : logs.map((log, i) => {
               const isExpanded = expandedRow === i;
-              const isDACP = (log.tenant_id || '').includes('dacp');
               return (
                 <React.Fragment key={i}>
                   <tr className="hover:bg-[rgba(0,0,0,0.015)] cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : i)}>
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea] font-mono text-[10px] text-[#9a9a92] whitespace-nowrap">{formatTime(log.created_at)}</td>
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea]">
-                      <span className={`text-[8px] font-bold py-[2px] px-2 rounded ${isDACP ? 'bg-[#eef3f9] text-[#1e3a5f]' : 'bg-[#edf7f0] text-[#1a6b3c]'}`}>
-                        {isDACP ? 'DACP' : 'Sangha'}
+                      <span className={`text-[8px] font-bold py-[2px] px-2 rounded ${tenantBadgeColor(log.tenant_id)}`}>
+                        {tenantLabel(log.tenant_id, tenants)}
                       </span>
                     </td>
                     <td className="px-3.5 py-2.5 border-b border-[#f0eeea]"><ModelBadge model={log.model} small /></td>
@@ -1288,6 +1309,13 @@ function ApiSpendPage() {
   const [quotaData, setQuotaData] = useState(null);
   const [mercuryData, setMercuryData] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [tenants, setTenants] = useState([]);
+
+  useEffect(() => {
+    api.get('/v1/admin/tenants').then(res => {
+      setTenants((res.data?.tenants || res.data || []).filter(t => t.slug !== 'admin'));
+    }).catch(() => {});
+  }, []);
 
   const fetchSpend = useCallback(async () => {
     setLoading(true);
@@ -1475,12 +1503,11 @@ function ApiSpendPage() {
                 </thead>
                 <tbody>
                   {byTenant.map(t => {
-                    const isDACP = (t.tenantId || '').includes('dacp');
                     return (
                       <tr key={t.tenantId} className="hover:bg-[#f5f4f0]">
                         <td className="px-4 py-2 border-b border-[#f0eeea]">
-                          <span className={`text-[8px] font-bold py-[2px] px-2 rounded mr-1.5 ${isDACP ? 'bg-[#eef3f9] text-[#1e3a5f]' : 'bg-[#edf7f0] text-[#1a6b3c]'}`}>
-                            {isDACP ? 'DACP' : 'Sangha'}
+                          <span className={`text-[8px] font-bold py-[2px] px-2 rounded mr-1.5 ${tenantBadgeColor(t.tenantId)}`}>
+                            {tenantLabel(t.tenantId, tenants)}
                           </span>
                           {t.tenantName}
                         </td>
