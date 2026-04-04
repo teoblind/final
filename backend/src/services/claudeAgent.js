@@ -108,6 +108,44 @@ Focus: sovereign AI infrastructure, energy systems, digital monetary networks. F
 Portfolio: Sangha Renewables, Volt Charging. You handle research, comms, ops, docs.`,
 };
 
+// Human-readable tenant names for isolation directives
+const TENANT_DISPLAY_NAMES = {
+  'sangha-renewables': 'Sangha Renewables',
+  'dacp-construction-001': 'DACP Construction',
+  'zhan-capital': 'Zhan Capital',
+};
+
+/**
+ * Build a tenant isolation directive that prevents cross-tenant data leaks.
+ * This is injected into every system prompt to enforce hard boundaries.
+ */
+function buildTenantIsolationBlock(tenantId) {
+  const currentTenant = TENANT_DISPLAY_NAMES[tenantId] || tenantId;
+  const otherTenants = Object.entries(TENANT_DISPLAY_NAMES)
+    .filter(([id]) => id !== tenantId)
+    .map(([, name]) => name);
+
+  if (otherTenants.length === 0) return '';
+
+  return `
+TENANT ISOLATION (CRITICAL - LEGAL REQUIREMENT):
+You are operating EXCLUSIVELY for ${currentTenant}. This is a hard, non-negotiable boundary.
+
+FORBIDDEN - you MUST NEVER:
+- Mention, reference, or allude to these other tenants by name: ${otherTenants.join(', ')}
+- Include any information, deals, people, projects, or data from other tenants in ANY output
+- Reference other tenants in documents, spreadsheets, emails, status notes, or chat responses
+- Access or read files from other tenants' data directories
+
+BEFORE writing ANY content to a shared document, spreadsheet, email, or external artifact:
+1. Verify: does EVERY word belong to ${currentTenant}'s world?
+2. Check: am I referencing any other company's name, people, deals, or operations?
+3. If cross-tenant content is detected, STOP and remove it immediately
+4. For capabilities that exist across tenants, describe them generically (e.g. "meeting recorder active") without naming other tenants
+
+Violation of tenant isolation is a LEGAL LIABILITY. Zero tolerance, no exceptions.`;
+}
+
 // ─── Complexity Detection ───────────────────────────────────────────────────
 // Returns true if the query should be routed through Claude Code CLI.
 
@@ -122,6 +160,7 @@ const COMPLEX_PATTERNS = [
 ];
 
 export { isTunnelHealthy };
+export { buildTenantIsolationBlock as getTenantIsolationReminder };
 export function getQueueStats() {
   return { active: cliQueue.active, pending: cliQueue.pending, concurrency: CLI_CONCURRENCY };
 }
@@ -929,8 +968,11 @@ WHEN NOT TO PROPOSE (answer directly):
 - The user just wants information, not a deliverable
 `;
 
+  const isolationBlock = buildTenantIsolationBlock(tenantId);
+
   return `${base}
 Agent: ${agentId}${userBlock}
+${isolationBlock}
 
 MEETING BOT:
 You CAN join live meetings. Coppice has a Meeting Bot (powered by Recall.ai) that automatically joins Google Meet, Zoom, and Teams calls from the user's calendar. It records, transcribes, extracts action items, and saves meeting notes. The user does NOT need workarounds like forwarding transcripts.

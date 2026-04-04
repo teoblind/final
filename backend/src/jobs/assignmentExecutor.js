@@ -32,6 +32,7 @@ import {
 import { tunnelOrChat } from '../services/cliTunnel.js';
 import { getThreadKnowledge, searchKnowledge } from '../services/knowledgeProcessor.js';
 import { generateReport } from '../services/documentService.js';
+import { getTenantIsolationReminder } from '../services/claudeAgent.js';
 
 let pollInterval = null;
 
@@ -194,7 +195,7 @@ async function executeAssignment(tenantId, assignment) {
     });
 
     // 6. Build and execute prompt
-    const prompt = buildExecutionPrompt(assignment, contextString);
+    const prompt = buildExecutionPrompt(assignment, contextString, tenantId);
 
     const isResearch = ['research', 'analysis', 'document'].includes(assignment.category);
     const { response } = await tunnelOrChat({
@@ -267,7 +268,7 @@ async function resumeAssignment(tenantId, assignment) {
 
     // Build continuation prompt
     const contextString = await gatherContext(tenantId, assignment);
-    const continuationPrompt = buildContinuationPrompt(assignment, respondedRequest, contextString);
+    const continuationPrompt = buildContinuationPrompt(assignment, respondedRequest, contextString, tenantId);
 
     const isResearchResume = ['research', 'analysis', 'document'].includes(assignment.category);
     const { response } = await tunnelOrChat({
@@ -393,17 +394,18 @@ function formatInputValues(assignment) {
   }
 }
 
-function buildExecutionPrompt(assignment, contextString) {
+function buildExecutionPrompt(assignment, contextString, tenantId) {
   const taskBlock = assignment.action_prompt
     || `Execute this task: ${assignment.title}\n\n${assignment.description}`;
 
   const inputBlock = formatInputValues(assignment);
+  const isolationReminder = tenantId ? getTenantIsolationReminder(tenantId) : '';
 
   return `${taskBlock}
 ${inputBlock}
 --- CONTEXT FROM KNOWLEDGE BASE ---
 ${contextString}
-
+${isolationReminder ? `\n${isolationReminder}\n` : ''}
 CRITICAL - HOW TO DELIVER YOUR WORK:
 Your response text IS the deliverable. The system converts your response into a professional PDF and Word document automatically. There is no other mechanism.
 
@@ -442,17 +444,18 @@ If you cannot complete this task because you are missing critical information (e
 Do NOT guess or fabricate. Request the information and stop.`;
 }
 
-function buildContinuationPrompt(assignment, respondedRequest, contextString) {
+function buildContinuationPrompt(assignment, respondedRequest, contextString, tenantId) {
   const taskBlock = assignment.action_prompt
     || `Execute this task: ${assignment.title}\n\n${assignment.description}`;
 
   const inputBlock = formatInputValues(assignment);
+  const isolationReminder = tenantId ? getTenantIsolationReminder(tenantId) : '';
 
   return `${taskBlock}
 ${inputBlock}
 --- CONTEXT FROM KNOWLEDGE BASE ---
 ${contextString}
-
+${isolationReminder ? `\n${isolationReminder}\n` : ''}
 --- PREVIOUS INFO REQUEST ---
 You previously asked: ${respondedRequest.content}
 The user responded: ${respondedRequest.response}
