@@ -89,6 +89,19 @@ router.get('/summary', (req, res) => {
       };
     });
 
+    const modelBreakdown = byModel.map(row => {
+      const pricing = getModelPricing(row.model);
+      const inputCost = ((row.input_tokens || 0) / 1_000_000) * pricing.input;
+      const outputCost = ((row.output_tokens || 0) / 1_000_000) * pricing.output;
+      return {
+        model: row.model,
+        requests: row.requests,
+        input_tokens: row.input_tokens || 0,
+        output_tokens: row.output_tokens || 0,
+        cost_cents: Math.round((inputCost + outputCost) * 100),
+      };
+    }).sort((a, b) => b.cost_cents - a.cost_cents);
+
     const budget = getUsageBudget(tenantId);
 
     res.json({
@@ -102,6 +115,7 @@ router.get('/summary', (req, res) => {
         tasks_run: taskCosts?.tasks_run || 0,
         task_cost_cents: taskCosts?.total_task_cost_cents || 0,
       },
+      by_model: modelBreakdown,
       by_user: Object.values(users).sort((a, b) => b.cost_cents - a.cost_cents),
       by_day: daily,
       budget: budget ? {

@@ -1102,6 +1102,8 @@ function initSchemaForDb(targetDb) {
       UNIQUE(tenant_id, service)
     )
   `);
+  try { targetDb.exec('ALTER TABLE service_quotas ADD COLUMN billing_type TEXT DEFAULT \'usage\''); } catch (e) { /* already exists */ }
+  try { targetDb.exec('ALTER TABLE service_quotas ADD COLUMN monthly_cost_cents INTEGER DEFAULT 0'); } catch (e) { /* already exists */ }
 
   // Service usage log - granular event log for metering
   targetDb.exec(`
@@ -1449,22 +1451,31 @@ function seedTenantData(targetDb, tenantId) {
 }
 
 const DEFAULT_SERVICE_QUOTAS = [
-  { service: 'whisper', monthly_allotment: 60, unit: 'minutes', overage_rate_cents: 1 },
-  { service: 'apollo', monthly_allotment: 200, unit: 'leads', overage_rate_cents: 10 },
-  { service: 'elevenlabs', monthly_allotment: 10000, unit: 'characters', overage_rate_cents: 30 },
-  { service: 'perplexity', monthly_allotment: 100, unit: 'queries', overage_rate_cents: 5 },
-  { service: 'fireflies', monthly_allotment: 50, unit: 'imports', overage_rate_cents: 20 },
-  { service: 'recall', monthly_allotment: 600, unit: 'minutes', overage_rate_cents: 1 },
-  { service: 'apify', monthly_allotment: 50, unit: 'scrapes', overage_rate_cents: 15 },
+  // Subscriptions
+  { service: 'claude_max', monthly_allotment: 1000, unit: 'sessions', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 40000 },
+  { service: 'elevenlabs', monthly_allotment: 10000, unit: 'characters', overage_rate_cents: 30, billing_type: 'subscription', monthly_cost_cents: 0 },
+  { service: 'fireflies', monthly_allotment: 50, unit: 'imports', overage_rate_cents: 20, billing_type: 'subscription', monthly_cost_cents: 0 },
+  // Pay-per-use
+  { service: 'anthropic_api', monthly_allotment: 5000, unit: 'requests', overage_rate_cents: 0, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'perplexity', monthly_allotment: 100, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'apollo', monthly_allotment: 200, unit: 'leads', overage_rate_cents: 10, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'recall', monthly_allotment: 600, unit: 'minutes', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'apify', monthly_allotment: 50, unit: 'scrapes', overage_rate_cents: 15, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'xai_grok', monthly_allotment: 200, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'fal_ai', monthly_allotment: 50, unit: 'generations', overage_rate_cents: 25, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'gemini', monthly_allotment: 500, unit: 'queries', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'whisper', monthly_allotment: 60, unit: 'minutes', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'google_maps', monthly_allotment: 500, unit: 'requests', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'hubspot', monthly_allotment: 1000, unit: 'requests', overage_rate_cents: 0, billing_type: 'usage', monthly_cost_cents: 0 },
 ];
 
 function seedServiceQuotas(targetDb, tenantId) {
   const insert = targetDb.prepare(`
-    INSERT OR IGNORE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents, billing_type, monthly_cost_cents)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   for (const q of DEFAULT_SERVICE_QUOTAS) {
-    insert.run(tenantId, q.service, q.monthly_allotment, q.unit, q.overage_rate_cents);
+    insert.run(tenantId, q.service, q.monthly_allotment, q.unit, q.overage_rate_cents, q.billing_type || 'usage', q.monthly_cost_cents || 0);
   }
 }
 
@@ -6373,11 +6384,11 @@ export function getSessionCountByUser(tenantId, userId) {
  */
 export function initServiceQuotas(tenantId) {
   const insert = db.prepare(`
-    INSERT OR IGNORE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents, billing_type, monthly_cost_cents)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
   for (const q of DEFAULT_SERVICE_QUOTAS) {
-    insert.run(tenantId, q.service, q.monthly_allotment, q.unit, q.overage_rate_cents);
+    insert.run(tenantId, q.service, q.monthly_allotment, q.unit, q.overage_rate_cents, q.billing_type || 'usage', q.monthly_cost_cents || 0);
   }
 }
 
@@ -6429,7 +6440,7 @@ export function recordServiceUsage(tenantId, service, quantity = 1, userId = nul
 }
 
 export function updateServiceQuota(tenantId, service, updates) {
-  const allowed = ['monthly_allotment', 'overage_rate_cents', 'unit'];
+  const allowed = ['monthly_allotment', 'overage_rate_cents', 'unit', 'billing_type', 'monthly_cost_cents'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(updates)) {

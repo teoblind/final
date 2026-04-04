@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users, BarChart3, Activity, Volume2, Zap, Globe } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle, ClipboardList, Clock, DollarSign, HardHat, Mic, TrendingUp, UserPlus, Video, Check, X, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Mail, FileSpreadsheet, MessageSquare, Paperclip, Pencil, RotateCcw, Save, Link2, ExternalLink, Search, Unlink, Share2, FileText, Download, Archive, Users, BarChart3, Activity, Volume2, Zap, Globe, Cpu, Bot, Sparkles, MapPin, Link, Image, Eye } from 'lucide-react';
 import InfoRequestCard from '../panels/agents/InfoRequestCard.jsx';
 import TaskInputForm from './TaskInputForm.jsx';
 
@@ -88,13 +88,20 @@ const MEETING_RANGES = [
 ];
 
 const SERVICE_META = {
-  whisper: { name: 'Whisper', icon: Mic, desc: 'Transcription' },
-  apollo: { name: 'Apollo', icon: UserPlus, desc: 'Lead Enrichment' },
+  claude_max: { name: 'Claude Max', icon: Bot, desc: '2x VPS Subscriptions' },
   elevenlabs: { name: 'ElevenLabs', icon: Volume2, desc: 'Voice Synthesis' },
-  perplexity: { name: 'Perplexity', icon: Search, desc: 'Web Research' },
   fireflies: { name: 'Fireflies', icon: Video, desc: 'Meeting Import' },
+  anthropic_api: { name: 'Anthropic API', icon: Cpu, desc: 'Token Usage' },
+  perplexity: { name: 'Perplexity', icon: Search, desc: 'Web Research' },
+  apollo: { name: 'Apollo', icon: UserPlus, desc: 'Lead Enrichment' },
   recall: { name: 'Recall.ai', icon: Mic, desc: 'Meeting Bot' },
-  apify: { name: 'LinkedIn', icon: Users, desc: 'Profile Scraping' },
+  apify: { name: 'LinkedIn/Apify', icon: Users, desc: 'Post Scraping' },
+  xai_grok: { name: 'xAI Grok', icon: Sparkles, desc: 'X/Twitter Search' },
+  fal_ai: { name: 'Fal AI', icon: Image, desc: 'Image/Video Gen' },
+  gemini: { name: 'Gemini Flash', icon: Eye, desc: 'Meeting Vision' },
+  whisper: { name: 'Whisper', icon: Mic, desc: 'Transcription' },
+  google_maps: { name: 'Google Maps', icon: MapPin, desc: 'Geocoding' },
+  hubspot: { name: 'HubSpot', icon: Link, desc: 'CRM Sync' },
 };
 
 export default function DacpCommandDashboard({ onNavigate }) {
@@ -893,7 +900,17 @@ export default function DacpCommandDashboard({ onNavigate }) {
       })()}
 
       {/* Service Quotas Card */}
-      {quotaData?.quotas?.length > 0 && (
+      {quotaData?.quotas?.length > 0 && (() => {
+        const subscriptions = quotaData.quotas.filter(q => q.billing_type === 'subscription');
+        const apiServices = quotaData.quotas.filter(q => q.billing_type !== 'subscription');
+        const totalMonthlyCost = subscriptions.reduce((sum, q) => sum + (q.monthly_cost_cents || 0), 0);
+        const fmtTokens = (n) => {
+          if (n == null) return '0';
+          if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+          if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+          return String(n);
+        };
+        return (
         <div className="bg-terminal-panel border border-terminal-border rounded-[14px] overflow-hidden mb-5">
           {/* Header */}
           <div className="px-[18px] py-[14px] flex items-center justify-between border-b border-[#f0eeea]">
@@ -901,60 +918,159 @@ export default function DacpCommandDashboard({ onNavigate }) {
               <Zap size={14} className="text-[#1e3a5f]" />
               <span className="text-xs font-heading font-bold text-terminal-text tracking-[0.3px]">Services</span>
             </div>
-            {quotaData.total_overage_cents > 0 && (
-              <span className="text-[11px] font-mono font-semibold text-red-500 tabular-nums">
-                Overage: ${(quotaData.total_overage_cents / 100).toFixed(2)}
-              </span>
-            )}
-          </div>
-          <div className="px-[18px] py-4">
-            {/* Quota grid - 2 cols desktop, 1 col mobile */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {quotaData.quotas.map((q) => {
-                const meta = SERVICE_META[q.service] || { name: q.service, icon: Globe, desc: '' };
-                const Icon = meta.icon;
-                const barColor = q.overage ? 'bg-purple-500'
-                  : q.pct_used >= 90 ? 'bg-red-500'
-                  : q.pct_used >= 70 ? 'bg-amber-500'
-                  : 'bg-[#1e3a5f]';
-                const barWidth = q.overage ? 100 : Math.min(q.pct_used, 100);
-                return (
-                  <div key={q.service} className="bg-[#faf9f7] border border-[#eae8e4] rounded-[10px] px-3.5 py-3">
-                    {/* Top row: icon+name ... usage fraction */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Icon size={13} className="text-[#6b6b65]" />
-                        <span className="text-[12px] font-heading font-semibold text-terminal-text">{meta.name}</span>
-                      </div>
-                      <span className="text-[11px] font-mono tabular-nums text-terminal-muted">
-                        {q.used_this_month} / {q.monthly_allotment} {q.unit}
-                      </span>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="w-full h-[6px] bg-[#e8e6e2] rounded-full overflow-hidden mb-1.5">
-                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${barWidth}%` }} />
-                    </div>
-                    {/* Bottom row: overage rate or overage cost */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-[#9a9a92]">
-                        ${(q.overage_rate_cents / 100).toFixed(2)}/{q.unit === 'minutes' ? 'min' : q.unit === 'leads' ? 'lead' : q.unit} overage
-                      </span>
-                      {q.overage && q.overage_cost_cents > 0 && (
-                        <span className="text-[10px] font-mono font-semibold text-red-500 tabular-nums">
-                          +${(q.overage_cost_cents / 100).toFixed(2)} overage
-                        </span>
-                      )}
-                      {!q.overage && (
-                        <span className="text-[10px] font-mono text-[#9a9a92] tabular-nums">{q.pct_used}%</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex items-center gap-3">
+              {totalMonthlyCost > 0 && (
+                <span className="text-[11px] font-mono font-semibold text-emerald-600 tabular-nums">
+                  ${(totalMonthlyCost / 100).toFixed(0)}/mo
+                </span>
+              )}
+              {quotaData.total_overage_cents > 0 && (
+                <span className="text-[11px] font-mono font-semibold text-red-500 tabular-nums">
+                  Overage: ${(quotaData.total_overage_cents / 100).toFixed(2)}
+                </span>
+              )}
             </div>
           </div>
+          <div className="px-[18px] py-4 space-y-5">
+            {/* Section A: Subscriptions */}
+            {subscriptions.length > 0 && (
+              <div>
+                <div className="text-[10px] font-heading font-bold uppercase tracking-[1px] text-[#9a9a92] mb-2.5">Subscriptions</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {subscriptions.map((q) => {
+                    const meta = SERVICE_META[q.service] || { name: q.service, icon: Globe, desc: '' };
+                    const Icon = meta.icon;
+                    const barColor = q.overage ? 'bg-purple-500'
+                      : q.pct_used >= 90 ? 'bg-red-500'
+                      : q.pct_used >= 70 ? 'bg-amber-500'
+                      : 'bg-[#1e3a5f]';
+                    const barWidth = q.overage ? 100 : Math.min(q.pct_used, 100);
+                    const cliSessions = q.service === 'claude_max' && usageData?.by_model
+                      ? Object.entries(usageData.by_model).filter(([m]) => m.toLowerCase().includes('cli')).reduce((s, [, v]) => s + (v.requests || 0), 0)
+                      : null;
+                    return (
+                      <div key={q.service} className="bg-[#faf9f7] border border-[#eae8e4] border-t-2 border-t-emerald-600/40 rounded-[10px] px-3.5 py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Icon size={13} className="text-[#6b6b65]" />
+                            <span className="text-[12px] font-heading font-semibold text-terminal-text">{meta.name}</span>
+                          </div>
+                          {q.monthly_cost_cents > 0 && (
+                            <span className="text-[10px] font-mono font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-[1px] rounded-full tabular-nums">
+                              ${(q.monthly_cost_cents / 100).toFixed(0)}/mo
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-mono tabular-nums text-terminal-muted">
+                            {q.used_this_month} / {q.monthly_allotment} {q.unit}
+                          </span>
+                        </div>
+                        <div className="w-full h-[6px] bg-[#e8e6e2] rounded-full overflow-hidden mb-1.5">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${barWidth}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          {q.overage && q.overage_cost_cents > 0 ? (
+                            <span className="text-[10px] font-mono font-semibold text-red-500 tabular-nums">
+                              +${(q.overage_cost_cents / 100).toFixed(2)} overage
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono text-[#9a9a92] tabular-nums">{q.pct_used}%</span>
+                          )}
+                          {cliSessions != null && (
+                            <span className="text-[10px] text-[#9a9a92]">{cliSessions} CLI sessions</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Section B: API Services */}
+            {apiServices.length > 0 && (
+              <div>
+                <div className="text-[10px] font-heading font-bold uppercase tracking-[1px] text-[#9a9a92] mb-2.5">API Services</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {apiServices.map((q) => {
+                    const meta = SERVICE_META[q.service] || { name: q.service, icon: Globe, desc: '' };
+                    const Icon = meta.icon;
+                    const barColor = q.overage ? 'bg-purple-500'
+                      : q.pct_used >= 90 ? 'bg-red-500'
+                      : q.pct_used >= 70 ? 'bg-amber-500'
+                      : 'bg-[#1e3a5f]';
+                    const barWidth = q.overage ? 100 : Math.min(q.pct_used, 100);
+                    const isAnthropic = q.service === 'anthropic_api';
+                    const modelBreakdown = isAnthropic && usageData?.by_model
+                      ? Object.entries(usageData.by_model).filter(([, v]) => (v.cost_cents || 0) > 0 || (v.requests || 0) > 0).sort(([, a], [, b]) => (b.cost_cents || 0) - (a.cost_cents || 0))
+                      : null;
+                    return (
+                      <div key={q.service} className="bg-[#faf9f7] border border-[#eae8e4] rounded-[10px] px-3.5 py-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Icon size={13} className="text-[#6b6b65]" />
+                            <span className="text-[12px] font-heading font-semibold text-terminal-text">{meta.name}</span>
+                          </div>
+                          <span className="text-[11px] font-mono tabular-nums text-terminal-muted">
+                            {q.used_this_month} / {q.monthly_allotment} {q.unit}
+                          </span>
+                        </div>
+                        <div className="w-full h-[6px] bg-[#e8e6e2] rounded-full overflow-hidden mb-1.5">
+                          <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${barWidth}%` }} />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-[#9a9a92]">
+                            ${(q.overage_rate_cents / 100).toFixed(2)}/{q.unit === 'minutes' ? 'min' : q.unit === 'leads' ? 'lead' : q.unit} overage
+                          </span>
+                          {q.overage && q.overage_cost_cents > 0 && (
+                            <span className="text-[10px] font-mono font-semibold text-red-500 tabular-nums">
+                              +${(q.overage_cost_cents / 100).toFixed(2)} overage
+                            </span>
+                          )}
+                          {!q.overage && (
+                            <span className="text-[10px] font-mono text-[#9a9a92] tabular-nums">{q.pct_used}%</span>
+                          )}
+                        </div>
+                        {/* Anthropic API model breakdown table */}
+                        {modelBreakdown && modelBreakdown.length > 0 && (
+                          <div className="mt-2.5 border-t border-[#eae8e4] pt-2">
+                            <table className="w-full text-[10px] font-mono">
+                              <thead>
+                                <tr className="text-[#9a9a92]">
+                                  <th className="text-left font-medium pb-1">Model</th>
+                                  <th className="text-right font-medium pb-1">Calls</th>
+                                  <th className="text-right font-medium pb-1">Input</th>
+                                  <th className="text-right font-medium pb-1">Output</th>
+                                  <th className="text-right font-medium pb-1">Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {modelBreakdown.map(([model, data]) => (
+                                  <tr key={model} className="text-terminal-text">
+                                    <td className="py-[2px]">
+                                      <span className="bg-[#eae8e4] text-[9px] px-1.5 py-[1px] rounded-[4px]">{model}</span>
+                                    </td>
+                                    <td className="text-right tabular-nums py-[2px]">{data.requests || 0}</td>
+                                    <td className="text-right tabular-nums py-[2px]">{fmtTokens(data.input_tokens)}</td>
+                                    <td className="text-right tabular-nums py-[2px]">{fmtTokens(data.output_tokens)}</td>
+                                    <td className="text-right tabular-nums py-[2px]">${((data.cost_cents || 0) / 100).toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Team Action Items + Approval Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4 mb-5">
