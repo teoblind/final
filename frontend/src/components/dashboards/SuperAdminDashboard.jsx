@@ -1009,7 +1009,7 @@ function ApiLogsPage() {
           <select className="px-2.5 py-1.5 border border-[#e8e6e1] rounded-lg text-[11px] bg-white text-[#333] outline-none focus:border-[#3b82f6]"
             value={filters.tenant_id} onChange={e => { setFilters(f => ({ ...f, tenant_id: e.target.value })); setPage(1); }}>
             <option value="">All Tenants</option>
-            <option value="default">Sangha Renewables</option>
+            <option value="default">Sangha</option>
             <option value="dacp-construction-001">DACP Construction</option>
           </select>
         </FilterGroup>
