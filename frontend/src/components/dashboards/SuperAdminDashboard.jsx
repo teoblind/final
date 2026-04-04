@@ -1183,7 +1183,8 @@ const PERIOD_OPTIONS = [
 const MODEL_COLORS = { haiku: '#a5b4fc', sonnet: '#3b82f6', opus: '#7c3aed', perplexity: '#d97706' };
 
 const ADMIN_SERVICE_META = {
-  claude_max: { name: 'Claude Max', desc: '2x VPS Subscriptions', color: '#7c3aed' },
+  claude_max_1: { name: 'Claude Max #1', desc: 'VPS Subscription', color: '#7c3aed' },
+  claude_max_2: { name: 'Claude Max #2', desc: 'VPS Subscription', color: '#9333ea' },
   elevenlabs: { name: 'ElevenLabs', desc: 'Voice Synthesis', color: '#d97706' },
   anthropic_api: { name: 'Anthropic API', desc: 'Token Usage', color: '#6366f1' },
   perplexity: { name: 'Perplexity', desc: 'Web Research', color: '#d97706' },
@@ -1301,7 +1302,7 @@ function ApiSpendPage() {
   }, [period]);
 
   const fetchQuotas = useCallback(() => {
-    api.get('/v1/usage/quotas').then(res => setQuotaData(res.data)).catch(() => {});
+    api.get('/v1/usage/quotas/admin').then(res => setQuotaData(res.data)).catch(() => {});
   }, []);
 
   useEffect(() => { fetchSpend(); }, [fetchSpend]);
@@ -1611,8 +1612,8 @@ function ApiSpendPage() {
             // Calculate actual costs
             const totalSubsCost = subs.reduce((s, q) => s + (q.monthly_cost_cents || 0), 0);
             const totalUsageCost = apis.reduce((s, q) => {
-              // For usage services: cost = used * overage_rate OR the used_this_month IS cents (apify, fal_ai)
-              if (['apify', 'fal_ai'].includes(q.service)) return s + (q.used_this_month || 0); // already in cents
+              if (['apify'].includes(q.service)) return s + (q.used_this_month || 0); // stored as cents
+              if (q.service === 'fal_ai') return s + (q.used_this_month || 0); // balance remaining in cents
               return s + ((q.used_this_month || 0) * (q.overage_rate_cents || 0));
             }, 0);
             const grandTotalCents = totalSubsCost + totalUsageCost;
@@ -1709,8 +1710,11 @@ function ApiSpendPage() {
                         const barColor = pct > 100 ? '#a855f7' : pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#22c55e';
 
                         // Calculate cost in cents
-                        const isCentsBased = ['apify', 'fal_ai'].includes(q.service);
-                        const costCents = isCentsBased ? (q.used_this_month || 0) : ((q.used_this_month || 0) * (q.overage_rate_cents || 0));
+                        // fal_ai stores balance remaining (not spend), apify stores actual spend in cents
+                        const isCentsBased = ['apify'].includes(q.service);
+                        const costCents = isCentsBased ? (q.used_this_month || 0)
+                          : q.service === 'fal_ai' ? (q.used_this_month || 0) // fal_ai: balance remaining in cents
+                          : ((q.used_this_month || 0) * (q.overage_rate_cents || 0));
                         const costDisplay = fc(costCents);
 
                         return (

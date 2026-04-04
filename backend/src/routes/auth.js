@@ -19,6 +19,7 @@ import {
 import {
   getUserByEmail,
   getUsersByEmail,
+  getUsersByEmailAllTenants,
   getUserByEmailAndTenant,
   getUserById,
   createUser,
@@ -123,10 +124,18 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
 
     if (resolvedTenantId) {
       // Single tenant context (subdomain or explicit selection)
-      user = getUserByEmailAndTenant(email, resolvedTenantId);
+      // For cross-tenant with explicit tenant_id, query the correct tenant DB
+      if (isCrossTenant && tenant_id) {
+        await runWithTenant(tenant_id, () => {
+          user = getUserByEmailAndTenant(email, tenant_id);
+        });
+      } else {
+        user = getUserByEmailAndTenant(email, resolvedTenantId);
+      }
     } else {
       // No tenant context - check if user exists in multiple tenants
-      const users = getUsersByEmail(email);
+      // Use cross-tenant search when flag is set (desktop app), else use current tenant DB
+      const users = isCrossTenant ? getUsersByEmailAllTenants(email) : getUsersByEmail(email);
       if (users.length > 1) {
         // Return tenant picker - don't verify password yet
         const tenants = users.map(u => {
@@ -162,30 +171,36 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
     // Generate token pair
     const tokens = generateTokens(user);
 
-    // Create session with hashed refresh token
-    const sessionId = uuidv4();
-    const refreshTokenHash = hashToken(tokens.refreshToken);
-    createSession({
-      id: sessionId,
-      userId: user.id,
-      refreshTokenHash,
-      device: req.headers['user-agent'] || null,
-      ipAddress: req.ip,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    });
+    // For cross-tenant login, run session/audit writes in the user's actual tenant context
+    const writeOps = () => {
+      const sessionId = uuidv4();
+      const refreshTokenHash = hashToken(tokens.refreshToken);
+      createSession({
+        id: sessionId,
+        userId: user.id,
+        refreshTokenHash,
+        device: req.headers['user-agent'] || null,
+        ipAddress: req.ip,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
 
-    // Update last login timestamp
-    updateUser(user.id, { lastLogin: new Date().toISOString() });
+      updateUser(user.id, { lastLogin: new Date().toISOString() });
 
-    // Audit log
-    insertAuditLog({
-      tenantId: user.tenant_id,
-      userId: user.id,
-      action: 'user.login',
-      resourceType: 'user',
-      resourceId: user.id,
-      ipAddress: req.ip,
-    });
+      insertAuditLog({
+        tenantId: user.tenant_id,
+        userId: user.id,
+        action: 'user.login',
+        resourceType: 'user',
+        resourceId: user.id,
+        ipAddress: req.ip,
+      });
+    };
+
+    if (isCrossTenant) {
+      await runWithTenant(user.tenant_id, writeOps);
+    } else {
+      writeOps();
+    }
 
     // Include tenant slug for subdomain redirect
     const tenantRow = getTenant(user.tenant_id);

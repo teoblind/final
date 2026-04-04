@@ -20,6 +20,7 @@ import {
   getServiceUsageLog,
   addCustomServiceQuota,
   deleteServiceQuota,
+  getAllTenants,
 } from '../cache/database.js';
 import { syncMercuryData } from '../services/usageSyncService.js';
 
@@ -171,6 +172,54 @@ router.get('/budget', (req, res) => {
     const budget = getUsageBudget(tenantId);
     res.json(budget || { monthly_limit_cents: 0, alert_threshold_pct: 80, enforce_limit: false });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /usage/quotas/admin - Aggregated quotas across all tenants (admin only) */
+router.get('/quotas/admin', async (req, res) => {
+  try {
+    if (req.user?.role && !['admin', 'owner', 'super_admin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const tenants = getAllTenants();
+    const aggregated = {};
+
+    for (const tenant of tenants) {
+      try {
+        initServiceQuotas(tenant.id);
+        const quotas = getServiceQuotas(tenant.id);
+        for (const q of quotas) {
+          if (!aggregated[q.service]) {
+            aggregated[q.service] = { ...q, used_this_month: 0 };
+          }
+          aggregated[q.service].used_this_month += (q.used_this_month || 0);
+          // Keep the highest allotment and cost (they should be same across tenants)
+          if (q.monthly_allotment > aggregated[q.service].monthly_allotment) {
+            aggregated[q.service].monthly_allotment = q.monthly_allotment;
+          }
+          if (q.monthly_cost_cents > aggregated[q.service].monthly_cost_cents) {
+            aggregated[q.service].monthly_cost_cents = q.monthly_cost_cents;
+          }
+        }
+      } catch (e) {
+        console.warn(`[Usage] Failed to get quotas for tenant ${tenant.id}:`, e.message);
+      }
+    }
+
+    const enriched = Object.values(aggregated).map(q => ({
+      ...q,
+      pct_used: q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0,
+      overage: q.monthly_allotment > 0 && q.used_this_month > q.monthly_allotment,
+      overage_units: Math.max(0, q.used_this_month - (q.monthly_allotment || 0)),
+      overage_cost_cents: Math.max(0, q.used_this_month - (q.monthly_allotment || 0)) * (q.overage_rate_cents || 0),
+    }));
+
+    const totalOverageCents = enriched.reduce((s, q) => s + q.overage_cost_cents, 0);
+    res.json({ quotas: enriched, total_overage_cents: totalOverageCents });
+  } catch (error) {
+    console.error('[Usage] Admin quotas error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

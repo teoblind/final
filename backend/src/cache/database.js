@@ -1454,14 +1454,15 @@ function seedTenantData(targetDb, tenantId) {
 
 const DEFAULT_SERVICE_QUOTAS = [
   // Subscriptions (fixed monthly cost)
-  { service: 'claude_max', monthly_allotment: 0, unit: 'runs', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 40000 },
+  { service: 'claude_max_1', monthly_allotment: 0, unit: 'runs', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 20000 },
+  { service: 'claude_max_2', monthly_allotment: 0, unit: 'runs', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 20000 },
   { service: 'elevenlabs', monthly_allotment: 10000, unit: 'characters', overage_rate_cents: 30, billing_type: 'subscription', monthly_cost_cents: 0 },
   // Usage-based (cost = used * overage_rate_cents)
   { service: 'anthropic_api', monthly_allotment: 5000, unit: 'requests', overage_rate_cents: 0, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'perplexity', monthly_allotment: 100, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'apollo', monthly_allotment: 200, unit: 'leads', overage_rate_cents: 10, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'recall', monthly_allotment: 600, unit: 'minutes', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
-  { service: 'apify', monthly_allotment: 500, unit: 'cents', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'apify', monthly_allotment: 2600, unit: 'cents', overage_rate_cents: 1, billing_type: 'subscription', monthly_cost_cents: 2600 },
   { service: 'xai_grok', monthly_allotment: 200, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'fal_ai', monthly_allotment: 1000, unit: 'cents', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'gemini', monthly_allotment: 500, unit: 'queries', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
@@ -2892,6 +2893,19 @@ export function getUserByEmail(email) {
 
 export function getUsersByEmail(email) {
   return db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').all(email);
+}
+
+/** Search for a user by email across ALL tenant databases (for cross-tenant login). */
+export function getUsersByEmailAllTenants(email) {
+  const allDbs = getAllTenantDbs();
+  const results = [];
+  for (const [tenantId, tdb] of Object.entries(allDbs)) {
+    try {
+      const users = tdb.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').all(email);
+      results.push(...users);
+    } catch {}
+  }
+  return results;
 }
 
 export function getUserByEmailAndTenant(email, tenantId) {

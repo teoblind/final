@@ -269,7 +269,7 @@ export async function syncClaudeMaxUsage(tenantId) {
 
   // Store agent run count (more meaningful than raw message count)
   const runs = result?.agent_runs || 0;
-  setServiceUsage(tenantId, 'claude_max', runs);
+  setServiceUsage(tenantId, 'claude_max_1', runs);
   return { runs, messages: result?.total_messages || 0 };
 }
 
