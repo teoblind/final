@@ -25,18 +25,27 @@ class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary] Caught:', error, info);
-    // Auto-reload on stale chunk errors (happens after deploy when old JS hashes are gone)
-    if (error?.message?.includes('Failed to fetch dynamically imported module') ||
-        error?.message?.includes('Importing a module script failed')) {
-      const key = '_err_reload';
-      const last = sessionStorage.getItem(key);
-      // Only auto-reload once per session to avoid infinite loops
-      if (!last || Date.now() - Number(last) > 10000) {
-        sessionStorage.setItem(key, String(Date.now()));
-        window.location.reload();
-        return;
-      }
+    // Auto-reload on any error - max 3 attempts per 30 seconds to avoid infinite loops
+    const key = '_err_reload';
+    const countKey = '_err_reload_count';
+    const last = Number(sessionStorage.getItem(key) || 0);
+    const count = Number(sessionStorage.getItem(countKey) || 0);
+    const now = Date.now();
+    // Reset counter if last error was >30s ago
+    if (now - last > 30000) {
+      sessionStorage.setItem(countKey, '1');
+      sessionStorage.setItem(key, String(now));
+      setTimeout(() => window.location.reload(), 1500);
+      return;
     }
+    // Allow up to 3 reloads within 30s window
+    if (count < 3) {
+      sessionStorage.setItem(countKey, String(count + 1));
+      sessionStorage.setItem(key, String(now));
+      setTimeout(() => window.location.reload(), 1500);
+      return;
+    }
+    // If 3+ reloads in 30s, stop and show manual button
   }
 
   render() {
@@ -48,14 +57,16 @@ class ErrorBoundary extends Component {
             <p className="text-sm text-terminal-muted mb-4">
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
+            <p className="text-xs text-terminal-muted mb-4">Auto-refreshing...</p>
             <button
               onClick={() => {
+                sessionStorage.removeItem('_err_reload_count');
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
               className="px-4 py-2 bg-terminal-panel border border-terminal-border rounded text-sm text-terminal-text hover:border-terminal-green"
             >
-              Reload
+              Reload Now
             </button>
           </div>
         </div>
