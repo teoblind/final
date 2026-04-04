@@ -39,34 +39,37 @@ function setServiceUsage(tenantId, service, usedAmount) {
 // ─── ElevenLabs ─────────────────────────────────────────────────────────────
 
 /**
- * Fetch character usage from ElevenLabs character-stats endpoint.
- * Sums the "All" usage array for total characters consumed this month.
+ * Fetch character usage from ElevenLabs subscription endpoint.
+ * Returns character_count (used this billing period) from user/subscription.
  */
 export async function syncElevenLabsUsage(tenantId) {
   const apiKey = process.env.ELEVENLABS_API_KEY || '';
   if (!apiKey || apiKey === 'DISABLED') return null;
 
-  const monthStart = getMonthStartUnix();
-  const now = Math.floor(Date.now() / 1000);
-
   const res = await fetch(
-    `https://api.elevenlabs.io/v1/usage/character-stats?start_unix=${monthStart}&end_unix=${now}`,
+    'https://api.elevenlabs.io/v1/user/subscription',
     { headers: { 'xi-api-key': apiKey } }
   );
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`ElevenLabs usage API error (${res.status}): ${errText}`);
+    throw new Error(`ElevenLabs subscription API error (${res.status}): ${errText}`);
   }
 
   const data = await res.json();
-
-  // Response shape: { usage: { All: [number, ...], ... } }
-  // Sum all values in the "All" array for total characters this billing period
-  const allUsage = data?.usage?.All || [];
-  const totalCharacters = allUsage.reduce((sum, val) => sum + (val || 0), 0);
+  const totalCharacters = data?.character_count || 0;
+  const characterLimit = data?.character_limit || 0;
 
   setServiceUsage(tenantId, 'elevenlabs', totalCharacters);
+
+  // Also update the allotment if it differs (in case plan changed)
+  if (characterLimit > 0) {
+    const tdb = getTenantDb(tenantId);
+    tdb.prepare(
+      'UPDATE service_quotas SET monthly_allotment = ? WHERE tenant_id = ? AND service = ?'
+    ).run(characterLimit, tenantId, 'elevenlabs');
+  }
+
   return totalCharacters;
 }
 

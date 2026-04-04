@@ -1456,7 +1456,7 @@ const DEFAULT_SERVICE_QUOTAS = [
   // Subscriptions (fixed monthly cost)
   { service: 'claude_max_1', monthly_allotment: 0, unit: 'runs', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 20000 },
   { service: 'claude_max_2', monthly_allotment: 0, unit: 'runs', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 20000 },
-  { service: 'elevenlabs', monthly_allotment: 10000, unit: 'characters', overage_rate_cents: 30, billing_type: 'subscription', monthly_cost_cents: 0 },
+  { service: 'elevenlabs', monthly_allotment: 40000, unit: 'characters', overage_rate_cents: 30, billing_type: 'subscription', monthly_cost_cents: 600 },
   // Usage-based (cost = used * overage_rate_cents)
   { service: 'anthropic_api', monthly_allotment: 5000, unit: 'requests', overage_rate_cents: 0, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'perplexity', monthly_allotment: 100, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
