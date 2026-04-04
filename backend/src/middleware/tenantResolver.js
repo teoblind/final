@@ -3,7 +3,8 @@ import { getTenantBySlug, getTenantByDomain, setTenantContext, SANGHA_TENANT_ID 
 const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 
 // Slug aliases - map subdomain to DB slug if they differ
-const SLUG_ALIASES = { sangha: SANGHA_TENANT_ID, admin: SANGHA_TENANT_ID };
+// Note: getTenantBySlug looks up by the 'slug' column, not 'id', so alias values must be slugs
+const SLUG_ALIASES = { admin: 'sangha' };
 
 // Reverse alias - map DB slug back to subdomain
 const REVERSE_ALIASES = { [SANGHA_TENANT_ID]: 'sangha' };
