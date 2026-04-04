@@ -578,6 +578,24 @@ Execute this instruction now. This action has been explicitly approved.`;
       }
     }
 
+    // If this is a trusted_sender approval (add contact as trusted sender)
+    if (item.type === 'trusted_sender' && item.payload_json) {
+      try {
+        const payload = JSON.parse(item.payload_json);
+        const { addTrustedSender } = await import('../cache/database.js');
+        addTrustedSender({
+          tenantId,
+          email: payload.email,
+          displayName: payload.displayName,
+          trustLevel: 'trusted',
+          notes: `Approved via dashboard. Original conversation: ${payload.subject || 'N/A'}`,
+        });
+        console.log(`Approval ${item.id}: added ${payload.email} as trusted sender for ${tenantId}`);
+      } catch (tsErr) {
+        console.error(`Approval ${item.id}: trusted sender add failed:`, tsErr.message);
+      }
+    }
+
     res.json(formatItem(updated));
   } catch (error) {
     console.error('Approvals approve error:', error);

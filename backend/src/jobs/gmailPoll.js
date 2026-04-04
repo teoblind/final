@@ -894,18 +894,19 @@ You are responding to an external email. Your text response will be sent as the 
     agentId: 'coppice',
   });
 
-  // Auto-save sender as trusted contact after successful conversation
+  // Request approval to add sender as trusted contact after successful conversation
   try {
     const existingSender = getTrustedSenderByEmail(resolvedTenant, from);
     if (!existingSender) {
-      addTrustedSender({
+      insertApprovalItem({
         tenantId: resolvedTenant,
-        email: from,
-        displayName: fromName || from,
-        trustLevel: 'trusted',
-        notes: `Auto-saved after email conversation: ${subject}`,
+        agentId: 'coppice',
+        title: `Add trusted sender: ${fromName || from}`,
+        type: 'trusted_sender',
+        description: `${fromName || from} (${from}) has been actively involved in email conversations. Subject: "${subject}". Approve to allow this contact to invite Coppice to meetings and trigger agent workflows.`,
+        payloadJson: JSON.stringify({ email: from, displayName: fromName || from, subject }),
       });
-      console.log(`[GmailPoll] Auto-saved sender ${from} as trusted for ${resolvedTenant}`);
+      console.log(`[GmailPoll] Created approval request to add ${from} as trusted sender for ${resolvedTenant}`);
     }
   } catch {}
 
