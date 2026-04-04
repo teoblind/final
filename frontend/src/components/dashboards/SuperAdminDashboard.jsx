@@ -1219,17 +1219,9 @@ function ApiSpendPage() {
 
   useEffect(() => { fetchSpend(); }, [fetchSpend]);
 
-  // Fetch service quotas (uses tenant auth endpoint, not admin)
+  // Fetch service quotas
   useEffect(() => {
-    const fetchQuotas = async () => {
-      try {
-        const token = localStorage.getItem('auth_token');
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch(`${API_BASE}/v1/usage/quotas`, { headers });
-        if (res.ok) { const d = await res.json(); setQuotaData(d); }
-      } catch (e) { /* non-critical */ }
-    };
-    fetchQuotas();
+    api.get('/v1/usage/quotas').then(res => setQuotaData(res.data)).catch(() => {});
   }, []);
 
   const fmtCost = (n) => {
