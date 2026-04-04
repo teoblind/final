@@ -73,17 +73,20 @@ export async function syncElevenLabsUsage(tenantId) {
 // ─── Recall.ai ──────────────────────────────────────────────────────────────
 
 /**
- * Fetch billing usage from Recall.ai.
- * Returns total seconds all-time; we convert to minutes and store as total.
+ * Fetch billing usage from Recall.ai for the current month.
+ * Uses start/end params to get only this billing period.
  */
 export async function syncRecallUsage(tenantId) {
   const apiKey = process.env.RECALL_API_KEY || '';
   if (!apiKey || apiKey === 'DISABLED') return null;
 
   const region = process.env.RECALL_REGION || 'us-west-2';
+  const now = new Date();
+  const monthStart = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1).toISOString();
+  const monthEnd = now.toISOString();
 
   const res = await fetch(
-    `https://${region}.recall.ai/api/v1/billing/usage/`,
+    `https://${region}.recall.ai/api/v1/billing/usage/?start=${monthStart}&end=${monthEnd}`,
     { headers: { 'Authorization': `Token ${apiKey}`, 'Content-Type': 'application/json' } }
   );
 
@@ -94,7 +97,6 @@ export async function syncRecallUsage(tenantId) {
 
   const data = await res.json();
 
-  // Response: { bot_total: 60311.105705 } (total seconds all-time)
   const totalSeconds = data?.bot_total || 0;
   const totalMinutes = Math.round(totalSeconds / 60);
 
