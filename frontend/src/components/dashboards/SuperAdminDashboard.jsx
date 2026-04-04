@@ -1183,8 +1183,8 @@ const PERIOD_OPTIONS = [
 const MODEL_COLORS = { haiku: '#a5b4fc', sonnet: '#3b82f6', opus: '#7c3aed', perplexity: '#d97706' };
 
 const ADMIN_SERVICE_META = {
-  claude_max_1: { name: 'Claude Max #1', desc: 'VPS Subscription', color: '#7c3aed' },
-  claude_max_2: { name: 'Claude Max #2', desc: 'VPS Subscription', color: '#9333ea' },
+  claude_max_1: { name: 'Claude Max #1', desc: 'Weekly Usage', color: '#7c3aed' },
+  claude_max_2: { name: 'Claude Max #2', desc: 'Weekly Usage', color: '#9333ea' },
   elevenlabs: { name: 'ElevenLabs', desc: 'Voice Synthesis', color: '#d97706' },
   anthropic_api: { name: 'Anthropic API', desc: 'Token Usage', color: '#6366f1' },
   perplexity: { name: 'Perplexity', desc: 'Web Research', color: '#d97706' },

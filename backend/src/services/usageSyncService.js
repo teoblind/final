@@ -247,33 +247,80 @@ export async function syncAnthropicUsage(tenantId) {
   };
 }
 
-// ─── Claude Max (Internal) ──────────────────────────────────────────────────
+// ─── Claude Max (Live Usage from API Headers) ──────────────────────────────
 
 /**
- * Count Claude Max (CLI) usage from chat_messages this month.
- * Filters for model = 'claude-code-cli'.
+ * Query Claude API with a cheap Haiku call to extract rate limit headers.
+ * Returns real-time utilization percentages for session, weekly, and overage.
  */
 export async function syncClaudeMaxUsage(tenantId) {
-  const tdb = getTenantDb(tenantId);
-  const monthStart = getMonthStartISO();
+  // Read credentials from Claude CLI config
+  const credPaths = [
+    '/root/.claude/.credentials.json',  // VPS account
+  ];
 
-  // Count distinct agent runs (conversations), not individual messages
-  const result = tdb.prepare(`
-    SELECT
-      COUNT(DISTINCT json_extract(metadata_json, '$.conversation_id')) as agent_runs,
-      COUNT(*) as total_messages
-    FROM chat_messages
-    WHERE tenant_id = ?
-      AND role = 'assistant'
-      AND metadata_json IS NOT NULL
-      AND json_extract(metadata_json, '$.model') = 'claude-code-cli'
-      AND created_at >= ?
-  `).get(tenantId, monthStart);
+  const results = {};
 
-  // Store agent run count (more meaningful than raw message count)
-  const runs = result?.agent_runs || 0;
-  setServiceUsage(tenantId, 'claude_max_1', runs);
-  return { runs, messages: result?.total_messages || 0 };
+  for (let i = 0; i < credPaths.length; i++) {
+    const credPath = credPaths[i];
+    const accountNum = i + 1;
+    const serviceKey = `claude_max_${accountNum}`;
+
+    try {
+      const fs = await import('fs');
+      if (!fs.existsSync(credPath)) continue;
+
+      const creds = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+      const token = creds?.claudeAiOauth?.accessToken;
+      if (!token) continue;
+
+      // Make a minimal Haiku call to get rate limit headers
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': token,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: '.' }],
+        }),
+      });
+
+      // Extract rate limit headers (works on 200 or 429)
+      const sessionUtil = parseFloat(res.headers.get('anthropic-ratelimit-unified-5h-utilization') || '0');
+      const weeklyUtil = parseFloat(res.headers.get('anthropic-ratelimit-unified-7d-utilization') || '0');
+      const overageUtil = parseFloat(res.headers.get('anthropic-ratelimit-unified-overage-utilization') || '0');
+      const sessionReset = parseInt(res.headers.get('anthropic-ratelimit-unified-5h-reset') || '0');
+      const weeklyReset = parseInt(res.headers.get('anthropic-ratelimit-unified-7d-reset') || '0');
+
+      // Store weekly utilization as percentage (0-100) in used_this_month
+      // and set monthly_allotment to 100 so progress bar works
+      const weeklyPct = Math.round(weeklyUtil * 100);
+      setServiceUsage(tenantId, serviceKey, weeklyPct);
+
+      // Update allotment to 100 (percentage-based tracking)
+      const tdb = getTenantDb(tenantId);
+      tdb.prepare(
+        'UPDATE service_quotas SET monthly_allotment = 100, unit = ? WHERE tenant_id = ? AND service = ?'
+      ).run('% weekly', tenantId, serviceKey);
+
+      results[serviceKey] = {
+        sessionPct: Math.round(sessionUtil * 100),
+        weeklyPct,
+        overagePct: Math.round(overageUtil * 100),
+        sessionReset: sessionReset ? new Date(sessionReset * 1000).toISOString() : null,
+        weeklyReset: weeklyReset ? new Date(weeklyReset * 1000).toISOString() : null,
+        email: creds?.claudeAiOauth?.email || `Account #${accountNum}`,
+      };
+    } catch (e) {
+      console.warn(`[UsageSync] Claude Max #${accountNum} sync failed:`, e.message);
+    }
+  }
+
+  return results;
 }
 
 // ─── Mercury Banking ────────────────────────────────────────────────────────
@@ -420,7 +467,11 @@ export async function syncAllUsage(tenantId) {
   if (results.recall != null) parts.push(`Recall: ${results.recall} minutes`);
   if (results.apify != null) parts.push(`Apify: $${results.apify.totalUsd} (${results.apify.scrapes} scrapes)`);
   if (results.anthropic != null) parts.push(`Anthropic: ${results.anthropic.requests} requests (${results.anthropic.input_tokens || 0} in / ${results.anthropic.output_tokens || 0} out tokens)`);
-  if (results.claudeMax != null) parts.push(`ClaudeMax: ${results.claudeMax.runs} runs (${results.claudeMax.messages} msgs)`);
+  if (results.claudeMax != null) {
+    for (const [key, val] of Object.entries(results.claudeMax)) {
+      parts.push(`${key}: ${val.weeklyPct}% weekly, ${val.sessionPct}% session`);
+    }
+  }
   if (results.falAi != null) parts.push(`FalAI: $${results.falAi.balance} remaining`);
   if (results.apollo != null) parts.push(`Apollo: ${results.apollo} API calls today`);
 
