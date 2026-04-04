@@ -18,6 +18,8 @@ import {
   initServiceQuotas,
   updateServiceQuota,
   getServiceUsageLog,
+  addCustomServiceQuota,
+  deleteServiceQuota,
 } from '../cache/database.js';
 import { syncMercuryData } from '../services/usageSyncService.js';
 
@@ -230,6 +232,38 @@ router.get('/quotas/:service/log', (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const log = getServiceUsageLog(tenantId, service, limit);
     res.json({ log });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** POST /usage/quotas - Add a new service/subscription to track (admin only) */
+router.post('/quotas', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant' });
+    if (req.user?.role && !['admin', 'owner'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { service, monthly_allotment, unit, overage_rate_cents, billing_type, monthly_cost_cents } = req.body;
+    if (!service) return res.status(400).json({ error: 'Service name required' });
+    addCustomServiceQuota(tenantId, service, { monthly_allotment, unit, overage_rate_cents, billing_type, monthly_cost_cents });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** DELETE /usage/quotas/:service - Remove a service from tracking (admin only) */
+router.delete('/quotas/:service', (req, res) => {
+  try {
+    const tenantId = req.resolvedTenant?.id || req.user?.tenantId;
+    if (!tenantId) return res.status(400).json({ error: 'No tenant' });
+    if (req.user?.role && !['admin', 'owner'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    deleteServiceQuota(tenantId, req.params.service);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

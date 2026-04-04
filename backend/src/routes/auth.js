@@ -117,7 +117,9 @@ router.post('/login', authRateLimiter(10), async (req, res) => {
     let user;
 
     // Resolve tenant: explicit tenant_id > hostname-resolved tenant > multi-tenant picker
-    const resolvedTenantId = tenant_id || req.resolvedTenant?.id;
+    // Desktop/API clients without a subdomain should search all tenants (cross_tenant flag)
+    const isCrossTenant = req.body.cross_tenant === true;
+    const resolvedTenantId = tenant_id || (isCrossTenant ? null : req.resolvedTenant?.id);
 
     if (resolvedTenantId) {
       // Single tenant context (subdomain or explicit selection)

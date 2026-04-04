@@ -4,7 +4,9 @@
  * Architecture: Recall.ai transcription webhook → wake word check → Claude → ElevenLabs TTS → Recall output_audio
  *
  * The bot is COMPLETELY SILENT unless someone says "Coppice" or "hey Coppice".
- * After activation, stays responsive for 45 seconds, then goes back to passive listening.
+ * After activation, responds ONLY to the speaker who triggered the wake word.
+ * If a different speaker talks, bot immediately deactivates (conversation moved on).
+ * After responding, allows a 5s follow-up window for the same speaker, then goes silent.
  * All meeting audio is tracked for context so the bot knows what's being discussed.
  */
 
@@ -20,7 +22,8 @@ const RECALL_REGION = process.env.RECALL_REGION || 'us-west-2';
 const RECALL_BASE = `https://${RECALL_REGION}.recall.ai/api/v1`;
 
 const SPEECH_PAUSE_MS = 2000;       // debounce: wait for speaker to finish
-const ACTIVE_DURATION_MS = 45000;   // stay active for 45s after wake word
+const ACTIVE_DURATION_MS = 45000;   // stay active for 45s after wake word (initial activation)
+const FOLLOWUP_WINDOW_MS = 5000;    // after responding, allow 5s for same-speaker follow-up
 const ECHO_COOLDOWN_MS = 3000;      // ignore transcripts right after bot speaks (echo suppression)
 
 // Active voice loops keyed by botId
@@ -70,8 +73,10 @@ export async function startVoiceLoop(botId, tenantId = SANGHA_TENANT_ID) {
     pendingSpeaker: '',
     debounceTimer: null,
     // Wake word state
-    isActive: false,           // true = responding to all speech
+    isActive: false,           // true = responding to speech from activeSpeaker
     activeTimeout: null,
+    activeSpeaker: null,       // who triggered the wake word - only respond to them
+    hasResponded: false,       // true after first response in this activation
   };
 
   activeLoops.set(botId, state);
@@ -89,16 +94,39 @@ function checkWakeWord(text) {
 }
 
 /**
- * Activate the bot - it will respond to all speech for ACTIVE_DURATION_MS.
+ * Activate the bot for a specific speaker. Only responds to that speaker.
+ * If someone else talks, bot immediately deactivates (conversation moved on).
  */
-function activateBot(state) {
+function activateBot(state, speaker) {
   state.isActive = true;
-  console.log(`[VoiceLoop] *** ACTIVATED - responding to all speech for ${ACTIVE_DURATION_MS / 1000}s ***`);
+  state.activeSpeaker = speaker;
+  state.hasResponded = false;
+  console.log(`[VoiceLoop] *** ACTIVATED by ${speaker} - responding for ${ACTIVE_DURATION_MS / 1000}s ***`);
   if (state.activeTimeout) clearTimeout(state.activeTimeout);
   state.activeTimeout = setTimeout(() => {
     console.log(`[VoiceLoop] Auto-deactivating - timeout`);
-    state.isActive = false;
+    deactivateBot(state);
   }, ACTIVE_DURATION_MS);
+}
+
+/**
+ * Deactivate the bot and clear state.
+ */
+function deactivateBot(state) {
+  state.isActive = false;
+  state.activeSpeaker = null;
+  state.hasResponded = false;
+  if (state.activeTimeout) {
+    clearTimeout(state.activeTimeout);
+    state.activeTimeout = null;
+  }
+  // Cancel any pending response
+  if (state.debounceTimer) {
+    clearTimeout(state.debounceTimer);
+    state.debounceTimer = null;
+    state.pendingText = '';
+    state.pendingSpeaker = '';
+  }
 }
 
 /**
@@ -130,18 +158,33 @@ export function handleTranscriptEvent(botId, msg) {
     state.meetingTranscript = state.meetingTranscript.slice(-80);
   }
 
-  console.log(`[VoiceLoop] [${speaker}]: "${text}" [${state.isActive ? 'ACTIVE' : 'passive'}]`);
+  console.log(`[VoiceLoop] [${speaker}]: "${text}" [${state.isActive ? `ACTIVE(${state.activeSpeaker})` : 'passive'}]`);
 
   // Check for wake word
   const hasWakeWord = checkWakeWord(text);
 
+  // --- PASSIVE MODE ---
   if (!hasWakeWord && !state.isActive) {
-    // Passive mode - ignore this utterance
     return;
   }
 
+  // --- WAKE WORD: (re)activate for this speaker ---
   if (hasWakeWord) {
-    activateBot(state);
+    activateBot(state, speaker);
+  }
+
+  // --- ACTIVE MODE: different speaker talks → deactivate ---
+  if (state.isActive && !hasWakeWord && speaker !== state.activeSpeaker) {
+    console.log(`[VoiceLoop] Different speaker (${speaker}) - deactivating. Conversation moved on.`);
+    deactivateBot(state);
+    return;
+  }
+
+  // --- ACTIVE MODE: same speaker or wake word speaker ---
+  // If bot is currently generating/speaking a response, don't queue more
+  if (state.isResponding) {
+    console.log(`[VoiceLoop] Already responding, skipping.`);
+    return;
   }
 
   // Accumulate text with debounce (speaker might still be talking)
@@ -166,8 +209,7 @@ export function handleTranscriptEvent(botId, msg) {
 export function stopVoiceLoop(botId) {
   const state = activeLoops.get(botId);
   if (state) {
-    clearTimeout(state.debounceTimer);
-    clearTimeout(state.activeTimeout);
+    deactivateBot(state);
     activeLoops.delete(botId);
     console.log(`[VoiceLoop] Stopped for bot ${botId}`);
   }
@@ -237,8 +279,15 @@ async function respondToSpeech(state, userMessage, speaker) {
 
     await speakText(state, responseText);
 
-    // Do NOT reset active timer - let it expire naturally.
-    // Previously this created an infinite loop: respond → reset timer → respond → reset...
+    // After first response, shorten active window to a brief follow-up period.
+    // This prevents the bot from staying engaged for 45s responding to everything.
+    // The same speaker can re-trigger with the wake word for a new interaction.
+    state.hasResponded = true;
+    if (state.activeTimeout) clearTimeout(state.activeTimeout);
+    state.activeTimeout = setTimeout(() => {
+      console.log(`[VoiceLoop] Follow-up window expired - deactivating`);
+      deactivateBot(state);
+    }, FOLLOWUP_WINDOW_MS);
   } catch (err) {
     console.error(`[VoiceLoop] Error:`, err.message);
   }

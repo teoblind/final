@@ -246,6 +246,17 @@ export default function LoginPage({ onLogin }) {
           {/* Footer */}
           <div style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: '#3a3a38' }}>
             <a href="https://coppice.ai" style={{ color: '#6b6b65', textDecoration: 'none' }}>coppice.ai</a>
+            <span style={{ margin: '0 8px', color: '#2a2a28' }}>|</span>
+            <a
+              href="https://github.com/teoblind/coppice-desktop/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#6b6b65', textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#9a9a92'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#6b6b65'; }}
+            >
+              Desktop App
+            </a>
           </div>
         </div>
 
@@ -536,7 +547,30 @@ export default function LoginPage({ onLogin }) {
             )}
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: '#c5c5bc' }}>
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
+            <a
+              href="https://github.com/teoblind/coppice-desktop/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 12, color: '#9a9a92', textDecoration: 'none',
+                padding: '6px 12px', borderRadius: 8,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#6b6b65'; e.currentTarget.style.background = '#f0eeea'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#9a9a92'; e.currentTarget.style.background = 'transparent'; }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download Desktop App
+            </a>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: '#c5c5bc' }}>
             Powered by <a href="https://coppice.ai" target="_blank" rel="noopener noreferrer" style={{ color: '#9a9a92', textDecoration: 'none', fontWeight: 600 }}>Coppice</a>
           </div>
         </div>

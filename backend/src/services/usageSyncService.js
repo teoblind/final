@@ -139,10 +139,10 @@ export async function syncApifyUsage(tenantId) {
     }
   }
 
-  // Store scrape count as the primary usage metric (matches 'scrapes' unit in service_quotas)
-  const usageValue = scrapeCount || Math.round(totalUsd * 100); // fallback to cents if no scrape count
-  setServiceUsage(tenantId, 'apify', usageValue);
-  return { scrapes: scrapeCount, totalUsd: Math.round(totalUsd * 100) / 100 };
+  // Store total spend in cents as the primary usage metric
+  const spendCents = Math.round(totalUsd * 100);
+  setServiceUsage(tenantId, 'apify', spendCents);
+  return { scrapes: scrapeCount, spendCents, totalUsd: Math.round(totalUsd * 100) / 100 };
 }
 
 // ─── Fal AI ────────────────────────────────────────────────────────────────
@@ -168,7 +168,8 @@ export async function syncFalAiUsage(tenantId) {
   const data = await res.json();
   const balance = data?.credits?.current_balance || 0;
 
-  // Store balance as cents remaining (inverse tracking - lower = more used)
+  // Store spend in cents (total credits used = initial deposit - current balance)
+  // We track balance for display, but usage is stored as spend
   const balanceCents = Math.round(balance * 100);
   setServiceUsage(tenantId, 'fal_ai', balanceCents);
   return { balance, balanceCents };
@@ -253,8 +254,11 @@ export async function syncClaudeMaxUsage(tenantId) {
   const tdb = getTenantDb(tenantId);
   const monthStart = getMonthStartISO();
 
+  // Count distinct agent runs (conversations), not individual messages
   const result = tdb.prepare(`
-    SELECT COUNT(*) as sessions
+    SELECT
+      COUNT(DISTINCT json_extract(metadata_json, '$.conversation_id')) as agent_runs,
+      COUNT(*) as total_messages
     FROM chat_messages
     WHERE tenant_id = ?
       AND role = 'assistant'
@@ -263,9 +267,10 @@ export async function syncClaudeMaxUsage(tenantId) {
       AND created_at >= ?
   `).get(tenantId, monthStart);
 
-  const sessions = result?.sessions || 0;
-  setServiceUsage(tenantId, 'claude_max', sessions);
-  return sessions;
+  // Store agent run count (more meaningful than raw message count)
+  const runs = result?.agent_runs || 0;
+  setServiceUsage(tenantId, 'claude_max', runs);
+  return { runs, messages: result?.total_messages || 0 };
 }
 
 // ─── Mercury Banking ────────────────────────────────────────────────────────
@@ -410,9 +415,9 @@ export async function syncAllUsage(tenantId) {
   const parts = [];
   if (results.elevenlabs != null) parts.push(`ElevenLabs: ${results.elevenlabs} characters`);
   if (results.recall != null) parts.push(`Recall: ${results.recall} minutes`);
-  if (results.apify != null) parts.push(`Apify: ${results.apify.scrapes} scrapes ($${results.apify.totalUsd})`);
+  if (results.apify != null) parts.push(`Apify: $${results.apify.totalUsd} (${results.apify.scrapes} scrapes)`);
   if (results.anthropic != null) parts.push(`Anthropic: ${results.anthropic.requests} requests (${results.anthropic.input_tokens || 0} in / ${results.anthropic.output_tokens || 0} out tokens)`);
-  if (results.claudeMax != null) parts.push(`ClaudeMax: ${results.claudeMax} sessions`);
+  if (results.claudeMax != null) parts.push(`ClaudeMax: ${results.claudeMax.runs} runs (${results.claudeMax.messages} msgs)`);
   if (results.falAi != null) parts.push(`FalAI: $${results.falAi.balance} remaining`);
   if (results.apollo != null) parts.push(`Apollo: ${results.apollo} API calls today`);
 

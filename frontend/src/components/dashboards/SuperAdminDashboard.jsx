@@ -1185,20 +1185,100 @@ const MODEL_COLORS = { haiku: '#a5b4fc', sonnet: '#3b82f6', opus: '#7c3aed', per
 const ADMIN_SERVICE_META = {
   claude_max: { name: 'Claude Max', desc: '2x VPS Subscriptions', color: '#7c3aed' },
   elevenlabs: { name: 'ElevenLabs', desc: 'Voice Synthesis', color: '#d97706' },
-  fireflies: { name: 'Fireflies', desc: 'Meeting Import', color: '#3b82f6' },
   anthropic_api: { name: 'Anthropic API', desc: 'Token Usage', color: '#6366f1' },
   perplexity: { name: 'Perplexity', desc: 'Web Research', color: '#d97706' },
   apollo: { name: 'Apollo', desc: 'Lead Enrichment', color: '#059669' },
   recall: { name: 'Recall.ai', desc: 'Meeting Bot', color: '#3b82f6' },
-  apify: { name: 'LinkedIn/Apify', desc: 'Post Scraping', color: '#0284c7' },
+  apify: { name: 'Apify', desc: 'Web Scraping', color: '#0284c7' },
   xai_grok: { name: 'xAI Grok', desc: 'X/Twitter Search', color: '#111110' },
   fal_ai: { name: 'Fal AI', desc: 'Image/Video Gen', color: '#e11d48' },
   gemini: { name: 'Gemini Flash', desc: 'Meeting Vision', color: '#2563eb' },
   whisper: { name: 'Whisper', desc: 'Transcription', color: '#059669' },
   google_maps: { name: 'Google Maps', desc: 'Geocoding', color: '#16a34a' },
-  hubspot: { name: 'HubSpot', desc: 'CRM Sync', color: '#f97316' },
   mercury: { name: 'Mercury', desc: 'Banking', color: '#5856d6' },
 };
+
+function AddSubscriptionModal({ onClose, onAdded }) {
+  const [name, setName] = useState('');
+  const [cost, setCost] = useState('');
+  const [type, setType] = useState('subscription');
+  const [unit, setUnit] = useState('subscription');
+  const [allotment, setAllotment] = useState('0');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const serviceKey = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      await api.post('/v1/usage/quotas', {
+        service: serviceKey,
+        billing_type: type,
+        monthly_cost_cents: Math.round(parseFloat(cost || '0') * 100),
+        unit: unit || 'subscription',
+        monthly_allotment: parseInt(allotment) || 0,
+        overage_rate_cents: 0,
+      });
+      onAdded();
+      onClose();
+    } catch (err) {
+      console.error('Failed to add subscription:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-[420px] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="text-[16px] font-bold text-[#111110] mb-4 font-heading">Add Service / Subscription</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[1px]">Service Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Perplexity Pro"
+              className="w-full mt-1 px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] focus:outline-none focus:border-[#3b82f6]" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[1px]">Type</label>
+              <select value={type} onChange={e => setType(e.target.value)}
+                className="w-full mt-1 px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] focus:outline-none focus:border-[#3b82f6]">
+                <option value="subscription">Subscription (fixed/mo)</option>
+                <option value="usage">Usage-based</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[1px]">Monthly Cost ($)</label>
+              <input value={cost} onChange={e => setCost(e.target.value)} placeholder="0.00" type="number" step="0.01"
+                className="w-full mt-1 px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] focus:outline-none focus:border-[#3b82f6]" />
+            </div>
+          </div>
+          {type === 'usage' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[1px]">Unit</label>
+                <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="requests"
+                  className="w-full mt-1 px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] focus:outline-none focus:border-[#3b82f6]" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#9a9a92] uppercase tracking-[1px]">Monthly Allotment</label>
+                <input value={allotment} onChange={e => setAllotment(e.target.value)} placeholder="0" type="number"
+                  className="w-full mt-1 px-3 py-2 border border-[#e8e6e1] rounded-lg text-[13px] focus:outline-none focus:border-[#3b82f6]" />
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 text-[12px] font-semibold text-[#6b6b65] hover:bg-[#f5f4f0] rounded-lg">Cancel</button>
+          <button onClick={handleSave} disabled={saving || !name.trim()}
+            className="px-4 py-2 text-[12px] font-semibold text-white bg-[#3b82f6] hover:bg-[#2563eb] rounded-lg disabled:opacity-50">
+            {saving ? 'Adding...' : 'Add Service'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ApiSpendPage() {
   const [data, setData] = useState(null);
@@ -1206,6 +1286,7 @@ function ApiSpendPage() {
   const [period, setPeriod] = useState(String(new Date().getDate()));
   const [quotaData, setQuotaData] = useState(null);
   const [mercuryData, setMercuryData] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const fetchSpend = useCallback(async () => {
     setLoading(true);
@@ -1219,13 +1300,27 @@ function ApiSpendPage() {
     }
   }, [period]);
 
+  const fetchQuotas = useCallback(() => {
+    api.get('/v1/usage/quotas').then(res => setQuotaData(res.data)).catch(() => {});
+  }, []);
+
   useEffect(() => { fetchSpend(); }, [fetchSpend]);
 
   // Fetch service quotas + Mercury
   useEffect(() => {
-    api.get('/v1/usage/quotas').then(res => setQuotaData(res.data)).catch(() => {});
+    fetchQuotas();
     api.get('/v1/usage/mercury').then(res => setMercuryData(res.data)).catch(() => {});
-  }, []);
+  }, [fetchQuotas]);
+
+  const handleDeleteService = async (service) => {
+    if (!window.confirm(`Remove ${service} from tracking?`)) return;
+    try {
+      await api.delete(`/v1/usage/quotas/${service}`);
+      fetchQuotas();
+    } catch (err) {
+      console.error('Failed to delete service:', err);
+    }
+  };
 
   const fmtCost = (n) => {
     if (n == null || n === 0) return '$0.00';
@@ -1508,51 +1603,93 @@ function ApiSpendPage() {
             </div>
           )}
 
-          {/* Service Quotas */}
+          {/* Service Cost Center */}
           {quotaData?.quotas?.length > 0 && (() => {
             const subs = quotaData.quotas.filter(q => q.billing_type === 'subscription');
             const apis = quotaData.quotas.filter(q => q.billing_type !== 'subscription');
-            const totalMonthlySubs = subs.reduce((s, q) => s + (q.monthly_cost_cents || 0), 0);
-            const totalOverage = quotaData.total_overage_cents || 0;
+
+            // Calculate actual costs
+            const totalSubsCost = subs.reduce((s, q) => s + (q.monthly_cost_cents || 0), 0);
+            const totalUsageCost = apis.reduce((s, q) => {
+              // For usage services: cost = used * overage_rate OR the used_this_month IS cents (apify, fal_ai)
+              if (['apify', 'fal_ai'].includes(q.service)) return s + (q.used_this_month || 0); // already in cents
+              return s + ((q.used_this_month || 0) * (q.overage_rate_cents || 0));
+            }, 0);
+            const grandTotalCents = totalSubsCost + totalUsageCost;
+
+            // Cost formatter
+            const fc = (cents) => cents >= 100 ? `$${(cents / 100).toFixed(2)}` : cents > 0 ? `$${(cents / 100).toFixed(2)}` : '$0.00';
+
+            // Alert services (>80% of allotment)
+            const alertServices = [...subs, ...apis].filter(q => q.monthly_allotment > 0 && (q.used_this_month / q.monthly_allotment) >= 0.8);
+
             return (
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[14px] font-bold text-[#111110] font-heading">Service Quotas</h3>
-                  <div className="flex gap-3 text-[11px] font-mono">
-                    {totalMonthlySubs > 0 && <span className="text-[#059669] font-bold">${(totalMonthlySubs / 100).toFixed(0)}/mo subscriptions</span>}
-                    {totalOverage > 0 && <span className="text-[#ef4444] font-bold">${(totalOverage / 100).toFixed(2)} overage</span>}
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-[14px] font-bold text-[#111110] font-heading">Service Cost Center</h3>
+                    {alertServices.length > 0 && (
+                      <span className="text-[9px] font-bold bg-[#fef3cd] text-[#92400e] px-2 py-0.5 rounded-full animate-pulse">
+                        {alertServices.length} service{alertServices.length > 1 ? 's' : ''} near limit
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-[11px] font-mono">
+                      <span className="text-[#059669] font-bold">{fc(totalSubsCost)}/mo fixed</span>
+                      {totalUsageCost > 0 && <span className="text-[#3b82f6] font-bold ml-3">{fc(totalUsageCost)} usage MTD</span>}
+                      <span className="text-[#111110] font-bold ml-3">{fc(grandTotalCents)} total</span>
+                    </div>
+                    <button onClick={() => setShowAddModal(true)}
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold border border-[#e8e6e1] bg-white text-[#6b6b65] hover:bg-[#f5f4f0] font-heading">
+                      + Add Service
+                    </button>
                   </div>
                 </div>
 
-                {/* Subscriptions */}
+                {/* Subscriptions - individual cards */}
                 {subs.length > 0 && (
                   <>
-                    <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[1px] mb-2">Subscriptions</div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[1px] mb-2">Fixed Subscriptions</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                       {subs.map(q => {
-                        const meta = ADMIN_SERVICE_META[q.service] || { name: q.service, desc: '', color: '#6b6b65' };
-                        const pct = q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0;
+                        const meta = ADMIN_SERVICE_META[q.service] || { name: q.service.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), desc: '', color: '#6b6b65' };
+                        const pct = q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : null;
+                        const isAlert = pct !== null && pct >= 80;
                         const barColor = pct > 100 ? '#a855f7' : pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#22c55e';
                         return (
-                          <div key={q.service} className="bg-white border border-[#e8e6e1] rounded-[14px] p-4 border-t-2" style={{ borderTopColor: meta.color + '66' }}>
+                          <div key={q.service} className={`bg-white border rounded-[14px] p-4 border-t-2 relative group ${isAlert ? 'border-[#f59e0b] shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'border-[#e8e6e1]'}`} style={{ borderTopColor: meta.color + '88' }}>
+                            {isAlert && (
+                              <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#f59e0b] rounded-full flex items-center justify-center">
+                                <AlertTriangle size={11} className="text-white" />
+                              </div>
+                            )}
+                            <button onClick={() => handleDeleteService(q.service)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[#c5c5bc] hover:text-[#ef4444] transition-opacity" title="Remove">
+                              <Trash2 size={12} />
+                            </button>
                             <div className="flex items-center justify-between mb-2">
                               <div>
                                 <div className="text-[13px] font-bold text-[#111110]">{meta.name}</div>
                                 <div className="text-[10px] text-[#9a9a92]">{meta.desc}</div>
                               </div>
-                              {q.monthly_cost_cents > 0 && (
-                                <span className="text-[10px] font-bold bg-[#edf7f0] text-[#059669] px-2 py-0.5 rounded-full">
-                                  ${(q.monthly_cost_cents / 100).toFixed(0)}/mo
-                                </span>
-                              )}
+                              <span className="text-[14px] font-bold font-mono text-[#059669]">
+                                {fc(q.monthly_cost_cents)}<span className="text-[9px] text-[#9a9a92] font-normal">/mo</span>
+                              </span>
                             </div>
-                            <div className="flex items-center justify-between text-[10px] mb-1">
-                              <span className="font-mono tabular-nums text-[#6b6b65]">{q.used_this_month.toLocaleString()} / {q.monthly_allotment.toLocaleString()} {q.unit}</span>
-                              <span className="font-mono tabular-nums font-bold" style={{ color: barColor }}>{pct}%</span>
-                            </div>
-                            <div className="w-full h-[6px] rounded-full bg-[#f0eeea] overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: barColor }} />
-                            </div>
+                            {pct !== null && (
+                              <>
+                                <div className="flex items-center justify-between text-[10px] mb-1">
+                                  <span className="font-mono tabular-nums text-[#6b6b65]">{q.used_this_month.toLocaleString()} / {q.monthly_allotment.toLocaleString()} {q.unit}</span>
+                                  <span className="font-mono tabular-nums font-bold" style={{ color: barColor }}>{pct}%</span>
+                                </div>
+                                <div className="w-full h-[6px] rounded-full bg-[#f0eeea] overflow-hidden">
+                                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: barColor }} />
+                                </div>
+                              </>
+                            )}
+                            {pct === null && q.used_this_month > 0 && (
+                              <div className="text-[10px] font-mono text-[#6b6b65] mt-1">{q.used_this_month.toLocaleString()} {q.unit} this month</div>
+                            )}
                           </div>
                         );
                       })}
@@ -1560,28 +1697,53 @@ function ApiSpendPage() {
                   </>
                 )}
 
-                {/* API Services */}
+                {/* Usage-Based Services - show dollar cost prominently */}
                 {apis.length > 0 && (
                   <>
-                    <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[1px] mb-2">API Services</div>
+                    <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[1px] mb-2">Usage-Based Services</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                       {apis.map(q => {
-                        const meta = ADMIN_SERVICE_META[q.service] || { name: q.service, desc: '', color: '#6b6b65' };
+                        const meta = ADMIN_SERVICE_META[q.service] || { name: q.service.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), desc: '', color: '#6b6b65' };
                         const pct = q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0;
+                        const isAlert = q.monthly_allotment > 0 && pct >= 80;
                         const barColor = pct > 100 ? '#a855f7' : pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#22c55e';
+
+                        // Calculate cost in cents
+                        const isCentsBased = ['apify', 'fal_ai'].includes(q.service);
+                        const costCents = isCentsBased ? (q.used_this_month || 0) : ((q.used_this_month || 0) * (q.overage_rate_cents || 0));
+                        const costDisplay = fc(costCents);
+
                         return (
-                          <div key={q.service} className="bg-white border border-[#e8e6e1] rounded-[14px] p-3">
+                          <div key={q.service} className={`bg-white border rounded-[14px] p-3 relative group ${isAlert ? 'border-[#f59e0b] shadow-[0_0_0_1px_rgba(245,158,11,0.3)]' : 'border-[#e8e6e1]'}`}>
+                            {isAlert && (
+                              <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#f59e0b] rounded-full flex items-center justify-center">
+                                <AlertTriangle size={11} className="text-white" />
+                              </div>
+                            )}
+                            <button onClick={() => handleDeleteService(q.service)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[#c5c5bc] hover:text-[#ef4444] transition-opacity" title="Remove">
+                              <Trash2 size={12} />
+                            </button>
                             <div className="flex items-center justify-between mb-1.5">
-                              <div className="text-[12px] font-bold text-[#111110]">{meta.name}</div>
-                              <span className="text-[10px] font-mono tabular-nums text-[#6b6b65]">{q.used_this_month} / {q.monthly_allotment} {q.unit}</span>
+                              <div>
+                                <div className="text-[12px] font-bold text-[#111110]">{meta.name}</div>
+                                <div className="text-[9px] text-[#9a9a92]">{meta.desc}</div>
+                              </div>
+                              <span className="text-[14px] font-bold font-mono text-[#3b82f6]">{costDisplay}</span>
                             </div>
-                            <div className="w-full h-[5px] rounded-full bg-[#f0eeea] overflow-hidden mb-1">
-                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: barColor }} />
-                            </div>
-                            <div className="flex justify-between text-[9px] text-[#9a9a92]">
-                              <span>{meta.desc}</span>
-                              {q.overage_rate_cents > 0 && <span>${(q.overage_rate_cents / 100).toFixed(2)}/{q.unit?.replace(/s$/, '')}</span>}
-                            </div>
+                            {q.monthly_allotment > 0 && (
+                              <>
+                                <div className="w-full h-[5px] rounded-full bg-[#f0eeea] overflow-hidden mb-1">
+                                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: barColor }} />
+                                </div>
+                                <div className="flex justify-between text-[9px] text-[#9a9a92]">
+                                  <span className="font-mono">{q.used_this_month.toLocaleString()} / {q.monthly_allotment.toLocaleString()} {q.unit}</span>
+                                  <span className="font-mono font-bold" style={{ color: barColor }}>{pct}%</span>
+                                </div>
+                              </>
+                            )}
+                            {!q.monthly_allotment && q.used_this_month > 0 && (
+                              <div className="text-[9px] font-mono text-[#9a9a92]">{q.used_this_month.toLocaleString()} {q.unit} this month</div>
+                            )}
                           </div>
                         );
                       })}
@@ -1591,6 +1753,8 @@ function ApiSpendPage() {
               </div>
             );
           })()}
+
+          {showAddModal && <AddSubscriptionModal onClose={() => setShowAddModal(false)} onAdded={fetchQuotas} />}
         </>
       )}
     </div>

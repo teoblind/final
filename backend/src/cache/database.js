@@ -1467,7 +1467,6 @@ const DEFAULT_SERVICE_QUOTAS = [
   { service: 'gemini', monthly_allotment: 500, unit: 'queries', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'whisper', monthly_allotment: 60, unit: 'minutes', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'google_maps', monthly_allotment: 500, unit: 'requests', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
-  { service: 'hubspot', monthly_allotment: 1000, unit: 'requests', overage_rate_cents: 0, billing_type: 'usage', monthly_cost_cents: 0 },
 ];
 
 function seedServiceQuotas(targetDb, tenantId) {
@@ -6476,6 +6475,25 @@ export function getServiceUsageSummary(tenantId) {
     WHERE tenant_id = ? AND created_at >= ?
     GROUP BY service
   `).all(tenantId, startDate);
+}
+
+export function addCustomServiceQuota(tenantId, service, config = {}) {
+  const {
+    monthly_allotment = 0,
+    unit = 'subscription',
+    overage_rate_cents = 0,
+    billing_type = 'subscription',
+    monthly_cost_cents = 0,
+  } = config;
+  db.prepare(`
+    INSERT OR REPLACE INTO service_quotas (tenant_id, service, monthly_allotment, unit, overage_rate_cents, billing_type, monthly_cost_cents, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  `).run(tenantId, service, monthly_allotment, unit, overage_rate_cents, billing_type, monthly_cost_cents);
+}
+
+export function deleteServiceQuota(tenantId, service) {
+  db.prepare('DELETE FROM service_quotas WHERE tenant_id = ? AND service = ?').run(tenantId, service);
+  db.prepare('DELETE FROM service_usage_log WHERE tenant_id = ? AND service = ?').run(tenantId, service);
 }
 
 // ─── Usage Aggregation for Tenants ──────────────────────────────────────────
