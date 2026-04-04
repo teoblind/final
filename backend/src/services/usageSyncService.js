@@ -268,6 +268,85 @@ export async function syncClaudeMaxUsage(tenantId) {
   return sessions;
 }
 
+// ─── Mercury Banking ────────────────────────────────────────────────────────
+
+/**
+ * Fetch Mercury bank account balances and recent transactions.
+ * Returns account summaries and this month's transaction totals by category.
+ * This is global (not per-tenant) - stored in the first tenant's DB.
+ */
+export async function syncMercuryData() {
+  const apiKey = process.env.MERCURY_API_KEY || '';
+  if (!apiKey || apiKey === 'DISABLED') return null;
+
+  const headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+
+  // Fetch accounts
+  const accountsRes = await fetch('https://api.mercury.com/api/v1/accounts', { headers });
+  if (!accountsRes.ok) {
+    const errText = await accountsRes.text();
+    throw new Error(`Mercury accounts API error (${accountsRes.status}): ${errText}`);
+  }
+  const accountsData = await accountsRes.json();
+  const accounts = accountsData?.accounts || [];
+
+  // Fetch this month's transactions for each account
+  const now = new Date();
+  const monthStart = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd = now.toISOString().slice(0, 10);
+
+  let allTransactions = [];
+  for (const acct of accounts) {
+    try {
+      const txRes = await fetch(
+        `https://api.mercury.com/api/v1/account/${acct.id}/transactions?start=${monthStart}&end=${monthEnd}&limit=500`,
+        { headers }
+      );
+      if (txRes.ok) {
+        const txData = await txRes.json();
+        const txns = txData?.transactions || [];
+        allTransactions.push(...txns.map(t => ({ ...t, accountName: acct.name, accountKind: acct.kind })));
+      }
+    } catch (e) {
+      console.warn(`[UsageSync] Mercury txn fetch failed for ${acct.name}:`, e.message);
+    }
+  }
+
+  // Summarize
+  const totalBalance = accounts.reduce((s, a) => s + (a.currentBalance || 0), 0);
+  const totalSpend = allTransactions
+    .filter(t => t.amount < 0 && t.status !== 'cancelled')
+    .reduce((s, t) => s + Math.abs(t.amount), 0);
+  const totalIncome = allTransactions
+    .filter(t => t.amount > 0 && t.status !== 'cancelled')
+    .reduce((s, t) => s + t.amount, 0);
+
+  return {
+    accounts: accounts.map(a => ({
+      id: a.id,
+      name: a.name,
+      kind: a.kind,
+      currentBalance: a.currentBalance,
+      availableBalance: a.availableBalance,
+      status: a.status,
+    })),
+    totalBalance,
+    totalSpendThisMonth: totalSpend,
+    totalIncomeThisMonth: totalIncome,
+    transactionCount: allTransactions.length,
+    transactions: allTransactions.slice(0, 50).map(t => ({
+      id: t.id,
+      amount: t.amount,
+      counterpartyName: t.counterpartyName || t.counterpartyNickname || 'Unknown',
+      note: t.note || '',
+      status: t.status,
+      postedDate: t.postedDate,
+      kind: t.kind,
+      accountName: t.accountName,
+    })),
+  };
+}
+
 // ─── Main Sync ──────────────────────────────────────────────────────────────
 
 /**

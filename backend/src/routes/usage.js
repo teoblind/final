@@ -19,6 +19,7 @@ import {
   updateServiceQuota,
   getServiceUsageLog,
 } from '../cache/database.js';
+import { syncMercuryData } from '../services/usageSyncService.js';
 
 const router = Router();
 
@@ -230,6 +231,18 @@ router.get('/quotas/:service/log', (req, res) => {
     const log = getServiceUsageLog(tenantId, service, limit);
     res.json({ log });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** GET /usage/mercury - Mercury bank account balances and transactions */
+router.get('/mercury', async (req, res) => {
+  try {
+    const data = await syncMercuryData();
+    if (!data) return res.json({ error: 'Mercury API not configured', accounts: [], transactions: [] });
+    res.json(data);
+  } catch (error) {
+    console.error('[Usage] Mercury error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });

@@ -1197,6 +1197,7 @@ const ADMIN_SERVICE_META = {
   whisper: { name: 'Whisper', desc: 'Transcription', color: '#059669' },
   google_maps: { name: 'Google Maps', desc: 'Geocoding', color: '#16a34a' },
   hubspot: { name: 'HubSpot', desc: 'CRM Sync', color: '#f97316' },
+  mercury: { name: 'Mercury', desc: 'Banking', color: '#5856d6' },
 };
 
 function ApiSpendPage() {
@@ -1204,6 +1205,7 @@ function ApiSpendPage() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(String(new Date().getDate()));
   const [quotaData, setQuotaData] = useState(null);
+  const [mercuryData, setMercuryData] = useState(null);
 
   const fetchSpend = useCallback(async () => {
     setLoading(true);
@@ -1219,9 +1221,10 @@ function ApiSpendPage() {
 
   useEffect(() => { fetchSpend(); }, [fetchSpend]);
 
-  // Fetch service quotas
+  // Fetch service quotas + Mercury
   useEffect(() => {
     api.get('/v1/usage/quotas').then(res => setQuotaData(res.data)).catch(() => {});
+    api.get('/v1/usage/mercury').then(res => setMercuryData(res.data)).catch(() => {});
   }, []);
 
   const fmtCost = (n) => {
@@ -1419,6 +1422,91 @@ function ApiSpendPage() {
               </table>
             </BreakdownCard>
           </div>
+
+          {/* Mercury Banking */}
+          {mercuryData?.accounts?.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[14px] font-bold text-[#111110] font-heading">Mercury Banking</h3>
+                <div className="flex gap-3 text-[11px] font-mono">
+                  <span className="text-[#5856d6] font-bold">
+                    ${(mercuryData.totalBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total balance
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                {mercuryData.accounts.map(acct => (
+                  <div key={acct.id} className="bg-white border border-[#e8e6e1] rounded-[14px] p-4 border-t-2" style={{ borderTopColor: '#5856d666' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="text-[13px] font-bold text-[#111110]">{acct.name}</div>
+                        <div className="text-[10px] text-[#9a9a92]">{acct.kind} - {acct.status}</div>
+                      </div>
+                    </div>
+                    <div className="text-[22px] font-bold text-[#111110] font-mono tabular-nums">
+                      ${(acct.currentBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    {acct.availableBalance !== acct.currentBalance && (
+                      <div className="text-[10px] text-[#9a9a92] font-mono">${(acct.availableBalance || 0).toFixed(2)} available</div>
+                    )}
+                  </div>
+                ))}
+                {/* Monthly summary card */}
+                <div className="bg-white border border-[#e8e6e1] rounded-[14px] p-4">
+                  <div className="text-[10px] text-[#9a9a92] font-bold uppercase tracking-[1px] mb-2">This Month</div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] text-[#6b6b65]">Outflows</span>
+                      <span className="text-[14px] font-bold font-mono text-[#ef4444]">
+                        -${(mercuryData.totalSpendThisMonth || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[11px] text-[#6b6b65]">Inflows</span>
+                      <span className="text-[14px] font-bold font-mono text-[#059669]">
+                        +${(mercuryData.totalIncomeThisMonth || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-[#f0eeea]">
+                      <span className="text-[11px] text-[#6b6b65]">Transactions</span>
+                      <span className="text-[12px] font-bold font-mono text-[#111110]">{mercuryData.transactionCount || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {/* Recent transactions */}
+              {mercuryData.transactions?.length > 0 && (
+                <div className="bg-white border border-[#e8e6e1] rounded-[14px] overflow-hidden">
+                  <table className="w-full border-collapse text-[12px]">
+                    <thead>
+                      <tr>
+                        {['Date', 'Counterparty', 'Note', 'Amount', 'Status'].map(h => (
+                          <th key={h} className="text-left px-4 py-2 bg-[#f5f4f0] border-b border-[#e8e6e1] font-bold text-[#6b6b65] text-[9px] uppercase tracking-[0.5px] font-heading">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mercuryData.transactions.slice(0, 15).map(tx => (
+                        <tr key={tx.id} className="hover:bg-[#f5f4f0]">
+                          <td className="px-4 py-2 border-b border-[#f0eeea] font-mono text-[10px] text-[#9a9a92]">{tx.postedDate || '-'}</td>
+                          <td className="px-4 py-2 border-b border-[#f0eeea] font-semibold">{tx.counterpartyName}</td>
+                          <td className="px-4 py-2 border-b border-[#f0eeea] text-[#9a9a92] max-w-[200px] truncate">{tx.note || '-'}</td>
+                          <td className={`px-4 py-2 border-b border-[#f0eeea] font-mono text-[11px] font-bold ${tx.amount < 0 ? 'text-[#ef4444]' : 'text-[#059669]'}`}>
+                            {tx.amount < 0 ? '-' : '+'}${Math.abs(tx.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2 border-b border-[#f0eeea]">
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${tx.status === 'sent' || tx.status === 'received' ? 'bg-[#edf7f0] text-[#059669]' : tx.status === 'pending' ? 'bg-[#fef3cd] text-[#92400e]' : 'bg-[#f0eeea] text-[#6b6b65]'}`}>
+                              {tx.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Service Quotas */}
           {quotaData?.quotas?.length > 0 && (() => {
