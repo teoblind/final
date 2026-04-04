@@ -660,6 +660,16 @@ router.post('/save-transcript', async (req, res) => {
     // Save as a knowledge entry (meeting type) - processed=0 so AI pipeline picks it up
     const { getTenantDb } = await import('../cache/database.js');
     const db = getTenantDb(tenantId);
+
+    // Dedup: skip if same title + recorded_at + duration already exists
+    const existing = db.prepare(
+      `SELECT id FROM knowledge_entries WHERE title = ? AND recorded_at = ? AND duration_seconds = ? AND source = 'local-capture' LIMIT 1`
+    ).get(title, date || new Date().toISOString(), duration || null);
+    if (existing) {
+      console.log(`[Recall] Duplicate local transcript skipped: "${title}" (existing: ${existing.id})`);
+      return res.json({ id: existing.id, duplicate: true });
+    }
+
     const id = `local-${Date.now()}`;
     db.prepare(`
       INSERT INTO knowledge_entries (id, tenant_id, type, title, transcript, content, source, source_agent, duration_seconds, recorded_at, processed, transcript_json)
