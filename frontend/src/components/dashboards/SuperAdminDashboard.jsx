@@ -1182,10 +1182,28 @@ const PERIOD_OPTIONS = [
 
 const MODEL_COLORS = { haiku: '#a5b4fc', sonnet: '#3b82f6', opus: '#7c3aed', perplexity: '#d97706' };
 
+const ADMIN_SERVICE_META = {
+  claude_max: { name: 'Claude Max', desc: '2x VPS Subscriptions', color: '#7c3aed' },
+  elevenlabs: { name: 'ElevenLabs', desc: 'Voice Synthesis', color: '#d97706' },
+  fireflies: { name: 'Fireflies', desc: 'Meeting Import', color: '#3b82f6' },
+  anthropic_api: { name: 'Anthropic API', desc: 'Token Usage', color: '#6366f1' },
+  perplexity: { name: 'Perplexity', desc: 'Web Research', color: '#d97706' },
+  apollo: { name: 'Apollo', desc: 'Lead Enrichment', color: '#059669' },
+  recall: { name: 'Recall.ai', desc: 'Meeting Bot', color: '#3b82f6' },
+  apify: { name: 'LinkedIn/Apify', desc: 'Post Scraping', color: '#0284c7' },
+  xai_grok: { name: 'xAI Grok', desc: 'X/Twitter Search', color: '#111110' },
+  fal_ai: { name: 'Fal AI', desc: 'Image/Video Gen', color: '#e11d48' },
+  gemini: { name: 'Gemini Flash', desc: 'Meeting Vision', color: '#2563eb' },
+  whisper: { name: 'Whisper', desc: 'Transcription', color: '#059669' },
+  google_maps: { name: 'Google Maps', desc: 'Geocoding', color: '#16a34a' },
+  hubspot: { name: 'HubSpot', desc: 'CRM Sync', color: '#f97316' },
+};
+
 function ApiSpendPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(String(new Date().getDate()));
+  const [quotaData, setQuotaData] = useState(null);
 
   const fetchSpend = useCallback(async () => {
     setLoading(true);
@@ -1200,6 +1218,19 @@ function ApiSpendPage() {
   }, [period]);
 
   useEffect(() => { fetchSpend(); }, [fetchSpend]);
+
+  // Fetch service quotas (uses tenant auth endpoint, not admin)
+  useEffect(() => {
+    const fetchQuotas = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await fetch(`${API_BASE}/v1/usage/quotas`, { headers });
+        if (res.ok) { const d = await res.json(); setQuotaData(d); }
+      } catch (e) { /* non-critical */ }
+    };
+    fetchQuotas();
+  }, []);
 
   const fmtCost = (n) => {
     if (n == null || n === 0) return '$0.00';
@@ -1396,6 +1427,90 @@ function ApiSpendPage() {
               </table>
             </BreakdownCard>
           </div>
+
+          {/* Service Quotas */}
+          {quotaData?.quotas?.length > 0 && (() => {
+            const subs = quotaData.quotas.filter(q => q.billing_type === 'subscription');
+            const apis = quotaData.quotas.filter(q => q.billing_type !== 'subscription');
+            const totalMonthlySubs = subs.reduce((s, q) => s + (q.monthly_cost_cents || 0), 0);
+            const totalOverage = quotaData.total_overage_cents || 0;
+            return (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[14px] font-bold text-[#111110] font-heading">Service Quotas</h3>
+                  <div className="flex gap-3 text-[11px] font-mono">
+                    {totalMonthlySubs > 0 && <span className="text-[#059669] font-bold">${(totalMonthlySubs / 100).toFixed(0)}/mo subscriptions</span>}
+                    {totalOverage > 0 && <span className="text-[#ef4444] font-bold">${(totalOverage / 100).toFixed(2)} overage</span>}
+                  </div>
+                </div>
+
+                {/* Subscriptions */}
+                {subs.length > 0 && (
+                  <>
+                    <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[1px] mb-2">Subscriptions</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                      {subs.map(q => {
+                        const meta = ADMIN_SERVICE_META[q.service] || { name: q.service, desc: '', color: '#6b6b65' };
+                        const pct = q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0;
+                        const barColor = pct > 100 ? '#a855f7' : pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#22c55e';
+                        return (
+                          <div key={q.service} className="bg-white border border-[#e8e6e1] rounded-[14px] p-4 border-t-2" style={{ borderTopColor: meta.color + '66' }}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div>
+                                <div className="text-[13px] font-bold text-[#111110]">{meta.name}</div>
+                                <div className="text-[10px] text-[#9a9a92]">{meta.desc}</div>
+                              </div>
+                              {q.monthly_cost_cents > 0 && (
+                                <span className="text-[10px] font-bold bg-[#edf7f0] text-[#059669] px-2 py-0.5 rounded-full">
+                                  ${(q.monthly_cost_cents / 100).toFixed(0)}/mo
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] mb-1">
+                              <span className="font-mono tabular-nums text-[#6b6b65]">{q.used_this_month.toLocaleString()} / {q.monthly_allotment.toLocaleString()} {q.unit}</span>
+                              <span className="font-mono tabular-nums font-bold" style={{ color: barColor }}>{pct}%</span>
+                            </div>
+                            <div className="w-full h-[6px] rounded-full bg-[#f0eeea] overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: barColor }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* API Services */}
+                {apis.length > 0 && (
+                  <>
+                    <div className="text-[9px] font-bold text-[#9a9a92] uppercase tracking-[1px] mb-2">API Services</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {apis.map(q => {
+                        const meta = ADMIN_SERVICE_META[q.service] || { name: q.service, desc: '', color: '#6b6b65' };
+                        const pct = q.monthly_allotment > 0 ? Math.round((q.used_this_month / q.monthly_allotment) * 100) : 0;
+                        const barColor = pct > 100 ? '#a855f7' : pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#22c55e';
+                        return (
+                          <div key={q.service} className="bg-white border border-[#e8e6e1] rounded-[14px] p-3">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="text-[12px] font-bold text-[#111110]">{meta.name}</div>
+                              <span className="text-[10px] font-mono tabular-nums text-[#6b6b65]">{q.used_this_month} / {q.monthly_allotment} {q.unit}</span>
+                            </div>
+                            <div className="w-full h-[5px] rounded-full bg-[#f0eeea] overflow-hidden mb-1">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, pct)}%`, background: barColor }} />
+                            </div>
+                            <div className="flex justify-between text-[9px] text-[#9a9a92]">
+                              <span>{meta.desc}</span>
+                              {q.overage_rate_cents > 0 && <span>${(q.overage_rate_cents / 100).toFixed(2)}/{q.unit?.replace(/s$/, '')}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
