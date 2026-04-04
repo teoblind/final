@@ -25,6 +25,7 @@ import {
   getConversationalAgentUrl,
 } from '../services/elevenlabsService.js';
 import { authenticate } from '../middleware/auth.js';
+import { recordServiceUsage } from '../cache/database.js';
 
 const router = express.Router();
 router.use(authenticate);
@@ -84,6 +85,12 @@ router.post('/transcribe', upload.single('audio'), async (req, res) => {
     }
 
     const result = await whisperRes.json();
+
+    // Track Whisper usage (duration in minutes)
+    try {
+      const durationMin = Math.ceil((result.duration || 0) / 60) || 1;
+      recordServiceUsage(req.tenant_id, 'whisper', durationMin, req.user?.id, 'Audio transcription');
+    } catch {}
 
     res.json({
       text: result.text || '',

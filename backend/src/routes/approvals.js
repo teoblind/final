@@ -11,7 +11,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import db from '../cache/database.js';
-import { insertActivity, setTenantContext, getAllTenantEmailConfigs, getTenantEmailConfig, SANGHA_TENANT_ID } from '../cache/database.js';
+import { insertActivity, setTenantContext, getAllTenantEmailConfigs, getTenantEmailConfig, SANGHA_TENANT_ID, recordServiceUsage } from '../cache/database.js';
 import { sendEstimateEmail, sendEmail, sendEmailWithAttachments } from '../services/emailService.js';
 
 const router = express.Router();
@@ -986,6 +986,8 @@ Return ONLY valid JSON, no commentary or markdown.`;
           if (searchRes.ok) {
             const searchData = await searchRes.json();
             const people = searchData.people || [];
+            // Track Apollo usage
+            try { recordServiceUsage(req.tenant_id, 'apollo', 1, req.user?.id, `Newsletter contact lookup: ${parsed.companyName}`); } catch {}
             if (people.length > 0) {
               const best = people[0];
               contactEmail = best.email || '';

@@ -7,7 +7,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { google } from 'googleapis';
-import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun, getAgentMemory, SANGHA_TENANT_ID } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun, getAgentMemory, SANGHA_TENANT_ID, recordServiceUsage } from '../cache/database.js';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -1015,6 +1015,13 @@ async function callWebResearch(query, focus) {
     }
 
     const data = await res.json();
+
+    // Track Perplexity usage
+    try {
+      const tenantId = getCurrentTenantId();
+      if (tenantId) recordServiceUsage(tenantId, 'perplexity', 1, null, `Chat research: ${query.slice(0, 60)}`);
+    } catch {}
+
     const answer = data.choices?.[0]?.message?.content || 'No results found.';
     const citations = data.citations || [];
 

@@ -145,6 +145,71 @@ export async function syncApifyUsage(tenantId) {
   return { scrapes: scrapeCount, totalUsd: Math.round(totalUsd * 100) / 100 };
 }
 
+// ─── Fal AI ────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch credit balance from Fal AI.
+ * Only available with an admin key. Stores remaining credits (in cents).
+ */
+export async function syncFalAiUsage(tenantId) {
+  const adminKey = process.env.FAL_AI_ADMIN_KEY || '';
+  if (!adminKey || adminKey === 'DISABLED') return null;
+
+  const res = await fetch(
+    'https://api.fal.ai/v1/account/billing?expand=credits',
+    { headers: { 'Authorization': `Key ${adminKey}` } }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Fal AI billing API error (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+  const balance = data?.credits?.current_balance || 0;
+
+  // Store balance as cents remaining (inverse tracking - lower = more used)
+  const balanceCents = Math.round(balance * 100);
+  setServiceUsage(tenantId, 'fal_ai', balanceCents);
+  return { balance, balanceCents };
+}
+
+// ─── Apollo Credits ────────────────────────────────────────────────────────
+
+/**
+ * Fetch Apollo API usage stats for the current day.
+ * Tracks daily API call consumption across all endpoints.
+ */
+export async function syncApolloUsage(tenantId) {
+  const apiKey = process.env.APOLLO_API_KEY || '';
+  if (!apiKey || apiKey === 'DISABLED') return null;
+
+  const res = await fetch(
+    'https://api.apollo.io/api/v1/usage_stats/api_usage_stats',
+    {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Apollo usage API error (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+
+  // Sum consumed calls across all endpoints for the day
+  let totalConsumed = 0;
+  for (const [, stats] of Object.entries(data || {})) {
+    if (stats?.daily?.consumed) totalConsumed += stats.daily.consumed;
+  }
+
+  setServiceUsage(tenantId, 'apollo', totalConsumed);
+  return totalConsumed;
+}
+
 // ─── Anthropic API (Internal) ───────────────────────────────────────────────
 
 /**
@@ -248,6 +313,20 @@ export async function syncAllUsage(tenantId) {
     errors.push(`ClaudeMax: ${e.message}`);
   }
 
+  // Fal AI
+  try {
+    results.falAi = await syncFalAiUsage(tenantId);
+  } catch (e) {
+    errors.push(`FalAI: ${e.message}`);
+  }
+
+  // Apollo
+  try {
+    results.apollo = await syncApolloUsage(tenantId);
+  } catch (e) {
+    errors.push(`Apollo: ${e.message}`);
+  }
+
   // Log summary
   const parts = [];
   if (results.elevenlabs != null) parts.push(`ElevenLabs: ${results.elevenlabs} characters`);
@@ -255,6 +334,8 @@ export async function syncAllUsage(tenantId) {
   if (results.apify != null) parts.push(`Apify: ${results.apify.scrapes} scrapes ($${results.apify.totalUsd})`);
   if (results.anthropic != null) parts.push(`Anthropic: ${results.anthropic.requests} requests (${results.anthropic.input_tokens || 0} in / ${results.anthropic.output_tokens || 0} out tokens)`);
   if (results.claudeMax != null) parts.push(`ClaudeMax: ${results.claudeMax} sessions`);
+  if (results.falAi != null) parts.push(`FalAI: $${results.falAi.balance} remaining`);
+  if (results.apollo != null) parts.push(`Apollo: ${results.apollo} API calls today`);
 
   if (parts.length > 0) {
     console.log(`[UsageSync] ${tenantId}: ${parts.join(', ')}`);

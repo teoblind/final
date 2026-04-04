@@ -19,7 +19,7 @@ import {
   getAllTenants, runWithTenant, getUsersByTenant,
   getDacpBidRequests, getDacpJobs, getDacpStats, getTenantDb,
   insertAgentAssignment, updateAgentAssignment,
-  SANGHA_TENANT_ID,
+  SANGHA_TENANT_ID, recordServiceUsage, getCurrentTenantId,
 } from '../cache/database.js';
 import { apolloBulkMatch } from '../services/leadEngine.js';
 import { gatherSocialIntelligence } from '../services/socialScraper.js';
@@ -137,6 +137,13 @@ async function searchWeb(query, focus = 'news') {
     }
 
     const data = await res.json();
+
+    // Track Perplexity usage
+    try {
+      const tenantId = getCurrentTenantId();
+      if (tenantId) recordServiceUsage(tenantId, 'perplexity', 1, null, `Newsletter: ${query.slice(0, 60)}`);
+    } catch {}
+
     return {
       query,
       answer: data.choices?.[0]?.message?.content || '',

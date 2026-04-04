@@ -37,6 +37,7 @@ import {
   getDacpSalesTrip,
   createDacpSalesTrip,
   updateDacpSalesTrip,
+  recordServiceUsage,
 } from '../cache/database.js';
 
 const router = express.Router();
@@ -894,6 +895,8 @@ router.post('/gc-offices/:id/geocode', async (req, res) => {
           lat = data.results[0].geometry.location.lat;
           lng = data.results[0].geometry.location.lng;
           geocodeSource = 'google';
+          // Track Google Maps usage
+          try { recordServiceUsage(req.tenant_id, 'google_maps', 1, req.user?.id, `Geocode: ${fullAddress.slice(0, 40)}`); } catch {}
         }
       } catch (googleErr) {
         console.warn('Google geocode failed, falling back to Nominatim:', googleErr.message);

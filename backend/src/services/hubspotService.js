@@ -5,7 +5,7 @@
  * Command Dashboard (pipeline widget).
  */
 
-import { getKeyVaultValue } from '../cache/database.js';
+import { getKeyVaultValue, recordServiceUsage, getCurrentTenantId } from '../cache/database.js';
 
 const HUBSPOT_BASE = 'https://api.hubapi.com';
 
@@ -38,6 +38,12 @@ async function hubspotFetch(endpoint, method = 'GET', body = null, tenantId = nu
     const errText = await res.text();
     throw new Error(`HubSpot ${res.status}: ${errText.slice(0, 300)}`);
   }
+
+  // Track HubSpot usage
+  try {
+    const tid = tenantId || getCurrentTenantId();
+    if (tid) recordServiceUsage(tid, 'hubspot', 1, null, `${method} ${endpoint.slice(0, 50)}`);
+  } catch {}
 
   return res.json();
 }

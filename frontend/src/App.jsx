@@ -662,7 +662,7 @@ function AppContent() {
   if (showOnboarding) {
     return (
       <Suspense fallback={<LoadingSpinner />}>
-        <OnboardingWizard onComplete={() => { localStorage.setItem(`onboarding_done_${user?.id}`, '1'); setShowOnboarding(false); }} />
+        <OnboardingWizard onComplete={() => { localStorage.setItem(`onboarding_done_${user?.id}`, '1'); setShowOnboarding(false); }} onLogout={logout} />
       </Suspense>
     );
   }

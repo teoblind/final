@@ -22,6 +22,8 @@ import {
   upsertLeadDiscoveryConfig,
   getLeadStats,
   insertActivity,
+  recordServiceUsage,
+  getCurrentTenantId,
 } from '../cache/database.js';
 
 // ─── API Clients ────────────────────────────────────────────────────────────
@@ -52,6 +54,13 @@ async function callPerplexity(system, user) {
   }
 
   const data = await res.json();
+
+  // Track Perplexity usage
+  try {
+    const tenantId = getCurrentTenantId();
+    if (tenantId) recordServiceUsage(tenantId, 'perplexity', 1, null, 'Lead engine research');
+  } catch {}
+
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -97,6 +106,13 @@ export async function apolloBulkMatch(details) {
   }
 
   const data = await res.json();
+
+  // Track Apollo usage
+  try {
+    const tenantId = getCurrentTenantId();
+    if (tenantId) recordServiceUsage(tenantId, 'apollo', details.length, null, 'Apollo bulk match');
+  } catch {}
+
   return (data.matches || []).filter(Boolean).map(p => ({
     name: [p.first_name, p.last_name].filter(Boolean).join(' '),
     email: p.email,

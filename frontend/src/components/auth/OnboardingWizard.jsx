@@ -117,7 +117,7 @@ const VENTURE_WELCOME = {
   ],
 };
 
-export default function OnboardingWizard({ onComplete }) {
+export default function OnboardingWizard({ onComplete, onLogout }) {
   const { tenant } = useTenant();
   const isConstruction = tenant?.settings?.industry === 'construction';
   const isVenture = tenant?.id === 'zhan-capital' || tenant?.settings?.industry === 'venture';
@@ -905,9 +905,16 @@ export default function OnboardingWizard({ onComplete }) {
             <CoppiceLogo color={isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#1a2e1a'} size={28} />
             <span className={`text-[13px] font-semibold tracking-[0.2px] ${dk ? dk.text : 'text-terminal-text'}`}>Setup</span>
           </div>
-          <button onClick={handleSkip} className={`text-[12px] transition-colors ${dk ? `${dk.muted} hover:text-white` : 'text-terminal-muted hover:text-terminal-text'}`}>
-            Skip Setup →
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={handleSkip} className={`text-[12px] transition-colors ${dk ? `${dk.muted} hover:text-white` : 'text-terminal-muted hover:text-terminal-text'}`}>
+              Skip Setup
+            </button>
+            {onLogout && (
+              <button onClick={onLogout} className={`text-[12px] transition-colors ${dk ? 'text-red-400/60 hover:text-red-400' : 'text-red-500/60 hover:text-red-500'}`}>
+                Log out
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Step indicator */}

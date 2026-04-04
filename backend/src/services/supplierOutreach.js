@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { getDacpSuppliers, upsertDacpSupplier, updateSupplierQuoteDate } from '../cache/database.js';
+import { getDacpSuppliers, upsertDacpSupplier, updateSupplierQuoteDate, recordServiceUsage } from '../cache/database.js';
 import { insertActivity } from '../cache/database.js';
 
 // Google Places API for finding local suppliers
@@ -37,7 +37,9 @@ export async function findLocalSuppliers(tenantId, { location, supplierType, rad
     try {
       const coords = await geocodeLocation(location);
       if (coords) {
+        trackMapsUsage(tenantId, 1, `Geocode: ${location.slice(0, 40)}`);
         apiSuppliers = await searchPlaces(coords, supplierType, radiusMeters);
+        if (apiSuppliers.length) trackMapsUsage(tenantId, 1, `Places search: ${supplierType}`);
       }
     } catch (err) {
       console.warn('[SupplierOutreach] Google Places search failed:', err.message);
@@ -90,6 +92,11 @@ async function geocodeLocation(location) {
     console.warn('[SupplierOutreach] Geocode failed:', err.message);
   }
   return null;
+}
+
+// Track Google Maps usage for supplier outreach
+function trackMapsUsage(tenantId, count = 1, desc = 'Maps API call') {
+  try { if (tenantId) recordServiceUsage(tenantId, 'google_maps', count, null, desc); } catch {}
 }
 
 /**

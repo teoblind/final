@@ -8,6 +8,8 @@
  * Returns structured results with direct post URLs for newsletter citations.
  */
 
+import { recordServiceUsage, getCurrentTenantId } from '../cache/database.js';
+
 // ── X/Twitter via xAI Grok API with x_search tool ───────────────────────────
 
 async function searchX(queries) {
@@ -75,6 +77,12 @@ Important: cast a wide net. Include posts from companies, journalists, industry 
       }
 
       console.log(`[SocialScraper] X query "${query.slice(0, 40)}": got ${content.length} chars of content`);
+
+      // Track xAI Grok usage
+      try {
+        const tenantId = getCurrentTenantId();
+        if (tenantId) recordServiceUsage(tenantId, 'xai_grok', 1, null, `X search: ${query.slice(0, 60)}`);
+      } catch {}
 
       // Extract JSON array from response
       const jsonMatch = content.match(/\[[\s\S]*\]/);
