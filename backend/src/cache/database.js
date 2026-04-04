@@ -1453,17 +1453,17 @@ function seedTenantData(targetDb, tenantId) {
 }
 
 const DEFAULT_SERVICE_QUOTAS = [
-  // Subscriptions
-  { service: 'claude_max', monthly_allotment: 1000, unit: 'sessions', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 40000 },
+  // Subscriptions (fixed monthly cost)
+  { service: 'claude_max', monthly_allotment: 0, unit: 'runs', overage_rate_cents: 0, billing_type: 'subscription', monthly_cost_cents: 40000 },
   { service: 'elevenlabs', monthly_allotment: 10000, unit: 'characters', overage_rate_cents: 30, billing_type: 'subscription', monthly_cost_cents: 0 },
-  // Pay-per-use
+  // Usage-based (cost = used * overage_rate_cents)
   { service: 'anthropic_api', monthly_allotment: 5000, unit: 'requests', overage_rate_cents: 0, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'perplexity', monthly_allotment: 100, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'apollo', monthly_allotment: 200, unit: 'leads', overage_rate_cents: 10, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'recall', monthly_allotment: 600, unit: 'minutes', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
-  { service: 'apify', monthly_allotment: 50, unit: 'scrapes', overage_rate_cents: 15, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'apify', monthly_allotment: 500, unit: 'cents', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'xai_grok', monthly_allotment: 200, unit: 'queries', overage_rate_cents: 5, billing_type: 'usage', monthly_cost_cents: 0 },
-  { service: 'fal_ai', monthly_allotment: 50, unit: 'generations', overage_rate_cents: 25, billing_type: 'usage', monthly_cost_cents: 0 },
+  { service: 'fal_ai', monthly_allotment: 1000, unit: 'cents', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'gemini', monthly_allotment: 500, unit: 'queries', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'whisper', monthly_allotment: 60, unit: 'minutes', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
   { service: 'google_maps', monthly_allotment: 500, unit: 'requests', overage_rate_cents: 1, billing_type: 'usage', monthly_cost_cents: 0 },
