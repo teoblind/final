@@ -94,6 +94,13 @@ const seenGmailIds = new Set();
 // across detection methods (Calendar API + Gmail fallback + recovery)
 const activeMeetingCodes = new Set();
 
+// Hard rate limit: track last bot dispatch time per meeting code AND per tenant.
+// Even if all other dedup checks fail, this prevents runaway bot creation.
+// meetCode -> timestamp, tenantId -> timestamp
+const lastBotDispatch = new Map();
+const MEETING_CODE_COOLDOWN_MS = 30 * 60 * 1000; // 30 min per meeting code
+const TENANT_COOLDOWN_MS = 2 * 60 * 1000;         // 2 min per tenant
+
 let pollTimer = null;
 
 // ─── SQLite Persistence for Bot Dedup ────────────────────────────────────────
@@ -599,6 +606,22 @@ async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
     return null;
   }
 
+  // Hard rate limit: prevent runaway bot creation even if dedup fails
+  const now = Date.now();
+  if (meetCode) {
+    const lastForCode = lastBotDispatch.get(`code:${meetCode}`);
+    if (lastForCode && now - lastForCode < MEETING_CODE_COOLDOWN_MS) {
+      console.log(`[CalendarPoll] Rate limit: bot already sent to ${meetCode} ${Math.round((now - lastForCode) / 1000)}s ago (cooldown: ${MEETING_CODE_COOLDOWN_MS / 1000}s)`);
+      joinedEvents.add(eventKey);
+      return null;
+    }
+  }
+  const lastForTenant = lastBotDispatch.get(`tenant:${tenantId}`);
+  if (lastForTenant && now - lastForTenant < TENANT_COOLDOWN_MS) {
+    console.log(`[CalendarPoll] Rate limit: bot already sent for ${tenantId} ${Math.round((now - lastForTenant) / 1000)}s ago (cooldown: ${TENANT_COOLDOWN_MS / 1000}s)`);
+    return null;
+  }
+
   console.log(`[CalendarPoll] ════════════════════════════════════════`);
   console.log(`[CalendarPoll] JOINING: ${summary}`);
   console.log(`[CalendarPoll] Tenant: ${tenantId} | Agent: ${agentEmail}`);
@@ -651,6 +674,10 @@ async function joinMeeting(meeting, tenantId, agentEmail, refreshToken) {
 
     // Persist to DB so PM2 restarts don't lose dedup state
     persistBotToDb(eventKey, bot.id, tenantId, meetCode, summary, link);
+
+    // Record dispatch time for rate limiting
+    if (meetCode) lastBotDispatch.set(`code:${meetCode}`, Date.now());
+    lastBotDispatch.set(`tenant:${tenantId}`, Date.now());
 
     // Mark as calendar-managed (calendarPoll handles its own emails via processMeetingComplete)
     // Also store inviter email as fallback
