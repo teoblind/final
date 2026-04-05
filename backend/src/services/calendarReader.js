@@ -10,14 +10,13 @@ import { google } from 'googleapis';
 import { getTenantDb } from '../cache/database.js';
 
 // OAuth app credentials - try GMAIL_CLIENT first, fall back to GOOGLE_OAUTH
-const CLIENT_PAIRS = [
-  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
-  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
-].filter(p => p.id && p.secret);
-
-const CLIENT_ID = CLIENT_PAIRS[0]?.id;
-const CLIENT_SECRET = CLIENT_PAIRS[0]?.secret;
-const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+function getClientPairs() {
+  return [
+    { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+    { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+  ].filter(p => p.id && p.secret);
+}
+function getFallbackRefreshToken() { return process.env.GMAIL_REFRESH_TOKEN; }
 
 // Cache calendar clients per tenant to avoid re-creating OAuth on every call
 const calClientCache = new Map();
@@ -31,7 +30,7 @@ const calClientCache = new Map();
 async function getCalendarForTenant(tenantId) {
   if (calClientCache.has(tenantId)) return calClientCache.get(tenantId);
 
-  let refreshToken = FALLBACK_REFRESH_TOKEN;
+  let refreshToken = getFallbackRefreshToken();
 
   // Try tenant-specific token
   try {
@@ -44,12 +43,13 @@ async function getCalendarForTenant(tenantId) {
     // tenant_email_config may not exist - use fallback
   }
 
-  if (!refreshToken || CLIENT_PAIRS.length === 0) {
+  const clientPairs = getClientPairs();
+  if (!refreshToken || clientPairs.length === 0) {
     return null;
   }
 
   // Try each OAuth client pair - token may have been issued by either
-  for (const pair of CLIENT_PAIRS) {
+  for (const pair of clientPairs) {
     try {
       const oauth2 = new google.auth.OAuth2(pair.id, pair.secret);
       oauth2.setCredentials({ refresh_token: refreshToken });
@@ -61,7 +61,7 @@ async function getCalendarForTenant(tenantId) {
     } catch (err) {
       const isAuthError = err.code === 401 || err.message?.includes('invalid_grant') ||
         err.message?.includes('Invalid Credentials') || err.message?.includes('unauthorized_client');
-      if (isAuthError && CLIENT_PAIRS.indexOf(pair) < CLIENT_PAIRS.length - 1) {
+      if (isAuthError && clientPairs.indexOf(pair) < clientPairs.length - 1) {
         console.log(`[CalendarReader] Primary OAuth client failed for ${tenantId}, trying fallback...`);
         continue;
       }

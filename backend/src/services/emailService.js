@@ -16,12 +16,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Dual OAuth app credentials - tokens may be issued by either client
-const OAUTH_CLIENTS = [
-  { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
-  { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
-].filter(c => c.id && c.secret);
+function getOAuthClients() {
+  return [
+    { id: process.env.GMAIL_CLIENT_ID, secret: process.env.GMAIL_CLIENT_SECRET },
+    { id: process.env.GOOGLE_OAUTH_CLIENT_ID, secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET },
+  ].filter(c => c.id && c.secret);
+}
 
-const FALLBACK_REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN;
+function getFallbackRefreshToken() { return process.env.GMAIL_REFRESH_TOKEN; }
 const FALLBACK_SENDER = 'Coppice <agent@zhan.coppice.ai>';
 
 /**
@@ -30,7 +32,7 @@ const FALLBACK_SENDER = 'Coppice <agent@zhan.coppice.ai>';
  * Tries both OAuth clients since tokens may be issued by either one.
  */
 async function getGmailClient(tenantId, senderEmail, senderName) {
-  let refreshToken = FALLBACK_REFRESH_TOKEN;
+  let refreshToken = getFallbackRefreshToken();
   let sender = FALLBACK_SENDER;
 
   if (tenantId) {
@@ -70,7 +72,8 @@ async function getGmailClient(tenantId, senderEmail, senderName) {
   }
 
   // Try each OAuth client until one works with this refresh token
-  for (const client of OAUTH_CLIENTS) {
+  const oauthClients = getOAuthClients();
+  for (const client of oauthClients) {
     try {
       const oAuth2Client = new google.auth.OAuth2(client.id, client.secret, 'http://localhost:8099');
       oAuth2Client.setCredentials({ refresh_token: refreshToken });
@@ -83,7 +86,7 @@ async function getGmailClient(tenantId, senderEmail, senderName) {
   }
 
   // Last resort - use first client without testing (will fail at send time with clear error)
-  const fallback = OAUTH_CLIENTS[0];
+  const fallback = oauthClients[0];
   const oAuth2Client = new google.auth.OAuth2(fallback.id, fallback.secret, 'http://localhost:8099');
   oAuth2Client.setCredentials({ refresh_token: refreshToken });
   const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });

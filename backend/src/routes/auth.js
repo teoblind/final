@@ -52,20 +52,21 @@ import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
 import { sendHtmlEmail } from '../services/emailService.js';
 
 // ─── Google OAuth Config ─────────────────────────────────────────────────────
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_OAUTH_REDIRECT_URI || '/api/v1/auth/google/callback';
+// Read at runtime (not import time) so dotenv.config() has already run
+function getGoogleClientId() { return process.env.GOOGLE_OAUTH_CLIENT_ID; }
+function getGoogleClientSecret() { return process.env.GOOGLE_OAUTH_CLIENT_SECRET; }
+function getGoogleRedirectUri() { return process.env.GOOGLE_OAUTH_REDIRECT_URI || '/api/v1/auth/google/callback'; }
 
 function getGoogleOAuth2Client(req) {
   // Build absolute redirect URI from request if relative
-  let redirectUri = GOOGLE_REDIRECT_URI;
+  let redirectUri = getGoogleRedirectUri();
   if (redirectUri.startsWith('/')) {
     // Always use https in production (Nginx terminates SSL)
     const proto = process.env.NODE_ENV === 'production' ? 'https' : (req.headers['x-forwarded-proto'] || req.protocol);
     const host = req.headers['x-forwarded-host'] || req.get('host');
     redirectUri = `${proto}://${host}${redirectUri}`;
   }
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
+  return new google.auth.OAuth2(getGoogleClientId(), getGoogleClientSecret(), redirectUri);
 }
 
 const router = express.Router();
@@ -755,7 +756,7 @@ router.post('/reset-password', authRateLimiter(5), async (req, res) => {
 // ─── GET /google - Start Google OAuth flow ──────────────────────────────────
 
 router.get('/google', (req, res) => {
-  if (!GOOGLE_CLIENT_ID) {
+  if (!getGoogleClientId()) {
     return res.status(501).json({ error: 'Google OAuth not configured' });
   }
 
@@ -898,13 +899,13 @@ function getIntegrationOAuth2Client(req) {
   // Reuse the sign-in callback path (/api/v1/auth/google/callback) which is already
   // registered as an authorized redirect URI in Google Cloud Console.
   // The state parameter distinguishes integration flow from sign-in flow.
-  let redirectUri = GOOGLE_REDIRECT_URI;
+  let redirectUri = getGoogleRedirectUri();
   if (redirectUri.startsWith('/')) {
     const proto = process.env.NODE_ENV === 'production' ? 'https' : (req?.headers?.['x-forwarded-proto'] || 'https');
     const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || 'coppice.ai';
     redirectUri = `${proto}://${host}${redirectUri}`;
   }
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, redirectUri);
+  return new google.auth.OAuth2(getGoogleClientId(), getGoogleClientSecret(), redirectUri);
 }
 
 // ─── GET /google/integration-status - Check if Google Workspace is connected ──
@@ -927,7 +928,7 @@ router.get('/google/integration-status', authenticate, async (req, res) => {
 
 router.get('/google/integrate', (req, res) => {
   try {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    if (!getGoogleClientId() || !getGoogleClientSecret()) {
       return res.status(501).json({ error: 'Google integration OAuth not configured' });
     }
 

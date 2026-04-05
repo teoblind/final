@@ -32,19 +32,19 @@ import {
 const router = express.Router();
 router.use(authenticate);
 
-const CLIENT_ID = process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
-const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+function getClientId() { return process.env.GMAIL_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID; }
+function getClientSecret() { return process.env.GMAIL_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET; }
 
 function makeGmailClient(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
-  const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
+  if (!getClientId() || !getClientSecret() || !refreshToken) return null;
+  const client = new google.auth.OAuth2(getClientId(), getClientSecret(), 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return google.gmail({ version: 'v1', auth: client });
 }
 
 function makeDriveClient(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
-  const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
+  if (!getClientId() || !getClientSecret() || !refreshToken) return null;
+  const client = new google.auth.OAuth2(getClientId(), getClientSecret(), 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return google.drive({ version: 'v3', auth: client });
 }

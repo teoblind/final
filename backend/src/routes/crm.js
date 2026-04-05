@@ -13,8 +13,8 @@ import { authenticate } from '../middleware/auth.js';
 const router = express.Router();
 router.use(authenticate);
 
-const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
-const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;
+function getClientId() { return process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID; }
+function getClientSecret() { return process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET; }
 
 const STAGES = ['Discovery', 'Qualification', 'Proposal', 'Negotiation', 'Contract Sent', 'Closed Won'];
 
@@ -28,8 +28,8 @@ function getRefreshToken(tenantId) {
 }
 
 function makeAuth(refreshToken) {
-  if (!CLIENT_ID || !CLIENT_SECRET || !refreshToken) return null;
-  const client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, 'http://localhost:8099');
+  if (!getClientId() || !getClientSecret() || !refreshToken) return null;
+  const client = new google.auth.OAuth2(getClientId(), getClientSecret(), 'http://localhost:8099');
   client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
