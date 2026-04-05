@@ -165,10 +165,10 @@ export default function OnboardingWizard({ onComplete, onLogout }) {
 
   // Agents step state
   const defaultModes = isVenture
-    ? { hivemind: 'autonomous', 'lead-engine': 'autonomous', meetings: 'autonomous', 'reporting-engine': 'autonomous' }
+    ? { hivemind: 'copilot', 'lead-engine': 'copilot', meetings: 'copilot', 'reporting-engine': 'copilot' }
     : isConstruction
-    ? { estimating: 'copilot', documents: 'copilot', meetings: 'autonomous', email: 'copilot' }
-    : { sangha: 'autonomous', 'lead-engine': 'autonomous', meetings: 'autonomous', 'reporting-engine': 'autonomous' };
+    ? { estimating: 'copilot', documents: 'copilot', meetings: 'copilot', email: 'copilot' }
+    : { sangha: 'copilot', 'lead-engine': 'copilot', meetings: 'copilot', 'reporting-engine': 'copilot' };
   const [agentModes, setAgentModes] = useState(defaultModes);
 
   // Team step state
@@ -383,7 +383,7 @@ export default function OnboardingWizard({ onComplete, onLogout }) {
     ? 'bg-gradient-to-br from-[#1a1a1a] to-[#111110]'
     : isConstruction
     ? 'bg-gradient-to-br from-[#1e3a5f] to-[#0f1f3a]'
-    : 'bg-gradient-to-br from-[#1a2e1a] to-[#0f1f0f]';
+    : 'bg-gradient-to-br from-[#1a6b3c] to-[#155a32]';
 
   const dk = null;
 
@@ -437,7 +437,7 @@ export default function OnboardingWizard({ onComplete, onLogout }) {
       {/* Hero */}
       <div className={`text-center mb-8 px-8 py-10 rounded-[18px] ${heroBg} text-white`}>
         <div className="mx-auto mb-5 flex justify-center">
-          <CoppiceLogo color={isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#1a2e1a'} size={56} />
+          <CoppiceLogo color={isVenture ? '#111110' : isConstruction ? '#1e3a5f' : '#155a32'} size={56} />
         </div>
         <h2 className="text-[26px] font-bold mb-2.5 tracking-[-0.3px]">{WELCOME.title}</h2>
         <p className="text-white/55 text-[13px] leading-relaxed max-w-md mx-auto">
