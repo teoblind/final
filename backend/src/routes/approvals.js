@@ -11,7 +11,7 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import db from '../cache/database.js';
-import { insertActivity, setTenantContext, getAllTenantEmailConfigs, getTenantEmailConfig, SANGHA_TENANT_ID, recordServiceUsage } from '../cache/database.js';
+import { insertActivity, setTenantContext, getAllTenantEmailConfigs, getTenantEmailConfig, getDefaultTenantId, recordServiceUsage } from '../cache/database.js';
 import { sendEstimateEmail, sendEmail, sendEmailWithAttachments } from '../services/emailService.js';
 
 const router = express.Router();
@@ -39,7 +39,7 @@ function findFileRecursive(fs, path, dir, filename, depth = 0) {
 }
 
 function resolveIds(req) {
-  const tenantId = req.tenantId || req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  const tenantId = req.tenantId || req.resolvedTenant?.id || getDefaultTenantId();
   const userId = req.user.id; // auth middleware guarantees req.user exists
   return { tenantId, userId };
 }
@@ -667,7 +667,7 @@ function formatItem(row) {
 // ---------------------------------------------------------------------------
 function seedDemoApprovals() {
   // Clear stale pending items for default tenant so we always get fresh seed data
-  db.prepare("DELETE FROM approval_items WHERE tenant_id = ? AND status = 'pending'").run(SANGHA_TENANT_ID);
+  db.prepare("DELETE FROM approval_items WHERE tenant_id = ? AND status = 'pending'").run(getDefaultTenantId());
 
   const sanghaItems = [
     {
@@ -737,9 +737,9 @@ function seedDemoApprovals() {
     VALUES (?, ?, ?, ?, ?, ?, 'pending')
   `);
   for (const item of sanghaItems) {
-    insert.run(SANGHA_TENANT_ID, item.agent_id, item.title, item.description, item.type, item.payload_json);
+    insert.run(getDefaultTenantId(), item.agent_id, item.title, item.description, item.type, item.payload_json);
   }
-  console.log(`Seeded ${sanghaItems.length} approval items for tenant ${SANGHA_TENANT_ID}`);
+  console.log(`Seeded ${sanghaItems.length} approval items for tenant ${getDefaultTenantId()}`);
 
   // DACP seeds (only if none exist) - must run inside DACP tenant context
   // so the db proxy routes to the correct SQLite file
@@ -796,7 +796,7 @@ function seedDemoApprovals() {
 // Seed agent insights
 // ---------------------------------------------------------------------------
 function seedDemoInsights() {
-  const existing = db.prepare("SELECT COUNT(*) as c FROM agent_insights WHERE tenant_id = ?").get(SANGHA_TENANT_ID);
+  const existing = db.prepare("SELECT COUNT(*) as c FROM agent_insights WHERE tenant_id = ?").get(getDefaultTenantId());
   if (existing.c > 0) return;
 
   const insights = [
@@ -857,9 +857,9 @@ function seedDemoInsights() {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
   `);
   for (const i of insights) {
-    insertInsight.run(i.id, SANGHA_TENANT_ID, i.agent_id, i.type, i.category, i.title, i.description, i.priority, i.actions_json);
+    insertInsight.run(i.id, getDefaultTenantId(), i.agent_id, i.type, i.category, i.title, i.description, i.priority, i.actions_json);
   }
-  console.log(`Seeded ${insights.length} agent insights for tenant ${SANGHA_TENANT_ID}`);
+  console.log(`Seeded ${insights.length} agent insights for tenant ${getDefaultTenantId()}`);
 }
 
 /**
@@ -867,7 +867,7 @@ function seedDemoInsights() {
  */
 router.post('/:id/update-draft', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
     const { id } = req.params;
     const { body, senderEmail, senderName, to, subject } = req.body;
     if (!body && !senderEmail && !to && !subject) return res.status(400).json({ error: 'body, senderEmail, to, or subject is required' });
@@ -900,7 +900,7 @@ router.post('/:id/update-draft', async (req, res) => {
  */
 router.post('/:id/rewrite', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
     const { id } = req.params;
     const { senderName, currentBody } = req.body;
     if (!senderName || !currentBody) return res.status(400).json({ error: 'senderName and currentBody required' });
@@ -1072,13 +1072,8 @@ Return ONLY valid JSON, no commentary or markdown.`;
   }
 });
 
-// Run seeds on import
-try {
-  seedDemoApprovals();
-  // seedDemoInsights(); - removed, was fake demo data
-} catch (err) {
-  // Table may not exist yet if initDatabase hasn't run - safe to ignore
-  console.warn('Approval/insight seed skipped:', err.message);
-}
+// Seeds disabled - no fake demo data in production
+// seedDemoApprovals();
+// seedDemoInsights();
 
 export default router;
