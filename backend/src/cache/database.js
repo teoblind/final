@@ -1258,9 +1258,9 @@ function seedTenantsInSystemDb() {
     console.log(`[DB] Migrated tenant 'default' -> '${SANGHA_TENANT_ID}'`);
   }
 
-  // Create Sangha Renewables tenant if not exists
+  // Create default tenant if not exists (only for this VPS's tenant)
   const sanghaTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get(SANGHA_TENANT_ID);
-  if (!sanghaTenant) {
+  if (!sanghaTenant && SANGHA_TENANT_ID === 'sangha-renewables') {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, settings_json, limits_json)
       VALUES (?, 'Sangha Renewables', 'sangha', 'professional', 'active', ?, ?)
@@ -1285,12 +1285,14 @@ function seedTenantsInSystemDb() {
     console.log(`[DB] Sangha tenant created in systemDb: ${SANGHA_TENANT_ID}`);
   }
 
-  // Fix: ensure tenant name is correct
-  systemDb.prepare(`UPDATE tenants SET name = 'Sangha Renewables' WHERE id = ? AND name = 'Default Organization'`).run(SANGHA_TENANT_ID);
+  // Fix: ensure tenant name is correct (only for Sangha VPS)
+  if (SANGHA_TENANT_ID === 'sangha-renewables') {
+    systemDb.prepare(`UPDATE tenants SET name = 'Sangha Renewables' WHERE id = ? AND name = 'Default Organization'`).run(SANGHA_TENANT_ID);
+  }
 
-  // Create DACP tenant if not exists
+  // Create DACP tenant if not exists (only on DACP VPS)
   const dacpTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('dacp-construction-001');
-  if (!dacpTenant) {
+  if (!dacpTenant && SANGHA_TENANT_ID === 'dacp-construction-001') {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1303,9 +1305,9 @@ function seedTenantsInSystemDb() {
     console.log('[DB] DACP tenant created in systemDb');
   }
 
-  // Create Zhan Capital tenant if not exists
+  // Create Zhan Capital tenant if not exists (only on Zhan VPS)
   const zhanTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('zhan-capital');
-  if (!zhanTenant) {
+  if (!zhanTenant && SANGHA_TENANT_ID === 'zhan-capital') {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
