@@ -449,7 +449,8 @@ function AppContent() {
       setShowChangePassword(true);
     }
     // Show onboarding once per user (localStorage flag persists after completion)
-    if (user?.id && !localStorage.getItem(`onboarding_done_${user.id}`)) {
+    // Skip if tenant already has industry configured (already onboarded by someone)
+    if (user?.id && !localStorage.getItem(`onboarding_done_${user.id}`) && !tenant?.settings?.industry) {
       setShowOnboarding(true);
     }
   }, [user]);
