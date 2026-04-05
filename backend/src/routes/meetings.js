@@ -139,68 +139,75 @@ const AGENT_PROMPTS = {
 router.get('/', async (req, res) => {
   try {
     const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
-    // Prefer user's personal calendar token (has actual meetings) over agent calendar
+    // Gather ALL available calendar tokens - user's personal + agent + email config
     const userCalToken = getKeyVaultValue(tenantId, 'google-calendar-user', 'refresh_token');
     const calToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
     const emailConfig = getTenantEmailConfig(tenantId);
-    const refreshToken = userCalToken || calToken || emailConfig?.gmailRefreshToken;
+    const emailRefreshToken = emailConfig?.gmailRefreshToken;
 
-    console.log(`[Meetings] GET / tenant=${tenantId} userCal=${!!userCalToken} agentCal=${!!calToken} refreshToken=${!!refreshToken}`);
+    // Deduplicate tokens and use ALL of them
+    const allTokens = [...new Set([userCalToken, calToken, emailRefreshToken].filter(Boolean))];
 
-    if (!refreshToken) {
+    console.log(`[Meetings] GET / tenant=${tenantId} userCal=${!!userCalToken} agentCal=${!!calToken} emailCal=${!!emailRefreshToken} totalTokens=${allTokens.length}`);
+
+    if (!allTokens.length) {
       return res.json({ meetings: [], note: 'No email connected' });
-    }
-
-    const cal = await makeCalendarClientAsync(refreshToken);
-    if (!cal) {
-      console.log(`[Meetings] Calendar client unavailable for tenant=${tenantId}`);
-      return res.json({ meetings: [], note: 'Calendar client unavailable' });
     }
 
     const range = req.query.range || 'week';
     const now = new Date();
-
-    // All ranges look forward from now
     const timeMin = now;
     const days = range === 'month' ? 30 : range === '90' ? 90 : 7;
     const timeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
 
-    // Fetch all visible calendars (agent's own + shared/delegated calendars)
-    let calendarIds = ['primary'];
-    try {
-      const calList = await cal.calendarList.list();
-      calendarIds = (calList.data.items || []).map(c => c.id);
-      if (calendarIds.length === 0) calendarIds = ['primary'];
-    } catch { /* fallback to primary only */ }
-
-    // Fetch events from all calendars in parallel
-    const allResults = await Promise.allSettled(
-      calendarIds.map(calId =>
-        cal.events.list({
-          calendarId: calId,
-          timeMin: timeMin.toISOString(),
-          timeMax: timeMax.toISOString(),
-          singleEvents: true,
-          orderBy: 'startTime',
-          maxResults: 50,
-        })
-      )
-    );
-
-    // Merge and deduplicate events by ID
+    // Fetch calendars from ALL tokens and merge results
     const seen = new Set();
     const items = [];
-    for (const result of allResults) {
-      if (result.status !== 'fulfilled') continue;
-      for (const event of (result.value.data.items || [])) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
-          items.push(event);
+    let totalCalendars = 0;
+
+    for (const token of allTokens) {
+      const cal = await makeCalendarClientAsync(token);
+      if (!cal) continue;
+
+      let calendarIds = ['primary'];
+      try {
+        const calList = await cal.calendarList.list();
+        calendarIds = (calList.data.items || []).map(c => c.id);
+        if (calendarIds.length === 0) calendarIds = ['primary'];
+      } catch { /* fallback to primary only */ }
+
+      totalCalendars += calendarIds.length;
+
+      const allResults = await Promise.allSettled(
+        calendarIds.map(calId =>
+          cal.events.list({
+            calendarId: calId,
+            timeMin: timeMin.toISOString(),
+            timeMax: timeMax.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults: 50,
+          })
+        )
+      );
+
+      for (const result of allResults) {
+        if (result.status !== 'fulfilled') continue;
+        for (const event of (result.value.data.items || [])) {
+          if (!seen.has(event.id)) {
+            seen.add(event.id);
+            items.push(event);
+          }
         }
       }
     }
 
-    console.log(`[Meetings] tenant=${tenantId} range=${range} calendars=${calendarIds.length} rawItems=${items.length}`);
+    if (!totalCalendars) {
+      console.log(`[Meetings] No calendar clients available for tenant=${tenantId}`);
+      return res.json({ meetings: [], note: 'Calendar client unavailable' });
+    }
+
+    console.log(`[Meetings] tenant=${tenantId} range=${range} tokens=${allTokens.length} calendars=${totalCalendars} rawItems=${items.length}`);
     const meetings = items
       .filter(e => e.status !== 'cancelled')
       .sort((a, b) => new Date(a.start?.dateTime || a.start?.date) - new Date(b.start?.dateTime || b.start?.date))
