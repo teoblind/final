@@ -17,12 +17,13 @@ if (!fs.existsSync(dataDir)) {
 // ─── Per-Tenant DB Infrastructure ──────────────────────────────────────────
 const tenantStore = new AsyncLocalStorage();
 
-// Sangha Renewables tenant ID (was 'default' historically)
-export const SANGHA_TENANT_ID = 'sangha-renewables';
+// Default tenant ID - configurable per VPS via env var
+export const SANGHA_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'sangha-renewables';
 
 // Map tenant_id → directory name for DB file paths
+const TENANT_DIR_ALIASES = { 'sangha-renewables': 'sangha', 'default': 'sangha' };
 function tenantDirName(tenantId) {
-  if (tenantId === SANGHA_TENANT_ID || tenantId === 'default') return 'sangha';
+  if (TENANT_DIR_ALIASES[tenantId]) return TENANT_DIR_ALIASES[tenantId];
   // Sanitize tenantId to prevent path traversal
   return tenantId.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
