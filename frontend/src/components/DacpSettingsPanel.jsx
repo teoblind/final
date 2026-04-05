@@ -11,6 +11,11 @@ const AgentRunHistory = lazy(() => import('./panels/agents/AgentRunHistory'));
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+function getAuthToken() {
+  try { const s = JSON.parse(sessionStorage.getItem('sangha_auth')); if (s?.tokens?.accessToken) return s.tokens.accessToken; } catch {}
+  return getAuthToken();
+}
+
 /* ── reusable section shell ─────────────────────────────────────────────────── */
 function Section({ icon: Icon, iconClass, title, desc, badge, borderDanger, children }) {
   return (
@@ -173,7 +178,7 @@ function IntegrationsPanel() {
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     // Check HubSpot status
     fetch(`${API_BASE}/v1/hubspot/status`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
@@ -200,7 +205,7 @@ function IntegrationsPanel() {
     // OAuth-based integrations (Google Workspace) - open popup
     if (integration.oauth) {
       setConnecting(integration.id);
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       const scopes = 'gmail.readonly,gmail.send,gmail.compose,gmail.modify,calendar,drive,spreadsheets,documents';
       const url = `${API_BASE}/v1/auth/google/integrate?scopes=${encodeURIComponent(scopes)}&source=google-all&token=${encodeURIComponent(token)}`;
       window.open(url, 'google-oauth', 'width=500,height=700,left=200,top=100');
@@ -211,7 +216,7 @@ function IntegrationsPanel() {
     setConnecting(integration.id);
     setError('');
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       const res = await fetch(`${API_BASE}/v1/hubspot/connect`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -227,7 +232,7 @@ function IntegrationsPanel() {
   };
 
   const handleDisconnect = async (integration) => {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     await fetch(`${API_BASE}/v1/hubspot/disconnect`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}` },
     });
@@ -469,7 +474,7 @@ export default function DacpSettingsPanel() {
 
   // Load pricing
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     fetch(`${API_BASE}/v1/estimates/pricing`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
@@ -522,7 +527,7 @@ export default function DacpSettingsPanel() {
     if (!newPricing.item.trim()) return;
     setAddingPricing(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       const m = parseFloat(newPricing.material) || 0;
       const l = parseFloat(newPricing.labor) || 0;
       const e = parseFloat(newPricing.equipment) || 0;
