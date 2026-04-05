@@ -36,7 +36,7 @@ import { handleTranscriptEvent, startVoiceLoop, stopVoiceLoop } from '../service
 import { getMeetingRoomByBot, addTranscript } from '../services/meetingRoomService.js';
 import { startVisionLoop, stopVisionLoop, getVisualContext, isVisionActive, processFrame } from '../services/geminiVisionService.js';
 import { authenticate } from '../middleware/auth.js';
-import { SANGHA_TENANT_ID } from '../cache/database.js';
+import { getDefaultTenantId } from '../cache/database.js';
 import { processUtterance, notifyBotResponded, resetConversation } from '../services/conversationStateMachine.js';
 import { sendHtmlEmail } from '../services/emailService.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
@@ -802,7 +802,7 @@ router.post('/join', async (req, res) => {
     let bot;
     if (voice) {
       // Voice bot: output_media page with OpenAI Realtime API for live conversation
-      bot = await createVoiceBot(meetingUrl, { botName: botName || 'Coppice', tenantId: tenantId || SANGHA_TENANT_ID });
+      bot = await createVoiceBot(meetingUrl, { botName: botName || 'Coppice', tenantId: tenantId || getDefaultTenantId() });
     } else {
       bot = await createBot(meetingUrl, { botName, transcriptionProvider, joinMessage });
     }

@@ -9,12 +9,12 @@ import express from 'express';
 import { authenticate } from '../middleware/auth.js';
 import { sendEmail } from '../services/emailService.js';
 import { getSubdomainForSlug } from '../middleware/tenantResolver.js';
-import { getTenantDb, getAllTenants, SANGHA_TENANT_ID } from '../cache/database.js';
+import { getTenantDb, getAllTenants, getDefaultTenantId } from '../cache/database.js';
 
 const router = express.Router();
 
 function getDb() {
-  const db = getTenantDb(SANGHA_TENANT_ID);
+  const db = getTenantDb(getDefaultTenantId());
   db.exec(`
     CREATE TABLE IF NOT EXISTS demo_requests (
       id TEXT PRIMARY KEY,
@@ -102,8 +102,8 @@ router.post('/auth/lookup-tenant', (req, res) => {
         const u = tenantDb.prepare('SELECT email, role, tenant_id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
         if (u) {
           const isAdmin = u.role && (u.role.includes('admin') || u.role === 'owner' || u.role === 'super_admin');
-          const subdomain = (isAdmin && tenant.id === SANGHA_TENANT_ID) ? 'admin' : getSubdomainForSlug(tenant.slug);
-          const displayName = (isAdmin && tenant.id === SANGHA_TENANT_ID) ? 'Platform Admin' : tenant.name;
+          const subdomain = (isAdmin && tenant.id === getDefaultTenantId()) ? 'admin' : getSubdomainForSlug(tenant.slug);
+          const displayName = (isAdmin && tenant.id === getDefaultTenantId()) ? 'Platform Admin' : tenant.name;
           users.push({ slug: subdomain, name: displayName, id: tenant.id, role: u.role });
         }
       } catch (e) { /* tenant DB may not have users table */ }

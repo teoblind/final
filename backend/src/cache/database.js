@@ -17,8 +17,15 @@ if (!fs.existsSync(dataDir)) {
 // ─── Per-Tenant DB Infrastructure ──────────────────────────────────────────
 const tenantStore = new AsyncLocalStorage();
 
-// Default tenant ID - configurable per VPS via env var
-export const SANGHA_TENANT_ID = process.env.DEFAULT_TENANT_ID || 'sangha-renewables';
+// Default tenant ID - lazy-loaded so dotenv.config() runs first
+let _defaultTenantId;
+function getDefaultTenantId() {
+  if (!_defaultTenantId) _defaultTenantId = process.env.DEFAULT_TENANT_ID || 'sangha-renewables';
+  return _defaultTenantId;
+}
+// Exported as a getter so it always reads the lazy value
+export { getDefaultTenantId };
+// SANGHA_TENANT_ID removed - all files now use getDefaultTenantId()
 
 // Map tenant_id → directory name for DB file paths
 const TENANT_DIR_ALIASES = { 'sangha-renewables': 'sangha', 'default': 'sangha' };
@@ -43,7 +50,7 @@ const tenantDbCache = new Map();
  * DB files live at data/{tenantDir}/{tenantDir}.db
  */
 function getTenantDb(tenantId) {
-  if (!tenantId) tenantId = SANGHA_TENANT_ID;
+  if (!tenantId) tenantId = getDefaultTenantId();
   if (tenantDbCache.has(tenantId)) return tenantDbCache.get(tenantId);
 
   const dirName = tenantDirName(tenantId);
@@ -74,7 +81,7 @@ function resolveDb() {
     return getTenantDb(tenantId);
   }
   // Fallback: Sangha tenant (for startup, cron jobs, etc.)
-  return getTenantDb(SANGHA_TENANT_ID);
+  return getTenantDb(getDefaultTenantId());
 }
 
 /**
@@ -1138,7 +1145,7 @@ function initSchemaForDb(targetDb) {
 
   for (const table of tablesToMigrate) {
     try {
-      targetDb.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT DEFAULT '${SANGHA_TENANT_ID}'`);
+      targetDb.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT DEFAULT '${getDefaultTenantId()}'`);
     } catch (e) {
       // Column already exists
     }
@@ -1203,8 +1210,8 @@ export function initDatabase() {
     // Init all tables
     initSchemaForDb(tdb);
 
-    // Migrate tenant_id = 'default' -> SANGHA_TENANT_ID in Sangha DB
-    if (tenant.id === SANGHA_TENANT_ID) {
+    // Migrate tenant_id = 'default' -> getDefaultTenantId() in Sangha DB
+    if (tenant.id === getDefaultTenantId()) {
       migrateSanghaTenantId(tdb);
     }
 
@@ -1217,13 +1224,13 @@ export function initDatabase() {
   console.log('[DB] All databases initialized');
 }
 
-/** Migrate tenant_id from 'default' to SANGHA_TENANT_ID in existing Sangha DB rows */
+/** Migrate tenant_id from 'default' to getDefaultTenantId() in existing Sangha DB rows */
 function migrateSanghaTenantId(tdb) {
   // Check if any rows still have the old 'default' tenant_id
   const check = tdb.prepare("SELECT COUNT(*) as c FROM users WHERE tenant_id = 'default'").get();
   if (!check || check.c === 0) return; // Already migrated or fresh DB
 
-  console.log(`[DB] Migrating Sangha tenant_id 'default' -> '${SANGHA_TENANT_ID}' ...`);
+  console.log(`[DB] Migrating Sangha tenant_id 'default' -> '${getDefaultTenantId()}' ...`);
 
   // All tables that have a tenant_id column
   const tables = tdb.prepare(`
@@ -1235,7 +1242,7 @@ function migrateSanghaTenantId(tdb) {
   let totalUpdated = 0;
   for (const table of tables) {
     try {
-      const result = tdb.prepare(`UPDATE ${table} SET tenant_id = ? WHERE tenant_id = 'default'`).run(SANGHA_TENANT_ID);
+      const result = tdb.prepare(`UPDATE ${table} SET tenant_id = ? WHERE tenant_id = 'default'`).run(getDefaultTenantId());
       if (result.changes > 0) {
         console.log(`[DB]   ${table}: ${result.changes} rows updated`);
         totalUpdated += result.changes;
@@ -1254,17 +1261,17 @@ function seedTenantsInSystemDb() {
   // Migrate: rename 'default' tenant to 'sangha-renewables' if old ID still exists
   const oldDefault = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('default');
   if (oldDefault) {
-    systemDb.prepare(`UPDATE tenants SET id = ?, slug = 'sangha' WHERE id = 'default'`).run(SANGHA_TENANT_ID);
-    console.log(`[DB] Migrated tenant 'default' -> '${SANGHA_TENANT_ID}'`);
+    systemDb.prepare(`UPDATE tenants SET id = ?, slug = 'sangha' WHERE id = 'default'`).run(getDefaultTenantId());
+    console.log(`[DB] Migrated tenant 'default' -> '${getDefaultTenantId()}'`);
   }
 
   // Create default tenant if not exists (only for this VPS's tenant)
-  const sanghaTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get(SANGHA_TENANT_ID);
-  if (!sanghaTenant && SANGHA_TENANT_ID === 'sangha-renewables') {
+  const sanghaTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get(getDefaultTenantId());
+  if (!sanghaTenant && getDefaultTenantId() === 'sangha-renewables') {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, settings_json, limits_json)
       VALUES (?, 'Sangha Renewables', 'sangha', 'professional', 'active', ?, ?)
-    `).run(SANGHA_TENANT_ID,
+    `).run(getDefaultTenantId(),
       JSON.stringify({
         industry: 'mining',
         macro_intelligence: true,
@@ -1282,17 +1289,17 @@ function seedTenantsInSystemDb() {
         dataRetentionDays: 365,
       })
     );
-    console.log(`[DB] Sangha tenant created in systemDb: ${SANGHA_TENANT_ID}`);
+    console.log(`[DB] Sangha tenant created in systemDb: ${getDefaultTenantId()}`);
   }
 
   // Fix: ensure tenant name is correct (only for Sangha VPS)
-  if (SANGHA_TENANT_ID === 'sangha-renewables') {
-    systemDb.prepare(`UPDATE tenants SET name = 'Sangha Renewables' WHERE id = ? AND name = 'Default Organization'`).run(SANGHA_TENANT_ID);
+  if (getDefaultTenantId() === 'sangha-renewables') {
+    systemDb.prepare(`UPDATE tenants SET name = 'Sangha Renewables' WHERE id = ? AND name = 'Default Organization'`).run(getDefaultTenantId());
   }
 
   // Create DACP tenant if not exists (only on DACP VPS)
   const dacpTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('dacp-construction-001');
-  if (!dacpTenant && SANGHA_TENANT_ID === 'dacp-construction-001') {
+  if (!dacpTenant && getDefaultTenantId() === 'dacp-construction-001') {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1307,7 +1314,7 @@ function seedTenantsInSystemDb() {
 
   // Create Zhan Capital tenant if not exists (only on Zhan VPS)
   const zhanTenant = systemDb.prepare('SELECT id FROM tenants WHERE id = ?').get('zhan-capital');
-  if (!zhanTenant && SANGHA_TENANT_ID === 'zhan-capital') {
+  if (!zhanTenant && getDefaultTenantId() === 'zhan-capital') {
     systemDb.prepare(`
       INSERT INTO tenants (id, name, slug, plan, status, branding_json, settings_json, limits_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1320,8 +1327,8 @@ function seedTenantsInSystemDb() {
     console.log('[DB] Zhan Capital tenant created in systemDb');
   }
 
-  // Backfill settings_json for existing Sangha tenant if missing
-  const existingSangha = systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get(SANGHA_TENANT_ID);
+  // Backfill settings_json for existing Sangha tenant if missing (only on Sangha VPS)
+  const existingSangha = getDefaultTenantId() === 'sangha-renewables' ? systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get(getDefaultTenantId()) : null;
   if (existingSangha && !existingSangha.settings_json) {
     systemDb.prepare('UPDATE tenants SET settings_json = ? WHERE id = ?').run(
       JSON.stringify({
@@ -1333,12 +1340,12 @@ function seedTenantsInSystemDb() {
         thread_privacy: true,
         auto_reply_enabled: true,
       }),
-      SANGHA_TENANT_ID
+      getDefaultTenantId()
     );
   }
 
-  // Backfill settings_json for Zhan Capital - ensure industry: 'venture' is set
-  const existingZhan = systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('zhan-capital');
+  // Backfill settings_json for Zhan Capital - ensure industry: 'venture' is set (only on Zhan VPS)
+  const existingZhan = getDefaultTenantId() === 'zhan-capital' ? systemDb.prepare('SELECT settings_json FROM tenants WHERE id = ?').get('zhan-capital') : null;
   if (existingZhan) {
     const zhanSettings = existingZhan.settings_json ? JSON.parse(existingZhan.settings_json) : {};
     if (!zhanSettings.industry) {
@@ -1387,7 +1394,7 @@ function seedTenantData(targetDb, tenantId) {
   }
 
   // Seed admin user for Sangha tenant
-  if (tenantId === SANGHA_TENANT_ID) {
+  if (tenantId === getDefaultTenantId()) {
     const adminUser = targetDb.prepare('SELECT id FROM users WHERE email = ?').get('teo@zhan.capital');
     if (!adminUser) {
       const salt = bcryptPkg.genSaltSync(12);
@@ -1395,7 +1402,7 @@ function seedTenantData(targetDb, tenantId) {
       targetDb.prepare(`
         INSERT OR IGNORE INTO users (id, email, name, password_hash, tenant_id, role, status)
         VALUES ('seed-admin-001', 'teo@zhan.capital', 'Teo Blind', ?, ?, 'sangha_admin', 'active')
-      `).run(hash, SANGHA_TENANT_ID);
+      `).run(hash, getDefaultTenantId());
       console.log('[DB] Seed admin user created: teo@zhan.capital');
     }
   }
@@ -1495,11 +1502,11 @@ function initEmailTrustSeedData(targetDb, tenantId) {
   insert.run(tenantId, 'teo@zhan.capital', null, 'Teo Blind', 'owner', 'Platform owner - Zhan Capital');
   insert.run(tenantId, 'teo.blind@gmail.com', null, 'Teo Blind', 'owner', 'Platform owner - personal Gmail');
 
-  if (tenantId === SANGHA_TENANT_ID) {
+  if (tenantId === getDefaultTenantId()) {
     // Sangha internal team - trust by domain and key individuals
-    insert.run(SANGHA_TENANT_ID, null, 'sanghasystems.com', null, 'trusted', 'Sangha Systems internal domain');
-    insert.run(SANGHA_TENANT_ID, null, 'zhan.capital', null, 'trusted', 'Zhan Capital internal domain');
-    insert.run(SANGHA_TENANT_ID, 'spencer@sanghasystems.com', null, 'Spencer Marr', 'owner', 'CEO - Sangha');
+    insert.run(getDefaultTenantId(), null, 'sanghasystems.com', null, 'trusted', 'Sangha Systems internal domain');
+    insert.run(getDefaultTenantId(), null, 'zhan.capital', null, 'trusted', 'Zhan Capital internal domain');
+    insert.run(getDefaultTenantId(), 'spencer@sanghasystems.com', null, 'Spencer Marr', 'owner', 'CEO - Sangha');
     console.log('Email trust: Seeded Sangha trusted senders');
   }
 
@@ -4961,7 +4968,7 @@ function initDacpSeedData(targetDb, tenantId) {
   const knEntCount = targetDb.prepare('SELECT COUNT(*) as c FROM knowledge_entities').get();
   if (knEntCount.c === 0) {
     const seedEntities = targetDb.prepare('INSERT OR IGNORE INTO knowledge_entities (id, tenant_id, entity_type, name, metadata_json) VALUES (?, ?, ?, ?, ?)');
-    const sanghaId = SANGHA_TENANT_ID;
+    const sanghaId = getDefaultTenantId();
     const dacpId = 'dacp-construction-001';
 
     // Sangha people
@@ -5230,14 +5237,14 @@ function initDacpSeedData(targetDb, tenantId) {
   }
 
   // ─── Lead Engine Seed Data ──────────────────────────────────────────────
-  const leCount = targetDb.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get(SANGHA_TENANT_ID);
+  const leCount = targetDb.prepare('SELECT COUNT(*) as c FROM le_leads WHERE tenant_id = ?').get(getDefaultTenantId());
   if (leCount.c === 0) {
     const insertLead = targetDb.prepare(`INSERT OR IGNORE INTO le_leads (id, tenant_id, venue_name, region, industry, trigger_news, priority_score, website, status, source, source_query, discovered_at, contacted_at, responded_at, notes, agent_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const insertContact = targetDb.prepare(`INSERT OR IGNORE INTO le_contacts (id, tenant_id, lead_id, name, email, title, phone, source, mx_valid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     const insertOutreach = targetDb.prepare(`INSERT OR IGNORE INTO le_outreach_log (id, tenant_id, lead_id, contact_id, email_type, subject, body, status, sent_at, responded_at, approved_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
     // Sangha leads
-    const S = SANGHA_TENANT_ID;
+    const S = getDefaultTenantId();
     insertLead.run('le-s-001', S, 'Meridian Renewables', 'ERCOT', 'Solar IPP', 'Crane County portfolio facing negative LMPs', 92, 'meridianrenewables.com', 'responded', 'discovery', 'solar IPP Texas ERCOT', '2026-02-20', '2026-03-02', '2026-03-07', null, 'Strong interest - exploring BTM mining for Crane County');
     insertLead.run('le-s-002', S, 'GridScale Partners', 'PJM', 'Wind IPP', 'Reviewing underperforming PJM wind assets', 85, 'gridscalepartners.com', 'responded', 'discovery', 'wind IPP PJM underperforming', '2026-02-22', '2026-03-03', '2026-03-05', null, 'Wants partnership structure details');
     insertLead.run('le-s-003', S, 'Nexus Solar', 'MISO', 'Solar IPP', '95 MW portfolio in MISO', 60, 'nexussolar.com', 'contacted', 'discovery', 'solar developer MISO', '2026-02-25', '2026-03-04', null, null, 'Not right time - revisit Q3');
@@ -7173,14 +7180,14 @@ function initActivityLogTableSchema(targetDb) {
 }
 
 function initActivityLogSeedData(targetDb, tenantId) {
-  if (tenantId !== SANGHA_TENANT_ID) return;
+  if (tenantId !== getDefaultTenantId()) return;
 
   const count = targetDb.prepare('SELECT COUNT(*) as c FROM activity_log').get();
   if (count.c === 0) {
     const insert = targetDb.prepare('INSERT INTO activity_log (tenant_id, type, title, subtitle, detail_json, source_type, agent_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const now = Date.now();
     const ts = (minAgo) => new Date(now - minAgo * 60000).toISOString().replace('T', ' ').slice(0, 19);
-    const S = SANGHA_TENANT_ID;
+    const S = getDefaultTenantId();
 
     insert.run(S, 'out', 'Outreach sent to James Torres, VP Ops at SunPeak Energy', 'Personalized re: ERCOT curtailment patterns on their Crane County site', JSON.stringify({ to: 'jtorres@sunpeak.com', subject: 'ERCOT curtailment optimization for Crane County', body: 'Hi James,\n\nI noticed SunPeak\'s Crane County site has been seeing significant curtailment during afternoon price spikes. We\'ve helped similar operators capture $1,200+ per curtailment event through our automated response system.\n\nWould you have 15 minutes this week to discuss how this could work for your fleet?\n\nBest,\nCoppice' }), 'email', 'lead-engine', ts(2));
     insert.run(S, 'meet', 'Transcribed: Reassurity Product Strategy Call', '42 min \u2014 6 attendees \u2014 4 action items extracted', JSON.stringify({ summary: 'Discussed insurance product structure for behind-the-meter mining operations. Agreed on parametric trigger design using ERCOT price data. Next steps: finalize term sheet, schedule actuarial review.', actionItems: ['Finalize term sheet draft by Friday', 'Schedule actuarial review with Munich Re', 'Send updated loss model to Adam', 'Prepare board presentation for March 20'], attendees: ['Spencer Marr', 'Adam Reeve', 'Teo Blind', 'Miguel Alvarez', 'Sarah Chen', 'Jason Gunderson'] }), 'meeting', 'knowledge', ts(60));

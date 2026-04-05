@@ -9,7 +9,7 @@
 
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { createScheduledTask, getScheduledTasks, getScheduledTask, updateScheduledTask, deleteScheduledTask, SANGHA_TENANT_ID } from '../cache/database.js';
+import { createScheduledTask, getScheduledTasks, getScheduledTask, updateScheduledTask, deleteScheduledTask, getDefaultTenantId } from '../cache/database.js';
 import { computeNextRun, isValidCron } from '../jobs/scheduledTaskRunner.js';
 
 const router = express.Router();
@@ -18,7 +18,7 @@ const router = express.Router();
 router.use(authenticate);
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
   const userId = req.user.id;
   return { tenantId, userId };
 }

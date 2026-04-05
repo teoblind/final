@@ -13,7 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { SANGHA_TENANT_ID } from '../cache/database.js';
+import { getDefaultTenantId } from '../cache/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,7 +179,7 @@ export async function sendAudio(botId, mp3Buffer) {
 export async function createVoiceBot(meetingUrl, opts = {}) {
   const {
     botName = 'Coppice',
-    tenantId = SANGHA_TENANT_ID,
+    tenantId = getDefaultTenantId(),
   } = opts;
 
   // Build instructions for the OpenAI Realtime session

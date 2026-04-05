@@ -19,7 +19,7 @@ import {
   getKeyVaultEntries,
   deleteKeyVaultEntry,
   getTenantDb,
-  SANGHA_TENANT_ID,
+  getDefaultTenantId,
 } from '../cache/database.js';
 import db from '../cache/database.js';
 
@@ -33,7 +33,7 @@ router.use(authenticate);
 // ---------------------------------------------------------------------------
 
 function resolveIds(req) {
-  const tenantId = req.tenantId || req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  const tenantId = req.tenantId || req.resolvedTenant?.id || getDefaultTenantId();
   const userId = req.user.id;
   return { tenantId, userId };
 }

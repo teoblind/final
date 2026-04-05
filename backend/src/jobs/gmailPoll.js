@@ -7,7 +7,7 @@
  */
 
 import { google } from 'googleapis';
-import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment, getAgentMemory, insertApprovalItem , SANGHA_TENANT_ID } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, isEmailPermanentlyProcessed, isThreadProcessed, markEmailProcessed, markEmailRetry, getEmailRetryCount, getTenant, logAutoReply, getSystemDb, getTenantDb, runWithTenant, getAllTenants, getTrustedSenderByEmail, addTrustedSender, upsertCcThreadTracker, getCcThreadsReadyForTrigger, markCcThreadTriggered, insertAgentAssignment, updateAgentAssignment, getAgentMemory, insertApprovalItem , getDefaultTenantId } from '../cache/database.js';
 import { isAwardNotice, processAwardNotice } from '../services/awardPipeline.js';
 import { isRfqEmail, processRfqEmail } from '../services/estimatePipeline.js';
 import { isIppEmail, processIppEmail } from '../services/ippPipeline.js';
@@ -262,7 +262,7 @@ async function saveAttachmentKnowledge(attachments, { tenantId, senderEmail, sub
 
 function isAutoReplyEnabled(tenantId) {
   try {
-    const tenant = getTenant(tenantId || SANGHA_TENANT_ID);
+    const tenant = getTenant(tenantId || getDefaultTenantId());
     if (!tenant?.settings) return false;
     return tenant.settings.auto_reply_enabled === true;
   } catch {
@@ -321,7 +321,7 @@ function shouldSuggestDraft({ from, subject, body, verdict }) {
  * Uses tunnelOrChat (CLI tunnel) - not API.
  */
 async function createSuggestedDraft({ tenantId, from, fromName, subject, body, threadId, messageId, accessTier }) {
-  const agentMap = { [SANGHA_TENANT_ID]: 'sangha', 'zhan-capital': 'zhan' };
+  const agentMap = { [getDefaultTenantId()]: 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[tenantId] || 'hivemind';
 
   // Build context
@@ -431,7 +431,7 @@ Reply with ONLY the email body text.`;
 }
 
 async function generalEmailHandler({ messageId, threadId, from, fromName, subject, body, tenantId, gmail, classification, originalTo, originalCc }) {
-  const resolvedTenant = tenantId || SANGHA_TENANT_ID;
+  const resolvedTenant = tenantId || getDefaultTenantId();
   const verdict = classification?.verdict || 'unknown';
   const accessTier = getAccessTier(verdict, classification?.trustLevel);
 
@@ -464,7 +464,7 @@ async function generalEmailHandler({ messageId, threadId, from, fromName, subjec
     try {
       const draftResult = await tunnelOrChat({
         tenantId: resolvedTenant,
-        agentId: { [SANGHA_TENANT_ID]: 'sangha', 'zhan-capital': 'zhan' }[resolvedTenant] || 'hivemind',
+        agentId: { [getDefaultTenantId()]: 'sangha', 'zhan-capital': 'zhan' }[resolvedTenant] || 'hivemind',
         userId: 'system-auto-reply',
         prompt: `You received an email from an UNKNOWN sender: ${fromName || from} (${from}). Subject: ${subject}. Body:\n\n${body.slice(0, 3000)}\n\nDraft a brief, professional reply. This sender is NOT verified - keep the response generic and do NOT share any internal business information. Reply with ONLY the email body text.
 
@@ -667,7 +667,7 @@ EXTERNAL COMMUNICATION GUARDRAILS (highest priority):
   }
 
   // Ask the tenant's primary agent to draft a response
-  const agentMap = { [SANGHA_TENANT_ID]: 'sangha', 'zhan-capital': 'zhan' };
+  const agentMap = { [getDefaultTenantId()]: 'sangha', 'zhan-capital': 'zhan' };
   const agentId = agentMap[resolvedTenant] || 'hivemind';
   const hasThreadContext = body.includes('--- Previous messages in this thread ---');
 
@@ -995,9 +995,9 @@ async function pollSingleInbox(gmail, tenantId, label) {
       const retryCount = getEmailRetryCount(msg.id);
       if (retryCount >= MAX_RETRIES) {
         console.error(`[GmailPoll] [${label}] Message ${msg.id} failed after ${MAX_RETRIES} retries - giving up`);
-        markEmailProcessed({ messageId: msg.id, threadId: fullData.threadId, pipeline: 'send-failed-permanent', tenantId: tenantId || SANGHA_TENANT_ID });
+        markEmailProcessed({ messageId: msg.id, threadId: fullData.threadId, pipeline: 'send-failed-permanent', tenantId: tenantId || getDefaultTenantId() });
         insertActivity({
-          tenantId: tenantId || SANGHA_TENANT_ID,
+          tenantId: tenantId || getDefaultTenantId(),
           type: 'in',
           title: `Auto-reply permanently failed (${MAX_RETRIES} retries exhausted)`,
           subtitle: `Message ${msg.id} - manual follow-up required`,
@@ -1043,7 +1043,7 @@ async function pollSingleInbox(gmail, tenantId, label) {
         const isExplicitlyAddressed = coppiceDirectAddress.test(body.slice(0, 2000));
 
         if (!isExplicitlyAddressed) {
-          const ccTenant = tenantId || SANGHA_TENANT_ID;
+          const ccTenant = tenantId || getDefaultTenantId();
           console.log(`[GmailPoll] [${label}] CC-only from ${senderEmail} - observing, not replying ("${subject}")`);
           insertActivity({
             tenantId: ccTenant,
@@ -1206,7 +1206,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
       // Owners (CEO, team members) should NOT get auto-replies unless they
       // explicitly ask Coppice to do something. This prevents the agent from
       // treating internal emails as prospect inquiries or hallucinating responses.
-      const ownerTenant = tenantId || SANGHA_TENANT_ID;
+      const ownerTenant = tenantId || getDefaultTenantId();
       const senderTrustRecord = getTrustedSenderByEmail(ownerTenant, senderEmail);
       const isOwner = senderTrustRecord?.trust_level === 'owner';
 
@@ -1309,7 +1309,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
       // ─── Thread-level dedup: skip if we already replied to this thread ───
       if (repliedThreads.has(msgThreadId)) {
         console.log(`[GmailPoll] [${label}] Skipping duplicate in thread ${msgThreadId} (already replied this cycle)`);
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'thread-dedup', tenantId: tenantId || SANGHA_TENANT_ID });
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: 'thread-dedup', tenantId: tenantId || getDefaultTenantId() });
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
         newReplies++;
         continue;
@@ -1328,7 +1328,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
         const skipReason = isBounce ? 'bounce' : isOOO ? 'out-of-office' : 'auto-reply';
         console.log(`[GmailPoll] [${label}] Skipping ${skipReason}: ${senderEmail} - "${subject}"`);
         insertActivity({
-          tenantId: tenantId || SANGHA_TENANT_ID,
+          tenantId: tenantId || getDefaultTenantId(),
           type: 'in',
           title: `${skipReason === 'bounce' ? 'Bounce' : skipReason === 'out-of-office' ? 'OOO' : 'Auto-reply'}: ${senderName || senderEmail}`,
           subtitle: subject,
@@ -1338,7 +1338,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
           agentId: 'email-guard',
         });
         try { await gmail.users.messages.modify({ userId: 'me', id: msg.id, requestBody: { removeLabelIds: ['UNREAD'] } }); } catch {}
-        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: `skip-${skipReason}`, tenantId: tenantId || SANGHA_TENANT_ID });
+        markEmailProcessed({ messageId: msg.id, threadId: msgThreadId, pipeline: `skip-${skipReason}`, tenantId: tenantId || getDefaultTenantId() });
         newReplies++;
         continue;
       }
@@ -1347,7 +1347,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
       const optOutPatterns = /\b(stop email|unsubscribe|opt.?out|remove me|stop contacting|do not (contact|email|reply)|take me off|no more emails)\b/i;
       const isOptOut = optOutPatterns.test(body.slice(0, 1000)) && body.length < 500; // short email with opt-out language
       if (isOptOut) {
-        const optOutTenant = tenantId || SANGHA_TENANT_ID;
+        const optOutTenant = tenantId || getDefaultTenantId();
         console.log(`[GmailPoll] [${label}] Opt-out request from ${senderEmail}, auto-blocking`);
         try {
           addTrustedSender({ tenantId: optOutTenant, email: senderEmail, displayName: senderName, trustLevel: 'blocked', notes: 'Opted out via email reply' });
@@ -1371,7 +1371,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
       // Check if this thread was already processed - handle multi-turn conversation
       const priorThread = isThreadProcessed(msgThreadId);
       if (priorThread) {
-        const followupTenant = priorThread.tenant_id || tenantId || SANGHA_TENANT_ID;
+        const followupTenant = priorThread.tenant_id || tenantId || getDefaultTenantId();
 
         // Skip our own sent messages to avoid reply loops
         const ownAddresses = ['agent@zhan.coppice.ai', 'coppice@zhan.capital', 'agent@sangha.coppice.ai', 'agent@dacp.coppice.ai'];
@@ -1523,7 +1523,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
       // Resolve tenant: inbox tenantId > contact match > pipeline default
       const contact = matchContactToTenant(senderEmail);
-      const resolvedTenant = tenantId || contact?.tenant_id || SANGHA_TENANT_ID;
+      const resolvedTenant = tenantId || contact?.tenant_id || getDefaultTenantId();
       const allHeaders = fullData.payload?.headers || [];
 
       // ─── Email Guard: classify before any processing ───
@@ -1709,7 +1709,7 @@ If you are missing critical context (like meeting notes or recordings mentioned 
 
       // Check if this is an IPP inquiry → route to mine spec pipeline
       if (isIppEmail(subject, body) && canProcess(classification.verdict)) {
-        const ippTenant = tenantId || contact?.tenant_id || SANGHA_TENANT_ID;
+        const ippTenant = tenantId || contact?.tenant_id || getDefaultTenantId();
         if (autoRespondAllowed) {
           try {
             const attachments = await extractAttachments(gmail, msg.id, fullData.payload);
@@ -1876,7 +1876,7 @@ async function pollInbox() {
   let totalNew = 0;
   for (const inbox of inboxes) {
     // Wrap each inbox poll in the appropriate tenant context
-    const resolvedId = inbox.tenantId || SANGHA_TENANT_ID;
+    const resolvedId = inbox.tenantId || getDefaultTenantId();
     try {
       const count = await runWithTenant(resolvedId, () => pollSingleInbox(inbox.gmail, inbox.tenantId, inbox.label));
       totalNew += count;

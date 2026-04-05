@@ -1,4 +1,4 @@
-import { getTenantBySlug, getTenantByDomain, setTenantContext, SANGHA_TENANT_ID } from '../cache/database.js';
+import { getTenantBySlug, getTenantByDomain, setTenantContext, getDefaultTenantId } from '../cache/database.js';
 
 const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 
@@ -6,12 +6,14 @@ const BASE_DOMAIN = process.env.APP_BASE_DOMAIN || 'coppice.ai';
 // Note: getTenantBySlug looks up by the 'slug' column, not 'id', so alias values must be slugs
 const SLUG_ALIASES = { admin: 'sangha' };
 
-// Reverse alias - map DB slug back to subdomain
-const REVERSE_ALIASES = { [SANGHA_TENANT_ID]: 'sangha' };
+// Reverse alias - map DB slug back to subdomain (lazy to read env)
+function getReverseAliases() {
+  return { [getDefaultTenantId()]: 'sangha', 'sangha-renewables': 'sangha' };
+}
 
 /** Get the canonical subdomain for a tenant slug */
 export function getSubdomainForSlug(slug) {
-  return REVERSE_ALIASES[slug] || slug;
+  return getReverseAliases()[slug] || slug;
 }
 
 /**
@@ -62,7 +64,7 @@ export default function tenantResolver(req, res, next) {
 
   // 3. Fallback: no subdomain → Sangha tenant
   if (!tenant) {
-    tenant = getTenantBySlug(SANGHA_TENANT_ID);
+    tenant = getTenantBySlug(getDefaultTenantId());
   }
 
   if (tenant) {
@@ -78,6 +80,6 @@ export default function tenantResolver(req, res, next) {
   }
 
   // Wrap downstream handlers in tenant context so the DB proxy routes correctly
-  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
   setTenantContext(tenantId, () => next());
 }

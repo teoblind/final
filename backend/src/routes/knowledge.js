@@ -23,7 +23,7 @@ import {
   getOpenActionItems,
 } from '../services/knowledgeProcessor.js';
 import { processMeetingComplete } from '../services/meetingProcessor.js';
-import { insertActivity, getCurrentTenantId, getTenantDb, getAllTenantDbs, getAgentAssignment, getThread, SANGHA_TENANT_ID } from '../cache/database.js';
+import { insertActivity, getCurrentTenantId, getTenantDb, getAllTenantDbs, getAgentAssignment, getThread, getDefaultTenantId } from '../cache/database.js';
 import { getThreadMessages } from '../services/chatService.js';
 import { authenticate } from '../middleware/auth.js';
 import { sendHtmlEmail } from '../services/emailService.js';
@@ -44,7 +44,7 @@ const audioUpload = multer({
 // Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
-    const tenantId = getCurrentTenantId() || SANGHA_TENANT_ID;
+    const tenantId = getCurrentTenantId() || getDefaultTenantId();
     const realDb = getTenantDb(tenantId);
     const val = realDb[prop];
     if (typeof val === 'function') return val.bind(realDb);
@@ -130,7 +130,7 @@ router.get('/audio/:id', async (req, res) => {
 router.use(authenticate);
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
   const userId = req.user?.id || 'anonymous';
   return { tenantId, userId };
 }

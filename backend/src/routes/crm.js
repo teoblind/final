@@ -7,7 +7,7 @@
 
 import express from 'express';
 import { google } from 'googleapis';
-import { getKeyVaultValue, upsertKeyVaultEntry, getTenantEmailConfig, SANGHA_TENANT_ID } from '../cache/database.js';
+import { getKeyVaultValue, upsertKeyVaultEntry, getTenantEmailConfig, getDefaultTenantId } from '../cache/database.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -38,7 +38,7 @@ function makeAuth(refreshToken) {
 
 router.get('/pipeline', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
 
     // Check for connected sheet
     const sheetId = getKeyVaultValue(tenantId, 'crm', 'sheet_id');
@@ -98,7 +98,7 @@ router.get('/pipeline', async (req, res) => {
 
 router.post('/setup-sheet', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
     const tenant = req.resolvedTenant;
     const userEmail = req.user?.email;
     const { confirm_replace } = req.body || {};
@@ -215,7 +215,7 @@ router.post('/setup-sheet', async (req, res) => {
 
 router.get('/calendar/events', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
 
     // Prefer user's personal calendar token (has actual meetings), then agent token, then docs
     let refreshToken = getKeyVaultValue(tenantId, 'google-calendar-user', 'refresh_token');
@@ -293,7 +293,7 @@ router.get('/calendar/events', async (req, res) => {
 
 router.post('/calendar/events/:id/invite', async (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
 
     let refreshToken = getKeyVaultValue(tenantId, 'google-calendar', 'refresh_token');
     if (!refreshToken) refreshToken = getKeyVaultValue(tenantId, 'google-docs', 'refresh_token');

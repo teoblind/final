@@ -11,7 +11,7 @@
 
 import express from 'express';
 import { routeToolCall } from '../services/chatService.js';
-import { runWithTenant, SANGHA_TENANT_ID } from '../cache/database.js';
+import { runWithTenant, getDefaultTenantId } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -38,7 +38,7 @@ router.post('/tool', async (req, res) => {
     return res.status(400).json({ error: 'toolName is required' });
   }
 
-  const resolvedTenant = tenantId || SANGHA_TENANT_ID;
+  const resolvedTenant = tenantId || getDefaultTenantId();
 
   try {
     console.log(`[Internal] Tool call: ${toolName} (tenant: ${resolvedTenant})`);

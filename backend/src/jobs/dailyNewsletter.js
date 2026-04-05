@@ -19,7 +19,7 @@ import {
   getAllTenants, runWithTenant, getUsersByTenant,
   getDacpBidRequests, getDacpJobs, getDacpStats, getTenantDb,
   insertAgentAssignment, updateAgentAssignment,
-  SANGHA_TENANT_ID, recordServiceUsage, getCurrentTenantId,
+  getDefaultTenantId, recordServiceUsage, getCurrentTenantId,
 } from '../cache/database.js';
 import { apolloBulkMatch } from '../services/leadEngine.js';
 import { gatherSocialIntelligence } from '../services/socialScraper.js';
@@ -28,7 +28,11 @@ let timer = null;
 
 // ── Tenant-specific search config ─────────────────────────────────────────────
 
-const TENANT_SEARCH_CONFIG = {
+// Lazy-init to ensure env vars are loaded before reading getDefaultTenantId()
+let _tenantSearchConfig;
+function getTenantSearchConfig() {
+  if (_tenantSearchConfig) return _tenantSearchConfig;
+  _tenantSearchConfig = {
   'dacp-construction-001': {
     name: 'DACP Construction',
     region: 'Dallas-Fort Worth Texas',
@@ -72,7 +76,7 @@ const TENANT_SEARCH_CONFIG = {
     ],
   },
   // Sangha Systems - Bitcoin mining & energy + renewables (weekly)
-  [SANGHA_TENANT_ID]: {
+  [getDefaultTenantId()]: {
     name: 'Sangha Systems',
     region: 'Texas ERCOT',
     services: ['bitcoin mining', 'behind-the-meter', 'hashrate', 'power curtailment', 'energy trading', 'renewable energy partnerships'],
@@ -101,10 +105,13 @@ const TENANT_SEARCH_CONFIG = {
     ],
     linkedinQueries: [],
   },
-};
+  };
+  return _tenantSearchConfig;
+}
 
 function getTenantConfig(tenantId) {
-  return TENANT_SEARCH_CONFIG[tenantId] || TENANT_SEARCH_CONFIG[SANGHA_TENANT_ID];
+  const config = getTenantSearchConfig();
+  return config[tenantId] || config[getDefaultTenantId()];
 }
 
 // ── Web Research ──────────────────────────────────────────────────────────────
@@ -844,7 +851,7 @@ async function runDailyNewsletter({ tenantFilter, recipientOverride } = {}) {
         console.log(`[Newsletter] Running for tenant: ${tenant.id}`);
 
         // Only run for tenants with an explicit config
-        if (!TENANT_SEARCH_CONFIG[tenant.id]) {
+        if (!getTenantSearchConfig()[tenant.id]) {
           console.log(`[Newsletter] Skipping ${tenant.id} - no specific newsletter config`);
           return;
         }

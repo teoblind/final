@@ -8,7 +8,7 @@
 
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { getActivities, getActivityDetail, getActivityCount, getLeadStats, getFleetConfig, getPoolConfig, SANGHA_TENANT_ID } from '../cache/database.js';
+import { getActivities, getActivityDetail, getActivityCount, getLeadStats, getFleetConfig, getPoolConfig, getDefaultTenantId } from '../cache/database.js';
 
 const router = express.Router();
 
@@ -32,7 +32,7 @@ function formatRelativeTime(dateStr) {
  */
 router.get('/', (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const offset = parseInt(req.query.offset) || 0;
     const type = req.query.type || undefined;
@@ -65,7 +65,7 @@ router.get('/', (req, res) => {
  */
 router.get('/summary', (req, res) => {
   try {
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
 
     // Lead/outreach stats
     let leads = 0, outreach = 0, replies = 0;
@@ -119,7 +119,7 @@ router.get('/:id', (req, res) => {
     if (!row) return res.status(404).json({ error: 'Activity not found' });
 
     // Verify tenant access
-    const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+    const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
     if (row.tenant_id !== tenantId) return res.status(404).json({ error: 'Activity not found' });
 
     let detail = null;

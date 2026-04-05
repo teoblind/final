@@ -21,7 +21,7 @@ import { spawn } from 'child_process';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { getTenantDb, getKeyVaultValue , SANGHA_TENANT_ID } from '../cache/database.js';
+import { getTenantDb, getKeyVaultValue , getDefaultTenantId } from '../cache/database.js';
 
 const GWS_BIN = process.env.GWS_BIN || 'gws';
 const GWS_TIMEOUT_MS = 30_000;
@@ -34,7 +34,7 @@ const tenantConfigCache = new Map();
  * Writes the tenant's OAuth credentials so gws authenticates as the right agent.
  */
 function getTenantGwsConfig(tenantId) {
-  const resolvedTenant = tenantId || SANGHA_TENANT_ID;
+  const resolvedTenant = tenantId || getDefaultTenantId();
   let refreshToken = process.env.GMAIL_REFRESH_TOKEN; // fallback
   let clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID;
   let clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET;

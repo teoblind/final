@@ -23,14 +23,14 @@ import {
   saveThreadSummary,
   insertAgentRun,
   insertApprovalItem,
-  SANGHA_TENANT_ID,
+  getDefaultTenantId,
 } from '../cache/database.js';
 import { saveMessage, getThreadMessages } from './chatService.js';
 
 // Lazy DB accessor - mirrors chatService.js pattern
 const db = new Proxy({}, {
   get(target, prop) {
-    const tenantId = getCurrentTenantId() || SANGHA_TENANT_ID;
+    const tenantId = getCurrentTenantId() || getDefaultTenantId();
     const realDb = getTenantDb(tenantId);
     const val = realDb[prop];
     if (typeof val === 'function') return val.bind(realDb);

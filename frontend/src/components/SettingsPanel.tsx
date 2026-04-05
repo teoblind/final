@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Cpu, Zap, Server, Bot, Bell, Palette, Save, RefreshCw, Plus, Trash2, ChevronDown, Battery, Monitor, Users, Key, Link2, Globe, Shield, Mail, Activity } from 'lucide-react';
 import { useApi } from '../hooks/useApi';
+import { useTenant } from '../contexts/TenantContext';
 import SettingsTeamPanel from './SettingsTeamPanel';
 const EmailSecurityPanel = lazy(() => import('./EmailSecurityPanel'));
 const AgentRunHistory = lazy(() => import('./panels/agents/AgentRunHistory'));
@@ -169,8 +170,11 @@ function IntegrationsPanel() {
 }
 
 export default function SettingsPanel() {
-  // Phase 2: Energy settings
-  const { data: settingsData, refetch: refetchSettings } = useApi('/energy/settings', { refreshInterval: 0 });
+  const { tenant } = useTenant() || {};
+  const isMining = tenant?.settings?.industry === 'mining';
+
+  // Phase 2: Energy settings (only fetched for mining tenants)
+  const { data: settingsData, refetch: refetchSettings } = useApi(isMining ? '/energy/settings' : null, { refreshInterval: 0 });
 
   const [energySettings, setEnergySettings] = useState({
     iso: 'ERCOT',
@@ -492,8 +496,7 @@ export default function SettingsPanel() {
       <div className="mb-6">
         <h2 className="text-xl font-bold text-terminal-green">Settings</h2>
         <p className="text-sm text-terminal-muted mt-1">
-          Configure your mining operations platform. Settings marked with a phase number
-          will become available as those features are built.
+          Configure your platform settings.
         </p>
         {SETTINGS_TABS.length > 1 && (
           <div className="flex gap-1 mt-4">
@@ -527,6 +530,7 @@ export default function SettingsPanel() {
         {/* Team Management */}
         <SettingsTeamPanel />
 
+        {isMining && <>
         {/* Fleet Configuration - Phase 3 ACTIVE */}
         <SettingsSection
           title="Fleet Configuration"
@@ -1898,6 +1902,7 @@ export default function SettingsPanel() {
             can still be configured in the Alerts tab.
           </p>
         </SettingsSection>
+        </>}
 
         {/* Theme */}
         <SettingsSection
@@ -1944,7 +1949,7 @@ export default function SettingsPanel() {
         <BrandingSection />
 
         {/* Phase 9: Insurance Settings */}
-        <InsuranceSettingsSection />
+        {isMining && <InsuranceSettingsSection />}
 
         {/* Agent Run History / Eval */}
         <SettingsSection title="Agent Run History" description="Audit agent outputs, track regressions, and compare runs" icon={<Activity size={18} />}>
@@ -2412,11 +2417,12 @@ function NotificationPreferencesSection() {
 }
 
 function BrandingSection() {
+  const { tenant } = useTenant() || {};
   const [branding, setBranding] = useState({
-    companyName: '',
-    primaryColor: '#00d26a',
-    logo: '',
-    hideSanghaBranding: false,
+    companyName: tenant?.branding?.companyName || '',
+    primaryColor: tenant?.branding?.primaryColor || '#141414',
+    logo: tenant?.branding?.logo || '',
+    hideSanghaBranding: tenant?.branding?.hideSanghaBranding || false,
   });
 
   return (

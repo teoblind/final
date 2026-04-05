@@ -7,14 +7,14 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { google } from 'googleapis';
-import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun, getAgentMemory, SANGHA_TENANT_ID, recordServiceUsage } from '../cache/database.js';
+import { getCurrentTenantId, getTenantDb, getAgentMode, insertActivity, saveThreadSummary, getSiblingThreadSummaries, searchDriveContents, insertAgentRun, getAgentMemory, getDefaultTenantId, recordServiceUsage } from '../cache/database.js';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 // Lazy DB accessor - resolves to the current tenant's DB via AsyncLocalStorage context
 const db = new Proxy({}, {
   get(target, prop) {
-    const tenantId = getCurrentTenantId() || SANGHA_TENANT_ID;
+    const tenantId = getCurrentTenantId() || getDefaultTenantId();
     const realDb = getTenantDb(tenantId);
     const val = realDb[prop];
     if (typeof val === 'function') return val.bind(realDb);
@@ -1276,7 +1276,7 @@ async function callCalendarTool(toolName, toolInput, tenantId) {
     const { getTenantDb } = await import('../cache/database.js');
 
     // Get the tenant's refresh token from tenant_email_config
-    const resolvedTenant = tenantId || SANGHA_TENANT_ID;
+    const resolvedTenant = tenantId || getDefaultTenantId();
     let refreshToken = process.env.GMAIL_REFRESH_TOKEN; // fallback to default agent
 
     try {
@@ -2398,7 +2398,7 @@ const EMAIL_TOOLS = [
 
 function getEmailPromptAddon(tenantId) {
   const emailMap = {
-    [SANGHA_TENANT_ID]: 'agent@sangha.coppice.ai',
+    [getDefaultTenantId()]: 'agent@sangha.coppice.ai',
     'dacp-construction-001': 'agent@dacp.coppice.ai',
     'zhan-capital': 'agent@zhan.coppice.ai',
   };
@@ -4097,7 +4097,7 @@ export function saveMessage(tenantId, agentId, userId, role, content, metadata =
 export function getMeetingPrompt(tenantId) {
   // Map tenant to their primary agent prompt
   const tenantAgentMap = {
-    [SANGHA_TENANT_ID]: 'sangha',
+    [getDefaultTenantId()]: 'sangha',
     'sangha': 'sangha',
     'dacp-construction-001': 'hivemind',
     'zhan-capital': 'zhan',

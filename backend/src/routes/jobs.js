@@ -19,7 +19,7 @@ import {
   getKeyVaultEntries,
   upsertKeyVaultEntry,
   deleteKeyVaultEntry,
-  SANGHA_TENANT_ID,
+  getDefaultTenantId,
 } from '../cache/database.js';
 
 const router = express.Router();
@@ -27,7 +27,7 @@ const router = express.Router();
 router.use(authenticate);
 
 function resolveTenant(req) {
-  return req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  return req.resolvedTenant?.id || getDefaultTenantId();
 }
 
 // ─── Background Jobs ─────────────────────────────────────────────────────────

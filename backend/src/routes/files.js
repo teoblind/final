@@ -13,7 +13,7 @@ import multer from 'multer';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { authenticate } from '../middleware/auth.js';
-import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue, getDriveSyncStatus, getDriveSyncedFiles, getDriveSyncedFileCount, SANGHA_TENANT_ID } from '../cache/database.js';
+import { getTenantFiles, getTenantFileCategories, getTenantFileCount, getTenantEmailConfig, getKeyVaultValue, getDriveSyncStatus, getDriveSyncedFiles, getDriveSyncedFileCount, getDefaultTenantId } from '../cache/database.js';
 import db from '../cache/database.js';
 import { runWithTenant } from '../cache/database.js';
 
@@ -50,7 +50,7 @@ const MIME_TO_CATEGORY = {
 };
 
 function resolveIds(req) {
-  const tenantId = req.resolvedTenant?.id || SANGHA_TENANT_ID;
+  const tenantId = req.resolvedTenant?.id || getDefaultTenantId();
   return { tenantId };
 }
 

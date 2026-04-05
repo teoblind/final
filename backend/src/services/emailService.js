@@ -10,7 +10,7 @@ import { readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { insertActivity, getTenantEmailConfig, getAllTenantEmailConfigs, SANGHA_TENANT_ID } from '../cache/database.js';
+import { insertActivity, getTenantEmailConfig, getAllTenantEmailConfigs, getDefaultTenantId } from '../cache/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -197,7 +197,7 @@ const SIGNATURES = {
 </div>`,
     text: '\n\n-\nCoppice\nAI Agent, DACP Construction\ndacpconstruction.com | dacp.coppice.ai',
   },
-  [SANGHA_TENANT_ID]: {
+  [getDefaultTenantId()]: {
     html: `
 <div style="margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif;">
   <p style="margin:0 0 2px;font-size:13px;color:#333;font-weight:600;">Coppice</p>
@@ -227,7 +227,7 @@ function getSignature(tenantId, isHtml = true) {
  */
 function getTrackingPixel(tenantId, messageId) {
   const baseUrl = process.env.APP_BASE_URL || 'https://coppice.ai';
-  const trackingId = Buffer.from(`${tenantId || SANGHA_TENANT_ID}__${messageId || 'unknown'}`).toString('base64url');
+  const trackingId = Buffer.from(`${tenantId || getDefaultTenantId()}__${messageId || 'unknown'}`).toString('base64url');
   return `<img src="${baseUrl}/api/v1/track/open/${trackingId}" width="1" height="1" style="display:none;" alt="" />`;
 }
 
@@ -416,7 +416,7 @@ export async function sendHtmlEmail({ to, subject, html, cc, bcc, tenantId, thre
 
   try {
     insertActivity({
-      tenantId: tenantId || SANGHA_TENANT_ID, type: 'out',
+      tenantId: tenantId || getDefaultTenantId(), type: 'out',
       title: `Email sent to ${to}`,
       subtitle: subject,
       detailJson: JSON.stringify({ to, subject }),
