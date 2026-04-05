@@ -24,8 +24,10 @@ function requireJwtSecret(envVar, label) {
   return ephemeral;
 }
 
-const JWT_SECRET = requireJwtSecret('JWT_SECRET', 'access token');
-const JWT_REFRESH_SECRET = requireJwtSecret('JWT_REFRESH_SECRET', 'refresh token');
+// Lazy-init: read env at first use so dotenv.config() has already run
+let _jwtSecret, _jwtRefreshSecret;
+function getJwtSecret() { if (!_jwtSecret) _jwtSecret = requireJwtSecret('JWT_SECRET', 'access token'); return _jwtSecret; }
+function getJwtRefreshSecret() { if (!_jwtRefreshSecret) _jwtRefreshSecret = requireJwtSecret('JWT_REFRESH_SECRET', 'refresh token'); return _jwtRefreshSecret; }
 
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
@@ -69,7 +71,7 @@ export function generateTokens(user) {
       tenantId: user.tenant_id,
       role: user.role,
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: ACCESS_TOKEN_EXPIRY }
   );
 
@@ -78,7 +80,7 @@ export function generateTokens(user) {
       userId: user.id,
       sessionId,
     },
-    JWT_REFRESH_SECRET,
+    getJwtRefreshSecret(),
     { expiresIn: REFRESH_TOKEN_EXPIRY }
   );
 
@@ -96,7 +98,7 @@ export function generateTokens(user) {
  * @throws {jwt.JsonWebTokenError|jwt.TokenExpiredError} On invalid or expired token
  */
 export function verifyAccessToken(token) {
-  return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, getJwtSecret());
 }
 
 /**
@@ -106,7 +108,7 @@ export function verifyAccessToken(token) {
  * @throws {jwt.JsonWebTokenError|jwt.TokenExpiredError} On invalid or expired token
  */
 export function verifyRefreshToken(token) {
-  return jwt.verify(token, JWT_REFRESH_SECRET);
+  return jwt.verify(token, getJwtRefreshSecret());
 }
 
 /**
