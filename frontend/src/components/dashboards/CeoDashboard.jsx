@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   AlertTriangle, BarChart3, Building2, CheckCircle, ChevronDown, ChevronRight,
   ChevronUp, ClipboardList, DollarSign, FileCheck, HardHat, Shield,
   TrendingUp, Truck, Users, XCircle, Megaphone, Clock, AlertCircle, Activity,
   Mail, FileText, Calendar, ArrowRight, Eye, X,
   Star, ArrowLeft, Briefcase, MapPin, Map, Plus, Minus, Navigation,
-  ExternalLink, Check, Trash2, GripVertical
+  ExternalLink, Check, Trash2, GripVertical, Filter
 } from 'lucide-react';
+
+const PipelineTab = lazy(() => import('./lead-engine/PipelineTab'));
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -476,6 +478,7 @@ export default function CeoDashboard({ onNavigate }) {
         {[
           { id: 'departments', label: 'Departments', icon: Building2 },
           { id: 'funnel', label: 'Bid Funnel', icon: BarChart3 },
+          { id: 'pipeline', label: 'Pipeline', icon: Filter },
           { id: 'gc-profiles', label: 'GC Profiles', icon: Briefcase },
           { id: 'leads', label: 'Newsletter Leads', icon: Mail },
           { id: 'newsletters', label: 'Newsletters', icon: FileText },
@@ -826,6 +829,13 @@ export default function CeoDashboard({ onNavigate }) {
             </>
           )}
         </div>
+      )}
+
+      {/* Pipeline Tab (Lead Engine) */}
+      {activeTab === 'pipeline' && (
+        <Suspense fallback={<div className="flex items-center justify-center py-12 text-terminal-muted text-sm">Loading pipeline...</div>}>
+          <PipelineTab />
+        </Suspense>
       )}
 
       {/* GC Profiles Tab */}

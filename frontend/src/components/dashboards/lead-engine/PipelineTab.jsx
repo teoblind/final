@@ -2,27 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApi, postApi } from '../../../hooks/useApi';
 import { Card, STAGE_CLS, OUTREACH_STATUS_CLS, SUB_CLS, timeAgo } from './shared';
 
-const DEMO_STATS = {
-  totalLeads: 502, newLeads: 34, contactedLeads: 96, respondedLeads: 7,
-  meetingLeads: 2, qualifiedLeads: 1, totalEmailsSent: 96,
-  totalResponded: 7, responseRate: 7.3, pendingDrafts: 3, sentToday: 8,
+const EMPTY_STATS = {
+  totalLeads: 0, newLeads: 0, contactedLeads: 0, respondedLeads: 0,
+  meetingLeads: 0, qualifiedLeads: 0, totalEmailsSent: 0,
+  totalResponded: 0, responseRate: 0, pendingDrafts: 0, sentToday: 0,
 };
-
-const DEMO_LEADS = [
-  { id: 'le-s-001', venue_name: 'Meridian Renewables', region: 'ERCOT', industry: 'Solar IPP', status: 'responded', priority_score: 92, discovered_at: '2026-02-20', contactCount: 1 },
-  { id: 'le-s-002', venue_name: 'GridScale Partners', region: 'PJM', industry: 'Wind IPP', status: 'responded', priority_score: 85, discovered_at: '2026-02-22', contactCount: 1 },
-  { id: 'le-s-004', venue_name: 'SunPeak Energy', region: 'ERCOT', industry: 'Solar IPP', status: 'meeting', priority_score: 88, discovered_at: '2026-02-18', contactCount: 1 },
-  { id: 'le-s-005', venue_name: 'Apex Clean Energy', region: 'SPP', industry: 'Wind/Solar', status: 'responded', priority_score: 90, discovered_at: '2026-02-15', contactCount: 1 },
-  { id: 'le-s-006', venue_name: 'Clearway Energy', region: 'ERCOT', industry: 'Wind IPP', status: 'contacted', priority_score: 75, discovered_at: '2026-03-01', contactCount: 1 },
-  { id: 'le-s-003', venue_name: 'Nexus Solar', region: 'MISO', industry: 'Solar IPP', status: 'contacted', priority_score: 60, discovered_at: '2026-02-25', contactCount: 1 },
-  { id: 'le-s-007', venue_name: 'EDP Renewables', region: 'MISO', industry: 'Solar IPP', status: 'new', priority_score: 70, discovered_at: '2026-03-07', contactCount: 1 },
-  { id: 'le-s-008', venue_name: 'NextEra Partners', region: 'ERCOT', industry: 'Wind/Solar', status: 'new', priority_score: 95, discovered_at: '2026-03-07', contactCount: 1 },
-];
-
-const DEMO_OUTREACH = [
-  { id: 'lo-s-001', venue_name: 'Meridian Renewables', contact_name: 'Sarah Chen', contact_email: 'schen@meridianrenewables.com', email_type: 'initial', subject: 'Behind-the-meter mining for Crane County', status: 'sent', sent_at: '2026-03-02T09:14:00', responded_at: '2026-03-07T11:42:00', body: 'Hi Sarah,\n\nI came across Meridian\'s Crane County solar portfolio...' },
-  { id: 'lo-s-002', venue_name: 'GridScale Partners', contact_name: 'Mark Liu', contact_email: 'mliu@gridscalepartners.com', email_type: 'initial', subject: 'Hashrate co-location for underperforming wind assets', status: 'sent', sent_at: '2026-03-03T10:22:00', responded_at: '2026-03-05T14:18:00', body: 'Hi Mark,\n\nGridScale\'s PJM wind portfolio caught our attention...' },
-];
 
 function LeadDetailModal({ lead, onClose }) {
   if (!lead) return null;
@@ -142,9 +126,9 @@ export default function PipelineTab() {
   const { data: leadsData, refetch: refetchLeads } = useApi('/lead-engine/leads', { refreshInterval: 30000 });
   const { data: outreachData, refetch: refetchOutreach } = useApi('/lead-engine/outreach', { refreshInterval: 30000 });
 
-  const stats = statsData || DEMO_STATS;
-  const leads = leadsData?.leads || DEMO_LEADS;
-  const outreach = outreachData?.outreach || DEMO_OUTREACH;
+  const stats = statsData || EMPTY_STATS;
+  const leads = leadsData?.leads || [];
+  const outreach = outreachData?.outreach || [];
 
   useEffect(() => {
     if (!selectedLeadId && leads.length > 0) setSelectedLeadId(leads[0].id);

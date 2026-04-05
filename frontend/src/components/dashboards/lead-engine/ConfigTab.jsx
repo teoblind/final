@@ -2,22 +2,22 @@ import React, { useState } from 'react';
 import { useApi, putApi } from '../../../hooks/useApi';
 import { Card, KVRow } from './shared';
 
-const DEMO_CONFIG = {
+const EMPTY_CONFIG = {
   mode: 'copilot',
-  enabled: 1,
-  queries: ['solar IPP ERCOT negative LMP', 'wind energy developer PJM underperforming', 'renewable IPP curtailment MISO'],
-  regions: ['ERCOT', 'PJM', 'MISO', 'SPP', 'CAISO'],
+  enabled: 0,
+  queries: [],
+  regions: [],
   queries_per_cycle: 2,
   max_emails_per_cycle: 10,
   followup_delay_days: 5,
   max_followups: 2,
-  sender_name: 'Sangha Renewables',
-  sender_email: 'outreach@sangha.io',
+  sender_name: '',
+  sender_email: '',
 };
 
 export default function ConfigTab() {
   const { data: configData, refetch: refetchConfig } = useApi('/lead-engine/config', { refreshInterval: 60000 });
-  const config = configData?.config || DEMO_CONFIG;
+  const config = configData?.config || EMPTY_CONFIG;
 
   const [editing, setEditing] = useState(false);
 
