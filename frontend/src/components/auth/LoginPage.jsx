@@ -248,9 +248,8 @@ export default function LoginPage({ onLogin }) {
             <a href="https://coppice.ai" style={{ color: '#6b6b65', textDecoration: 'none' }}>coppice.ai</a>
             <span style={{ margin: '0 8px', color: '#2a2a28' }}>|</span>
             <a
-              href="https://github.com/teoblind/coppice-desktop/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/download/Coppice.dmg"
+              download
               style={{ color: '#6b6b65', textDecoration: 'none', transition: 'color 0.15s' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#9a9a92'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#6b6b65'; }}
@@ -549,9 +548,8 @@ export default function LoginPage({ onLogin }) {
 
           <div style={{ textAlign: 'center', marginTop: 20 }}>
             <a
-              href="https://github.com/teoblind/coppice-desktop/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/download/Coppice.dmg"
+              download
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 fontSize: 12, color: '#9a9a92', textDecoration: 'none',
