@@ -660,6 +660,9 @@ app.get('/voice-agent', (req, res) => {
   res.sendFile(join(__dirname, '../public/voice-agent.html'));
 });
 
+// Serve desktop app downloads from persistent directory (not wiped by frontend builds)
+app.use('/download', express.static(join(__dirname, '../../downloads')));
+
 // Serve static frontend files in production
 const frontendPath = join(__dirname, '../../frontend/dist');
 app.use(express.static(frontendPath));
