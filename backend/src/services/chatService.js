@@ -5157,7 +5157,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   const cliStreamAgents = ['sangha', 'hivemind', 'zhan', 'estimating', 'documents', 'email', 'workflow', 'comms'];
   const cliStreamEnabled = process.env.CLAUDE_CLI_ENABLED === 'true';
   const streamAgentConfig = getAgentConfig(agentId);
-  const streamForceApi = streamAgentConfig.force_api === true || !!options.helpMode;
+  const streamForceApi = streamAgentConfig.force_api === true;
   const streamForceCli = streamAgentConfig.force_cli === true;
 
   if (cliStreamEnabled && cliStreamAgents.includes(agentId) && !streamForceApi) {
@@ -5272,7 +5272,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
         route: cliResult.route || 'cli-stream',
       };
       if (lastTaskProposal) cliMeta.taskProposal = lastTaskProposal;
-      saveMessage(tenantId, agentId, userId, 'assistant', cliResponse, cliMeta, threadId);
+      if (!skipPersist) saveMessage(tenantId, agentId, userId, 'assistant', cliResponse, cliMeta, threadId);
 
       _recordRun({ output: cliResponse, model: 'claude-code-cli', route: cliResult.route || 'cli-stream', status: cliResult.timedOut ? 'timeout' : 'completed' });
       return { response: cliResponse };
@@ -5285,7 +5285,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
         console.error(`[chatStream] API key disabled, cannot fall back. CLI error: ${cliError.message}`);
         onChunk('I\'m having trouble connecting to the AI service right now. The SSH tunnel may be down. Please try again in a moment.');
         const errResponse = 'CLI tunnel failed and API fallback is disabled.';
-        saveMessage(tenantId, agentId, userId, 'assistant', errResponse, { model: 'error', route: 'cli-stream-failed' }, threadId);
+        if (!skipPersist) saveMessage(tenantId, agentId, userId, 'assistant', errResponse, { model: 'error', route: 'cli-stream-failed' }, threadId);
         return { response: errResponse };
       }
       console.log(`[chatStream] Falling back to API route`);
@@ -5298,7 +5298,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
   if (!_apiKeyCheck || _apiKeyCheck === 'DISABLED' || _apiKeyCheck.length < 10) {
     const errMsg = 'All messages route through the AI agent. Please try again.';
     onChunk(errMsg);
-    saveMessage(tenantId, agentId, userId, 'assistant', errMsg, { model: 'error', route: 'no-api-key' }, threadId);
+    if (!skipPersist) saveMessage(tenantId, agentId, userId, 'assistant', errMsg, { model: 'error', route: 'no-api-key' }, threadId);
     return { response: errMsg };
   }
 
@@ -5533,7 +5533,7 @@ export async function chatStream(tenantId, agentId, userId, userContent, threadI
         streamed: true,
       };
       if (lastTaskProposal) msgMeta.taskProposal = lastTaskProposal;
-      saveMessage(tenantId, agentId, userId, 'assistant', fullText, msgMeta, threadId);
+      if (!skipPersist) saveMessage(tenantId, agentId, userId, 'assistant', fullText, msgMeta, threadId);
 
       // Save thread summary for cross-thread awareness
       if (threadId) {
